@@ -22,3 +22,6 @@ venv:
 
 run: venv
 	./${VENV_DIR}/bin/${PYTHON} migrationapp.py -H ${VCENTER_HOST} -u ${VCENTER_USERNAME} -p ${VCENTER_PASSWORD} -nossl
+
+getvm: venv
+	./${VENV_DIR}/bin/${PYTHON} migrationapp.py -H '${VCENTER_HOST}' -u '${VCENTER_USERNAME}' -p '${VCENTER_PASSWORD}' -nossl --vm-name '$(VMNAME)'
