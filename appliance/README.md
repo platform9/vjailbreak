@@ -11,7 +11,7 @@ IP provisioned, you can set it with `export K8S_IP=x.x.x.x` before running vagra
 
 ```bash
 vagrant up
-vagrant ssh control1 -- -t 'cat /etc/rancher/k3s/k3s.yaml' > k3s.yaml
+vagrant ssh control1 -- -t 'sudo cat /etc/rancher/k3s/k3s.yaml' > k3s.yaml
 export KUBECONFIG=$PWD/k3s.yaml
 k get nodes
 NAME       STATUS   ROLES                       AGE     VERSION
