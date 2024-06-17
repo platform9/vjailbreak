@@ -33,10 +33,6 @@ def main():
         vm = get_vm_by_name(service_instance, args.vm_name)
         if vm:
             print("VM found by name:", vm.name)
-            # get cpu and memory
-            print("CPU:", vm.config.hardware.numCPU)
-            print("Memory:", vm.config.hardware.memoryMB)
-            
         else:
             print("VM not found by name:", args.vm_name)    
     elif args.vm_uuid:
@@ -48,5 +44,21 @@ def main():
         else:
             print("VM not found by uuid:", args.vm_uuid)
 
+    # Generate VPX URL
+    vmdata = get_all_info(service_instance)
+    datacenter = None
+    cluster = None
+    host = None
+    for dc in vmdata:
+        for cluster in vmdata[dc]:
+            for hostname in vmdata[dc][cluster]:
+                for vmname in vmdata[dc][cluster][hostname]:
+                    if vmname == args.vm_name:
+                        datacenter = dc
+                        cluster = cluster
+                        host = hostname
+                        break
+    url = f"vpx://{process_vpx_parameters(args.username)}@{process_vpx_parameters(args.host)}/{process_vpx_parameters(datacenter)}/{process_vpx_parameters(cluster)}/{process_vpx_parameters(host)}?no_verify=1"
+    print("URL:", url)
 if __name__ == "__main__":
     main()

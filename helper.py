@@ -19,3 +19,7 @@ def get_all_obj(content, vim_type, folder=None, recurse=True):
 
     container.Destroy()
     return obj
+
+def process_vpx_parameters(string):
+    # replace special chars with utf encoded verion
+    return string.replace('@', '%40').replace(' ', '%20')
