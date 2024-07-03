@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fedora-hostpath-pod
+spec:
+  containers:
+  - name: fedora
+    securityContext:
+      privileged: true
+    image: tanaypf9/v2v:latest
+    command: ["/bin/bash", "-c", "--"]
+    args: ["while true; do sleep 30; done;"]
+    volumeMounts:
+    - mountPath: /home/fedora/vmware-vix-disklib-distrib
+      name: vddk
+    - mountPath: /dev
+      name: dev
+    - mountPath: /home/fedora/admin.rc
+      name: admin-rc
+      readOnly: true
+    - mountPath: /home/fedora/devwork
+      name: devwork
+    resources:
+      requests:
+        ephemeral-storage: "10Gi"  # Request 2Gi of ephemeral storage
+      limits:
+        ephemeral-storage: "10Gi"  # Limit to 4Gi of ephemeral storage
+  volumes:
+  - name: vddk
+    hostPath:
+      path: /home/ubuntu/vmware-vix-disklib-distrib
+      type: Directory
+  - name: dev
+    hostPath:
+      path: /dev
+      type: Directory
+  - name: admin-rc
+    hostPath:
+      path: /home/ubuntu/admin.rc
+      type: File
+  - name: devwork
+    hostPath:
+      path: /home/ubuntu/devwork
+      type: Directory
