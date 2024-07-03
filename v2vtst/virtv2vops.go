@@ -66,7 +66,7 @@ func NTFSFix(ctx context.Context, path string) error {
 
 		err := cmd.Run()
 		if err != nil {
-			return err
+			log.Printf("Failed to fix NTFS on %s: %v", partition, err)
 		}
 	}
 	return nil
