@@ -146,7 +146,7 @@ func CopyDisk(nbdserver NBDServer, dest string) error {
 	defer progressRead.Close()
 	defer progressWrite.Close()
 
-	cmd := exec.Command("nbdcopy", "--progress=3", generateSockUrl(nbdserver.tmp_dir), dest)
+	cmd := exec.Command("nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
 	log.Println(cmd.String())

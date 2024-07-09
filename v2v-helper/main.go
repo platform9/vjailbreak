@@ -30,18 +30,17 @@ func main() {
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
 	var envInsecure = os.Getenv("VCENTER_INSECURE")
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
-	// var applianceid = os.Getenv("APPLIANCE_ID")
 	var networkid = os.Getenv("NEUTRON_NETWORK_ID")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
+	var envconvert = os.Getenv("CONVERT")
 
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
-	// log.Println("Password:", envPassword)
 	log.Println("Insecure:", envInsecure)
 	log.Println("Source VM Name:", sourcevmname)
-	// log.Println("Appliance ID:", applianceid)
 	log.Println("Network ID:", networkid)
 	insecure, _ := strconv.ParseBool(envInsecure)
+	convert, _ := strconv.ParseBool(envconvert)
 
 	// 1. Validate vCenter and Openstack connection
 	client, err := ValidateVCenter(ctx, envUserName, envPassword, envURL, insecure)
@@ -152,24 +151,24 @@ func main() {
 			log.Fatalf("Failed to check if CBT is enabled: %s\n", err)
 		}
 		log.Println("CBT enabled successfully")
-	}
 
-	// 8. Create a snapshot of the source VM to Enable cbt
-	// check if the source VM has a snapshot
-	if vminfo.VM.Snapshot != nil {
-		log.Fatalf("Source VM has a snapshot. Please delete the snapshot before proceeding")
+		// 8. Create a snapshot of the source VM to Enable cbt
+		// // check if the source VM has a snapshot
+		// if vminfo.VM.Snapshot != nil {
+		// 	log.Fatalf("Source VM has a snapshot. Please delete the snapshot before proceeding")
+		// }
+		log.Println("Creating temporary snapshot of the source VM")
+		err = TakeSnapshot(ctx, "tmp-snap")
+		if err != nil {
+			log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
+		}
+		log.Println("Snapshot created successfully")
+		err = DeleteSnapshot(ctx, "tmp-snap")
+		if err != nil {
+			log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
+		}
+		log.Println("Snapshot deleted successfully")
 	}
-	log.Println("Creating temporary snapshot of the source VM")
-	err = TakeSnapshot(ctx, "tmp-snap")
-	if err != nil {
-		log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
-	}
-	log.Println("Snapshot created successfully")
-	err = DeleteSnapshot(ctx, "tmp-snap")
-	if err != nil {
-		log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
-	}
-	log.Println("Snapshot deleted successfully")
 
 	// 9. Start NBD Server
 	log.Println("Starting NBD server")
@@ -215,6 +214,9 @@ func main() {
 				}
 				log.Printf("Disk copied successfully: %+v\n", vminfo.VMDisks[idx].Path)
 			}
+		} else if incrementalCopyCount > 20 {
+			log.Println("20 incremental copies done, will proceed with the conversion now")
+			break
 		} else {
 			migration_snapshot, err := GetSnapshot(ctx, "migration-snap")
 			if err != nil {
@@ -278,22 +280,22 @@ func main() {
 		incrementalCopyCount += 1
 
 	}
-	// // run v2v only for the first disk as it is the boot disk
-	// for _, vmdisk := range vminfo.VMDisks {
-	// 	// Fix NTFS
-	// 	if ostype == "windows" {
-	// 		err = NTFSFix(ctx, vmdisk.Path)
-	// 		if err != nil {
-	// 			log.Fatalf("Failed to run ntfsfix: %s\n", err)
-	// 		}
-	// 	}
+	// run v2v only for the first disk as it is the boot disk
+	if convert {
+		// Fix NTFS
+		if ostype == "windows" {
+			err = NTFSFix(ctx, vminfo.VMDisks[0].Path)
+			if err != nil {
+				log.Fatalf("Failed to run ntfsfix: %s\n", err)
+			}
+		}
 
-	// 	err = ConvertDisk(ctx, vmdisk.Path)
+		err = ConvertDisk(ctx, vminfo.VMDisks[0].Path)
 
-	// 	if err != nil {
-	// 		log.Fatalf("Failed to run virt-v2v: %s\n", err)
-	// 	}
-	// }
+		if err != nil {
+			log.Fatalf("Failed to run virt-v2v: %s\n", err)
+		}
+	}
 
 	// Detatch volumes from VM
 	for _, vmdisk := range vminfo.VMDisks {

@@ -94,7 +94,6 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-// TODO: openstack volume set --image-property hw_disk_bus=sata  "a_wintst_cbt-Hard disk 1"
 func CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
 	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
 	var opts volumes.CreateOpts
@@ -266,11 +265,11 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.F
 	// 		flavor.Name, flavor.ID, flavor.RAM, flavor.VCPUs, flavor.Disk)
 	// }
 
-	fmt.Println("Current requirements:", cpu, "CPUs and", memory, "MB of RAM")
+	log.Println("Current requirements:", cpu, "CPUs and", memory, "MB of RAM")
 
 	bestFlavor := new(flavors.Flavor)
-	bestFlavor.VCPUs = 1000000
-	bestFlavor.RAM = 1000000
+	bestFlavor.VCPUs = 9999999
+	bestFlavor.RAM = 9999999
 	// Find the smallest flavor that meets the requirements
 	for _, flavor := range allFlavors {
 		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
@@ -281,10 +280,10 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.F
 	}
 
 	if bestFlavor != nil {
-		fmt.Printf("The best flavor is:\nName: %s\nID: %s\nRAM: %dMB\nVCPUs: %d\nDisk: %dGB\n",
+		log.Printf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {
-		fmt.Println("No suitable flavor found.")
+		log.Println("No suitable flavor found.")
 	}
 
 	return bestFlavor, nil

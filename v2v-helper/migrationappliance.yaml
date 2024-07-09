@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: MigrationAppliance
+  name: migrationappliance
 spec:
   restartPolicy: Never
   containers:
@@ -22,21 +22,13 @@ spec:
       value: ""
     - name: SOURCE_VM_NAME
       value: ""
-    - name: APPLIANCE_ID
-      value: ""
     - name: NEUTRON_NETWORK_ID
       value: ""
     - name: OS_TYPE
       value: ""
+    - name: CONVERT
+      value: ""
     - name: OS_AUTH_URL
-      value: ""
-    - name: OS_PROJECT_ID
-      value: ""
-    - name: OS_PROJECT_NAME
-      value: ""
-    - name: OS_USER_DOMAIN_NAME
-      value: ""
-    - name: OS_PROJECT_DOMAIN_ID
       value: ""
     - name: OS_DOMAIN_NAME
       value: ""
@@ -45,12 +37,6 @@ spec:
     - name: OS_USERNAME
       value: ""
     - name: OS_PASSWORD
-      value: ""
-    - name: OS_REGION_NAME
-      value: ""
-    - name: OS_INTERFACE
-      value: ""
-    - name: OS_IDENTITY_API_VERSION
       value: ""
     volumeMounts:
     - mountPath: /home/fedora/vmware-vix-disklib-distrib
