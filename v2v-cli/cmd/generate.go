@@ -18,6 +18,8 @@ const podYamlTemplate = `apiVersion: v1
 kind: Pod
 metadata:
   name: v2v-helper
+  labels:
+    vm-name: mig_vm_name
 spec:
   restartPolicy: Never
   containers:
@@ -65,10 +67,10 @@ func randSeq(n int) string {
 	return string(b)
 }
 
-var generateCmd = &cobra.Command{
-	Use:   "generate",
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
 	Short: "Generate Kubernetes Pod and ConfigMap YAML",
-	Long: `Generate Kubernetes Pod and ConfigMap YAML based on user input and admin.rc file. 
+	Long: `Generate Kubernetes Pod and ConfigMap YAML based on user input and admin.rc file and start the migration. 
 Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DOMAIN_NAME, OS_TENANT_NAME, OS_USERNAME, OS_PASSWORD.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if kubectl exists
@@ -83,7 +85,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		configMap.Metadata.Name = "migration-config"
 		configMap.Data = make(map[string]string)
 
-		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_ID", "OS_TYPE"}
+		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAME", "OS_TYPE"}
 		for _, env := range envVars {
 			var value string
 			fmt.Printf("Enter value for %s", env)
@@ -93,9 +95,11 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 				value = string(password)
 				fmt.Println()
 			} else if env == "VCENTER_INSECURE" || env == "CONVERT" {
-				fmt.Printf(" (true/false):")
+				fmt.Printf(" (true/false) (Default is true):")
 				fmt.Scanln(&value)
-				if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
+				if value == "" {
+					value = "true"
+				} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
 					value = "true"
 				} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
 					value = "false"
@@ -103,12 +107,21 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 			} else if env == "OS_TYPE" {
 				fmt.Printf(" (Windows/Linux): ")
 				fmt.Scanln(&value)
+			} else if env == "NEUTRON_NETWORK_NAME" {
+				fmt.Printf("(Default is vlan-218-uservm-network-1): ")
+				fmt.Scanln(&value)
+				if value == "" {
+					value = "vlan-218-uservm-network-1"
+				}
 			} else {
 				fmt.Printf(": ")
 				fmt.Scanln(&value)
 			}
 			configMap.Data[env] = value
 		}
+
+		// TODO: Remove this in future
+		configMap.Data["NEUTRON_NETWORK_ID"] = "fe8446ee-dc50-41f8-9de2-9a100eb132a2"
 
 		randsequence := randSeq(5)
 
@@ -144,6 +157,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		podYaml := podYamlTemplate
 		podYaml = strings.Replace(podYaml, "migration-config", configMap.Metadata.Name, -1)
 		podYaml = strings.Replace(podYaml, "v2v-helper", "v2v-helper"+"-"+randsequence, -1)
+		podYaml = strings.Replace(podYaml, "mig_vm_name", configMap.Data["SOURCE_VM_NAME"], -1)
 
 		// Write the Pod YAML to a file
 		podOutputFile := "pod.yaml"
@@ -161,6 +175,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 			log.Fatalf("Error applying YAML files: %v", err)
 		}
 		fmt.Println("YAML files applied successfully.")
+		fmt.Printf("To check the status of the migration, run: kubectl logs -f v2v-helper-%s\n", randsequence)
 	},
 }
 

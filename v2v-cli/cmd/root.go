@@ -9,8 +9,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "v2v-helper-cli",
-	Short: "A CLI tool to generate Kubernetes Pod YAML",
-	Long:  `A CLI tool to generate Kubernetes Pod YAML based on user input and admin file.`,
+	Short: "A CLI tool to migrate VMs from VMware to Openstack.",
+	Long:  `A CLI tool to migrate VMs from VMware to Openstack.`,
 }
 
 func Execute() {
@@ -22,7 +22,7 @@ func Execute() {
 
 func init() {
 	// Register your commands here
-	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(migrateCmd)
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }
