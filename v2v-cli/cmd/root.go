@@ -23,6 +23,7 @@ func Execute() {
 func init() {
 	// Register your commands here
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(statusCmd)
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }

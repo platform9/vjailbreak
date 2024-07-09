@@ -204,3 +204,34 @@ func parseAdminFile(filename string) (map[string]string, error) {
 	}
 	return envVars, nil
 }
+
+var statusCmd = &cobra.Command{
+	Use:   "status [vm-name]",
+	Short: "Check the status of a migration",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		vmName := args[0]
+		// Check if kubectl exists
+		_, err := exec.LookPath("kubectl")
+		if err != nil {
+			log.Fatal("kubectl not found. Please make sure it is installed and in your PATH.")
+		}
+		// Get the pod with the matching label
+		getPodCmd := exec.Command("kubectl", "get", "pod", "-l", "vm-name="+vmName, "-o", "jsonpath={.items[0].metadata.name}")
+		podNameBytes, err := getPodCmd.Output()
+		if err != nil {
+			log.Fatalf("Error getting pod name: %v", err)
+		}
+		podName := strings.TrimSpace(string(podNameBytes))
+		if podName == "" {
+			log.Fatalf("No pod found with the vm-name label: %s", vmName)
+		}
+		// Get the pod logs
+		logsCmd := exec.Command("kubectl", "logs", "-f", podName)
+		logsCmd.Stdout = os.Stdout
+		logsCmd.Stderr = os.Stderr
+		if err := logsCmd.Run(); err != nil {
+			log.Fatalf("Error getting pod logs: %v", err)
+		}
+	},
+}
