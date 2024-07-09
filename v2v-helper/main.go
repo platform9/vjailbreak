@@ -30,7 +30,7 @@ func main() {
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
 	var envInsecure = os.Getenv("VCENTER_INSECURE")
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
-	var networkid = os.Getenv("NEUTRON_NETWORK_ID")
+	var networkname = os.Getenv("NEUTRON_NETWORK_NAME")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
 	var envconvert = os.Getenv("CONVERT")
 
@@ -38,7 +38,7 @@ func main() {
 	log.Println("Username:", envUserName)
 	log.Println("Insecure:", envInsecure)
 	log.Println("Source VM Name:", sourcevmname)
-	log.Println("Network ID:", networkid)
+	log.Println("Network ID:", networkname)
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
 
@@ -328,6 +328,13 @@ func main() {
 	log.Printf("Closest OpenStack flavor: %+v\n", closestFlavour)
 
 	// Create Port Group with the same mac address as the source VM
+	// Find the network with the given ID
+	networkid, err := GetNetworkID(ctx, networkname)
+	if err != nil {
+		log.Fatalf("Failed to get network ID: %s\n", err)
+	}
+	log.Printf("Network ID: %s\n", networkid)
+
 	port, err := CreatePort(ctx, networkid, vminfo)
 	if err != nil {
 		log.Fatalf("Failed to create port group: %s\n", err)

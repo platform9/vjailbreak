@@ -289,6 +289,27 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.F
 	return bestFlavor, nil
 }
 
+func GetNetworkID(ctx context.Context, networkname string) (string, error) {
+	networkingClient := ctx.Value("openstack_clients").(*OpenStackClients).NetworkingClient
+
+	allPages, err := networks.List(networkingClient, nil).AllPages()
+	if err != nil {
+		return "", err
+	}
+
+	allNetworks, err := networks.ExtractNetworks(allPages)
+	if err != nil {
+		return "", err
+	}
+
+	for _, network := range allNetworks {
+		if network.Name == networkname {
+			return network.ID, nil
+		}
+	}
+	return "", fmt.Errorf("network not found")
+}
+
 func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Port, error) {
 	networkingClient := ctx.Value("openstack_clients").(*OpenStackClients).NetworkingClient
 
