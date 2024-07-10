@@ -109,7 +109,9 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 				fmt.Scanln(&value)
 			} else if env == "NEUTRON_NETWORK_NAME" {
 				fmt.Printf("(Default is vlan-218-uservm-network-1): ")
-				fmt.Scanln(&value)
+				reader := bufio.NewReader(os.Stdin)
+				value, _ = reader.ReadString('\n')
+				value = strings.TrimSuffix(value, "\n")
 				if value == "" {
 					value = "vlan-218-uservm-network-1"
 				}
@@ -119,9 +121,6 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 			}
 			configMap.Data[env] = value
 		}
-
-		// TODO: Remove this in future
-		configMap.Data["NEUTRON_NETWORK_ID"] = "fe8446ee-dc50-41f8-9de2-9a100eb132a2"
 
 		randsequence := randSeq(5)
 
