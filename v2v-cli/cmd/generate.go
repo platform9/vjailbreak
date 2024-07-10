@@ -49,6 +49,16 @@ spec:
       type: Directory
 `
 
+var (
+	VCENTER_USERNAME     string
+	VCENTER_PASSWORD     string
+	VCENTER_HOST         string
+	SOURCE_VM_NAME       string
+	CONVERT              string
+	VCENTER_INSECURE     string
+	NEUTRON_NETWORK_NAME string
+)
+
 type ConfigMap struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
@@ -88,35 +98,72 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAME", "OS_TYPE"}
 		for _, env := range envVars {
 			var value string
-			fmt.Printf("Enter value for %s", env)
-			if env == "VCENTER_PASSWORD" {
-				fmt.Printf(": ")
-				password, _ := term.ReadPassword(0)
-				value = string(password)
-				fmt.Println()
-			} else if env == "VCENTER_INSECURE" || env == "CONVERT" {
-				fmt.Printf(" (true/false) (Default is true):")
-				fmt.Scanln(&value)
-				if value == "" {
-					value = "true"
-				} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
-					value = "true"
-				} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
-					value = "false"
+			switch env {
+			case "VCENTER_USERNAME":
+				if vcenter_username, _ := rootCmd.Flags().GetString("vcenter-user"); vcenter_username != "" {
+					value = vcenter_username
+				} else {
+					fmt.Printf("Enter value for %s: ", env)
+					fmt.Scanln(&value)
 				}
-			} else if env == "OS_TYPE" {
-				fmt.Printf(" (Windows/Linux): ")
-				fmt.Scanln(&value)
-			} else if env == "NEUTRON_NETWORK_NAME" {
-				fmt.Printf("(Default is vlan-218-uservm-network-1): ")
-				reader := bufio.NewReader(os.Stdin)
-				value, _ = reader.ReadString('\n')
-				value = strings.TrimSuffix(value, "\n")
-				if value == "" {
-					value = "vlan-218-uservm-network-1"
+			case "VCENTER_PASSWORD":
+				if vcenter_password, _ := rootCmd.Flags().GetString("vcenter-password"); vcenter_password != "" {
+					value = vcenter_password
+				} else {
+					fmt.Printf("Enter value for %s: ", env)
+					password, _ := term.ReadPassword(0)
+					value = string(password)
+					fmt.Println()
 				}
-			} else {
-				fmt.Printf(": ")
+			case "VCENTER_HOST":
+				if vcenter_host, _ := rootCmd.Flags().GetString("vcenter-host"); vcenter_host != "" {
+					value = vcenter_host
+				} else {
+					fmt.Printf("Enter value for %s: ", env)
+					fmt.Scanln(&value)
+				}
+			case "SOURCE_VM_NAME":
+				if source_vm_name, _ := rootCmd.Flags().GetString("source-vm-name"); source_vm_name != "" {
+					value = source_vm_name
+				} else {
+					fmt.Printf("Enter value for %s: ", env)
+					fmt.Scanln(&value)
+				}
+			case "VCENTER_INSECURE", "CONVERT":
+				if vcenter_insecure, _ := rootCmd.Flags().GetString("vcenter-insecure"); vcenter_insecure != "" {
+					value = vcenter_insecure
+				} else {
+					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
+					fmt.Scanln(&value)
+					if value == "" {
+						value = "true"
+					} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
+						value = "true"
+					} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
+						value = "false"
+					}
+				}
+			case "OS_TYPE":
+				if os_type, _ := rootCmd.Flags().GetString("os-type"); os_type != "" {
+					value = os_type
+				} else {
+					fmt.Printf("Enter value for %s (Windows/Linux): ", env)
+					fmt.Scanln(&value)
+				}
+			case "NEUTRON_NETWORK_NAME":
+				if neutron_network_name, _ := rootCmd.Flags().GetString("neutron-network-name"); neutron_network_name != "" {
+					value = neutron_network_name
+				} else {
+					fmt.Printf("Enter value for %s (Default is vlan-218-uservm-network-1): ", env)
+					reader := bufio.NewReader(os.Stdin)
+					value, _ = reader.ReadString('\n')
+					value = strings.TrimSuffix(value, "\n")
+					if value == "" {
+						value = "vlan-218-uservm-network-1"
+					}
+				}
+			default:
+				fmt.Printf("Enter value for %s: ", env)
 				fmt.Scanln(&value)
 			}
 			configMap.Data[env] = value
@@ -126,7 +173,12 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 
 		configMap.Metadata.Name = configMap.Metadata.Name + "-" + randsequence
 
-		adminFile := "admin.rc"
+		var adminFile string
+		if admin_rc, _ := rootCmd.Flags().GetString("admin-file"); admin_rc != "" {
+			adminFile = admin_rc
+		} else {
+			adminFile = "admin.rc"
+		}
 		adminConfig, err := parseAdminFile(adminFile)
 		if err != nil {
 			log.Fatalf("Error reading admin file: %v", err)

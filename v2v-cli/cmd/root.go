@@ -26,4 +26,15 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	migrateCmd.PersistentFlags().StringP("admin-file", "a", "admin.rc", "Path to the admin file")
+	migrateCmd.PersistentFlags().StringP("vcenter-user", "u", "", "Username for vCenter")
+	migrateCmd.PersistentFlags().StringP("vcenter-password", "p", "", "Password for vCenter")
+	migrateCmd.PersistentFlags().StringP("vcenter-host", "", "", "vCenter host")
+	migrateCmd.PersistentFlags().StringP("source-vm-name", "s", "", "Name of the source VM")
+	migrateCmd.PersistentFlags().StringP("convert", "c", "true", "Convert the VM to Openstack format")
+	migrateCmd.PersistentFlags().StringP("vcenter-insecure", "i", "true", "Ignore SSL certificate verification")
+	migrateCmd.PersistentFlags().StringP("neutron-network-name", "n", "vlan-218-uservm-network-1", "Neutron network name")
+	migrateCmd.PersistentFlags().StringP("os-type", "o", "Linux", "OS type of the VM")
+
 }
