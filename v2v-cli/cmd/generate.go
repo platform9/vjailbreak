@@ -95,19 +95,19 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		configMap.Metadata.Name = "migration-config"
 		configMap.Data = make(map[string]string)
 
-		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAME", "OS_TYPE"}
+		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAME", "OS_TYPE", "VIRTIO_WIN_DRIVER"}
 		for _, env := range envVars {
 			var value string
 			switch env {
 			case "VCENTER_USERNAME":
-				if vcenter_username, _ := rootCmd.Flags().GetString("vcenter-user"); vcenter_username != "" {
+				if vcenter_username, _ := cmd.Flags().GetString("vcenter-user"); vcenter_username != "" {
 					value = vcenter_username
 				} else {
 					fmt.Printf("Enter value for %s: ", env)
 					fmt.Scanln(&value)
 				}
 			case "VCENTER_PASSWORD":
-				if vcenter_password, _ := rootCmd.Flags().GetString("vcenter-password"); vcenter_password != "" {
+				if vcenter_password, _ := cmd.Flags().GetString("vcenter-password"); vcenter_password != "" {
 					value = vcenter_password
 				} else {
 					fmt.Printf("Enter value for %s: ", env)
@@ -116,21 +116,21 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 					fmt.Println()
 				}
 			case "VCENTER_HOST":
-				if vcenter_host, _ := rootCmd.Flags().GetString("vcenter-host"); vcenter_host != "" {
+				if vcenter_host, _ := cmd.Flags().GetString("vcenter-host"); vcenter_host != "" {
 					value = vcenter_host
 				} else {
 					fmt.Printf("Enter value for %s: ", env)
 					fmt.Scanln(&value)
 				}
 			case "SOURCE_VM_NAME":
-				if source_vm_name, _ := rootCmd.Flags().GetString("source-vm-name"); source_vm_name != "" {
+				if source_vm_name, _ := cmd.Flags().GetString("source-vm-name"); source_vm_name != "" {
 					value = source_vm_name
 				} else {
 					fmt.Printf("Enter value for %s: ", env)
 					fmt.Scanln(&value)
 				}
 			case "VCENTER_INSECURE", "CONVERT":
-				if vcenter_insecure, _ := rootCmd.Flags().GetString("vcenter-insecure"); vcenter_insecure != "" {
+				if vcenter_insecure, _ := cmd.Flags().GetString("vcenter-insecure"); vcenter_insecure != "" {
 					value = vcenter_insecure
 				} else {
 					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
@@ -144,14 +144,14 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 					}
 				}
 			case "OS_TYPE":
-				if os_type, _ := rootCmd.Flags().GetString("os-type"); os_type != "" {
+				if os_type, _ := cmd.Flags().GetString("os-type"); os_type != "" {
 					value = os_type
 				} else {
 					fmt.Printf("Enter value for %s (Windows/Linux): ", env)
 					fmt.Scanln(&value)
 				}
 			case "NEUTRON_NETWORK_NAME":
-				if neutron_network_name, _ := rootCmd.Flags().GetString("neutron-network-name"); neutron_network_name != "" {
+				if neutron_network_name, _ := cmd.Flags().GetString("neutron-network-name"); neutron_network_name != "" {
 					value = neutron_network_name
 				} else {
 					fmt.Printf("Enter value for %s (Default is vlan-218-uservm-network-1): ", env)
@@ -161,6 +161,13 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 					if value == "" {
 						value = "vlan-218-uservm-network-1"
 					}
+				}
+			case "VIRTIO_WIN_DRIVER":
+				if virtio_win_driver, _ := cmd.Flags().GetString("virtio-win-iso"); virtio_win_driver != "" {
+					value = virtio_win_driver
+				} else {
+					fmt.Printf("Enter value for %s: ", env)
+					fmt.Scanln(&value)
 				}
 			default:
 				fmt.Printf("Enter value for %s: ", env)
@@ -174,7 +181,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		configMap.Metadata.Name = configMap.Metadata.Name + "-" + randsequence
 
 		var adminFile string
-		if admin_rc, _ := rootCmd.Flags().GetString("admin-file"); admin_rc != "" {
+		if admin_rc, _ := cmd.Flags().GetString("admin-file"); admin_rc != "" {
 			adminFile = admin_rc
 		} else {
 			adminFile = "admin.rc"

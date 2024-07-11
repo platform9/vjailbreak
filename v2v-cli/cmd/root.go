@@ -36,5 +36,6 @@ func init() {
 	migrateCmd.PersistentFlags().StringP("vcenter-insecure", "i", "true", "Ignore SSL certificate verification")
 	migrateCmd.PersistentFlags().StringP("neutron-network-name", "n", "vlan-218-uservm-network-1", "Neutron network name")
 	migrateCmd.PersistentFlags().StringP("os-type", "o", "Linux", "OS type of the VM")
+	migrateCmd.PersistentFlags().StringP("virtio-win-iso", "w", "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso", "URL to the virtio-win iso")
 
 }
