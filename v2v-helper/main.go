@@ -14,17 +14,7 @@ import (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Load environment variables from .env and admin.rc file
-	// This file should be in the same directory as the main.go file
-	// err := godotenv.Load(".env")
-	// if err != nil {
-	// 	log.Fatalf("Error loading .env file")
-	// }
 
-	// err = godotenv.Load("admin.rc")
-	// if err != nil {
-	// 	log.Fatalf("Error loading admin.rc file")
-	// }
 	var envURL = os.Getenv("VCENTER_HOST")
 	var envUserName = os.Getenv("VCENTER_USERNAME")
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
@@ -65,12 +55,6 @@ func main() {
 		log.Fatalf("Failed to get thumbprint: %s\n", err)
 	}
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
-
-	// data, err := getAllInfo(ctx, client, envURL, envUserName)
-	// if err != nil {
-	// 	log.Fatalf("Failed to get all info: %s\n", err)
-	// 	return
-	// }
 
 	// 3. Retrieve the source VM
 	source_vm, err := GetVMByName(ctx, sourcevmname)
@@ -156,11 +140,6 @@ func main() {
 		}
 		log.Println("CBT enabled successfully")
 
-		// 8. Create a snapshot of the source VM to Enable cbt
-		// // check if the source VM has a snapshot
-		// if vminfo.VM.Snapshot != nil {
-		// 	log.Fatalf("Source VM has a snapshot. Please delete the snapshot before proceeding")
-		// }
 		log.Println("Creating temporary snapshot of the source VM")
 		err = TakeSnapshot(ctx, "tmp-snap")
 		if err != nil {
@@ -181,11 +160,6 @@ func main() {
 		log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
 	}
 
-	// vminfo, err = GetVMInfo(ctx)
-	// if err != nil {
-	// 	log.Fatalf("Failed to get all info: %s\n", err)
-	// }
-	// log.Printf("VM Disk Info: %+v\n", vminfo.VMDisks)
 	vminfo, err = UpdateDiskInfo(ctx, vminfo)
 	if err != nil {
 		log.Fatalf("Failed to update disk info: %s\n", err)
@@ -206,7 +180,6 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	incrementalCopyCount := 0
-	// oldsnapname := "migration-snap"
 	for {
 		// If its the firt copy, copy the entire disk
 		if incrementalCopyCount == 0 {
@@ -347,28 +320,10 @@ func main() {
 	log.Printf("Port Group created successfully: %+v\n", port)
 
 	// Create a new VM in OpenStack
-
 	newVM, err := CreateVM(ctx, closestFlavour, networkid, port, vminfo)
 	if err != nil {
 		log.Fatalf("Failed to create VM: %s\n", err)
 	}
 
 	log.Printf("VM created successfully: %+v\n", newVM)
-
-	// // Check if the source VM is powered off. if not, power it off
-	// if source_vm.State != "poweredOff" {
-	// 	log.Println("Source VM is not powered off. Powering off the VM")
-	// 	task, err := source_vm.VM.PowerOff(ctx)
-	// 	if err != nil {
-	// 		log.Fatalf("Failed to power off source VM: %s\n", err)
-	// 		return
-	// 	}
-	// 	err = task.Wait(ctx)
-	// 	if err != nil {
-	// 		log.Fatalf("Failed to wait for source VM power off task: %s\n", err)
-	// 		return
-	// 	}
-	// 	log.Println("Source VM powered off successfully")
-	// }
-
 }

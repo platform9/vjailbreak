@@ -17,7 +17,7 @@ import (
 const podYamlTemplate = `apiVersion: v1
 kind: Pod
 metadata:
-  name: v2v-helper
+  name: v2vhelper
   labels:
     vm-name: mig_vm_name
 spec:
@@ -26,7 +26,7 @@ spec:
   - name: fedora
     securityContext:
       privileged: true
-    image: tanaypf9/v2v:latest
+    image: platform9/v2v-helper:v0.1
     imagePullPolicy: Always
     command:
     - /home/fedora/manager
@@ -214,7 +214,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		// Update the Pod YAML template with the correct ConfigMap name
 		podYaml := podYamlTemplate
 		podYaml = strings.Replace(podYaml, "migration-config", configMap.Metadata.Name, -1)
-		podYaml = strings.Replace(podYaml, "v2v-helper", "v2v-helper"+"-"+randsequence, -1)
+		podYaml = strings.Replace(podYaml, "v2vhelper", "v2v-helper"+"-"+randsequence, -1)
 		podYaml = strings.Replace(podYaml, "mig_vm_name", configMap.Data["SOURCE_VM_NAME"], -1)
 
 		// Write the Pod YAML to a file

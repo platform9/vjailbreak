@@ -259,12 +259,6 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.F
 		return nil, err
 	}
 
-	// Print the list of flavors
-	// for _, flavor := range allFlavors {
-	// 	fmt.Printf("Name: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
-	// 		flavor.Name, flavor.ID, flavor.RAM, flavor.VCPUs, flavor.Disk)
-	// }
-
 	log.Println("Current requirements:", cpu, "CPUs and", memory, "MB of RAM")
 
 	bestFlavor := new(flavors.Flavor)
@@ -327,8 +321,6 @@ func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Po
 	}
 
 	for _, network := range allNetworks {
-		// fmt.Printf("Name: %s, ID: %s Given ID: %s\n", network.Name, network.ID, networkid)
-
 		if network.ID == networkid {
 			for _, m := range vminfo.Mac {
 				pages, err := ports.List(networkingClient, ports.ListOpts{
@@ -369,15 +361,6 @@ func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Po
 
 func CreateVM(ctx context.Context, flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error) {
 	computeClient := ctx.Value("openstack_clients").(*OpenStackClients).ComputeClient
-	// blockDevices := []bootfromvolume.BlockDevice{}
-	// for _, disk := range vminfo.VMDisks {
-	// 	blockDevices = append(blockDevices, bootfromvolume.BlockDevice{
-	// 		DeleteOnTermination: true,
-	// 		DestinationType:     bootfromvolume.DestinationVolume,
-	// 		SourceType:          bootfromvolume.SourceVolume,
-	// 		UUID:                disk.OpenstackVol.ID,
-	// 	})
-	// }
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,

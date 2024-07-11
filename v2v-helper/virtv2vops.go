@@ -103,7 +103,6 @@ func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindrive
 	// Convert the disk
 
 	if ostype == "windows" {
-		// url := "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso"
 		filePath := "/home/fedora/virtio-win.iso"
 		log.Println("Downloading virtio windrivers")
 		err := downloadFile(virtiowindriver, filePath)
