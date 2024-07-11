@@ -32,6 +32,7 @@ func main() {
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
 	var networkname = os.Getenv("NEUTRON_NETWORK_NAME")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
+	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
 	var envconvert = os.Getenv("CONVERT")
 
 	log.Println("URL:", envURL)
@@ -75,6 +76,9 @@ func main() {
 	source_vm, err := GetVMByName(ctx, sourcevmname)
 	if err != nil {
 		log.Fatalf("Failed to get source VM: %s\n", err)
+	}
+	if source_vm == nil {
+		log.Fatalf("Source VM not found")
 	}
 	log.Printf("Source VM: %+v\n", source_vm)
 	ctx = context.WithValue(ctx, "vm", source_vm)
@@ -290,7 +294,7 @@ func main() {
 			}
 		}
 
-		err = ConvertDisk(ctx, vminfo.VMDisks[0].Path)
+		err = ConvertDisk(ctx, vminfo.VMDisks[0].Path, ostype, virtiowin)
 
 		if err != nil {
 			log.Fatalf("Failed to run virt-v2v: %s\n", err)

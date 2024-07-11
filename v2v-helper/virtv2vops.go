@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -72,8 +74,47 @@ func NTFSFix(ctx context.Context, path string) error {
 	return nil
 }
 
-func ConvertDisk(ctx context.Context, path string) error {
+func downloadFile(url, filePath string) error {
+	// Get the data from the URL
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	// Create the file
+	out, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error {
 	// Convert the disk
+
+	if ostype == "windows" {
+		// url := "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso"
+		filePath := "/home/fedora/virtio-win.iso"
+		log.Println("Downloading virtio windrivers")
+		err := downloadFile(virtiowindriver, filePath)
+		if err != nil {
+			return err
+		}
+		log.Println("Downloaded virtio windrivers")
+		defer os.Remove(filePath)
+		os.Setenv("VIRTIO_WIN", filePath)
+
+	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := exec.Command("virt-v2v-in-place", "-i", "disk", path)
 	log.Println(cmd.String())

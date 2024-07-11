@@ -118,7 +118,7 @@ func CreateVolume(ctx context.Context, name string, size int64, ostype string, u
 		}
 	}
 	if ostype == "windows" {
-		err = SetVolumeSATA(ctx, volume)
+		err = SetVolumeImageMetadata(ctx, volume)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +130,7 @@ func CreateVolume(ctx context.Context, name string, size int64, ostype string, u
 func WaitForVolume(ctx context.Context, volumeID string) error {
 	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
 
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 10; i++ {
 		volume, err := volumes.Get(blockStorageClient, volumeID).Extract()
 		if err != nil {
 			return err
@@ -139,10 +139,9 @@ func WaitForVolume(ctx context.Context, volumeID string) error {
 		if volume.Status == "available" {
 			return nil
 		}
-
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	return fmt.Errorf("volume did not become available within 30 seconds")
+	return fmt.Errorf("volume did not become available within 500 seconds")
 }
 
 func AttachVolumeToVM(ctx context.Context, volumeID, instanceID string) error {
@@ -219,12 +218,13 @@ func SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
 	return nil
 }
 
-func SetVolumeSATA(ctx context.Context, volume *volumes.Volume) error {
+func SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume) error {
 	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
 
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
-			"hw_disk_bus": "sata",
+			"hw_disk_bus": "virtio",
+			"os_type":     "windows",
 		},
 	}
 	err := volumeactions.SetImageMetadata(blockStorageClient, volume.ID, options).ExtractErr()
