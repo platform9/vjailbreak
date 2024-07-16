@@ -53,23 +53,26 @@ func validateOpenStack() (*OpenStackClients, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	providerClient, err := openstack.AuthenticatedClient(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, gophercloud.EndpointOpts{})
+	endpoint := gophercloud.EndpointOpts{
+		Region: os.Getenv("OS_REGION_NAME"),
+	}
+
+	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{})
+	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	networkingClient, err := openstack.NewNetworkV2(providerClient, gophercloud.EndpointOpts{})
+	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +131,6 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, err
 	}
-
-	log.Printf("Volume created with ID: %s\n", volume.ID)
-	log.Printf("%+v\n", volume)
 
 	err = osclient.WaitForVolume(volume.ID)
 	if err != nil {

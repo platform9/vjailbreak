@@ -191,7 +191,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 			log.Fatalf("Error reading admin file: %v", err)
 		}
 
-		openStackEnvVars := []string{"OS_AUTH_URL", "OS_DOMAIN_NAME", "OS_TENANT_NAME", "OS_USERNAME", "OS_PASSWORD"}
+		openStackEnvVars := []string{"OS_AUTH_URL", "OS_DOMAIN_NAME", "OS_TENANT_NAME", "OS_USERNAME", "OS_PASSWORD", "OS_REGION_NAME"}
 		for _, env := range openStackEnvVars {
 			value, ok := adminConfig[env]
 			if !ok {
