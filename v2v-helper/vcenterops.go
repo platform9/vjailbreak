@@ -8,14 +8,31 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 )
 
-func ValidateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
+type VCenterOperations interface {
+	getDatacenters() ([]*object.Datacenter, error)
+	GetVMByName(name string) (*object.VirtualMachine, error)
+}
+
+type VCenterClient struct {
+	VCClient            *vim25.Client
+	VCFinder            *find.Finder
+	VCPropertyCollector *property.Collector
+}
+
+func validateVCenter(username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
 	// add protocol to host if not present
 	if host[:4] != "http" {
-		host = "https://" + host + "/sdk"
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
 	}
 	u, err := url.Parse(host)
 	if err != nil {
@@ -31,11 +48,21 @@ func ValidateVCenter(ctx context.Context, username, password, host string, disab
 	}
 
 	c := new(vim25.Client)
-	err = s.Login(ctx, c, nil)
+	err = s.Login(context.Background(), c, nil)
 	if err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+func VCenterClientBuilder(username, password, host string, disableSSLVerification bool) (*VCenterClient, error) {
+	client, err := validateVCenter(username, password, host, disableSSLVerification)
+	if err != nil {
+		return nil, err
+	}
+	finder := find.NewFinder(client, false)
+	pc := property.DefaultCollector(client)
+	return &VCenterClient{VCClient: client, VCFinder: finder, VCPropertyCollector: pc}, nil
 }
 
 // This was used to generate the VDDK URL in case it was virt-v2v needed it
@@ -56,7 +83,7 @@ func GetThumbprint(host string) (string, error) {
 	// Get the thumbprint of the vCenter server
 	// Establish a TLS connection to the server
 	conn, err := tls.Dial("tcp", host+":443", &tls.Config{
-		InsecureSkipVerify: true, // Skip verification for demonstration purposes
+		InsecureSkipVerify: true, // Skip verification
 	})
 	if err != nil {
 		return "", err
@@ -82,4 +109,31 @@ func GetThumbprint(host string) (string, error) {
 
 	// Return the thumbprint as a hexadecimal string
 	return thumbprint, nil
+}
+
+// Get all datacenters
+func (vcclient *VCenterClient) getDatacenters() ([]*object.Datacenter, error) {
+	// Find all datacenters
+	datacenters, err := vcclient.VCFinder.DatacenterList(context.Background(), "*")
+	if err != nil {
+		return nil, err
+	}
+
+	return datacenters, nil
+}
+
+// get VM by name
+func (vcclient *VCenterClient) GetVMByName(name string) (*object.VirtualMachine, error) {
+	datacenters, err := vcclient.getDatacenters()
+	if err != nil {
+		return nil, err
+	}
+	for _, datacenter := range datacenters {
+		vcclient.VCFinder.SetDatacenter(datacenter)
+		vm, err := vcclient.VCFinder.VirtualMachine(context.Background(), name)
+		if err == nil {
+			return vm, nil
+		}
+	}
+	return nil, err
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -50,7 +49,7 @@ func GetPartitions(disk string) ([]string, error) {
 	return partitions, nil
 }
 
-func NTFSFix(ctx context.Context, path string) error {
+func NTFSFix(path string) error {
 	// Fix NTFS
 	partitions, err := GetPartitions(path)
 	if err != nil {
@@ -62,14 +61,15 @@ func NTFSFix(ctx context.Context, path string) error {
 			continue
 		}
 		cmd := exec.Command("ntfsfix", partition)
-		log.Println(cmd.String())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		log.Printf("Executing %s", cmd.String())
+		// cmd.Stdout = os.Stdout
+		// cmd.Stderr = os.Stderr
 
 		err := cmd.Run()
 		if err != nil {
 			log.Printf("Failed to fix NTFS on %s: %v", partition, err)
 		}
+		log.Printf("Fixed NTFS on %s", partition)
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func downloadFile(url, filePath string) error {
 	return err
 }
 
-func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error {
+func ConvertDisk(path string, ostype string, virtiowindriver string) error {
 	// Convert the disk
 
 	if ostype == "windows" {
@@ -116,7 +116,7 @@ func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindrive
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := exec.Command("virt-v2v-in-place", "-i", "disk", path)
-	log.Println(cmd.String())
+	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

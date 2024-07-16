@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,6 +23,21 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
 
+type OpenstackOperations interface {
+	CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error)
+	WaitForVolume(volumeID string) error
+	AttachVolumeToVM(volumeID string) error
+	WaitForVolumeAttachment(volumeID string) error
+	DetachVolumeFromVM(volumeID string) error
+	SetVolumeUEFI(volume *volumes.Volume) error
+	SetVolumeImageMetadata(volume *volumes.Volume) error
+	SetVolumeBootable(volume *volumes.Volume) error
+	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
+	GetNetworkID(networkname string) (string, error)
+	CreatePort(networkid string, vminfo VMInfo) (*ports.Port, error)
+	CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error)
+}
+
 type OpenStackClients struct {
 	BlockStorageClient *gophercloud.ServiceClient
 	ComputeClient      *gophercloud.ServiceClient
@@ -34,7 +48,7 @@ type OpenStackMetadata struct {
 	UUID string `json:"uuid"`
 }
 
-func ValidateOpenStack(ctx context.Context) (*OpenStackClients, error) {
+func validateOpenStack() (*OpenStackClients, error) {
 	opts, err := openstack.AuthOptionsFromEnv()
 	if err != nil {
 		return nil, err
@@ -67,7 +81,15 @@ func ValidateOpenStack(ctx context.Context) (*OpenStackClients, error) {
 	}, nil
 }
 
-func GetCurrentInstanceUUID() (string, error) {
+func OpenStackClientsBuilder() (*OpenStackClients, error) {
+	ostackclients, err := validateOpenStack()
+	if err != nil {
+		return nil, err
+	}
+	return ostackclients, nil
+}
+
+func getCurrentInstanceUUID() (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
 	if err != nil {
@@ -94,8 +116,8 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
-	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
+	blockStorageClient := osclient.BlockStorageClient
 	var opts volumes.CreateOpts
 
 	opts = volumes.CreateOpts{
@@ -107,18 +129,21 @@ func CreateVolume(ctx context.Context, name string, size int64, ostype string, u
 		return nil, err
 	}
 
-	err = WaitForVolume(ctx, volume.ID)
+	log.Printf("Volume created with ID: %s\n", volume.ID)
+	log.Printf("%+v\n", volume)
+
+	err = osclient.WaitForVolume(volume.ID)
 	if err != nil {
 		return nil, err
 	}
 	if uefi {
-		err = SetVolumeUEFI(ctx, volume)
+		err = osclient.SetVolumeUEFI(volume)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if ostype == "windows" {
-		err = SetVolumeImageMetadata(ctx, volume)
+		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, err
 		}
@@ -127,11 +152,9 @@ func CreateVolume(ctx context.Context, name string, size int64, ostype string, u
 	return volume, nil
 }
 
-func WaitForVolume(ctx context.Context, volumeID string) error {
-	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
-
+func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 	for i := 0; i < 10; i++ {
-		volume, err := volumes.Get(blockStorageClient, volumeID).Extract()
+		volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
 			return err
 		}
@@ -144,9 +167,12 @@ func WaitForVolume(ctx context.Context, volumeID string) error {
 	return fmt.Errorf("volume did not become available within 500 seconds")
 }
 
-func AttachVolumeToVM(ctx context.Context, volumeID, instanceID string) error {
-	computeClient := ctx.Value("openstack_clients").(*OpenStackClients).ComputeClient
-	_, err := volumeattach.Create(computeClient, instanceID, volumeattach.CreateOpts{
+func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
+	instanceID, err := getCurrentInstanceUUID()
+	if err != nil {
+		return err
+	}
+	_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 		VolumeID:            volumeID,
 		DeleteOnTermination: false,
 	}).Extract()
@@ -155,31 +181,11 @@ func AttachVolumeToVM(ctx context.Context, volumeID, instanceID string) error {
 	}
 
 	log.Println("Waiting for volume attachment")
-	err = WaitForVolumeAttachment(ctx, volumeID)
+	err = osclient.WaitForVolumeAttachment(volumeID)
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func WaitForVolumeAttachment(ctx context.Context, volumeID string) error {
-	for i := 0; i < 6; i++ {
-		devicePath, _ := findDevice(volumeID)
-		if devicePath != "" {
-			return nil
-		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
-	}
-	return fmt.Errorf("volume attachment not found within 30 seconds")
-}
-
-func DetachVolumeFromVM(ctx context.Context, volumeID, instanceID string) error {
-	computeClient := ctx.Value("openstack_clients").(*OpenStackClients).ComputeClient
-	err := volumeattach.Delete(computeClient, instanceID, volumeID).ExtractErr()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -203,53 +209,69 @@ func findDevice(volumeID string) (string, error) {
 	return "", nil
 }
 
-func SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
-	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
-
-	options := volumeactions.ImageMetadataOpts{
-		Metadata: map[string]string{
-			"hw_firmware_type": "uefi",
-		},
+func (osclient *OpenStackClients) WaitForVolumeAttachment(volumeID string) error {
+	for i := 0; i < 6; i++ {
+		devicePath, _ := findDevice(volumeID)
+		if devicePath != "" {
+			return nil
+		}
+		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	err := volumeactions.SetImageMetadata(blockStorageClient, volume.ID, options).ExtractErr()
+	return fmt.Errorf("volume attachment not found within 30 seconds")
+}
+
+func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
+	instanceID, err := getCurrentInstanceUUID()
+	if err != nil {
+		return err
+	}
+	err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume) error {
-	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
+func (osclient *OpenStackClients) SetVolumeUEFI(volume *volumes.Volume) error {
+	options := volumeactions.ImageMetadataOpts{
+		Metadata: map[string]string{
+			"hw_firmware_type": "uefi",
+		},
+	}
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
+func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume) error {
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
 			"os_type":     "windows",
 		},
 	}
-	err := volumeactions.SetImageMetadata(blockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
-	blockStorageClient := ctx.Value("openstack_clients").(*OpenStackClients).BlockStorageClient
-
+func (osclient *OpenStackClients) SetVolumeBootable(volume *volumes.Volume) error {
 	options := volumeactions.BootableOpts{
 		Bootable: true,
 	}
-	err := volumeactions.SetBootable(blockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetBootable(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
-	computeClient := ctx.Value("openstack_clients").(*OpenStackClients).ComputeClient
-	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
+func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error) {
+	allPages, err := flavors.ListDetail(osclient.ComputeClient, nil).AllPages()
 	if err != nil {
 		return nil, err
 	}
@@ -283,10 +305,8 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.F
 	return bestFlavor, nil
 }
 
-func GetNetworkID(ctx context.Context, networkname string) (string, error) {
-	networkingClient := ctx.Value("openstack_clients").(*OpenStackClients).NetworkingClient
-
-	allPages, err := networks.List(networkingClient, nil).AllPages()
+func (osclient *OpenStackClients) GetNetworkID(networkname string) (string, error) {
+	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
 		return "", err
 	}
@@ -304,11 +324,9 @@ func GetNetworkID(ctx context.Context, networkname string) (string, error) {
 	return "", fmt.Errorf("network not found")
 }
 
-func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Port, error) {
-	networkingClient := ctx.Value("openstack_clients").(*OpenStackClients).NetworkingClient
-
+func (osclient *OpenStackClients) CreatePort(networkid string, vminfo VMInfo) (*ports.Port, error) {
 	// Get the list of networks
-	allPages, err := networks.List(networkingClient, nil).AllPages()
+	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
 		log.Printf("Failed to list networks: %v", err)
 		return nil, err
@@ -323,7 +341,7 @@ func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Po
 	for _, network := range allNetworks {
 		if network.ID == networkid {
 			for _, m := range vminfo.Mac {
-				pages, err := ports.List(networkingClient, ports.ListOpts{
+				pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 					NetworkID:  networkid,
 					MACAddress: m,
 				}).AllPages()
@@ -343,8 +361,8 @@ func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Po
 					}
 				}
 				log.Printf("Port with MAC address %s does not exist, creating new port\n", m)
-				port, err := ports.Create(networkingClient, ports.CreateOpts{
-					Name:       "port-" + vminfo.VM.Name,
+				port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+					Name:       "port-" + vminfo.Name,
 					NetworkID:  networkid,
 					MACAddress: m,
 				}).Extract()
@@ -359,8 +377,7 @@ func CreatePort(ctx context.Context, networkid string, vminfo VMInfo) (*ports.Po
 	return nil, fmt.Errorf("network not found")
 }
 
-func CreateVM(ctx context.Context, flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error) {
-	computeClient := ctx.Value("openstack_clients").(*OpenStackClients).ComputeClient
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error) {
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,
@@ -369,7 +386,7 @@ func CreateVM(ctx context.Context, flavor *flavors.Flavor, networkID string, por
 	}
 	// Create the server
 	serverCreateOpts := servers.CreateOpts{
-		Name:      vminfo.VM.Name,
+		Name:      vminfo.Name,
 		FlavorRef: flavor.ID,
 		Networks: []servers.Network{
 			{
@@ -384,12 +401,20 @@ func CreateVM(ctx context.Context, flavor *flavors.Flavor, networkID string, por
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
 	}
 
-	server, err := servers.Create(computeClient, createOpts).Extract()
+	// Wait for disks to become available
+	for _, disk := range vminfo.VMDisks {
+		err := osclient.WaitForVolume(disk.OpenstackVol.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	server, err := servers.Create(osclient.ComputeClient, createOpts).Extract()
 	if err != nil {
 		return nil, err
 	}
 
-	err = servers.WaitForStatus(computeClient, server.ID, "ACTIVE", 60)
+	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", 60)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +424,7 @@ func CreateVM(ctx context.Context, flavor *flavors.Flavor, networkID string, por
 	log.Println("Attaching Additional Disks")
 
 	for _, disk := range vminfo.VMDisks[1:] {
-		_, err := volumeattach.Create(computeClient, server.ID, volumeattach.CreateOpts{
+		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
 		}).Extract()

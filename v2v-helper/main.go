@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"strconv"
@@ -12,9 +11,8 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	// ctx, cancel := context.WithCancel(context.Background())
+	// defer cancel()
 	var envURL = os.Getenv("VCENTER_HOST")
 	var envUserName = os.Getenv("VCENTER_USERNAME")
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
@@ -34,19 +32,19 @@ func main() {
 	convert, _ := strconv.ParseBool(envconvert)
 
 	// 1. Validate vCenter and Openstack connection
-	client, err := ValidateVCenter(ctx, envUserName, envPassword, envURL, insecure)
+	vcclient, err := VCenterClientBuilder(envUserName, envPassword, envURL, insecure)
 	if err != nil {
 		log.Fatalf("Failed to validate vCenter connection: %v", err)
 	}
-	ctx = context.WithValue(ctx, "govmomi_client", client)
+	// ctx = context.WithValue(ctx, "govmomi_client", vcclient)
 	log.Printf("Connected to vCenter: %s\n", envURL)
 
 	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
-	openstackclients, err := ValidateOpenStack(ctx)
+	openstackclients, err := OpenStackClientsBuilder()
 	if err != nil {
 		log.Fatalf("Failed to validate OpenStack connection: %v", err)
 	}
-	ctx = context.WithValue(ctx, "openstack_clients", openstackclients)
+	// ctx = context.WithValue(ctx, "openstack_clients", openstackclients)
 	log.Println("Connected to OpenStack")
 
 	// 2. Get thumbprint
@@ -57,57 +55,58 @@ func main() {
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
 
 	// 3. Retrieve the source VM
-	source_vm, err := GetVMByName(ctx, sourcevmname)
+	// source_vm, err := vcclient.GetVMByName(sourcevmname)
+	// if err != nil {
+	// 	log.Fatalf("Failed to get source VM: %s\n", err)
+	// }
+	// if source_vm == nil {
+	// 	log.Fatalf("Source VM not found")
+	// }
+	// log.Printf("Source VM: %+v\n", source_vm)
+	// ctx = context.WithValue(ctx, "vm", source_vm)
+	// log.Println("Source VM retrieved successfully")
+
+	// 3. Retrieve the source VM
+	vmops, err := VMOpsBuilder(*vcclient, sourcevmname)
 	if err != nil {
 		log.Fatalf("Failed to get source VM: %s\n", err)
 	}
-	if source_vm == nil {
-		log.Fatalf("Source VM not found")
-	}
-	log.Printf("Source VM: %+v\n", source_vm)
-	ctx = context.WithValue(ctx, "vm", source_vm)
-	log.Println("Source VM retrieved successfully")
 
 	// 4. Get Info about VM
-	vminfo, err := GetVMInfo(ctx)
+	vminfo, err := vmops.GetVMInfo()
 	if err != nil {
 		log.Fatalf("Failed to get all info: %s\n", err)
 	}
 
 	// Get the disks of the VM
-	log.Printf("VM Disk Info: %+v\n", vminfo.VMDisks)
+	// log.Printf("VM Disk Info: %+v\n", vminfo.VMDisks)
 
-	log.Printf("VM MAC Info: %+v\n", vminfo.Mac)
+	// log.Printf("VM MAC Info: %+v\n", vminfo.Mac)
 
 	// 5. Create a new volume in openstack
+	log.Println("Creating volumes in OpenStack")
 	for idx, vmdisk := range vminfo.VMDisks {
-		volume, err := CreateVolume(ctx, vminfo.VM.Name+"-"+vmdisk.Name, vmdisk.Size, ostype, vminfo.UEFI)
+		volume, err := openstackclients.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, ostype, vminfo.UEFI)
 		if err != nil {
 			log.Fatalf("Failed to create volume: %s\n", err)
 		}
 		vminfo.VMDisks[idx].OpenstackVol = volume
 		if idx == 0 {
-			err = SetVolumeBootable(ctx, volume)
+			err = openstackclients.SetVolumeBootable(volume)
 			if err != nil {
 				log.Fatalf("Failed to set volume as bootable: %s\n", err)
 			}
 		}
 	}
-	log.Printf("Volumes created successfully: %+v\n", vminfo.VMDisks[0].OpenstackVol.ID)
-
-	// TODO: 6. Mount Volumes to Appliance VM
-	applianceid, err := GetCurrentInstanceUUID()
-	if err != nil {
-		log.Fatalf("Failed to get current instance UUID: %s\n", err)
-	}
+	log.Println("Volumes created successfully")
 
 	log.Println("Attaching volumes to VM")
 	for _, vmdisk := range vminfo.VMDisks {
-		err = AttachVolumeToVM(ctx, vmdisk.OpenstackVol.ID, applianceid)
+		err = openstackclients.AttachVolumeToVM(vmdisk.OpenstackVol.ID)
 		if err != nil {
 			log.Fatalf("Failed to attach volume to VM: %s\n", err)
 		}
-		log.Printf("Volume attached to VM: %+v\n", vmdisk.OpenstackVol)
+		log.Printf("Volume attached to VM: %s\n", vmdisk.OpenstackVol.Name)
 	}
 
 	// Get the Path of the attached volume
@@ -117,11 +116,11 @@ func main() {
 			log.Fatalf("Failed to find device: %s\n", err)
 		}
 		vminfo.VMDisks[idx].Path = devicePath
-		log.Printf("Volumes attached successfully at %s: %+v\n", vminfo.VMDisks[idx].Path, vminfo.VMDisks)
+		log.Printf("Volume %s attached successfully at %s\n", vmdisk.Name, vminfo.VMDisks[idx].Path)
 	}
 
 	// 7. Check If CBT is enabled
-	cbt, err := IsCBTEnabled(ctx)
+	cbt, err := vmops.IsCBTEnabled()
 	if err != nil {
 		log.Fatalf("Failed to check if CBT is enabled: %s\n", err)
 	}
@@ -130,23 +129,23 @@ func main() {
 	if !cbt {
 		// 7.5. Enable CBT
 		log.Println("CBT is not enabled. Enabling CBT")
-		err = EnableCBT(ctx)
+		err = vmops.EnableCBT()
 		if err != nil {
 			log.Fatalf("Failed to enable CBT: %s\n", err)
 		}
-		_, err := IsCBTEnabled(ctx)
+		_, err := vmops.IsCBTEnabled()
 		if err != nil {
 			log.Fatalf("Failed to check if CBT is enabled: %s\n", err)
 		}
 		log.Println("CBT enabled successfully")
 
 		log.Println("Creating temporary snapshot of the source VM")
-		err = TakeSnapshot(ctx, "tmp-snap")
+		err = vmops.TakeSnapshot("tmp-snap")
 		if err != nil {
 			log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
 		}
 		log.Println("Snapshot created successfully")
-		err = DeleteSnapshot(ctx, "tmp-snap")
+		err = vmops.DeleteSnapshot("tmp-snap")
 		if err != nil {
 			log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
 		}
@@ -155,21 +154,21 @@ func main() {
 
 	// 9. Start NBD Server
 	log.Println("Starting NBD server")
-	err = TakeSnapshot(ctx, "migration-snap")
+	err = vmops.TakeSnapshot("migration-snap")
 	if err != nil {
 		log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
 	}
 
-	vminfo, err = UpdateDiskInfo(ctx, vminfo)
+	vminfo, err = vmops.UpdateDiskInfo(vminfo)
 	if err != nil {
 		log.Fatalf("Failed to update disk info: %s\n", err)
 	}
 
-	log.Printf("Before starting NBD %+v\n", vminfo.VMDisks)
+	// log.Printf("Before starting NBD %+v\n", vminfo.VMDisks)
 
 	var nbdservers []NBDServer
 	for _, vmdisk := range vminfo.VMDisks {
-		nbdserver, err := StartNBDServer(ctx, envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk)
+		nbdserver, err := vmops.StartNBDServer(envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk)
 		if err != nil {
 			log.Fatalf("Failed to start NBD server: %s\n", err)
 		}
@@ -181,61 +180,55 @@ func main() {
 
 	incrementalCopyCount := 0
 	for {
-		// If its the firt copy, copy the entire disk
+		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			log.Println("Copying disk")
 			for idx, vmdisk := range vminfo.VMDisks {
-				err = CopyDisk(nbdservers[idx], vmdisk.Path)
+				err = nbdservers[idx].CopyDisk(vmdisk.Path)
 				if err != nil {
 					log.Fatalf("Failed to copy disk: %s\n", err)
 				}
-				log.Printf("Disk copied successfully: %+v\n", vminfo.VMDisks[idx].Path)
+				log.Printf("Disk copied successfully: %s\n", vminfo.VMDisks[idx].Path)
 			}
 		} else if incrementalCopyCount > 20 {
 			log.Println("20 incremental copies done, will proceed with the conversion now")
 			break
 		} else {
-			migration_snapshot, err := GetSnapshot(ctx, "migration-snap")
+			migration_snapshot, err := vmops.GetSnapshot("migration-snap")
 			if err != nil {
 				log.Fatalf("Failed to get snapshot: %s\n", err)
 			}
-			log.Printf("Old ChangeID: %+v\n", vminfo.VMDisks[0].ChangeID)
 
 			var changedAreas types.DiskChangeInfo
 			done := true
 
-			for idx, vmdisk := range vminfo.VMDisks {
-				done = true
+			for idx, _ := range vminfo.VMDisks {
+				// done = true
 				// changedAreas, err = source_vm.QueryChangedDiskAreas(ctx, initial_snapshot, final_snapshot, disk, 0)
-				changedAreas, err = CustomQueryChangedDiskAreas(ctx, vmdisk.ChangeID, migration_snapshot, vmdisk.Disk, 0)
+				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 				if err != nil {
 					log.Fatalf("Failed to get changed disk areas: %s\n", err)
-				}
-				log.Printf("Changed Areas: %+v\n", changedAreas)
-
-				log.Println("Restarting NBD server")
-				for idx, nbdserver := range nbdservers {
-					err = StopNBDServer(nbdserver)
-					if err != nil {
-						log.Fatalf("Failed to stop NBD server: %s\n", err)
-					}
-
-					vminfo, err = UpdateDiskInfo(ctx, vminfo)
-					if err != nil {
-						log.Fatalf("Failed to update snapshot info: %s\n", err)
-					}
-					nbdservers[idx], err = StartNBDServer(ctx, envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk)
-					// sleep for 2 seconds to allow the NBD server to start
-					time.Sleep(2 * time.Second)
 				}
 
 				if len(changedAreas.ChangedArea) == 0 {
 					log.Println("No changed blocks found. Skipping copy")
 				} else {
+					log.Println("Blocks have Changed.")
+
+					log.Println("Restarting NBD server")
+					err = nbdservers[idx].StopNBDServer()
+					if err != nil {
+						log.Fatalf("Failed to stop NBD server: %s\n", err)
+					}
+
+					nbdservers[idx], err = vmops.StartNBDServer(envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk)
+					// sleep for 2 seconds to allow the NBD server to start
+					time.Sleep(2 * time.Second)
+
 					// 11. Copy Changed Blocks over
 					done = false
 					log.Println("Copying changed blocks")
-					err = CopyChangedBlocks(ctx, changedAreas, nbdservers[idx], vmdisk.Path)
+					err = nbdservers[idx].CopyChangedBlocks(changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						log.Fatalf("Failed to copy changed blocks: %s\n", err)
 					}
@@ -245,11 +238,19 @@ func main() {
 				break
 			}
 		}
-		err = DeleteSnapshot(ctx, "migration-snap")
+
+		//Update old change id to the new base change id value
+		// Only do this after you have gone through all disks with old change id.
+		// If you dont, only your first disk will have the updated changes
+		vminfo, err = vmops.UpdateDiskInfo(vminfo)
+		if err != nil {
+			log.Fatalf("Failed to update snapshot info: %s\n", err)
+		}
+		err = vmops.DeleteSnapshot("migration-snap")
 		if err != nil {
 			log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
 		}
-		err = TakeSnapshot(ctx, "migration-snap")
+		err = vmops.TakeSnapshot("migration-snap")
 		if err != nil {
 			log.Fatalf("Failed to take snapshot of source VM: %s\n", err)
 		}
@@ -261,13 +262,13 @@ func main() {
 	if convert {
 		// Fix NTFS
 		if ostype == "windows" {
-			err = NTFSFix(ctx, vminfo.VMDisks[0].Path)
+			err = NTFSFix(vminfo.VMDisks[0].Path)
 			if err != nil {
 				log.Fatalf("Failed to run ntfsfix: %s\n", err)
 			}
 		}
 
-		err = ConvertDisk(ctx, vminfo.VMDisks[0].Path, ostype, virtiowin)
+		err = ConvertDisk(vminfo.VMDisks[0].Path, ostype, virtiowin)
 
 		if err != nil {
 			log.Fatalf("Failed to run virt-v2v: %s\n", err)
@@ -276,54 +277,54 @@ func main() {
 
 	// Detatch volumes from VM
 	for _, vmdisk := range vminfo.VMDisks {
-		err = DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID, applianceid)
+		err = openstackclients.DetachVolumeFromVM(vmdisk.OpenstackVol.ID)
 		if err != nil {
 			log.Fatalf("Failed to detach volume from VM: %s\n", err)
 		}
-		log.Printf("Volume detached from VM: %+v\n", vmdisk.OpenstackVol)
+		log.Printf("Volume %s detached from VM\n", vmdisk.Name)
 	}
 
 	log.Println("Stopping NBD server")
 	for _, nbdserver := range nbdservers {
-		err = StopNBDServer(nbdserver)
+		err = nbdserver.StopNBDServer()
 		if err != nil {
 			log.Fatalf("Failed to stop NBD server: %s\n", err)
 		}
 	}
 
-	log.Println("DEV: deleting snapshot")
-	err = DeleteSnapshot(ctx, "migration-snap")
+	log.Println("Deleting migration snapshot")
+	err = vmops.DeleteSnapshot("migration-snap")
 	if err != nil {
 		log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
 	}
 
 	// Get closest openstack flavour
-	closestFlavour, err := GetClosestFlavour(ctx, vminfo.CPU, vminfo.Memory)
+	closestFlavour, err := openstackclients.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 	if err != nil {
 		log.Fatalf("Failed to get closest OpenStack flavor: %s\n", err)
 	}
-	log.Printf("Closest OpenStack flavor: %+v\n", closestFlavour)
+	log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", closestFlavour.Name, closestFlavour.VCPUs, closestFlavour.RAM)
 
 	// Create Port Group with the same mac address as the source VM
 	// Find the network with the given ID
-	networkid, err := GetNetworkID(ctx, networkname)
+	networkid, err := openstackclients.GetNetworkID(networkname)
 	if err != nil {
 		log.Fatalf("Failed to get network ID: %s\n", err)
 	}
 	log.Printf("Network ID: %s\n", networkid)
 
-	port, err := CreatePort(ctx, networkid, vminfo)
+	port, err := openstackclients.CreatePort(networkid, vminfo)
 	if err != nil {
 		log.Fatalf("Failed to create port group: %s\n", err)
 	}
 
-	log.Printf("Port Group created successfully: %+v\n", port)
+	log.Printf("Port Group created successfully: MAC:%s IP:%s %\n", port.MACAddress, port.FixedIPs[0].IPAddress)
 
 	// Create a new VM in OpenStack
-	newVM, err := CreateVM(ctx, closestFlavour, networkid, port, vminfo)
+	newVM, err := openstackclients.CreateVM(closestFlavour, networkid, port, vminfo)
 	if err != nil {
 		log.Fatalf("Failed to create VM: %s\n", err)
 	}
 
-	log.Printf("VM created successfully: %+v\n", newVM)
+	log.Printf("VM created successfully: ID: %s\n", newVM.ID)
 }
