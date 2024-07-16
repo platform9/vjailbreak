@@ -6,14 +6,22 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/methods"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
+
+type VMOperations interface {
+	GetVMInfo() (VMInfo, error)
+	UpdateDiskInfo(vminfo VMInfo) (VMInfo, error)
+	IsCBTEnabled() (bool, error)
+	EnableCBT() error
+	TakeSnapshot(name string) error
+	DeleteSnapshot(name string) error
+	GetSnapshot(name string) (*types.ManagedObjectReference, error)
+	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
+}
 
 type VMInfo struct {
 	CPU     int32
@@ -22,10 +30,10 @@ type VMInfo struct {
 	Mac     []string
 	UUID    string
 	Host    string
-	VM      mo.VirtualMachine
 	VMDisks []VMDisk
 	VddkURL string
 	UEFI    bool
+	Name    string
 }
 
 type ChangeID struct {
@@ -45,14 +53,21 @@ type VMDisk struct {
 	ChangeID        string
 }
 
-func getDatacenters(ctx context.Context, finder *find.Finder) ([]*object.Datacenter, error) {
-	// Find all datacenters
-	datacenters, err := finder.DatacenterList(ctx, "*")
+type VMOps struct {
+	vcclient *VCenterClient
+	VMObj    *object.VirtualMachine
+}
+
+func VMOpsBuilder(vcclient VCenterClient, name string) (*VMOps, error) {
+	vm, err := vcclient.GetVMByName(name)
 	if err != nil {
 		return nil, err
 	}
+	if vm == nil {
+		return nil, fmt.Errorf("VM %s not found", name)
+	}
+	return &VMOps{vcclient: &vcclient, VMObj: vm}, nil
 
-	return datacenters, nil
 }
 
 // func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
@@ -64,29 +79,11 @@ func getDatacenters(ctx context.Context, finder *find.Finder) ([]*object.Datacen
 // 	return vms, nil
 // }
 
-// get VM by name
-func GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error) {
-	client := ctx.Value("govmomi_client").(*vim25.Client)
-	finder := find.NewFinder(client, false)
-	datacenters, err := getDatacenters(ctx, finder)
-	if err != nil {
-		return nil, err
-	}
-	for _, datacenter := range datacenters {
-		finder.SetDatacenter(datacenter)
-		vm, err := finder.VirtualMachine(ctx, name)
-		if err == nil {
-			return vm, nil
-		}
-	}
-	return nil, err
-}
-
-func GetVMInfo(ctx context.Context) (VMInfo, error) {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
+func (vmops *VMOps) GetVMInfo() (VMInfo, error) {
+	vm := vmops.VMObj
 
 	var o mo.VirtualMachine
-	vm.Properties(ctx, vm.Reference(), []string{}, &o)
+	vm.Properties(context.Background(), vm.Reference(), []string{}, &o)
 	var mac []string
 	for _, device := range o.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
@@ -115,14 +112,14 @@ func GetVMInfo(ctx context.Context) (VMInfo, error) {
 		Mac:     mac,
 		UUID:    o.Config.Uuid,
 		Host:    o.Runtime.Host.Reference().Value,
-		VM:      o,
+		Name:    o.Name,
 		VMDisks: vmdisks,
 		UEFI:    uefi,
 	}
 	return vminfo, nil
 }
 
-func ParseChangeID(changeId string) (*ChangeID, error) {
+func parseChangeID(changeId string) (*ChangeID, error) {
 	changeIdParts := strings.Split(changeId, "/")
 	if len(changeIdParts) != 2 {
 		return nil, fmt.Errorf("invalid change ID format")
@@ -135,7 +132,7 @@ func ParseChangeID(changeId string) (*ChangeID, error) {
 	}, nil
 }
 
-func GetChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
+func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	var changeId string
 
 	if b, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
@@ -153,24 +150,23 @@ func GetChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	if changeId == "" {
 		return nil, fmt.Errorf("CBT is not enabled on disk %d", disk.Key)
 	}
-	return ParseChangeID(changeId)
+	return parseChangeID(changeId)
 }
 
-func UpdateDiskInfo(ctx context.Context, vminfo VMInfo) (VMInfo, error) {
-	client := ctx.Value("govmomi_client").(*vim25.Client)
-	pc := property.DefaultCollector(client)
-	vm := ctx.Value("vm").(*object.VirtualMachine)
+func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
+	pc := vmops.vcclient.VCPropertyCollector
+	vm := vmops.VMObj
 	var snapbackingdisk []string
 	var snapname []string
 	var snapid []string
 
 	var o mo.VirtualMachine
-	vm.Properties(ctx, vm.Reference(), []string{}, &o)
+	vm.Properties(context.Background(), vm.Reference(), []string{}, &o)
 
 	if o.Snapshot != nil {
 		// get backing disk of snapshot
 		var s mo.VirtualMachineSnapshot
-		pc.RetrieveOne(ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		pc.RetrieveOne(context.Background(), o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
 
 		for _, device := range s.Config.Hardware.Device {
 			switch disk := device.(type) {
@@ -179,7 +175,7 @@ func UpdateDiskInfo(ctx context.Context, vminfo VMInfo) (VMInfo, error) {
 				info := backing.GetVirtualDeviceFileBackingInfo()
 				snapbackingdisk = append(snapbackingdisk, info.FileName)
 				snapname = append(snapname, o.Snapshot.CurrentSnapshot.Value)
-				changeid, err := GetChangeID(disk)
+				changeid, err := getChangeID(disk)
 				if err != nil {
 					return vminfo, err
 				}
@@ -196,61 +192,61 @@ func UpdateDiskInfo(ctx context.Context, vminfo VMInfo) (VMInfo, error) {
 	return vminfo, nil
 }
 
-func IsCBTEnabled(ctx context.Context) (bool, error) {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
+func (vmops *VMOps) IsCBTEnabled() (bool, error) {
+	vm := vmops.VMObj
 	var o mo.VirtualMachine
-	vm.Properties(ctx, vm.Reference(), []string{"config.changeTrackingEnabled"}, &o)
+	vm.Properties(context.Background(), vm.Reference(), []string{"config.changeTrackingEnabled"}, &o)
 	return *o.Config.ChangeTrackingEnabled, nil
 }
 
-func EnableCBT(ctx context.Context) error {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
+func (vmops *VMOps) EnableCBT() error {
+	vm := vmops.VMObj
 	configSpec := types.VirtualMachineConfigSpec{
 		ChangeTrackingEnabled: types.NewBool(true),
 	}
 
-	task, err := vm.Reconfigure(ctx, configSpec)
+	task, err := vm.Reconfigure(context.Background(), configSpec)
 	if err != nil {
 		return err
 	}
-	task.Wait(ctx)
+	task.Wait(context.Background())
 	return nil
 }
 
-func TakeSnapshot(ctx context.Context, name string) error {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
-	task, err := vm.CreateSnapshot(ctx, name, "", false, false)
+func (vmops *VMOps) TakeSnapshot(name string) error {
+	vm := vmops.VMObj
+	task, err := vm.CreateSnapshot(context.Background(), name, "", false, false)
 	if err != nil {
 		return err
 	}
-	task.Wait(ctx)
+	task.Wait(context.Background())
 	return nil
 }
 
-func DeleteSnapshot(ctx context.Context, name string) error {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
+func (vmops *VMOps) DeleteSnapshot(name string) error {
+	vm := vmops.VMObj
 	var consolidate = true
-	task, err := vm.RemoveSnapshot(ctx, name, false, &consolidate)
+	task, err := vm.RemoveSnapshot(context.Background(), name, false, &consolidate)
 	if err != nil {
 		return err
 	}
-	task.Wait(ctx)
+	task.Wait(context.Background())
 	return nil
 }
 
-func GetSnapshot(ctx context.Context, name string) (*types.ManagedObjectReference, error) {
-	vm := ctx.Value("vm").(*object.VirtualMachine)
-	snap, err := vm.FindSnapshot(ctx, name)
+func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, error) {
+	vm := vmops.VMObj
+	snap, err := vm.FindSnapshot(context.Background(), name)
 	if err != nil {
 		return nil, err
 	}
 	return snap, nil
 }
 
-func CustomQueryChangedDiskAreas(ctx context.Context, baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error) {
+func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error) {
 	var noChange types.DiskChangeInfo
 	var err error
-	v := ctx.Value("vm").(*object.VirtualMachine)
+	v := vmops.VMObj
 
 	req := types.QueryChangedDiskAreas{
 		This:        v.Reference(),
@@ -260,10 +256,14 @@ func CustomQueryChangedDiskAreas(ctx context.Context, baseChangeID string, curSn
 		ChangeId:    baseChangeID,
 	}
 
-	res, err := methods.QueryChangedDiskAreas(ctx, v.Client(), &req)
+	res, err := methods.QueryChangedDiskAreas(context.Background(), v.Client(), &req)
 	if err != nil {
 		return noChange, err
 	}
 
 	return res.Returnval, nil
 }
+
+// func (vmops *VMOps) LiveReplicateDisks() (string, error) {
+
+// }
