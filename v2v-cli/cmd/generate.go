@@ -129,9 +129,23 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 					fmt.Printf("Enter value for %s: ", env)
 					fmt.Scanln(&value)
 				}
-			case "VCENTER_INSECURE", "CONVERT":
+			case "VCENTER_INSECURE":
 				if vcenter_insecure, _ := cmd.Flags().GetString("vcenter-insecure"); vcenter_insecure != "" {
 					value = vcenter_insecure
+				} else {
+					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
+					fmt.Scanln(&value)
+					if value == "" {
+						value = "true"
+					} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
+						value = "true"
+					} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
+						value = "false"
+					}
+				}
+			case "CONVERT":
+				if convert, _ := cmd.Flags().GetString("convert"); convert != "" {
+					value = convert
 				} else {
 					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
 					fmt.Scanln(&value)
