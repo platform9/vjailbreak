@@ -28,6 +28,8 @@ func main() {
 	log.Println("Insecure:", envInsecure)
 	log.Println("Source VM Name:", sourcevmname)
 	log.Println("Network ID:", networkname)
+	log.Println("OS Type:", ostype)
+
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
 
@@ -275,6 +277,16 @@ func main() {
 		}
 	}
 
+	if ostype == "linux" {
+		// Add Wildcard Netplan
+		log.Println("Adding wildcard netplan")
+		err = AddWildcardNetplan(vminfo.VMDisks[0].Path)
+		if err != nil {
+			log.Fatalf("Failed to add wildcard netplan: %s\n", err)
+		}
+		log.Println("Wildcard netplan added successfully")
+	}
+
 	// Detatch volumes from VM
 	for _, vmdisk := range vminfo.VMDisks {
 		err = openstackclients.DetachVolumeFromVM(vmdisk.OpenstackVol.ID)
@@ -318,7 +330,7 @@ func main() {
 		log.Fatalf("Failed to create port group: %s\n", err)
 	}
 
-	log.Printf("Port Group created successfully: MAC:%s IP:%s %\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+	log.Printf("Port Group created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
 
 	// Create a new VM in OpenStack
 	newVM, err := openstackclients.CreateVM(closestFlavour, networkid, port, vminfo)

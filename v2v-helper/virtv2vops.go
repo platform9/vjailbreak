@@ -126,3 +126,36 @@ func ConvertDisk(path string, ostype string, virtiowindriver string) error {
 	}
 	return nil
 }
+
+func AddWildcardNetplan(path string) error {
+	// Add wildcard to netplan
+	netplan := `[Match]
+Name=en*
+
+[Network]
+DHCP=yes`
+
+	// Create the netplan file
+	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
+	if err != nil {
+		return err
+	}
+	log.Println("Created local netplan file")
+	log.Println("Uploading netplan file to disk")
+	// Upload it to the disk
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	cmd := exec.Command(
+		"guestfish",
+		"--rw",
+		"-a",
+		path,
+		"-i")
+	input := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+	cmd.Stdin = strings.NewReader(input)
+	log.Printf("Executing %s", cmd.String()+" "+input)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
