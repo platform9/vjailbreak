@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"vjailbreak/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/vmware/govmomi/object"
@@ -54,11 +55,11 @@ type VMDisk struct {
 }
 
 type VMOps struct {
-	vcclient *VCenterClient
+	vcclient *vcenter.VCenterClient
 	VMObj    *object.VirtualMachine
 }
 
-func VMOpsBuilder(vcclient VCenterClient, name string) (*VMOps, error) {
+func VMOpsBuilder(vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
 	vm, err := vcclient.GetVMByName(name)
 	if err != nil {
 		return nil, err

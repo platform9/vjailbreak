@@ -1,4 +1,4 @@
-package main
+package vcenter
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 )
+
+//go:generate mockgen -source=../vcenter/vcenterops.go -destination=../vcenter/vcenterops_mock.go -package=vcenter
 
 type VCenterOperations interface {
 	getDatacenters() ([]*object.Datacenter, error)
