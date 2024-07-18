@@ -1,4 +1,4 @@
-package main
+package nbd
 
 import (
 	"bufio"
@@ -13,9 +13,12 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 	"libguestfs.org/libnbd"
 )
+
+//go:generate mockgen -source=../nbd/nbdops.go -destination=../nbd/nbdops_mock.go -package=nbd
 
 type NBDOperations interface {
 	StartNBDServer(server, username, password, thumbprint, snapref, file string) (NBDServer, error)
@@ -75,11 +78,9 @@ func verifynbdkit() error {
 	return nil
 }
 
-func (vmops *VMOps) StartNBDServer(server, username, password, thumbprint, snapref, file string) (NBDServer, error) {
+func StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) (NBDServer, error) {
 	// Start the NBD server
 	// vm := ctx.Value("vm").(*object.VirtualMachine)
-
-	vm := vmops.VMObj
 	tmp, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
 		return NBDServer{}, err
