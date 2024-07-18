@@ -18,7 +18,7 @@ RUN go mod download
 COPY main.go main.go
 COPY nbdops.go nbdops.go
 COPY openstackops.go openstackops.go
-COPY vcenterops.go vcenterops.go
+COPY vcenter/ vcenter/
 COPY vmops.go vmops.go
 COPY virtv2vops.go virtv2vops.go
 

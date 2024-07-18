@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"vjailbreak/vcenter"
 
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -34,7 +35,7 @@ func main() {
 	convert, _ := strconv.ParseBool(envconvert)
 
 	// 1. Validate vCenter and Openstack connection
-	vcclient, err := VCenterClientBuilder(envUserName, envPassword, envURL, insecure)
+	vcclient, err := vcenter.VCenterClientBuilder(envUserName, envPassword, envURL, insecure)
 	if err != nil {
 		log.Fatalf("Failed to validate vCenter connection: %v", err)
 	}
@@ -50,7 +51,7 @@ func main() {
 	log.Println("Connected to OpenStack")
 
 	// 2. Get thumbprint
-	thumbprint, err := GetThumbprint(envURL)
+	thumbprint, err := vcenter.GetThumbprint(envURL)
 	if err != nil {
 		log.Fatalf("Failed to get thumbprint: %s\n", err)
 	}
