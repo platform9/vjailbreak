@@ -6,7 +6,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"vjailbreak/nbd"
 	"vjailbreak/vcenter"
+	"vjailbreak/vm"
 
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -70,7 +72,7 @@ func main() {
 	// log.Println("Source VM retrieved successfully")
 
 	// 3. Retrieve the source VM
-	vmops, err := VMOpsBuilder(*vcclient, sourcevmname)
+	vmops, err := vm.VMOpsBuilder(*vcclient, sourcevmname)
 	if err != nil {
 		log.Fatalf("Failed to get source VM: %s\n", err)
 	}
@@ -169,9 +171,9 @@ func main() {
 
 	// log.Printf("Before starting NBD %+v\n", vminfo.VMDisks)
 
-	var nbdservers []NBDServer
+	var nbdservers []nbd.NBDServer
 	for _, vmdisk := range vminfo.VMDisks {
-		nbdserver, err := vmops.StartNBDServer(envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk)
+		nbdserver, err := nbd.StartNBDServer(vmops.VMObj, envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk)
 		if err != nil {
 			log.Fatalf("Failed to start NBD server: %s\n", err)
 		}
@@ -224,7 +226,7 @@ func main() {
 						log.Fatalf("Failed to stop NBD server: %s\n", err)
 					}
 
-					nbdservers[idx], err = vmops.StartNBDServer(envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk)
+					nbdservers[idx], err = nbd.StartNBDServer(vmops.VMObj, envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk)
 					// sleep for 2 seconds to allow the NBD server to start
 					time.Sleep(2 * time.Second)
 

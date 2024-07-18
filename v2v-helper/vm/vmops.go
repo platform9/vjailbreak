@@ -1,4 +1,4 @@
-package main
+package vm
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
+
+//go:generate mockgen -source=../vm/vmops.go -destination=../vm/vmops_mock.go -package=vm
 
 type VMOperations interface {
 	GetVMInfo() (VMInfo, error)
@@ -183,7 +185,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 				snapid = append(snapid, changeid.Value)
 			}
 		}
-		for idx, _ := range vminfo.VMDisks {
+		for idx := range vminfo.VMDisks {
 			vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 			vminfo.VMDisks[idx].Snapname = snapname[idx]
 			vminfo.VMDisks[idx].ChangeID = snapid[idx]
@@ -264,7 +266,3 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 
 	return res.Returnval, nil
 }
-
-// func (vmops *VMOps) LiveReplicateDisks() (string, error) {
-
-// }

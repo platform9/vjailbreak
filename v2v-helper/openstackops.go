@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"vjailbreak/vm"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -34,8 +35,8 @@ type OpenstackOperations interface {
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
 	GetNetworkID(networkname string) (string, error)
-	CreatePort(networkid string, vminfo VMInfo) (*ports.Port, error)
-	CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error)
+	CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error)
+	CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error)
 }
 
 type OpenStackClients struct {
@@ -324,7 +325,7 @@ func (osclient *OpenStackClients) GetNetworkID(networkname string) (string, erro
 	return "", fmt.Errorf("network not found")
 }
 
-func (osclient *OpenStackClients) CreatePort(networkid string, vminfo VMInfo) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error) {
 	// Get the list of networks
 	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
@@ -377,7 +378,7 @@ func (osclient *OpenStackClients) CreatePort(networkid string, vminfo VMInfo) (*
 	return nil, fmt.Errorf("network not found")
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo VMInfo) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error) {
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,
