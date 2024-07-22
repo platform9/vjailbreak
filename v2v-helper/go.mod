@@ -7,7 +7,7 @@ require (
 	github.com/gophercloud/gophercloud v1.12.0
 	github.com/stretchr/testify v1.9.0
 	github.com/vmware/govmomi v0.38.0
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+	golang.org/x/sys v0.4.0
 	libguestfs.org/libnbd v1.20.0
 )
 

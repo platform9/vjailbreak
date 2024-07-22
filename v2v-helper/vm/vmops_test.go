@@ -108,12 +108,13 @@ func TestGetVMInfo(t *testing.T) {
 				},
 			},
 		},
-		UEFI: false,
-		Name: "DC0_H0_VM0",
+		UEFI:   false,
+		Name:   "DC0_H0_VM0",
+		OSType: "linux",
 	}
 	vmops, _ := VMOpsBuilder(*simVC, vmName)
 
-	vminfo, err := vmops.GetVMInfo()
+	vminfo, err := vmops.GetVMInfo("linux")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedVMInfo, vminfo)
 }

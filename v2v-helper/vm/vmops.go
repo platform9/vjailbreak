@@ -16,7 +16,8 @@ import (
 //go:generate mockgen -source=../vm/vmops.go -destination=../vm/vmops_mock.go -package=vm
 
 type VMOperations interface {
-	GetVMInfo() (VMInfo, error)
+	GetVMInfo(ostype string) (VMInfo, error)
+	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(vminfo VMInfo) (VMInfo, error)
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
@@ -37,6 +38,7 @@ type VMInfo struct {
 	VddkURL string
 	UEFI    bool
 	Name    string
+	OSType  string
 }
 
 type ChangeID struct {
@@ -73,6 +75,10 @@ func VMOpsBuilder(vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
 
 }
 
+func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
+	return vmops.VMObj
+}
+
 // func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
 // 	// Find all virtual machines on the host
 // 	vms, err := finder.VirtualMachineList(ctx, "*")
@@ -82,7 +88,7 @@ func VMOpsBuilder(vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
 // 	return vms, nil
 // }
 
-func (vmops *VMOps) GetVMInfo() (VMInfo, error) {
+func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vm := vmops.VMObj
 
 	var o mo.VirtualMachine
@@ -108,6 +114,16 @@ func (vmops *VMOps) GetVMInfo() (VMInfo, error) {
 	if o.Config.Firmware == "efi" {
 		uefi = true
 	}
+	if ostype == "" {
+		if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyWindowsGuest) {
+			ostype = "windows"
+		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
+			ostype = "linux"
+		} else {
+			return VMInfo{}, fmt.Errorf("No OS type provided and unable to determine OS type")
+		}
+	}
+
 	vminfo := VMInfo{
 		CPU:     o.Config.Hardware.NumCPU,
 		Memory:  o.Config.Hardware.MemoryMB,
@@ -118,6 +134,7 @@ func (vmops *VMOps) GetVMInfo() (VMInfo, error) {
 		Name:    o.Name,
 		VMDisks: vmdisks,
 		UEFI:    uefi,
+		OSType:  ostype,
 	}
 	return vminfo, nil
 }

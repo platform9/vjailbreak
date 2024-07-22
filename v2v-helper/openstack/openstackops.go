@@ -1,4 +1,4 @@
-package main
+package openstack
 
 import (
 	"encoding/json"
@@ -24,6 +24,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
 
+//go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
+
 type OpenstackOperations interface {
 	CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error)
 	WaitForVolume(volumeID string) error
@@ -37,6 +39,8 @@ type OpenstackOperations interface {
 	GetNetworkID(networkname string) (string, error)
 	CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error)
+	DeleteVolume(volumeID string) error
+	FindDevice(volumeID string) (string, error)
 }
 
 type OpenStackClients struct {
@@ -85,7 +89,7 @@ func validateOpenStack() (*OpenStackClients, error) {
 	}, nil
 }
 
-func OpenStackClientsBuilder() (*OpenStackClients, error) {
+func NewOpenStackClients() (*OpenStackClients, error) {
 	ostackclients, err := validateOpenStack()
 	if err != nil {
 		return nil, err
@@ -122,9 +126,8 @@ func getCurrentInstanceUUID() (string, error) {
 // create a new volume
 func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
-	var opts volumes.CreateOpts
 
-	opts = volumes.CreateOpts{
+	opts := volumes.CreateOpts{
 		Size: int(float64(size) / (1024 * 1024 * 1024)),
 		Name: name,
 	}
@@ -151,6 +154,14 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	}
 
 	return volume, nil
+}
+
+func (osclient *OpenStackClients) DeleteVolume(volumeID string) error {
+	err := volumes.Delete(osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
@@ -190,7 +201,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	return nil
 }
 
-func findDevice(volumeID string) (string, error) {
+func (osclient *OpenStackClients) FindDevice(volumeID string) (string, error) {
 	files, err := os.ReadDir("/dev/disk/by-id/")
 	if err != nil {
 		return "", err
@@ -212,7 +223,7 @@ func findDevice(volumeID string) (string, error) {
 
 func (osclient *OpenStackClients) WaitForVolumeAttachment(volumeID string) error {
 	for i := 0; i < 6; i++ {
-		devicePath, _ := findDevice(volumeID)
+		devicePath, _ := osclient.FindDevice(volumeID)
 		if devicePath != "" {
 			return nil
 		}
@@ -296,7 +307,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 		}
 	}
 
-	if bestFlavor != nil {
+	if bestFlavor.VCPUs != 9999999 {
 		log.Printf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {

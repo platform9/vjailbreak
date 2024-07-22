@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	object "github.com/vmware/govmomi/object"
 	types "github.com/vmware/govmomi/vim25/types"
 )
 
@@ -93,18 +94,32 @@ func (mr *MockVMOperationsMockRecorder) GetSnapshot(name interface{}) *gomock.Ca
 }
 
 // GetVMInfo mocks base method.
-func (m *MockVMOperations) GetVMInfo() (VMInfo, error) {
+func (m *MockVMOperations) GetVMInfo(ostype string) (VMInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVMInfo")
+	ret := m.ctrl.Call(m, "GetVMInfo", ostype)
 	ret0, _ := ret[0].(VMInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVMInfo indicates an expected call of GetVMInfo.
-func (mr *MockVMOperationsMockRecorder) GetVMInfo() *gomock.Call {
+func (mr *MockVMOperationsMockRecorder) GetVMInfo(ostype interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMInfo", reflect.TypeOf((*MockVMOperations)(nil).GetVMInfo))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMInfo", reflect.TypeOf((*MockVMOperations)(nil).GetVMInfo), ostype)
+}
+
+// GetVMObj mocks base method.
+func (m *MockVMOperations) GetVMObj() *object.VirtualMachine {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVMObj")
+	ret0, _ := ret[0].(*object.VirtualMachine)
+	return ret0
+}
+
+// GetVMObj indicates an expected call of GetVMObj.
+func (mr *MockVMOperationsMockRecorder) GetVMObj() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMObj", reflect.TypeOf((*MockVMOperations)(nil).GetVMObj))
 }
 
 // IsCBTEnabled mocks base method.
