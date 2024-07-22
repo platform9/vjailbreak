@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	object "github.com/vmware/govmomi/object"
 	types "github.com/vmware/govmomi/vim25/types"
 )
 
@@ -62,19 +63,32 @@ func (mr *MockNBDOperationsMockRecorder) CopyDisk(dest interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), dest)
 }
 
-// StartNBDServer mocks base method.
-func (m *MockNBDOperations) StartNBDServer(server, username, password, thumbprint, snapref, file string) (NBDServer, error) {
+// NewNBDNBDServer mocks base method.
+func (m *MockNBDOperations) NewNBDNBDServer() NBDServer {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartNBDServer", server, username, password, thumbprint, snapref, file)
+	ret := m.ctrl.Call(m, "NewNBDNBDServer")
 	ret0, _ := ret[0].(NBDServer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
+}
+
+// NewNBDNBDServer indicates an expected call of NewNBDNBDServer.
+func (mr *MockNBDOperationsMockRecorder) NewNBDNBDServer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNBDNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).NewNBDNBDServer))
+}
+
+// StartNBDServer mocks base method.
+func (m *MockNBDOperations) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartNBDServer", vm, server, username, password, thumbprint, snapref, file)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // StartNBDServer indicates an expected call of StartNBDServer.
-func (mr *MockNBDOperationsMockRecorder) StartNBDServer(server, username, password, thumbprint, snapref, file interface{}) *gomock.Call {
+func (mr *MockNBDOperationsMockRecorder) StartNBDServer(vm, server, username, password, thumbprint, snapref, file interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).StartNBDServer), server, username, password, thumbprint, snapref, file)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).StartNBDServer), vm, server, username, password, thumbprint, snapref, file)
 }
 
 // StopNBDServer mocks base method.

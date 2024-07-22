@@ -1,4 +1,4 @@
-package main
+package virtv2v
 
 import (
 	"bufio"
@@ -12,6 +12,16 @@ import (
 	"strings"
 	"unicode"
 )
+
+//go:generate mockgen -source=../virtv2v/virtv2vops.go -destination=../virtv2v/virtv2vops_mock.go -package=virtv2v
+
+type VirtV2VOperations interface {
+	RetainAlphanumeric(input string) string
+	GetPartitions(disk string) ([]string, error)
+	NTFSFix(path string) error
+	ConvertDisk(path string, ostype string, virtiowindriver string) error
+	AddWildcardNetplan(path string) error
+}
 
 func RetainAlphanumeric(input string) string {
 	var builder strings.Builder
@@ -67,7 +77,7 @@ func NTFSFix(path string) error {
 
 		err := cmd.Run()
 		if err != nil {
-			log.Printf("Failed to fix NTFS on %s: %v", partition, err)
+			log.Printf("Skipping NTFS fix on %s: %v", partition, err)
 		}
 		log.Printf("Fixed NTFS on %s", partition)
 	}
