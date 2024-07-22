@@ -21,37 +21,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
+// MigrationSource defines the source details for the migration
 type MigrationSource struct {
-	VirtualMachine    string `json:"virtualmachine"`
-	VCenter           string `json:"vcenter"`
-	Cluster           string `json:"cluster"`
-	DataCenter        string `json:"datacenter"`
-	ESXNode           string `json:"esxnode"`
-	VCenterThumbPrint string `json:"vcenterthumbprint"`
+	VMwareRef       string   `json:"vmwareref"`
+	DataCenter      string   `json:"datacenter"`
+	VirtualMachines []string `json:"virtualmachines"`
 }
 
+// MigrationDestination defines the destination details for the migration
 type MigrationDestination struct {
-	MigrationVMId string `json:"migrationvmid"`
+	OpenstackRef string `json:"openstackref"`
 }
 
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	Source             MigrationSource      `json:"source"`
-	Destination        MigrationDestination `json:"destination"`
-	VmwareSecretRef    string               `json:"vmwaresecretref"`
-	OpenstackSecretRef string               `json:"openstacksecretref"`
+	Source      MigrationSource      `json:"source"`
+	Destination MigrationDestination `json:"destination"`
 }
 
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	Active []corev1.ObjectReference `json:"active,omitempty"`
 }
 

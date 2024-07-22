@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"slices"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +33,6 @@ import (
 	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // MigrationReconciler reconciles a Migration object
@@ -66,6 +64,8 @@ func RemoveString(s []string, r string) []string {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=list;get
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=list;get;create;update;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -77,7 +77,6 @@ func RemoveString(s []string, r string) []string {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.2/pkg/reconcile
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
 	ctxlog := log.FromContext(ctx)
 	migration := &vjailbreakv1alpha1.Migration{}
 
@@ -126,106 +125,154 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
 func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
+	v2vimage := "tanaypf9/v2v:latest"
 
-	migrationJobName := migration.Name
-	var backOffLimit int32 = 0
-	migrationJob := &batchv1.Job{}
-	err := r.Get(ctx, types.NamespacedName{Name: migrationJobName, Namespace: migration.Namespace}, migrationJob)
-	if err != nil && apierrors.IsNotFound(err) {
-		ctxlog.Info(fmt.Sprintf("Creating new Job '%s'", migrationJobName))
-		migrationJob = &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      migrationJobName,
-				Namespace: migration.Namespace,
-			},
-			Spec: batchv1.JobSpec{
-				BackoffLimit: &backOffLimit,
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{"vjailbreak.pf9.io/migration": migrationJobName},
+	// Fetch VMware secret
+	vmwareSecret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: migration.Spec.Source.VMwareRef, Namespace: migration.Namespace}, vmwareSecret)
+	if err != nil {
+		ctxlog.Error(err, "Failed to retrieve VMware secret")
+		return ctrl.Result{}, err
+	}
+
+	// Fetch OpenStack secret
+	openstackSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.Destination.OpenstackRef, Namespace: migration.Namespace}, openstackSecret)
+	if err != nil {
+		ctxlog.Error(err, "Failed to retrieve OpenStack secret")
+		return ctrl.Result{}, err
+	}
+
+	for _, vm := range migration.Spec.Source.VirtualMachines {
+		configMapName := fmt.Sprintf("migration-config-%s", vm)
+		podName := fmt.Sprintf("v2v-helper-%s", vm)
+
+		// Create ConfigMap
+		configMap := &corev1.ConfigMap{}
+		err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
+		if err != nil && apierrors.IsNotFound(err) {
+			ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vm))
+			configMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: migration.Namespace,
+				},
+				Data: map[string]string{
+					"CONVERT":              "true",
+					"NEUTRON_NETWORK_NAME": "vlan3002",
+					"OS_AUTH_URL":          string(openstackSecret.Data["OS_AUTH_URL"]),
+					"OS_DOMAIN_NAME":       string(openstackSecret.Data["OS_DOMAIN_NAME"]),
+					"OS_PASSWORD":          string(openstackSecret.Data["OS_PASSWORD"]),
+					"OS_REGION_NAME":       string(openstackSecret.Data["OS_REGION_NAME"]),
+					"OS_TENANT_NAME":       string(openstackSecret.Data["OS_TENANT_NAME"]),
+					"OS_TYPE":              "Windows",
+					"OS_USERNAME":          string(openstackSecret.Data["OS_USERNAME"]),
+					"SOURCE_VM_NAME":       vm,
+					"VCENTER_HOST":         string(vmwareSecret.Data["VCENTER_HOST"]),
+					"VCENTER_INSECURE":     string(vmwareSecret.Data["VCENTER_INSECURE"]),
+					"VCENTER_PASSWORD":     string(vmwareSecret.Data["VCENTER_PASSWORD"]),
+					"VCENTER_USERNAME":     string(vmwareSecret.Data["VCENTER_USERNAME"]),
+					"VIRTIO_WIN_DRIVER":    "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso",
+				},
+			}
+			err = ctrl.SetControllerReference(migration, configMap, r.Scheme)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			err = r.Create(ctx, configMap)
+			if err != nil {
+				ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
+				return ctrl.Result{}, err
+			}
+			ctxlog.Info(fmt.Sprintf("ConfigMap '%s' created for VM '%s'", configMapName, vm))
+		}
+
+		// Create Pod
+		pod := &corev1.Pod{}
+		err = r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migration.Namespace}, pod)
+		if err != nil && apierrors.IsNotFound(err) {
+			ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vm))
+			pod = &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: migration.Namespace,
+					Labels: map[string]string{
+						"vm-name": vm,
 					},
-					Spec: corev1.PodSpec{
-						RestartPolicy: corev1.RestartPolicyNever,
-						Volumes: []corev1.Volume{
-							{
-								Name: "adminrc",
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: migration.Spec.OpenstackSecretRef,
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:            "fedora",
+							Image:           v2vimage,
+							ImagePullPolicy: corev1.PullAlways,
+							Command:         []string{"/home/fedora/manager"},
+							SecurityContext: &corev1.SecurityContext{
+								Privileged: new(bool),
+							},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: configMapName,
+										},
 									},
 								},
 							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "vddk",
+									MountPath: "/home/fedora/vmware-vix-disklib-distrib",
+								},
+								{
+									Name:      "dev",
+									MountPath: "/dev",
+								},
+							},
 						},
-						Containers: []corev1.Container{
-							{
-								Name:            "virt-v2v",
-								Image:           "ubuntu:latest",
-								ImagePullPolicy: "Always",
-								Command:         []string{"/bin/echo"},
-								Args:            []string{"hello", " world!"},
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    *resource.NewMilliQuantity(int64(50), resource.DecimalSI),
-										corev1.ResourceMemory: *resource.NewScaledQuantity(int64(250), resource.Mega),
-									},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "vddk",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/home/ubuntu/vmware-vix-disklib-distrib",
+									Type: newHostPathType("Directory"),
 								},
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "adminrc",
-										MountPath: "/home/migration/admin.rc",
-										ReadOnly:  true,
-									},
-								},
-								Env: []corev1.EnvVar{
-									{
-										Name:  "VJAILBREAK_VMWARE_USER",
-										Value: "",
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_PASSWORD",
-										Value: "",
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_VCENTER",
-										Value: migration.Spec.Source.VCenter,
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_CLUSTER",
-										Value: migration.Spec.Source.Cluster,
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_DATACENTER",
-										Value: migration.Spec.Source.DataCenter,
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_ESXNODE",
-										Value: migration.Spec.Source.ESXNode,
-									},
-									{
-										Name:  "VJAILBREAK_VMWARE_THUMBPRINT",
-										Value: migration.Spec.Source.VCenterThumbPrint,
-									},
+							},
+						},
+						{
+							Name: "dev",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/dev",
+									Type: newHostPathType("Directory"),
 								},
 							},
 						},
 					},
 				},
-			},
+			}
+			err = ctrl.SetControllerReference(migration, pod, r.Scheme)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			err = r.Create(ctx, pod)
+			if err != nil {
+				ctxlog.Error(err, fmt.Sprintf("Failed to create Pod '%s'", podName))
+				return ctrl.Result{}, err
+			}
+			ctxlog.Info(fmt.Sprintf("Pod '%s' queued for Migration '%s'", podName, migration.Name))
 		}
-		err = ctrl.SetControllerReference(migration, migrationJob, r.Scheme)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		err = r.Create(ctx, migrationJob)
-		if err != nil {
-			ctxlog.Error(err, fmt.Sprintf("Failed to create Job '%s'", migrationJobName))
-			return ctrl.Result{}, err
-		}
-		ctxlog.Info(fmt.Sprintf("Job '%s' queued for Migration '%s'", migrationJobName, migration.Name))
 	}
 
 	return ctrl.Result{}, nil
+}
 
+func newHostPathType(pathType string) *corev1.HostPathType {
+	hostPathType := corev1.HostPathType(pathType)
+	return &hostPathType
 }
 
 // SetupWithManager sets up the controller with the Manager.

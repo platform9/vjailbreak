@@ -40,51 +40,38 @@ spec:
             description: MigrationSpec defines the desired state of Migration
             properties:
               destination:
+                description: MigrationDestination defines the destination details
+                  for the migration
                 properties:
-                  migrationvmid:
+                  openstackref:
                     type: string
                 required:
-                - migrationvmid
+                - openstackref
                 type: object
-              openstacksecretref:
-                type: string
               source:
+                description: MigrationSource defines the source details for the migration
                 properties:
-                  cluster:
-                    type: string
                   datacenter:
                     type: string
-                  esxnode:
-                    type: string
-                  vcenter:
-                    type: string
-                  vcenterthumbprint:
-                    type: string
-                  virtualmachine:
+                  virtualmachines:
+                    items:
+                      type: string
+                    type: array
+                  vmwareref:
                     type: string
                 required:
-                - cluster
                 - datacenter
-                - esxnode
-                - vcenter
-                - vcenterthumbprint
-                - virtualmachine
+                - virtualmachines
+                - vmwareref
                 type: object
-              vmwaresecretref:
-                type: string
             required:
             - destination
-            - openstacksecretref
             - source
-            - vmwaresecretref
             type: object
           status:
             description: MigrationStatus defines the observed state of Migration
             properties:
               active:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
                 items:
                   description: |-
                     ObjectReference contains enough information to let you inspect or modify the referred object.
