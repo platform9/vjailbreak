@@ -1,0 +1,19 @@
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: Migration
+metadata:
+  labels:
+    app.kubernetes.io/name: migration
+    app.kubernetes.io/managed-by: kustomize
+  name: migration-sample
+spec:
+  vmwaresecretref: pnapbmc1
+  openstacksecretref: pnappmo1
+  source:
+    virtualmachine: dev test
+    vcenter: vcenter.phx.pnap.platform9.horse
+    datacenter: PNAP BMC
+    cluster: Cluster-01
+    vcenterthumbprint: 0D:37:03:77:48:E3:0F:20:AB:A3:DC:4C:23:E0:38:08:A4:11:CD:B4
+
+  destination:
+    migrationvmid: 1eb982c9-6019-42d3-8162-dcc4b7962d77
