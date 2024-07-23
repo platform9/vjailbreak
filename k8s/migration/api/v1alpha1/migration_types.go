@@ -26,11 +26,15 @@ type MigrationSource struct {
 	VMwareRef       string   `json:"vmwareref"`
 	DataCenter      string   `json:"datacenter"`
 	VirtualMachines []string `json:"virtualmachines"`
+	// +kubebuilder:validation:Enum=windows;linux
+	OSType          string `json:"ostype"`
+	VirtioWinDriver string `json:"virtiowindriver,omitempty"`
 }
 
 // MigrationDestination defines the destination details for the migration
 type MigrationDestination struct {
 	OpenstackRef string `json:"openstackref"`
+	NetworkName  string `json:"networkname"`
 }
 
 // MigrationSpec defines the desired state of Migration

@@ -43,15 +43,25 @@ spec:
                 description: MigrationDestination defines the destination details
                   for the migration
                 properties:
+                  networkname:
+                    type: string
                   openstackref:
                     type: string
                 required:
+                - networkname
                 - openstackref
                 type: object
               source:
                 description: MigrationSource defines the source details for the migration
                 properties:
                   datacenter:
+                    type: string
+                  ostype:
+                    enum:
+                    - windows
+                    - linux
+                    type: string
+                  virtiowindriver:
                     type: string
                   virtualmachines:
                     items:
@@ -61,6 +71,7 @@ spec:
                     type: string
                 required:
                 - datacenter
+                - ostype
                 - virtualmachines
                 - vmwareref
                 type: object
