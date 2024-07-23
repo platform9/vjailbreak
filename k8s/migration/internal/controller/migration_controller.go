@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,8 +66,10 @@ func RemoveString(s []string, r string) []string {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=list;get
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=list;get;create;update;delete
+//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list
+//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list
+//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -125,54 +129,71 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
 func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
-	v2vimage := "tanaypf9/v2v:latest"
+	v2vimage := "platform9/v2v-helper:v0.1"
 
-	// Fetch VMware secret
-	vmwareSecret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: migration.Spec.Source.VMwareRef, Namespace: migration.Namespace}, vmwareSecret)
+	// Fetch VMwareCreds CR
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+	err := r.Get(ctx, types.NamespacedName{Name: migration.Spec.Source.VMwareRef, Namespace: migration.Namespace}, vmwcreds)
 	if err != nil {
-		ctxlog.Error(err, "Failed to retrieve VMware secret")
+		ctxlog.Error(err, "Failed to retrieve VMware CR")
 		return ctrl.Result{}, err
 	}
 
-	// Fetch OpenStack secret
-	openstackSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.Destination.OpenstackRef, Namespace: migration.Namespace}, openstackSecret)
+	if vmwcreds.Status.VMwareValidationStatus != "Success" {
+		ctxlog.Info(fmt.Sprintf("VMwareCreds '%s' CR is not validated", vmwcreds.Name))
+		return ctrl.Result{}, nil
+	}
+
+	// Fetch OpenStackCreds CR
+	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.Destination.OpenstackRef, Namespace: migration.Namespace}, openstackcreds)
 	if err != nil {
-		ctxlog.Error(err, "Failed to retrieve OpenStack secret")
+		ctxlog.Error(err, "Failed to retrieve OpenStack CR")
 		return ctrl.Result{}, err
+	}
+
+	if openstackcreds.Status.OpenStackValidationStatus != "Success" {
+		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is not validated", openstackcreds.Name))
+		return ctrl.Result{}, nil
 	}
 
 	for _, vm := range migration.Spec.Source.VirtualMachines {
-		configMapName := fmt.Sprintf("migration-config-%s", vm)
-		podName := fmt.Sprintf("v2v-helper-%s", vm)
+		vmname := strings.Replace(strings.Replace(vm, " ", "-", -1), "_", "-", -1)
+		configMapName := fmt.Sprintf("migration-config-%s", vmname)
+		podName := fmt.Sprintf("v2v-helper-%s", vmname)
+		virtiodrivers := ""
+		if migration.Spec.Source.VirtioWinDriver == "" {
+			virtiodrivers = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+		} else {
+			virtiodrivers = migration.Spec.Source.VirtioWinDriver
+		}
 
 		// Create ConfigMap
 		configMap := &corev1.ConfigMap{}
 		err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
 		if err != nil && apierrors.IsNotFound(err) {
-			ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vm))
+			ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 			configMap = &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      configMapName,
 					Namespace: migration.Namespace,
 				},
 				Data: map[string]string{
-					"CONVERT":              "true",
-					"NEUTRON_NETWORK_NAME": "vlan3002",
-					"OS_AUTH_URL":          string(openstackSecret.Data["OS_AUTH_URL"]),
-					"OS_DOMAIN_NAME":       string(openstackSecret.Data["OS_DOMAIN_NAME"]),
-					"OS_PASSWORD":          string(openstackSecret.Data["OS_PASSWORD"]),
-					"OS_REGION_NAME":       string(openstackSecret.Data["OS_REGION_NAME"]),
-					"OS_TENANT_NAME":       string(openstackSecret.Data["OS_TENANT_NAME"]),
-					"OS_TYPE":              "Windows",
-					"OS_USERNAME":          string(openstackSecret.Data["OS_USERNAME"]),
+					"CONVERT":              "true", //Assume that the vm always has to be converted
+					"NEUTRON_NETWORK_NAME": migration.Spec.Destination.NetworkName,
+					"OS_AUTH_URL":          openstackcreds.Spec.OS_AUTH_URL,
+					"OS_DOMAIN_NAME":       openstackcreds.Spec.OS_DOMAIN_NAME,
+					"OS_PASSWORD":          openstackcreds.Spec.OS_PASSWORD,
+					"OS_REGION_NAME":       openstackcreds.Spec.OS_REGION_NAME,
+					"OS_TENANT_NAME":       openstackcreds.Spec.OS_TENANT_NAME,
+					"OS_TYPE":              migration.Spec.Source.OSType,
+					"OS_USERNAME":          openstackcreds.Spec.OS_USERNAME,
 					"SOURCE_VM_NAME":       vm,
-					"VCENTER_HOST":         string(vmwareSecret.Data["VCENTER_HOST"]),
-					"VCENTER_INSECURE":     string(vmwareSecret.Data["VCENTER_INSECURE"]),
-					"VCENTER_PASSWORD":     string(vmwareSecret.Data["VCENTER_PASSWORD"]),
-					"VCENTER_USERNAME":     string(vmwareSecret.Data["VCENTER_USERNAME"]),
-					"VIRTIO_WIN_DRIVER":    "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso",
+					"VCENTER_HOST":         vmwcreds.Spec.VCENTER_HOST,
+					"VCENTER_INSECURE":     strconv.FormatBool(vmwcreds.Spec.VCENTER_INSECURE),
+					"VCENTER_PASSWORD":     vmwcreds.Spec.VCENTER_PASSWORD,
+					"VCENTER_USERNAME":     vmwcreds.Spec.VCENTER_USERNAME,
+					"VIRTIO_WIN_DRIVER":    virtiodrivers,
 				},
 			}
 			err = ctrl.SetControllerReference(migration, configMap, r.Scheme)
@@ -184,20 +205,21 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 				ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 				return ctrl.Result{}, err
 			}
-			ctxlog.Info(fmt.Sprintf("ConfigMap '%s' created for VM '%s'", configMapName, vm))
+			ctxlog.Info(fmt.Sprintf("ConfigMap '%s' created for VM '%s'", configMapName, vmname))
 		}
 
 		// Create Pod
+		pointtrue := true
 		pod := &corev1.Pod{}
 		err = r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migration.Namespace}, pod)
 		if err != nil && apierrors.IsNotFound(err) {
-			ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vm))
+			ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vmname))
 			pod = &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
 					Namespace: migration.Namespace,
 					Labels: map[string]string{
-						"vm-name": vm,
+						"vm-name": vmname,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -209,7 +231,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"/home/fedora/manager"},
 							SecurityContext: &corev1.SecurityContext{
-								Privileged: new(bool),
+								Privileged: &pointtrue,
 							},
 							EnvFrom: []corev1.EnvFromSource{
 								{

@@ -1,0 +1,76 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: openstackcreds.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: OpenstackCreds
+    listKind: OpenstackCredsList
+    plural: openstackcreds
+    singular: openstackcreds
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: OpenstackCreds is the Schema for the openstackcreds API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OpenstackCredsSpec defines the desired state of OpenstackCreds
+            properties:
+              OS_AUTH_URL:
+                description: OS_AUTH_URL is the OpenStack authentication URL
+                type: string
+              OS_DOMAIN_NAME:
+                description: OS_DOMAIN_NAME is the OpenStack domain name
+                type: string
+              OS_PASSWORD:
+                description: OS_PASSWORD is the OpenStack password
+                type: string
+              OS_REGION_NAME:
+                description: OS_REGION_NAME is the OpenStack region name
+                type: string
+              OS_TENANT_NAME:
+                description: OS_TENANT_NAME is the OpenStack tenant name
+                type: string
+              OS_USERNAME:
+                description: OS_USERNAME is the OpenStack username
+                type: string
+            type: object
+          status:
+            description: OpenstackCredsStatus defines the observed state of OpenstackCreds
+            properties:
+              openstackValidationMessage:
+                type: string
+              openstackValidationStatus:
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

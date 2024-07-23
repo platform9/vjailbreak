@@ -41,13 +41,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-- apiGroups:
   - deploy.pf9.io
   resources:
   - sites
@@ -95,6 +88,58 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - migrations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - openstackcreds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - openstackcreds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - openstackcreds/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwarecreds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwarecreds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwarecreds/status
   verbs:
   - get
   - patch

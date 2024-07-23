@@ -1,4 +1,26 @@
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: OpenstackCreds
+metadata:
+  name: sapmo1
+spec:
+  OS_AUTH_URL: <>
+  OS_DOMAIN_NAME: Default
+  OS_USERNAME: <>
+  OS_PASSWORD: <>
+  OS_REGION_NAME: cspmo
+  OS_TENANT_NAME: service
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VMwareCreds
+metadata:
+  name: pnapbmc1
+spec:
+  VCENTER_HOST: <>
+  VCENTER_INSECURE: true
+  VCENTER_PASSWORD: <>
+  VCENTER_USERNAME: <>
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: Migration
 metadata:
   labels:
@@ -7,10 +29,14 @@ metadata:
   name: vm-migration-sample
 spec:
   source:
-    vmwareref: pnapbmc1 #(ip, username, password)
+    vmwareref: pnapbmc1
     datacenter: PNAP BMC
+    ostype: windows
+    virtiowindriver: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso
     virtualmachines:
     - dev test1
     - dev test2
   destination:
-    openstackref: pnappmo1 #(admin.rc vars)
+    networkname: vlan3002
+    openstackref: sapmo1
+---
