@@ -63,20 +63,6 @@ func (mr *MockNBDOperationsMockRecorder) CopyDisk(dest interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), dest)
 }
 
-// NewNBDNBDServer mocks base method.
-func (m *MockNBDOperations) NewNBDNBDServer() NBDServer {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewNBDNBDServer")
-	ret0, _ := ret[0].(NBDServer)
-	return ret0
-}
-
-// NewNBDNBDServer indicates an expected call of NewNBDNBDServer.
-func (mr *MockNBDOperationsMockRecorder) NewNBDNBDServer() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNBDNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).NewNBDNBDServer))
-}
-
 // StartNBDServer mocks base method.
 func (m *MockNBDOperations) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
 	m.ctrl.T.Helper()

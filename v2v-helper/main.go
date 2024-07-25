@@ -79,8 +79,8 @@ func main() {
 	}
 
 	nbdops := []nbd.NBDOperations{}
-	for idx, _ := range vminfo.VMDisks {
-		nbdops[idx].NewNBDNBDServer()
+	for range vminfo.VMDisks {
+		nbdops = append(nbdops, &nbd.NBDServer{})
 	}
 
 	// Live Replicate Disks
@@ -88,6 +88,10 @@ func main() {
 	if err != nil {
 		log.Printf("Failed to live replicate disks: %s\n", err)
 		log.Println("Removing migration snapshot and Openstack volumes.")
+		err = vmops.DeleteSnapshot("migration-snap")
+		if err != nil {
+			log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
+		}
 		err = migrate.DetachAllDisks(vminfo, openstackclients)
 		if err != nil {
 			log.Fatalf("Failed to detach all volumes from VM: %s\n", err)
