@@ -21,7 +21,6 @@ import (
 //go:generate mockgen -source=../nbd/nbdops.go -destination=../nbd/nbdops_mock.go -package=nbd
 
 type NBDOperations interface {
-	NewNBDNBDServer() NBDServer
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error
 	StopNBDServer() error
 	CopyDisk(dest string) error
@@ -79,27 +78,14 @@ func verifynbdkit() error {
 	return nil
 }
 
-func (nbdserver NBDServer) NewNBDNBDServer() NBDServer {
-	tmp, err := os.MkdirTemp("", "nbdkit-")
+func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
+	tmp_dir, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
-		return NBDServer{}
+		return err
 	}
-	return NBDServer{
-		cmd:     nil,
-		tmp_dir: tmp,
-	}
-}
 
-func (nbdserver NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
-	// Start the NBD server
-	// vm := ctx.Value("vm").(*object.VirtualMachine)
-	// tmp, err := os.MkdirTemp("", "nbdkit-")
-	// if err != nil {
-	// 	return NBDServer{}, err
-	// }
-
-	socket := fmt.Sprintf("%s/nbdkit.sock", nbdserver.tmp_dir)
-	pidFile := fmt.Sprintf("%s/nbdkit.pid", nbdserver.tmp_dir)
+	socket := fmt.Sprintf("%s/nbdkit.sock", tmp_dir)
+	pidFile := fmt.Sprintf("%s/nbdkit.pid", tmp_dir)
 
 	cmd := exec.Command(
 		"nbdkit",
@@ -132,19 +118,16 @@ func (nbdserver NBDServer) StartNBDServer(vm *object.VirtualMachine, server, use
 		}
 	}
 	log.Printf("Executing %s\n", cmdstring)
-	err := cmd.Start()
+	err = cmd.Start()
 	if err != nil {
 		return err
 	}
 	nbdserver.cmd = cmd
-	// return NBDServer{
-	// 	cmd:     cmd,
-	// 	tmp_dir: tmp,
-	// }, nil
+	nbdserver.tmp_dir = tmp_dir
 	return nil
 }
 
-func (nbdserver NBDServer) StopNBDServer() error {
+func (nbdserver *NBDServer) StopNBDServer() error {
 	err := nbdserver.cmd.Process.Kill()
 	if err != nil {
 		return err
@@ -153,7 +136,7 @@ func (nbdserver NBDServer) StopNBDServer() error {
 	return nil
 }
 
-func (nbdserver NBDServer) CopyDisk(dest string) error {
+func (nbdserver *NBDServer) CopyDisk(dest string) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -358,7 +341,7 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 	return nil
 }
 
-func (nbdserver NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error {
+func (nbdserver *NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error {
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
 	if err != nil {

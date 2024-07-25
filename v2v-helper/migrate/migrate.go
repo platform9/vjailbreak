@@ -107,7 +107,6 @@ func LiveReplicateDisks(vminfo vm.VMInfo, vmops vm.VMOperations, nbdops []nbd.NB
 		if err != nil {
 			return vminfo, fmt.Errorf("Failed to start NBD server: %s\n", err)
 		}
-		// nbdservers = append(nbdservers, nbdserver)
 
 	}
 	// sleep for 2 seconds to allow the NBD server to start
