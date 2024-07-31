@@ -28,8 +28,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -159,6 +161,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is not validated", openstackcreds.Name))
 		return ctrl.Result{}, nil
 	}
+	newvmstat := []vjailbreakv1alpha1.VMMigrationStatus{}
 
 	for _, vm := range migration.Spec.Source.VirtualMachines {
 		vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
@@ -281,7 +284,16 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 				return ctrl.Result{}, err
 			}
 			ctxlog.Info(fmt.Sprintf("Pod '%s' queued for Migration '%s'", podName, migration.Name))
+		} else {
+			newvmstat = append(newvmstat, vjailbreakv1alpha1.VMMigrationStatus{
+				VMName: vm,
+				Status: "Migration " + string(pod.Status.Phase),
+			})
 		}
+	}
+	migration.Status.VMMigrationStatus = newvmstat
+	if err := r.Status().Update(ctx, migration); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -307,6 +319,7 @@ func newHostPathType(pathType string) *corev1.HostPathType {
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.Migration{}).
+		For(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
