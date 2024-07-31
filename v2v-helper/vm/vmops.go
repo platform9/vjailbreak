@@ -27,6 +27,7 @@ type VMOperations interface {
 	DeleteSnapshot(name string) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
 	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
+	VMPowerOff() error
 }
 
 type VMInfo struct {
@@ -290,4 +291,13 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 	}
 
 	return res.Returnval, nil
+}
+
+func (vmops *VMOps) VMPowerOff() error {
+	task, err := vmops.VMObj.PowerOff(context.Background())
+	if err != nil {
+		return err
+	}
+	task.Wait(context.Background())
+	return nil
 }

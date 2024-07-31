@@ -263,6 +263,7 @@ func (osclient *OpenStackClients) EnableQGA(volume *volumes.Volume) error {
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_qemu_guest_agent": "yes",
+			"hw_video_model":      "virtio",
 		},
 	}
 	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()

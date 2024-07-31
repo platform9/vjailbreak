@@ -148,6 +148,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	}
 	// sleep for 2 seconds to allow the NBD server to start
 	time.Sleep(2 * time.Second)
+	final := false
 
 	incrementalCopyCount := 0
 	for {
@@ -162,9 +163,6 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 				}
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
-		} else if incrementalCopyCount > 20 {
-			log.Println("20 incremental copies done, will proceed with the conversion now")
-			break
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot("migration-snap")
 			if err != nil {
@@ -210,9 +208,15 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 					migobj.logMessage("Finished copying changed blocks")
 				}
 			}
-			if done {
+			if final {
 				break
 			}
+			if done || incrementalCopyCount > 20 {
+				log.Println("No more changes found. Shutting down source VM and performing final copy")
+				vmops.VMPowerOff()
+				final = true
+			}
+
 		}
 
 		//Update old change id to the new base change id value
@@ -335,7 +339,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			return fmt.Errorf("failed to create port group: %s", err)
 		}
 
-		log.Printf("Port Group created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+		log.Printf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
 		networkids = append(networkids, network.ID)
 		portids = append(portids, port.ID)
 	}
