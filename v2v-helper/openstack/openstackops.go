@@ -40,7 +40,7 @@ type OpenstackOperations interface {
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
-	CreatePort(networkid *networks.Network, mac, vmname string) (*ports.Port, error)
+	CreatePort(networkid *networks.Network, mac, ip, vmname string) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
@@ -365,7 +365,7 @@ func (osclient *OpenStackClients) GetNetwork(networkname string) (*networks.Netw
 	return nil, fmt.Errorf("network not found")
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, vmname string) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string) (*ports.Port, error) {
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -386,13 +386,29 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, vmn
 		}
 	}
 	log.Printf("Port with MAC address %s does not exist, creating new port\n", mac)
+	log.Println("Trying with same IP address: ", ip)
 	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 		Name:       "port-" + vmname,
 		NetworkID:  network.ID,
 		MACAddress: mac,
+		FixedIPs: []ports.IP{
+			{
+				SubnetID:  network.Subnets[0],
+				IPAddress: ip,
+			},
+		},
 	}).Extract()
 	if err != nil {
-		return nil, err
+		// return nil, err
+		log.Printf("Could Not Use IP: %s, using DHCP to create Port", ip)
+		port, err = ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+			Name:       "port-" + vmname,
+			NetworkID:  network.ID,
+			MACAddress: mac,
+		}).Extract()
+		if err != nil {
+			return nil, err
+		}
 	}
 	log.Println("Port created with ID: ", port.ID)
 	return port, nil

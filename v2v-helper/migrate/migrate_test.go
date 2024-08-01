@@ -424,14 +424,14 @@ func TestCreateTargetInstance(t *testing.T) {
 		RAM:   2048,
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
 		},
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
@@ -445,6 +445,10 @@ func TestCreateTargetInstance(t *testing.T) {
 		Mac: []string{
 			"mac-address-1",
 			"mac-address-2",
+		},
+		IPs: []string{
+			"ip-address-1",
+			"ip-address-2",
 		},
 	}
 

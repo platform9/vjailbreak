@@ -35,6 +35,7 @@ type VMInfo struct {
 	Memory  int32
 	State   types.VirtualMachinePowerState
 	Mac     []string
+	IPs     []string
 	UUID    string
 	Host    string
 	VMDisks []VMDisk
@@ -103,6 +104,18 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 			mac = append(mac, nic.GetVirtualEthernetCard().MacAddress)
 		}
 	}
+	// Get IP addresses of the VM
+	ips := []string{}
+	for _, nic := range o.Guest.Net {
+		if nic.IpConfig != nil {
+			for _, ip := range nic.IpConfig.IpAddress {
+				if !strings.Contains(ip.IpAddress, ":") {
+					ips = append(ips, ip.IpAddress)
+				}
+			}
+		}
+	}
+
 	vmdisks := []VMDisk{} // Create an empty slice of Disk structs
 	for _, device := range o.Config.Hardware.Device {
 		if disk, ok := device.(*types.VirtualDisk); ok {
@@ -133,6 +146,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		Memory:  o.Config.Hardware.MemoryMB,
 		State:   o.Runtime.PowerState,
 		Mac:     mac,
+		IPs:     ips,
 		UUID:    o.Config.Uuid,
 		Host:    o.Runtime.Host.Reference().Value,
 		Name:    o.Name,

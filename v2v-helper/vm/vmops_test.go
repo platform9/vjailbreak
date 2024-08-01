@@ -66,6 +66,7 @@ func TestGetVMInfo(t *testing.T) {
 		Memory: 32,
 		State:  "poweredOn",
 		Mac:    []string{"00:0c:29:36:63:62"},
+		IPs:    []string{},
 		UUID:   "265104de-1472-547c-b873-6dc7883fb6cb",
 		Host:   "host-22",
 		VMDisks: []VMDisk{

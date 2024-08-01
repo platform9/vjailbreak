@@ -334,7 +334,13 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		}
 		log.Printf("Network ID: %s\n", network.ID)
 
-		port, err := openstackops.CreatePort(network, vminfo.Mac[idx], vminfo.Name)
+		ip := ""
+		if len(vminfo.Mac) != len(vminfo.IPs) {
+			ip = ""
+		} else {
+			ip = vminfo.IPs[idx]
+		}
+		port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
 		if err != nil {
 			return fmt.Errorf("failed to create port group: %s", err)
 		}
