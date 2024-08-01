@@ -86,6 +86,15 @@ func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, us
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %v", err)
 	}
+	// Create the configuration file
+	// Ref: https://tecblog.au.de/veeam-v12-12-1-double-your-nbd-backup-performance/
+	configFile := "/home/fedora/vddk.conf"
+	configContent := `vixDiskLib.nfcAio.Session.BufSizeIn64KB=16
+vixDiskLib.nfcAio.Session.BufCount=4`
+	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	if err != nil {
+		return err
+	}
 
 	socket := fmt.Sprintf("%s/nbdkit.sock", tmp_dir)
 	pidFile := fmt.Sprintf("%s/nbdkit.pid", tmp_dir)
@@ -104,7 +113,8 @@ func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, us
 		fmt.Sprintf("user=%s", username),
 		fmt.Sprintf("password=%s", password),
 		fmt.Sprintf("thumbprint=%s", thumbprint),
-		"compression=skipz",
+		"compression=fastlz",
+		"config=/home/fedora/vddk.conf",
 		fmt.Sprintf("vm=moref=%s", vm.Reference().Value),
 		// fmt.Sprintf("snapshot=%s", snapref),
 		file,
