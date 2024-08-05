@@ -19,6 +19,7 @@ COPY main.go main.go
 COPY migrate/ migrate/
 COPY nbd/ nbd/
 COPY openstack/ openstack/
+COPY reporter/ reporter/
 COPY vcenter/ vcenter/
 COPY vm/ vm/
 COPY virtv2v/ virtv2v/

@@ -1,3 +1,5 @@
+// Copyright © 2024 The vjailbreak authors
+
 package vm
 
 import (
@@ -61,17 +63,15 @@ type VMDisk struct {
 type VMOps struct {
 	vcclient *vcenter.VCenterClient
 	VMObj    *object.VirtualMachine
+	ctx      context.Context
 }
 
-func VMOpsBuilder(vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
-	vm, err := vcclient.GetVMByName(name)
+func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
+	vm, err := vcclient.GetVMByName(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get VM: %s", err)
 	}
-	if vm == nil {
-		return nil, fmt.Errorf("VM %s not found", name)
-	}
-	return &VMOps{vcclient: &vcclient, VMObj: vm}, nil
+	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx}, nil
 
 }
 
@@ -92,7 +92,10 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vm := vmops.VMObj
 
 	var o mo.VirtualMachine
-	vm.Properties(context.Background(), vm.Reference(), []string{}, &o)
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	if err != nil {
+		return VMInfo{}, fmt.Errorf("failed to get VM properties: %s", err)
+	}
 	var mac []string
 	for _, device := range o.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
@@ -120,7 +123,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
 			ostype = "linux"
 		} else {
-			return VMInfo{}, fmt.Errorf("No OS type provided and unable to determine OS type")
+			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
 		}
 	}
 
@@ -181,12 +184,15 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 	var snapid []string
 
 	var o mo.VirtualMachine
-	vm.Properties(context.Background(), vm.Reference(), []string{}, &o)
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	if err != nil {
+		return vminfo, fmt.Errorf("failed to get VM properties: %s", err)
+	}
 
 	if o.Snapshot != nil {
 		// get backing disk of snapshot
 		var s mo.VirtualMachineSnapshot
-		pc.RetrieveOne(context.Background(), o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
 
 		for _, device := range s.Config.Hardware.Device {
 			switch disk := device.(type) {
@@ -197,7 +203,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 				snapname = append(snapname, o.Snapshot.CurrentSnapshot.Value)
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					return vminfo, err
+					return vminfo, fmt.Errorf("failed to get change ID: %s", err)
 				}
 				snapid = append(snapid, changeid.Value)
 			}
@@ -215,7 +221,10 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 	vm := vmops.VMObj
 	var o mo.VirtualMachine
-	vm.Properties(context.Background(), vm.Reference(), []string{"config.changeTrackingEnabled"}, &o)
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"config.changeTrackingEnabled"}, &o)
+	if err != nil {
+		return false, fmt.Errorf("failed to get VM properties: %s", err)
+	}
 	return *o.Config.ChangeTrackingEnabled, nil
 }
 
@@ -225,40 +234,40 @@ func (vmops *VMOps) EnableCBT() error {
 		ChangeTrackingEnabled: types.NewBool(true),
 	}
 
-	task, err := vm.Reconfigure(context.Background(), configSpec)
+	task, err := vm.Reconfigure(vmops.ctx, configSpec)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to enable CBT: %s", err)
 	}
-	task.Wait(context.Background())
+	task.Wait(vmops.ctx)
 	return nil
 }
 
 func (vmops *VMOps) TakeSnapshot(name string) error {
 	vm := vmops.VMObj
-	task, err := vm.CreateSnapshot(context.Background(), name, "", false, false)
+	task, err := vm.CreateSnapshot(vmops.ctx, name, "", false, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to take snapshot: %s", err)
 	}
-	task.Wait(context.Background())
+	task.Wait(vmops.ctx)
 	return nil
 }
 
 func (vmops *VMOps) DeleteSnapshot(name string) error {
 	vm := vmops.VMObj
 	var consolidate = true
-	task, err := vm.RemoveSnapshot(context.Background(), name, false, &consolidate)
+	task, err := vm.RemoveSnapshot(vmops.ctx, name, false, &consolidate)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete snapshot: %s", err)
 	}
-	task.Wait(context.Background())
+	task.Wait(vmops.ctx)
 	return nil
 }
 
 func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, error) {
 	vm := vmops.VMObj
-	snap, err := vm.FindSnapshot(context.Background(), name)
+	snap, err := vm.FindSnapshot(vmops.ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find snapshot: %s", err)
 	}
 	return snap, nil
 }
@@ -276,9 +285,9 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 		ChangeId:    baseChangeID,
 	}
 
-	res, err := methods.QueryChangedDiskAreas(context.Background(), v.Client(), &req)
+	res, err := methods.QueryChangedDiskAreas(vmops.ctx, v.Client(), &req)
 	if err != nil {
-		return noChange, err
+		return noChange, fmt.Errorf("failed to query changed disk areas: %s", err)
 	}
 
 	return res.Returnval, nil

@@ -1,3 +1,5 @@
+// Copyright © 2024 The vjailbreak authors
+
 package vcenter
 
 import (
@@ -18,8 +20,8 @@ import (
 //go:generate mockgen -source=../vcenter/vcenterops.go -destination=../vcenter/vcenterops_mock.go -package=vcenter
 
 type VCenterOperations interface {
-	getDatacenters() ([]*object.Datacenter, error)
-	GetVMByName(name string) (*object.VirtualMachine, error)
+	getDatacenters(ctx context.Context) ([]*object.Datacenter, error)
+	GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error)
 }
 
 type VCenterClient struct {
@@ -28,7 +30,7 @@ type VCenterClient struct {
 	VCPropertyCollector *property.Collector
 }
 
-func validateVCenter(username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
+func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
 	// add protocol to host if not present
 	if host[:4] != "http" {
 		host = "https://" + host
@@ -38,7 +40,7 @@ func validateVCenter(username, password, host string, disableSSLVerification boo
 	}
 	u, err := url.Parse(host)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
 	u.User = url.UserPassword(username, password)
 	// fmt.Println(u)
@@ -50,17 +52,17 @@ func validateVCenter(username, password, host string, disableSSLVerification boo
 	}
 
 	c := new(vim25.Client)
-	err = s.Login(context.Background(), c, nil)
+	err = s.Login(ctx, c, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to login: %v", err)
 	}
 	return c, nil
 }
 
-func VCenterClientBuilder(username, password, host string, disableSSLVerification bool) (*VCenterClient, error) {
-	client, err := validateVCenter(username, password, host, disableSSLVerification)
+func VCenterClientBuilder(ctx context.Context, username, password, host string, disableSSLVerification bool) (*VCenterClient, error) {
+	client, err := validateVCenter(ctx, username, password, host, disableSSLVerification)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
 	}
 	finder := find.NewFinder(client, false)
 	pc := property.DefaultCollector(client)
@@ -88,7 +90,7 @@ func GetThumbprint(host string) (string, error) {
 		InsecureSkipVerify: true, // Skip verification
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to connect to vCenter: %v", err)
 	}
 	defer conn.Close()
 
@@ -114,28 +116,28 @@ func GetThumbprint(host string) (string, error) {
 }
 
 // Get all datacenters
-func (vcclient *VCenterClient) getDatacenters() ([]*object.Datacenter, error) {
+func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Datacenter, error) {
 	// Find all datacenters
-	datacenters, err := vcclient.VCFinder.DatacenterList(context.Background(), "*")
+	datacenters, err := vcclient.VCFinder.DatacenterList(ctx, "*")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get datacenters: %v", err)
 	}
 
 	return datacenters, nil
 }
 
 // get VM by name
-func (vcclient *VCenterClient) GetVMByName(name string) (*object.VirtualMachine, error) {
-	datacenters, err := vcclient.getDatacenters()
+func (vcclient *VCenterClient) GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error) {
+	datacenters, err := vcclient.getDatacenters(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get datacenters: %v", err)
 	}
 	for _, datacenter := range datacenters {
 		vcclient.VCFinder.SetDatacenter(datacenter)
-		vm, err := vcclient.VCFinder.VirtualMachine(context.Background(), name)
+		vm, err := vcclient.VCFinder.VirtualMachine(ctx, name)
 		if err == nil {
 			return vm, nil
 		}
 	}
-	return nil, err
+	return nil, fmt.Errorf("VM not found")
 }

@@ -1,3 +1,5 @@
+// Copyright © 2024 The vjailbreak authors
+
 package nbd
 
 import (
@@ -21,15 +23,16 @@ import (
 //go:generate mockgen -source=../nbd/nbdops.go -destination=../nbd/nbdops_mock.go -package=nbd
 
 type NBDOperations interface {
-	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error
+	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
 	CopyDisk(dest string) error
 	CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error
 }
 
 type NBDServer struct {
-	cmd     *exec.Cmd
-	tmp_dir string
+	cmd          *exec.Cmd
+	tmp_dir      string
+	progresschan chan string
 }
 
 type BlockStatusData struct {
@@ -72,16 +75,16 @@ func verifynbdkit() error {
 	cmd := exec.Command("nbdkit", "--version")
 	err := cmd.Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to run nbdkit: %v", err)
 	}
 
 	return nil
 }
 
-func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
+func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
 	tmp_dir, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temp dir: %v", err)
 	}
 
 	socket := fmt.Sprintf("%s/nbdkit.sock", tmp_dir)
@@ -120,17 +123,18 @@ func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, us
 	log.Printf("Executing %s\n", cmdstring)
 	err = cmd.Start()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start nbdkit: %v", err)
 	}
 	nbdserver.cmd = cmd
 	nbdserver.tmp_dir = tmp_dir
+	nbdserver.progresschan = progchan
 	return nil
 }
 
 func (nbdserver *NBDServer) StopNBDServer() error {
 	err := nbdserver.cmd.Process.Kill()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to kill nbdkit: %v", err)
 	}
 	os.RemoveAll(nbdserver.tmp_dir)
 	return nil
@@ -140,7 +144,7 @@ func (nbdserver *NBDServer) CopyDisk(dest string) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create pipe: %v", err)
 	}
 	defer progressRead.Close()
 	defer progressWrite.Close()
@@ -152,13 +156,15 @@ func (nbdserver *NBDServer) CopyDisk(dest string) error {
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
 		for scanner.Scan() {
-			log.Printf("Progress: %s%%", scanner.Text())
+			prog := fmt.Sprintf("Progress: %s%%", scanner.Text())
+			log.Println(prog)
+			nbdserver.progresschan <- prog
 		}
 	}()
 	err = cmd.Run()
 	if err != nil {
 		log.Println("Error running nbdcopy")
-		return err
+		return fmt.Errorf("Failed to run nbdcopy: %v", err)
 	}
 
 	return nil
@@ -258,15 +264,15 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 
 // pwrite writes the given byte buffer to the sink at the given offset
 func pwrite(fd *os.File, buffer []byte, offset uint64) (int, error) {
-	written, err := syscall.Pwrite(int(fd.Fd()), buffer, int64(offset))
 	blocksize := len(buffer)
+	written, err := syscall.Pwrite(int(fd.Fd()), buffer, int64(offset))
+	if err != nil {
+		return -1, fmt.Errorf("Failed to write %d bytes at offset %d: %v", blocksize, offset, err)
+	}
 	if written < blocksize {
 		log.Printf("Wrote less than blocksize (%d): %d", blocksize, written)
 	}
-	if err != nil {
-		return -1, err
-	}
-	return written, err
+	return written, nil
 }
 
 // zeroRange fills the destination range with zero bytes
@@ -279,7 +285,7 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 
 	err := punch(offset, length)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to punch hole at offset %d: %v", offset, err)
 	}
 
 	if err != nil { // Fall back to regular pwrite
@@ -302,15 +308,15 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 		}
 	}
 
-	return err
+	return nil
 }
 
 func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error {
 	if (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0 {
-		// log.Printf("Found a %d-byte %s at offset %d, filling destination with zeroes.", block.Length, skip, block.Offset)
 		err := zeroRange(fd, block.Offset, block.Length)
-		// updateProgress(int(block.Length))
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to zero range at offset %d: %v", block.Offset, err)
+		}
 	}
 
 	buffer := bytes.Repeat([]byte{0}, MaxPreadLength)
@@ -324,18 +330,13 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 		offset := block.Offset + count
 		err := handle.Pread(buffer, uint64(offset), nil)
 		if err != nil {
-			log.Printf("Error reading from source at offset %d: %v", offset, err)
-			return err
+			return fmt.Errorf("error reading from source at offset %d: %v", offset, err)
 		}
 
 		_, err = pwrite(fd, buffer, uint64(offset))
 		if err != nil {
-			log.Printf("Failed to write data block at offset %d to local file: %v", block.Offset, err)
-			return err
+			return fmt.Errorf("failed to write data block at offset %d to local file: %v", block.Offset, err)
 		}
-		// log.Printf("Copied %d bytes at offset %d", length, offset)
-
-		// updateProgress(written)
 		count += int64(length)
 	}
 	return nil
@@ -345,22 +346,22 @@ func (nbdserver *NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo,
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create libnbd handle: %v", err)
 	}
 	err = handle.AddMetaContext("base:allocation")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to add meta context: %v", err)
 	}
 	err = handle.ConnectUri(generateSockUrl(nbdserver.tmp_dir))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to source: %v", err)
 	}
 	defer handle.Close()
 
 	// log.Println("Opening File")
 	fd, err := os.OpenFile(path, os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open file: %v", err)
 	}
 	// log.Println("File Opened")
 
@@ -377,15 +378,14 @@ func (nbdserver *NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo,
 		for _, block := range blocks {
 			err := copyRange(fd, handle, block)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to copy block: %v", err)
 			}
 		}
 		copiedsize += extent.Length
-		// if (idx+1)%10 == 0 {
-		log.Printf("Progress: %.2f%%\n", float64(copiedsize)/float64(totalsize)*100.0)
-		// }
+		prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
+		log.Println(prog)
+		nbdserver.progresschan <- prog
 	}
-	// log.Printf("Copied %d/%d bytes", copiedsize, totalsize)
 	return nil
 }
 
