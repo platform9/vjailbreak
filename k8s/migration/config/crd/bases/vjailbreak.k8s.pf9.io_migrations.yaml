@@ -43,12 +43,14 @@ spec:
                 description: MigrationDestination defines the destination details
                   for the migration
                 properties:
-                  networkname:
-                    type: string
+                  networknames:
+                    items:
+                      type: string
+                    type: array
                   openstackref:
                     type: string
                 required:
-                - networkname
+                - networknames
                 - openstackref
                 type: object
               source:

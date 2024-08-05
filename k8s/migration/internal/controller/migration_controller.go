@@ -183,7 +183,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 				},
 				Data: map[string]string{
 					"CONVERT":              "true", // Assume that the vm always has to be converted
-					"NEUTRON_NETWORK_NAME": migration.Spec.Destination.NetworkName,
+					"NEUTRON_NETWORK_NAME": strings.Join(migration.Spec.Destination.NetworkNames, ","),
 					"OS_AUTH_URL":          openstackcreds.Spec.OsAuthURL,
 					"OS_DOMAIN_NAME":       openstackcreds.Spec.OsDomainName,
 					"OS_PASSWORD":          openstackcreds.Spec.OsPassword,

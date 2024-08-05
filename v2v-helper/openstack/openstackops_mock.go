@@ -12,6 +12,7 @@ import (
 	volumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	flavors "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	servers "github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	networks "github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
 
@@ -53,33 +54,33 @@ func (mr *MockOpenstackOperationsMockRecorder) AttachVolumeToVM(volumeID interfa
 }
 
 // CreatePort mocks base method.
-func (m *MockOpenstackOperations) CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error) {
+func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, vmname string) (*ports.Port, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePort", networkid, vminfo)
+	ret := m.ctrl.Call(m, "CreatePort", networkid, mac, vmname)
 	ret0, _ := ret[0].(*ports.Port)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreatePort indicates an expected call of CreatePort.
-func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, vminfo interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, vmname interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), networkid, vminfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), networkid, mac, vmname)
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", flavor, networkID, port, vminfo)
+	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkID, port, vminfo interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkID, port, vminfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo)
 }
 
 // CreateVolume mocks base method.
@@ -125,6 +126,20 @@ func (mr *MockOpenstackOperationsMockRecorder) DetachVolumeFromVM(volumeID inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DetachVolumeFromVM", reflect.TypeOf((*MockOpenstackOperations)(nil).DetachVolumeFromVM), volumeID)
 }
 
+// EnableQGA mocks base method.
+func (m *MockOpenstackOperations) EnableQGA(volume *volumes.Volume) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnableQGA", volume)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnableQGA indicates an expected call of EnableQGA.
+func (mr *MockOpenstackOperationsMockRecorder) EnableQGA(volume interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableQGA", reflect.TypeOf((*MockOpenstackOperations)(nil).EnableQGA), volume)
+}
+
 // FindDevice mocks base method.
 func (m *MockOpenstackOperations) FindDevice(volumeID string) (string, error) {
 	m.ctrl.T.Helper()
@@ -155,19 +170,19 @@ func (mr *MockOpenstackOperationsMockRecorder) GetClosestFlavour(cpu, memory int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClosestFlavour", reflect.TypeOf((*MockOpenstackOperations)(nil).GetClosestFlavour), cpu, memory)
 }
 
-// GetNetworkID mocks base method.
-func (m *MockOpenstackOperations) GetNetworkID(networkname string) (string, error) {
+// GetNetwork mocks base method.
+func (m *MockOpenstackOperations) GetNetwork(networkname string) (*networks.Network, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNetworkID", networkname)
-	ret0, _ := ret[0].(string)
+	ret := m.ctrl.Call(m, "GetNetwork", networkname)
+	ret0, _ := ret[0].(*networks.Network)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetNetworkID indicates an expected call of GetNetworkID.
-func (mr *MockOpenstackOperationsMockRecorder) GetNetworkID(networkname interface{}) *gomock.Call {
+// GetNetwork indicates an expected call of GetNetwork.
+func (mr *MockOpenstackOperationsMockRecorder) GetNetwork(networkname interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkID", reflect.TypeOf((*MockOpenstackOperations)(nil).GetNetworkID), networkname)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetwork", reflect.TypeOf((*MockOpenstackOperations)(nil).GetNetwork), networkname)
 }
 
 // SetVolumeBootable mocks base method.

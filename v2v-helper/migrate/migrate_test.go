@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/vmware/govmomi/object"
@@ -389,8 +390,15 @@ func TestCreateTargetInstance(t *testing.T) {
 		VCPUs: 2,
 		RAM:   2048,
 	}, nil).Times(1)
-	mockOpenStackOps.EXPECT().GetNetworkID(gomock.Any()).Return("network-id", nil).Times(1)
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+		MACAddress: "mac-address",
+		FixedIPs: []ports.IP{
+			{IPAddress: "ip-address"},
+		},
+	}, nil).Times(1)
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
@@ -398,16 +406,20 @@ func TestCreateTargetInstance(t *testing.T) {
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).Times(1)
 
-	vminfo := vm.VMInfo{
-		CPU:    2,
-		Memory: 2048,
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
 	}
 
 	migobj := Migrate{
 		Openstackclients: mockOpenStackOps,
-		Networkname:      "network-name",
+		Networknames:     []string{"network-name-1", "network-name-2"},
 		InPod:            false,
 	}
-	err := migobj.CreateTargetInstance(vminfo)
+	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.NoError(t, err)
 }

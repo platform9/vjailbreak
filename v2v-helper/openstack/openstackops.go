@@ -35,12 +35,13 @@ type OpenstackOperations interface {
 	WaitForVolumeAttachment(volumeID string) error
 	DetachVolumeFromVM(volumeID string) error
 	SetVolumeUEFI(volume *volumes.Volume) error
+	EnableQGA(volume *volumes.Volume) error
 	SetVolumeImageMetadata(volume *volumes.Volume) error
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
-	GetNetworkID(networkname string) (string, error)
-	CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error)
-	CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error)
+	GetNetwork(networkname string) (*networks.Network, error)
+	CreatePort(networkid *networks.Network, mac, vmname string) (*ports.Port, error)
+	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
 }
@@ -154,11 +155,17 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 			return nil, fmt.Errorf("failed to set volume uefi: %s", err)
 		}
 	}
+
 	if ostype == "windows" {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
 		}
+	}
+
+	err = osclient.EnableQGA(volume)
+	if err != nil {
+		return nil, err
 	}
 
 	return volume, nil
@@ -252,6 +259,19 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	return nil
 }
 
+func (osclient *OpenStackClients) EnableQGA(volume *volumes.Volume) error {
+	options := volumeactions.ImageMetadataOpts{
+		Metadata: map[string]string{
+			"hw_qemu_guest_agent": "yes",
+		},
+	}
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	if err != nil {
+		return fmt.Errorf("failed to detach volume from VM: %s", err)
+	}
+	return nil
+}
+
 func (osclient *OpenStackClients) SetVolumeUEFI(volume *volumes.Volume) error {
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
@@ -325,79 +345,59 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 	return bestFlavor, nil
 }
 
-func (osclient *OpenStackClients) GetNetworkID(networkname string) (string, error) {
+func (osclient *OpenStackClients) GetNetwork(networkname string) (*networks.Network, error) {
 	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
-		return "", fmt.Errorf("failed to list networks: %s", err)
-	}
-
-	allNetworks, err := networks.ExtractNetworks(allPages)
-	if err != nil {
-		return "", fmt.Errorf("failed to extract all networks: %s", err)
-	}
-
-	for _, network := range allNetworks {
-		if network.Name == networkname {
-			return network.ID, nil
-		}
-	}
-	return "", fmt.Errorf("network not found")
-}
-
-func (osclient *OpenStackClients) CreatePort(networkid string, vminfo vm.VMInfo) (*ports.Port, error) {
-	// Get the list of networks
-	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
-	if err != nil {
-		log.Printf("Failed to list networks: %v", err)
 		return nil, fmt.Errorf("failed to list networks: %s", err)
 	}
 
 	allNetworks, err := networks.ExtractNetworks(allPages)
 	if err != nil {
-		log.Printf("Failed to extract networks: %v", err)
 		return nil, fmt.Errorf("failed to extract all networks: %s", err)
 	}
 
 	for _, network := range allNetworks {
-		if network.ID == networkid {
-			for _, m := range vminfo.Mac {
-				pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
-					NetworkID:  networkid,
-					MACAddress: m,
-				}).AllPages()
-				if err != nil {
-					return nil, fmt.Errorf("failed to list ports: %s", err)
-				}
-
-				portList, err := ports.ExtractPorts(pages)
-				if err != nil {
-					return nil, fmt.Errorf("failed to extract all ports: %s", err)
-				}
-
-				for _, port := range portList {
-					if port.MACAddress == m {
-						log.Printf("Port with MAC address %s already exists, ID: %s\n", m, port.ID)
-						return &port, nil
-					}
-				}
-				log.Printf("Port with MAC address %s does not exist, creating new port\n", m)
-				port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
-					Name:       "port-" + vminfo.Name,
-					NetworkID:  networkid,
-					MACAddress: m,
-				}).Extract()
-				if err != nil {
-					return nil, fmt.Errorf("failed to create port: %s", err)
-				}
-				log.Println("Port created with ID: ", port.ID)
-				return port, nil
-			}
+		if network.Name == networkname {
+			return &network, nil
 		}
 	}
 	return nil, fmt.Errorf("network not found")
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkID string, port *ports.Port, vminfo vm.VMInfo) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, vmname string) (*ports.Port, error) {
+	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
+		NetworkID:  network.ID,
+		MACAddress: mac,
+	}).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list networks: %s", err)
+	}
+
+	portList, err := ports.ExtractPorts(pages)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, port := range portList {
+		if port.MACAddress == mac {
+			log.Printf("Port with MAC address %s already exists, ID: %s\n", mac, port.ID)
+			return &port, nil
+		}
+	}
+	log.Printf("Port with MAC address %s does not exist, creating new port\n", mac)
+	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+		Name:       "port-" + vmname,
+		NetworkID:  network.ID,
+		MACAddress: mac,
+	}).Extract()
+	if err != nil {
+		return nil, err
+	}
+	log.Println("Port created with ID: ", port.ID)
+	return port, nil
+}
+
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,
@@ -405,15 +405,17 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkID str
 		UUID:                vminfo.VMDisks[0].OpenstackVol.ID,
 	}
 	// Create the server
+	openstacknws := []servers.Network{}
+	for idx := range networkIDs {
+		openstacknws = append(openstacknws, servers.Network{
+			UUID: networkIDs[idx],
+			Port: portIDs[idx],
+		})
+	}
 	serverCreateOpts := servers.CreateOpts{
 		Name:      vminfo.Name,
 		FlavorRef: flavor.ID,
-		Networks: []servers.Network{
-			{
-				UUID: networkID,
-				Port: port.ID,
-			},
-		},
+		Networks:  openstacknws,
 	}
 
 	createOpts := bootfromvolume.CreateOptsExt{

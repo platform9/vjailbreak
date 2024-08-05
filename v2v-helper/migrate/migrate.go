@@ -23,7 +23,7 @@ type Migrate struct {
 	UserName         string
 	Password         string
 	Insecure         bool
-	Networkname      string
+	Networknames     []string
 	Virtiowin        string
 	Ostype           string
 	Thumbprint       string
@@ -312,30 +312,36 @@ func (migobj *Migrate) DeleteAllDisks(vminfo vm.VMInfo) error {
 func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
-	networkname := migobj.Networkname
+	networknames := migobj.Networknames
 	closestFlavour, err := openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 	if err != nil {
 		return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 	}
 	log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", closestFlavour.Name, closestFlavour.VCPUs, closestFlavour.RAM)
 
-	// Create Port Group with the same mac address as the source VM
-	// Find the network with the given ID
-	networkid, err := openstackops.GetNetworkID(networkname)
-	if err != nil {
-		return fmt.Errorf("failed to get network ID: %s", err)
-	}
-	log.Printf("Network ID: %s\n", networkid)
+	networkids := []string{}
+	portids := []string{}
+	for idx, networkname := range networknames {
+		// Create Port Group with the same mac address as the source VM
+		// Find the network with the given ID
+		network, err := openstackops.GetNetwork(networkname)
+		if err != nil {
+			return fmt.Errorf("failed to get network: %s", err)
+		}
+		log.Printf("Network ID: %s\n", network.ID)
 
-	port, err := openstackops.CreatePort(networkid, vminfo)
-	if err != nil {
-		return fmt.Errorf("failed to create port group: %s", err)
-	}
+		port, err := openstackops.CreatePort(network, vminfo.Mac[idx], vminfo.Name)
+		if err != nil {
+			return fmt.Errorf("failed to create port group: %s", err)
+		}
 
-	log.Printf("Port Group created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+		log.Printf("Port Group created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+		networkids = append(networkids, network.ID)
+		portids = append(portids, port.ID)
+	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(closestFlavour, networkid, port, vminfo)
+	newVM, err := openstackops.CreateVM(closestFlavour, networkids, portids, vminfo)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
