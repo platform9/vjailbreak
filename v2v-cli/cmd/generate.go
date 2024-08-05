@@ -77,6 +77,15 @@ func randSeq(n int) string {
 	return string(b)
 }
 
+func readBool(value string) string {
+	if value == "" || strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
+		return "true"
+	} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
+		return "false"
+	}
+	return "true"
+}
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Generate Kubernetes Pod and ConfigMap YAML",
@@ -135,13 +144,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 				} else {
 					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
 					fmt.Scanln(&value)
-					if value == "" {
-						value = "true"
-					} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
-						value = "true"
-					} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
-						value = "false"
-					}
+					value = readBool(value)
 				}
 			case "CONVERT":
 				if convert, _ := cmd.Flags().GetString("convert"); convert != "" {
@@ -149,13 +152,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 				} else {
 					fmt.Printf("Enter value for %s (true/false) (Default is true):", env)
 					fmt.Scanln(&value)
-					if value == "" {
-						value = "true"
-					} else if strings.ToLower(value) == "true" || strings.ToLower(value) == "t" {
-						value = "true"
-					} else if strings.ToLower(value) == "false" || strings.ToLower(value) == "f" {
-						value = "false"
-					}
+					value = readBool(value)
 				}
 			case "OS_TYPE":
 				if os_type, _ := cmd.Flags().GetString("os-type"); os_type != "" {
