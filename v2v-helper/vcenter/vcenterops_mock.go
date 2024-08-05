@@ -5,6 +5,7 @@
 package vcenter
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -35,31 +36,31 @@ func (m *MockVCenterOperations) EXPECT() *MockVCenterOperationsMockRecorder {
 }
 
 // GetVMByName mocks base method.
-func (m *MockVCenterOperations) GetVMByName(name string) (*object.VirtualMachine, error) {
+func (m *MockVCenterOperations) GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVMByName", name)
+	ret := m.ctrl.Call(m, "GetVMByName", ctx, name)
 	ret0, _ := ret[0].(*object.VirtualMachine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVMByName indicates an expected call of GetVMByName.
-func (mr *MockVCenterOperationsMockRecorder) GetVMByName(name interface{}) *gomock.Call {
+func (mr *MockVCenterOperationsMockRecorder) GetVMByName(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMByName", reflect.TypeOf((*MockVCenterOperations)(nil).GetVMByName), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMByName", reflect.TypeOf((*MockVCenterOperations)(nil).GetVMByName), ctx, name)
 }
 
 // getDatacenters mocks base method.
-func (m *MockVCenterOperations) getDatacenters() ([]*object.Datacenter, error) {
+func (m *MockVCenterOperations) getDatacenters(ctx context.Context) ([]*object.Datacenter, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getDatacenters")
+	ret := m.ctrl.Call(m, "getDatacenters", ctx)
 	ret0, _ := ret[0].([]*object.Datacenter)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getDatacenters indicates an expected call of getDatacenters.
-func (mr *MockVCenterOperationsMockRecorder) getDatacenters() *gomock.Call {
+func (mr *MockVCenterOperationsMockRecorder) getDatacenters(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getDatacenters", reflect.TypeOf((*MockVCenterOperations)(nil).getDatacenters))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getDatacenters", reflect.TypeOf((*MockVCenterOperations)(nil).getDatacenters), ctx)
 }

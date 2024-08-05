@@ -1,3 +1,5 @@
+// Copyright © 2024 The vjailbreak authors
+
 package vcenter
 
 import (
@@ -56,13 +58,13 @@ func TestGetVMByName(t *testing.T) {
 
 	// Test for a VM that doesn't exist
 	vmName := "i_dont_exist"
-	vm, err := simVC.GetVMByName(vmName)
+	vm, err := simVC.GetVMByName(context.TODO(), vmName)
 	assert.Nil(t, vm)
-	assert.Nil(t, err)
+	assert.EqualError(t, err, "VM not found")
 
 	// Test for a VM that does exist
 	vmName = "DC0_H0_VM0"
-	vm, err = simVC.GetVMByName(vmName)
+	vm, err = simVC.GetVMByName(context.TODO(), vmName)
 	assert.Nil(t, err)
 	assert.IsType(t, &object.VirtualMachine{}, vm)
 	assert.Equal(t, vmName, vm.Name())

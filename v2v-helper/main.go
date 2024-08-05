@@ -1,6 +1,9 @@
+// Copyright © 2024 The vjailbreak authors
+
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strconv"
@@ -8,11 +11,13 @@ import (
 	"vjailbreak/migrate"
 	"vjailbreak/nbd"
 	"vjailbreak/openstack"
+	"vjailbreak/reporter"
 	"vjailbreak/vcenter"
 	"vjailbreak/vm"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
 	var envURL = os.Getenv("VCENTER_HOST")
 	var envUserName = os.Getenv("VCENTER_USERNAME")
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
@@ -34,7 +39,7 @@ func main() {
 	convert, _ := strconv.ParseBool(envconvert)
 
 	// Validate vCenter and Openstack connection
-	vcclient, err := vcenter.VCenterClientBuilder(envUserName, envPassword, envURL, insecure)
+	vcclient, err := vcenter.VCenterClientBuilder(ctx, envUserName, envPassword, envURL, insecure)
 	if err != nil {
 		log.Fatalf("Failed to validate vCenter connection: %v", err)
 	}
@@ -55,69 +60,39 @@ func main() {
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
 
 	// Retrieve the source VM
-	vmops, err := vm.VMOpsBuilder(*vcclient, sourcevmname)
+	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, sourcevmname)
 	if err != nil {
 		log.Fatalf("Failed to get source VM: %s\n", err)
 	}
 
-	// Get Info about VM
-	vminfo, err := vmops.GetVMInfo(ostype)
+	migrationobj := migrate.Migrate{
+		URL:              envURL,
+		UserName:         envUserName,
+		Password:         envPassword,
+		Insecure:         insecure,
+		Networkname:      networkname,
+		Virtiowin:        virtiowin,
+		Ostype:           ostype,
+		Thumbprint:       thumbprint,
+		Convert:          convert,
+		Openstackclients: openstackclients,
+		Vcclient:         vcclient,
+		VMops:            vmops,
+		Nbdops:           []nbd.NBDOperations{},
+		EventReporter:    make(chan string),
+		InPod:            reporter.IsRunningInPod(),
+	}
+
+	eventReporter, err := reporter.NewReporter()
 	if err != nil {
-		log.Fatalf("Failed to get all info: %s\n", err)
+		log.Fatalf("Failed to create reporter: %s\n", err)
 	}
+	eventReporter.UpdatePodEvents(ctx, migrationobj.EventReporter)
 
-	// Create and Add Volumes to Host
-	vminfo, err = migrate.AddVolumestoHost(vminfo, openstackclients)
+	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
-		log.Fatalf("Failed to add volumes to host: %s\n", err)
+		log.Fatalf("Failed to migrate VM: %s\n", err)
 	}
 
-	// Enable CBT
-	err = migrate.EnableCBTWrapper(vmops)
-	if err != nil {
-		log.Fatalf("CBT Failure: %s\n", err)
-	}
-
-	nbdops := []nbd.NBDOperations{}
-	for range vminfo.VMDisks {
-		nbdops = append(nbdops, &nbd.NBDServer{})
-	}
-
-	// Live Replicate Disks
-	vminfo, err = migrate.LiveReplicateDisks(vminfo, vmops, nbdops, envURL, envUserName, envPassword, thumbprint)
-	if err != nil {
-		log.Printf("Failed to live replicate disks: %s\n", err)
-		log.Println("Removing migration snapshot and Openstack volumes.")
-		err = vmops.DeleteSnapshot("migration-snap")
-		if err != nil {
-			log.Fatalf("Failed to delete snapshot of source VM: %s\n", err)
-		}
-		err = migrate.DetachAllDisks(vminfo, openstackclients)
-		if err != nil {
-			log.Fatalf("Failed to detach all volumes from VM: %s\n", err)
-		}
-		err = migrate.DeleteAllDisks(vminfo, openstackclients)
-		if err != nil {
-			log.Fatalf("Failed to delete all volumes from host: %s\n", err)
-		}
-		os.Exit(1)
-	}
-
-	// Convert the Boot Disk to raw format
-	err = migrate.ConvertDisks(vminfo, convert, virtiowin)
-	if err != nil {
-		log.Fatalf("Failed to convert disks: %s\n", err)
-
-	}
-
-	// Detatch all volumes from VM
-	err = migrate.DetachAllDisks(vminfo, openstackclients)
-	if err != nil {
-		log.Fatalf("Failed to detach all volumes from VM: %s\n", err)
-	}
-
-	err = migrate.CreateTargetInstance(vminfo, openstackclients, networkname)
-	if err != nil {
-		log.Fatalf("Failed to create target instance: %s\n", err)
-	}
+	cancel()
 }

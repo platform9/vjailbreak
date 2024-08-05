@@ -64,17 +64,17 @@ func (mr *MockNBDOperationsMockRecorder) CopyDisk(dest interface{}) *gomock.Call
 }
 
 // StartNBDServer mocks base method.
-func (m *MockNBDOperations) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string) error {
+func (m *MockNBDOperations) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartNBDServer", vm, server, username, password, thumbprint, snapref, file)
+	ret := m.ctrl.Call(m, "StartNBDServer", vm, server, username, password, thumbprint, snapref, file, progchan)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StartNBDServer indicates an expected call of StartNBDServer.
-func (mr *MockNBDOperationsMockRecorder) StartNBDServer(vm, server, username, password, thumbprint, snapref, file interface{}) *gomock.Call {
+func (mr *MockNBDOperationsMockRecorder) StartNBDServer(vm, server, username, password, thumbprint, snapref, file, progchan interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).StartNBDServer), vm, server, username, password, thumbprint, snapref, file)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNBDServer", reflect.TypeOf((*MockNBDOperations)(nil).StartNBDServer), vm, server, username, password, thumbprint, snapref, file, progchan)
 }
 
 // StopNBDServer mocks base method.

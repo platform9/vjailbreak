@@ -1,3 +1,4 @@
+// Copyright © 2024 The vjailbreak authors
 package migrate
 
 import (
@@ -55,7 +56,12 @@ func TestAddVolumestoHost(t *testing.T) {
 		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sdb", nil).Times(1),
 	)
 
-	outputvminfo, err := AddVolumestoHost(inputvminfo, mockOpenStackOps)
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		InPod:            false,
+	}
+
+	outputvminfo, err := migobj.AddVolumestoHost(inputvminfo)
 	assert.NoError(t, err)
 	assert.Equal(t, "id1", outputvminfo.VMDisks[0].OpenstackVol.ID)
 	assert.Equal(t, "id2", outputvminfo.VMDisks[1].OpenstackVol.ID)
@@ -77,7 +83,11 @@ func TestEnableCBTWrapper(t *testing.T) {
 		mockVMOps.EXPECT().DeleteSnapshot(gomock.Any()).Return(nil).Times(1),
 	)
 
-	err := EnableCBTWrapper(mockVMOps)
+	migobj := Migrate{
+		VMops:         mockVMOps,
+		EventReporter: make(chan string),
+	}
+	err := migobj.EnableCBTWrapper()
 	assert.NoError(t, err)
 }
 
@@ -113,6 +123,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 	envUserName := "envUserName"
 	envPassword := "envPassword"
 	thumbprint := "thumbprint"
+	dummychan := make(chan string)
 
 	mockVMOps := vm.NewMockVMOperations(ctrl)
 	mockNBD := nbd.NewMockNBDOperations(ctrl)
@@ -137,7 +148,8 @@ func TestLiveReplicateDisks(t *testing.T) {
 				envPassword,
 				thumbprint,
 				"migration-snap",
-				"[ds1] test_vm/test_vm.vmdk").
+				"[ds1] test_vm/test_vm.vmdk",
+				dummychan).
 			Return(nil).
 			Times(1),
 		mockVMOps.EXPECT().GetVMObj().Return(&object.VirtualMachine{}).Times(1),
@@ -149,7 +161,8 @@ func TestLiveReplicateDisks(t *testing.T) {
 				envPassword,
 				thumbprint,
 				"migration-snap",
-				"[ds1] test_vm/test_vm_1.vmdk").
+				"[ds1] test_vm/test_vm_1.vmdk",
+				dummychan).
 			Return(nil).
 			Times(1),
 		mockNBD.EXPECT().CopyDisk(inputvminfo.VMDisks[0].Path).Return(nil).Times(1),
@@ -192,7 +205,8 @@ func TestLiveReplicateDisks(t *testing.T) {
 				envPassword,
 				thumbprint,
 				"migration-snap",
-				"[ds1] test_vm/test_vm.vmdk").
+				"[ds1] test_vm/test_vm.vmdk",
+				dummychan).
 			Return(nil).
 			Times(1),
 		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, inputvminfo.VMDisks[0].Path).Return(nil).Times(1),
@@ -210,7 +224,8 @@ func TestLiveReplicateDisks(t *testing.T) {
 				envPassword,
 				thumbprint,
 				"migration-snap",
-				"[ds1] test_vm/test_vm_1.vmdk").
+				"[ds1] test_vm/test_vm_1.vmdk",
+				dummychan).
 			Return(nil).
 			Times(1),
 		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, inputvminfo.VMDisks[1].Path).Return(nil).Times(1),
@@ -244,7 +259,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 			Return(changedAreasexample, nil).Times(1),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).Times(1),
 		mockVMOps.EXPECT().GetVMObj().Return(&object.VirtualMachine{}).Times(1),
-		mockNBD.EXPECT().StartNBDServer(&object.VirtualMachine{}, envURL, envUserName, envPassword, thumbprint, "migration-snap", "[ds1] test_vm/test_vm.vmdk").Return(nil).Times(1),
+		mockNBD.EXPECT().StartNBDServer(&object.VirtualMachine{}, envURL, envUserName, envPassword, thumbprint, "migration-snap", "[ds1] test_vm/test_vm.vmdk", dummychan).Return(nil).Times(1),
 		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, inputvminfo.VMDisks[0].Path).Return(nil).Times(1),
 		// No copy for Disk 2
 		mockVMOps.EXPECT().
@@ -287,7 +302,16 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).Times(1),
 	)
 
-	updatedVMInfo, err := LiveReplicateDisks(inputvminfo, mockVMOps, []nbd.NBDOperations{mockNBD, mockNBD}, envURL, envUserName, envPassword, thumbprint)
+	migobj := Migrate{
+		VMops:         mockVMOps,
+		Nbdops:        []nbd.NBDOperations{mockNBD, mockNBD},
+		URL:           envURL,
+		UserName:      envUserName,
+		Password:      envPassword,
+		Thumbprint:    thumbprint,
+		EventReporter: dummychan,
+	}
+	updatedVMInfo, err := migobj.LiveReplicateDisks(inputvminfo)
 	assert.NoError(t, err)
 	assert.Equal(t, vm.VMInfo{
 		Name:   "test-vm",
@@ -324,7 +348,12 @@ func TestDetachAllDisks(t *testing.T) {
 		},
 	}
 
-	err := DetachAllDisks(inputvminfo, mockOpenStackOps)
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		InPod:            false,
+	}
+
+	err := migobj.DetachAllDisks(inputvminfo)
 	assert.NoError(t, err)
 }
 
@@ -342,7 +371,12 @@ func TestDeleteAllDisks(t *testing.T) {
 		},
 	}
 
-	err := DeleteAllDisks(vminfo, mockOpenStackOps)
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		InPod:            false,
+	}
+
+	err := migobj.DeleteAllDisks(vminfo)
 	assert.NoError(t, err)
 }
 
@@ -369,6 +403,11 @@ func TestCreateTargetInstance(t *testing.T) {
 		Memory: 2048,
 	}
 
-	err := CreateTargetInstance(vminfo, mockOpenStackOps, "network-name")
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networkname:      "network-name",
+		InPod:            false,
+	}
+	err := migobj.CreateTargetInstance(vminfo)
 	assert.NoError(t, err)
 }

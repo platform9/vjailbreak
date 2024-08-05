@@ -1,3 +1,5 @@
+// Copyright © 2024 The vjailbreak authors
+
 package virtv2v
 
 import (
@@ -63,7 +65,7 @@ func NTFSFix(path string) error {
 	// Fix NTFS
 	partitions, err := GetPartitions(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get partitions: %w", err)
 	}
 	log.Printf("Partitions: %v", partitions)
 	for _, partition := range partitions {
@@ -77,7 +79,7 @@ func NTFSFix(path string) error {
 
 		err := cmd.Run()
 		if err != nil {
-			log.Printf("Skipping NTFS fix on %s: %v", partition, err)
+			log.Printf("Skipping NTFS fix on %s", partition)
 		}
 		log.Printf("Fixed NTFS on %s", partition)
 	}
@@ -88,7 +90,7 @@ func downloadFile(url, filePath string) error {
 	// Get the data from the URL
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to download file: %s", err)
 	}
 	defer resp.Body.Close()
 
@@ -100,13 +102,16 @@ func downloadFile(url, filePath string) error {
 	// Create the file
 	out, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create file: %s", err)
 	}
 	defer out.Close()
 
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to write to file: %s", err)
+	}
+	return nil
 }
 
 func ConvertDisk(path string, ostype string, virtiowindriver string) error {
@@ -117,7 +122,7 @@ func ConvertDisk(path string, ostype string, virtiowindriver string) error {
 		log.Println("Downloading virtio windrivers")
 		err := downloadFile(virtiowindriver, filePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to download virtio-win: %s", err)
 		}
 		log.Println("Downloaded virtio windrivers")
 		defer os.Remove(filePath)
@@ -132,7 +137,7 @@ func ConvertDisk(path string, ostype string, virtiowindriver string) error {
 
 	err := cmd.Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
 	return nil
 }
@@ -148,7 +153,7 @@ DHCP=yes`
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create netplan file: %s", err)
 	}
 	log.Println("Created local netplan file")
 	log.Println("Uploading netplan file to disk")
@@ -165,7 +170,7 @@ DHCP=yes`
 	log.Printf("Executing %s", cmd.String()+" "+input)
 	err = cmd.Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to upload netplan file: %s", err)
 	}
 	return nil
 }
