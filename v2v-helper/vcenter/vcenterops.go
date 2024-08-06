@@ -43,9 +43,7 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 		return nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
 	u.User = url.UserPassword(username, password)
-	// fmt.Println(u)
 	// Connect and log in to ESX or vCenter
-	// Share govc's session cache
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
