@@ -274,7 +274,6 @@ func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, err
 
 func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error) {
 	var noChange types.DiskChangeInfo
-	var err error
 	v := vmops.VMObj
 
 	req := types.QueryChangedDiskAreas{

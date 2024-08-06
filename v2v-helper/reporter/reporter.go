@@ -170,7 +170,7 @@ func (r *Reporter) UpdateProgress(progress string) error {
 	// Update the Pod status
 	_, err := r.Clientset.CoreV1().Pods(r.PodNamespace).UpdateStatus(context.TODO(), r.Pod, metav1.UpdateOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update pod status: %v", err)
 	}
 	if err := r.GetPod(); err != nil {
 		return fmt.Errorf("failed to get pod: %v", err)
@@ -190,10 +190,10 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
 				}
 				if strings.Contains(msg, "Progress:") {
 					if err := r.UpdateProgress(msg); err != nil {
-						fmt.Println(err)
+						log.Println(err)
 					}
 				} else if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
-					fmt.Println(err)
+					log.Println(err)
 				}
 			case <-ctx.Done():
 				// Context cancelled, exit the goroutine

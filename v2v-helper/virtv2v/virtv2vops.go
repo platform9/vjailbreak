@@ -74,8 +74,6 @@ func NTFSFix(path string) error {
 		}
 		cmd := exec.Command("ntfsfix", partition)
 		log.Printf("Executing %s", cmd.String())
-		// cmd.Stdout = os.Stdout
-		// cmd.Stderr = os.Stderr
 
 		err := cmd.Run()
 		if err != nil {
