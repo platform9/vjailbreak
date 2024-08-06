@@ -64,11 +64,11 @@ const MaxIntervalCount = 6
 func validateOpenStack() (*OpenStackClients, error) {
 	opts, err := openstack.AuthOptionsFromEnv()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
 	}
 	providerClient, err := openstack.AuthenticatedClient(opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to authenticate OpenStack client: %s", err)
 	}
 
 	endpoint := gophercloud.EndpointOpts{
@@ -77,17 +77,17 @@ func validateOpenStack() (*OpenStackClients, error) {
 
 	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create block storage client: %s", err)
 	}
 
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create compute client: %s", err)
 	}
 
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create networking client: %s", err)
 	}
 
 	return &OpenStackClients{
@@ -100,7 +100,7 @@ func validateOpenStack() (*OpenStackClients, error) {
 func NewOpenStackClients() (*OpenStackClients, error) {
 	ostackclients, err := validateOpenStack()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
 	}
 	return ostackclients, nil
 }
@@ -109,23 +109,23 @@ func getCurrentInstanceUUID() (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create request: %s", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read response body: %s", err)
 	}
 
 	var metadata OpenStackMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to unmarshal metadata: %s", err)
 	}
 
 	return metadata.UUID, nil
@@ -141,23 +141,23 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	}
 	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create volume: %s", err)
 	}
 
 	err = osclient.WaitForVolume(volume.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to wait for volume: %s", err)
 	}
 	if uefi {
 		err = osclient.SetVolumeUEFI(volume)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set volume uefi: %s", err)
 		}
 	}
 	if ostype == "windows" {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
 		}
 	}
 
@@ -212,7 +212,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 func (osclient *OpenStackClients) FindDevice(volumeID string) (string, error) {
 	files, err := os.ReadDir("/dev/disk/by-id/")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read directory: %s", err)
 	}
 
 	for _, file := range files {
