@@ -172,7 +172,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			var changedAreas types.DiskChangeInfo
 			done := true
 
-			for idx, _ := range vminfo.VMDisks {
+			for idx := range vminfo.VMDisks {
 				// done = true
 				// changedAreas, err = source_vm.QueryChangedDiskAreas(ctx, initial_snapshot, final_snapshot, disk, 0)
 				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
@@ -213,7 +213,10 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			}
 			if done || incrementalCopyCount > 20 {
 				log.Println("No more changes found. Shutting down source VM and performing final copy")
-				vmops.VMPowerOff()
+				err = vmops.VMPowerOff()
+				if err != nil {
+					return vminfo, fmt.Errorf("failed to power off VM: %s", err)
+				}
 				final = true
 			}
 

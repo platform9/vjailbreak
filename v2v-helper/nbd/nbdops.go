@@ -70,17 +70,6 @@ var fixedOptArgs = libnbd.BlockStatusOptargs{
 	FlagsSet: true,
 }
 
-func verifynbdkit() error {
-	// Verify that nbdkit is installed
-	cmd := exec.Command("nbdkit", "--version")
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to run nbdkit: %v", err)
-	}
-
-	return nil
-}
-
 func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
 	tmp_dir, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
@@ -125,7 +114,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	for _, arg := range cmd.Args {
 
 		if strings.Contains(arg, password) {
-			cmdstring += fmt.Sprintf("password=[REDACTED] ")
+			cmdstring += "password=[REDACTED] "
 		} else {
 			cmdstring += fmt.Sprintf("%s ", arg)
 		}
@@ -186,13 +175,13 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 	// Callback for libnbd.BlockStatus. Needs to modify blocks list above.
 	updateBlocksCallback := func(metacontext string, nbdOffset uint64, extents []uint32, err *int) int {
 		if nbdOffset > math.MaxInt64 {
-			fmt.Errorf("Block status offset too big for conversion: 0x%x", nbdOffset)
+			log.Printf("Block status offset too big for conversion: 0x%x", nbdOffset)
 			return -2
 		}
 		offset := int64(nbdOffset)
 
 		if *err != 0 {
-			fmt.Errorf("Block status callback error at offset %d: error code %d", offset, *err)
+			log.Printf("Block status callback error at offset %d: error code %d", offset, *err)
 			return *err
 		}
 		if metacontext != "base:allocation" {
@@ -200,7 +189,7 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 			return 0
 		}
 		if (len(extents) % 2) != 0 {
-			fmt.Errorf("Block status entry at offset %d has unexpected length %d!", offset, len(extents))
+			log.Printf("Block status entry at offset %d has unexpected length %d!", offset, len(extents))
 			return -1
 		}
 		for i := 0; i < len(extents); i += 2 {
@@ -257,7 +246,7 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 		}
 		err := handle.BlockStatus(uint64(length), uint64(lastOffset), updateBlocksCallback, &fixedOptArgs)
 		if err != nil {
-			fmt.Errorf("Error getting block status at offset %d, returning whole block instead. Error was: %v", lastOffset, err)
+			log.Printf("Error getting block status at offset %d, returning whole block instead. Error was: %v", lastOffset, err)
 			return createWholeBlock()
 		}
 		last := len(blocks) - 1
@@ -300,7 +289,6 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 
 	if err != nil { // Fall back to regular pwrite
 		log.Printf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, err)
-		err = nil
 		count := int64(0)
 		const blocksize = 16 << 20
 		buffer := bytes.Repeat([]byte{0}, blocksize)

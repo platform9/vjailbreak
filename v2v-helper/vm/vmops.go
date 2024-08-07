@@ -207,7 +207,10 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 	if o.Snapshot != nil {
 		// get backing disk of snapshot
 		var s mo.VirtualMachineSnapshot
-		pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		err := pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		if err != nil {
+			return vminfo, fmt.Errorf("failed to get snapshot properties: %s", err)
+		}
 
 		for _, device := range s.Config.Hardware.Device {
 			switch disk := device.(type) {
@@ -253,7 +256,10 @@ func (vmops *VMOps) EnableCBT() error {
 	if err != nil {
 		return fmt.Errorf("failed to enable CBT: %s", err)
 	}
-	task.Wait(vmops.ctx)
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
 	return nil
 }
 
@@ -263,7 +269,10 @@ func (vmops *VMOps) TakeSnapshot(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to take snapshot: %s", err)
 	}
-	task.Wait(vmops.ctx)
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
 	return nil
 }
 
@@ -274,7 +283,10 @@ func (vmops *VMOps) DeleteSnapshot(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete snapshot: %s", err)
 	}
-	task.Wait(vmops.ctx)
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
 	return nil
 }
 
@@ -308,10 +320,13 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 }
 
 func (vmops *VMOps) VMPowerOff() error {
-	task, err := vmops.VMObj.PowerOff(context.Background())
+	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
 		return err
 	}
-	task.Wait(context.Background())
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
 	return nil
 }
