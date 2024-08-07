@@ -45,11 +45,15 @@ type MigrationReconciler struct {
 
 var migrationFinalizer = "migration.vjailbreak.pf9.io/finalizer"
 
+const success = "Success"
+const v2vimage = "platform9/v2v-helper:v0.1"
+
 //+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
@@ -128,9 +132,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
-func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
-	v2vimage := "platform9/v2v-helper:v0.1"
-
+func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
+	migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
 	// Fetch VMwareCreds CR
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := r.Get(ctx, types.NamespacedName{Name: migration.Spec.Source.VMwareRef, Namespace: migration.Namespace}, vmwcreds)
@@ -139,7 +142,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 		return ctrl.Result{}, err
 	}
 
-	if vmwcreds.Status.VMwareValidationStatus != "Success" {
+	if vmwcreds.Status.VMwareValidationStatus != success {
 		ctxlog.Info(fmt.Sprintf("VMwareCreds '%s' CR is not validated", vmwcreds.Name))
 		return ctrl.Result{}, nil
 	}
@@ -152,13 +155,13 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 		return ctrl.Result{}, err
 	}
 
-	if openstackcreds.Status.OpenStackValidationStatus != "Success" {
+	if openstackcreds.Status.OpenStackValidationStatus != success {
 		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is not validated", openstackcreds.Name))
 		return ctrl.Result{}, nil
 	}
 
 	for _, vm := range migration.Spec.Source.VirtualMachines {
-		vmname := strings.Replace(strings.Replace(vm, " ", "-", -1), "_", "-", -1)
+		vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
 		configMapName := fmt.Sprintf("migration-config-%s", vmname)
 		podName := fmt.Sprintf("v2v-helper-%s", vmname)
 		virtiodrivers := ""
@@ -179,28 +182,24 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 					Namespace: migration.Namespace,
 				},
 				Data: map[string]string{
-					"CONVERT":              "true", //Assume that the vm always has to be converted
+					"CONVERT":              "true", // Assume that the vm always has to be converted
 					"NEUTRON_NETWORK_NAME": migration.Spec.Destination.NetworkName,
-					"OS_AUTH_URL":          openstackcreds.Spec.OS_AUTH_URL,
-					"OS_DOMAIN_NAME":       openstackcreds.Spec.OS_DOMAIN_NAME,
-					"OS_PASSWORD":          openstackcreds.Spec.OS_PASSWORD,
-					"OS_REGION_NAME":       openstackcreds.Spec.OS_REGION_NAME,
-					"OS_TENANT_NAME":       openstackcreds.Spec.OS_TENANT_NAME,
+					"OS_AUTH_URL":          openstackcreds.Spec.OsAuthURL,
+					"OS_DOMAIN_NAME":       openstackcreds.Spec.OsDomainName,
+					"OS_PASSWORD":          openstackcreds.Spec.OsPassword,
+					"OS_REGION_NAME":       openstackcreds.Spec.OsRegionName,
+					"OS_TENANT_NAME":       openstackcreds.Spec.OsTenantName,
 					"OS_TYPE":              migration.Spec.Source.OSType,
-					"OS_USERNAME":          openstackcreds.Spec.OS_USERNAME,
+					"OS_USERNAME":          openstackcreds.Spec.OsUsername,
 					"SOURCE_VM_NAME":       vm,
-					"VCENTER_HOST":         vmwcreds.Spec.VCENTER_HOST,
-					"VCENTER_INSECURE":     strconv.FormatBool(vmwcreds.Spec.VCENTER_INSECURE),
-					"VCENTER_PASSWORD":     vmwcreds.Spec.VCENTER_PASSWORD,
-					"VCENTER_USERNAME":     vmwcreds.Spec.VCENTER_USERNAME,
+					"VCENTER_HOST":         vmwcreds.Spec.VcenterHost,
+					"VCENTER_INSECURE":     strconv.FormatBool(vmwcreds.Spec.VcenterInsecure),
+					"VCENTER_PASSWORD":     vmwcreds.Spec.VcenterPassword,
+					"VCENTER_USERNAME":     vmwcreds.Spec.VcenterUsername,
 					"VIRTIO_WIN_DRIVER":    virtiodrivers,
 				},
 			}
-			err = ctrl.SetControllerReference(migration, configMap, r.Scheme)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = r.Create(ctx, configMap)
+			err = r.createResource(ctx, migration, configMap)
 			if err != nil {
 				ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 				return ctrl.Result{}, err
@@ -223,7 +222,8 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 					},
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:      corev1.RestartPolicyNever,
+					ServiceAccountName: "migration-controller-manager",
 					Containers: []corev1.Container{
 						{
 							Name:            "fedora",
@@ -276,12 +276,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 					},
 				},
 			}
-			err = ctrl.SetControllerReference(migration, pod, r.Scheme)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = r.Create(ctx, pod)
-			if err != nil {
+			if err := r.createResource(ctx, migration, pod); err != nil {
 				ctxlog.Error(err, fmt.Sprintf("Failed to create Pod '%s'", podName))
 				return ctrl.Result{}, err
 			}
@@ -290,6 +285,18 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context, migrati
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MigrationReconciler) createResource(ctx context.Context, owner metav1.Object, controlled client.Object) error {
+	err := ctrl.SetControllerReference(owner, controlled, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to set controller reference")
+	}
+	err = r.Create(ctx, controlled)
+	if err != nil {
+		return fmt.Errorf("failed to create resource")
+	}
+	return nil
 }
 
 func newHostPathType(pathType string) *corev1.HostPathType {

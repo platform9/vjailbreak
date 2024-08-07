@@ -40,22 +40,22 @@ spec:
             description: OpenstackCredsSpec defines the desired state of OpenstackCreds
             properties:
               OS_AUTH_URL:
-                description: OS_AUTH_URL is the OpenStack authentication URL
+                description: OsAuthURL is the OpenStack authentication URL
                 type: string
               OS_DOMAIN_NAME:
-                description: OS_DOMAIN_NAME is the OpenStack domain name
+                description: OsDomainName is the OpenStack domain name
                 type: string
               OS_PASSWORD:
-                description: OS_PASSWORD is the OpenStack password
+                description: OsPassword is the OpenStack password
                 type: string
               OS_REGION_NAME:
-                description: OS_REGION_NAME is the OpenStack region name
+                description: OsRegionName is the OpenStack region name
                 type: string
               OS_TENANT_NAME:
-                description: OS_TENANT_NAME is the OpenStack tenant name
+                description: OsTenantName is the OpenStack tenant name
                 type: string
               OS_USERNAME:
-                description: OS_USERNAME is the OpenStack username
+                description: OsUsername is the OpenStack username
                 type: string
             type: object
           status:
