@@ -28,23 +28,23 @@ type OpenstackCredsSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// OS_AUTH_URL is the OpenStack authentication URL
-	OS_AUTH_URL string `json:"OS_AUTH_URL,omitempty"`
+	// OsAuthURL is the OpenStack authentication URL
+	OsAuthURL string `json:"OS_AUTH_URL,omitempty"`
 
-	// OS_DOMAIN_NAME is the OpenStack domain name
-	OS_DOMAIN_NAME string `json:"OS_DOMAIN_NAME,omitempty"`
+	// OsDomainName is the OpenStack domain name
+	OsDomainName string `json:"OS_DOMAIN_NAME,omitempty"`
 
-	// OS_USERNAME is the OpenStack username
-	OS_USERNAME string `json:"OS_USERNAME,omitempty"`
+	// OsUsername is the OpenStack username
+	OsUsername string `json:"OS_USERNAME,omitempty"`
 
-	// OS_PASSWORD is the OpenStack password
-	OS_PASSWORD string `json:"OS_PASSWORD,omitempty"`
+	// OsPassword is the OpenStack password
+	OsPassword string `json:"OS_PASSWORD,omitempty"`
 
-	// OS_REGION_NAME is the OpenStack region name
-	OS_REGION_NAME string `json:"OS_REGION_NAME,omitempty"`
+	// OsRegionName is the OpenStack region name
+	OsRegionName string `json:"OS_REGION_NAME,omitempty"`
 
-	// OS_TENANT_NAME is the OpenStack tenant name
-	OS_TENANT_NAME string `json:"OS_TENANT_NAME,omitempty"`
+	// OsTenantName is the OpenStack tenant name
+	OsTenantName string `json:"OS_TENANT_NAME,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

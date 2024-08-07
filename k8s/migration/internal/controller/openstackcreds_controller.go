@@ -78,7 +78,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				return ctrl.Result{}, err
 			}
 		} else {
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackcreds.Spec.OS_AUTH_URL))
+			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
 			// Update the status of the OpenstackCreds object
 			openstackcreds.Status.OpenStackValidationStatus = "Success"
 			openstackcreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
@@ -93,21 +93,22 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	providerClient, err := openstack.AuthenticatedClient(gophercloud.AuthOptions{
-		IdentityEndpoint: openstackcreds.Spec.OS_AUTH_URL,
-		Username:         openstackcreds.Spec.OS_USERNAME,
-		Password:         openstackcreds.Spec.OS_PASSWORD,
-		DomainName:       openstackcreds.Spec.OS_DOMAIN_NAME,
-		TenantName:       openstackcreds.Spec.OS_TENANT_NAME,
+		IdentityEndpoint: openstackcreds.Spec.OsAuthURL,
+		Username:         openstackcreds.Spec.OsUsername,
+		Password:         openstackcreds.Spec.OsPassword,
+		DomainName:       openstackcreds.Spec.OsDomainName,
+		TenantName:       openstackcreds.Spec.OsTenantName,
 	})
 	if err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Error authenticating to Openstack '%s'", openstackcreds.Spec.OS_AUTH_URL))
+		ctxlog.Error(err, fmt.Sprintf("Error authenticating to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
 		return err
 	}
 	_, err = openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
-		Region: openstackcreds.Spec.OS_REGION_NAME,
+		Region: openstackcreds.Spec.OsRegionName,
 	})
 	if err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'", openstackcreds.Spec.OS_REGION_NAME, openstackcreds.Spec.OS_AUTH_URL))
+		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
+			openstackcreds.Spec.OsRegionName, openstackcreds.Spec.OsAuthURL))
 		return err
 	}
 	return nil

@@ -77,7 +77,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			}
 		} else {
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Spec.VCENTER_HOST))
+			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Spec.VcenterHost))
 			// Update the status of the VMwareCreds object
 			vmwcreds.Status.VMwareValidationStatus = "Success"
 			vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
@@ -91,10 +91,10 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
-	host := vmwcreds.Spec.VCENTER_HOST
-	username := vmwcreds.Spec.VCENTER_USERNAME
-	password := vmwcreds.Spec.VCENTER_PASSWORD
-	disableSSLVerification := vmwcreds.Spec.VCENTER_INSECURE
+	host := vmwcreds.Spec.VcenterHost
+	username := vmwcreds.Spec.VcenterUsername
+	password := vmwcreds.Spec.VcenterPassword
+	disableSSLVerification := vmwcreds.Spec.VcenterInsecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}

@@ -224,9 +224,9 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 
 		// Update the Pod YAML template with the correct ConfigMap name
 		podYaml := podYamlTemplate
-		podYaml = strings.Replace(podYaml, "migration-config", configMap.Metadata.Name, -1)
-		podYaml = strings.Replace(podYaml, "v2vhelper", "v2v-helper"+"-"+randsequence, -1)
-		podYaml = strings.Replace(podYaml, "mig_vm_name", configMap.Data["SOURCE_VM_NAME"], -1)
+		podYaml = strings.ReplaceAll(podYaml, "migration-config", configMap.Metadata.Name)
+		podYaml = strings.ReplaceAll(podYaml, "v2vhelper", "v2v-helper"+"-"+randsequence)
+		podYaml = strings.ReplaceAll(podYaml, "mig_vm_name", configMap.Data["SOURCE_VM_NAME"])
 
 		// Write the Pod YAML to a file
 		podOutputFile := "pod.yaml"
