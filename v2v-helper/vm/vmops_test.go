@@ -66,6 +66,7 @@ func TestGetVMInfo(t *testing.T) {
 		Memory: 32,
 		State:  "poweredOn",
 		Mac:    []string{"00:0c:29:36:63:62"},
+		IPs:    []string{},
 		UUID:   "265104de-1472-547c-b873-6dc7883fb6cb",
 		Host:   "host-22",
 		VMDisks: []VMDisk{
@@ -141,7 +142,7 @@ func TestIsCBTEnabled(t *testing.T) {
 	vmName := "DC0_H0_VM0"
 	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName)
 
-	vmops.EnableCBT()
+	_ = vmops.EnableCBT()
 	enabled, err := vmops.IsCBTEnabled()
 	assert.NoError(t, err)
 	assert.True(t, enabled)
@@ -169,7 +170,7 @@ func TestDeleteSnapshot(t *testing.T) {
 	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName)
 
 	snapshotName := "snapshot-1"
-	vmops.TakeSnapshot(snapshotName)
+	_ = vmops.TakeSnapshot(snapshotName)
 	err = vmops.DeleteSnapshot(snapshotName)
 	assert.NoError(t, err)
 }
@@ -183,7 +184,7 @@ func TestGetSnapshot(t *testing.T) {
 	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName)
 
 	snapshotName := "snapshot-1"
-	vmops.TakeSnapshot(snapshotName)
+	_ = vmops.TakeSnapshot(snapshotName)
 	snapshot, err := vmops.GetSnapshot(snapshotName)
 	assert.NoError(t, err)
 	assert.NotNil(t, snapshot)

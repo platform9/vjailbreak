@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/vmware/govmomi/object"
@@ -297,6 +298,39 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockVMOps.EXPECT().
 			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
 			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).Times(1),
+		// Final Copy
+		mockVMOps.EXPECT().VMPowerOff().Return(nil).Times(1),
+		mockVMOps.EXPECT().
+			UpdateDiskInfo(vm.VMInfo{
+				Name:   "test-vm",
+				OSType: "linux",
+				UEFI:   false,
+				VMDisks: []vm.VMDisk{
+					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+					{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+				},
+			}).
+			Return(vm.VMInfo{
+				Name:   "test-vm",
+				OSType: "linux",
+				UEFI:   false,
+				VMDisks: []vm.VMDisk{
+					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+					{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+				},
+			}, nil).
+			Times(1),
+		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).Times(1),
+		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).Times(1),
+		mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).Times(1),
+		// No copy for Disk 1
+		mockVMOps.EXPECT().
+			CustomQueryChangedDiskAreas("5", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
+			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).Times(1),
+		// No copy for Disk 2
+		mockVMOps.EXPECT().
+			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
+			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).Times(1),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).Times(1),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).Times(1),
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).Times(1),
@@ -389,8 +423,15 @@ func TestCreateTargetInstance(t *testing.T) {
 		VCPUs: 2,
 		RAM:   2048,
 	}, nil).Times(1)
-	mockOpenStackOps.EXPECT().GetNetworkID(gomock.Any()).Return("network-id", nil).Times(1)
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+		MACAddress: "mac-address",
+		FixedIPs: []ports.IP{
+			{IPAddress: "ip-address"},
+		},
+	}, nil).Times(1)
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).Times(1)
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
@@ -398,16 +439,24 @@ func TestCreateTargetInstance(t *testing.T) {
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).Times(1)
 
-	vminfo := vm.VMInfo{
-		CPU:    2,
-		Memory: 2048,
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
+		IPs: []string{
+			"ip-address-1",
+			"ip-address-2",
+		},
 	}
 
 	migobj := Migrate{
 		Openstackclients: mockOpenStackOps,
-		Networkname:      "network-name",
+		Networknames:     []string{"network-name-1", "network-name-2"},
 		InPod:            false,
 	}
-	err := migobj.CreateTargetInstance(vminfo)
+	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.NoError(t, err)
 }

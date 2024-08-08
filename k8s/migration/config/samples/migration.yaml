@@ -37,6 +37,7 @@ spec:
     - dev test1
     - dev test2
   destination:
-    networkname: vlan3002
     openstackref: sapmo1
+    networknames: 
+    - vlan-218-uservm-network-1
 ---

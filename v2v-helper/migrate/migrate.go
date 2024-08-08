@@ -23,7 +23,7 @@ type Migrate struct {
 	UserName         string
 	Password         string
 	Insecure         bool
-	Networkname      string
+	Networknames     []string
 	Virtiowin        string
 	Ostype           string
 	Thumbprint       string
@@ -148,6 +148,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	}
 	// sleep for 2 seconds to allow the NBD server to start
 	time.Sleep(2 * time.Second)
+	final := false
 
 	incrementalCopyCount := 0
 	for {
@@ -162,9 +163,6 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 				}
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
-		} else if incrementalCopyCount > 20 {
-			log.Println("20 incremental copies done, will proceed with the conversion now")
-			break
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot("migration-snap")
 			if err != nil {
@@ -174,7 +172,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			var changedAreas types.DiskChangeInfo
 			done := true
 
-			for idx, _ := range vminfo.VMDisks {
+			for idx := range vminfo.VMDisks {
 				// done = true
 				// changedAreas, err = source_vm.QueryChangedDiskAreas(ctx, initial_snapshot, final_snapshot, disk, 0)
 				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
@@ -210,9 +208,18 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 					migobj.logMessage("Finished copying changed blocks")
 				}
 			}
-			if done {
+			if final {
 				break
 			}
+			if done || incrementalCopyCount > 20 {
+				log.Println("No more changes found. Shutting down source VM and performing final copy")
+				err = vmops.VMPowerOff()
+				if err != nil {
+					return vminfo, fmt.Errorf("failed to power off VM: %s", err)
+				}
+				final = true
+			}
+
 		}
 
 		//Update old change id to the new base change id value
@@ -312,30 +319,42 @@ func (migobj *Migrate) DeleteAllDisks(vminfo vm.VMInfo) error {
 func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
-	networkname := migobj.Networkname
+	networknames := migobj.Networknames
 	closestFlavour, err := openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 	if err != nil {
 		return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 	}
 	log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", closestFlavour.Name, closestFlavour.VCPUs, closestFlavour.RAM)
 
-	// Create Port Group with the same mac address as the source VM
-	// Find the network with the given ID
-	networkid, err := openstackops.GetNetworkID(networkname)
-	if err != nil {
-		return fmt.Errorf("failed to get network ID: %s", err)
-	}
-	log.Printf("Network ID: %s\n", networkid)
+	networkids := []string{}
+	portids := []string{}
+	for idx, networkname := range networknames {
+		// Create Port Group with the same mac address as the source VM
+		// Find the network with the given ID
+		network, err := openstackops.GetNetwork(networkname)
+		if err != nil {
+			return fmt.Errorf("failed to get network: %s", err)
+		}
+		log.Printf("Network ID: %s\n", network.ID)
 
-	port, err := openstackops.CreatePort(networkid, vminfo)
-	if err != nil {
-		return fmt.Errorf("failed to create port group: %s", err)
-	}
+		ip := ""
+		if len(vminfo.Mac) != len(vminfo.IPs) {
+			ip = ""
+		} else {
+			ip = vminfo.IPs[idx]
+		}
+		port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
+		if err != nil {
+			return fmt.Errorf("failed to create port group: %s", err)
+		}
 
-	log.Printf("Port Group created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+		log.Printf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+		networkids = append(networkids, network.ID)
+		portids = append(portids, port.ID)
+	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(closestFlavour, networkid, port, vminfo)
+	newVM, err := openstackops.CreateVM(closestFlavour, networkids, portids, vminfo)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
