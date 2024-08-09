@@ -28,8 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -68,7 +71,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		ctxlog.Info(fmt.Sprintf("VMwareCreds '%s' CR is being created or updated", vmwcreds.Name))
 		ctxlog.Info(fmt.Sprintf("Validating VMwareCreds '%s' object", vmwcreds.Name))
-		if err := validateVMwareCreds(vmwcreds); err != nil {
+		if _, err := validateVMwareCreds(vmwcreds); err != nil {
 			// Update the status of the VMwareCreds object
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", vmwcreds.Name, err)
@@ -90,7 +93,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
+func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	host := vmwcreds.Spec.VcenterHost
 	username := vmwcreds.Spec.VcenterUsername
 	password := vmwcreds.Spec.VcenterPassword
@@ -103,7 +106,7 @@ func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
 	}
 	u, err := url.Parse(host)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
 	u.User = url.UserPassword(username, password)
 	// fmt.Println(u)
@@ -118,9 +121,46 @@ func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
 	c := new(vim25.Client)
 	err = s.Login(context.Background(), c, nil)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to login: %v", err)
 	}
-	return nil
+	return c, nil
+}
+
+func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	var networks []string
+	c, err := validateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %v", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get the vm
+	vm, err := finder.VirtualMachine(ctx, vmname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find vm: %v", err)
+	}
+
+	// Get the network name of the VM
+	var o mo.VirtualMachine
+	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %v", err)
+	}
+
+	for _, device := range o.Config.Hardware.Device {
+		switch nic := device.(type) {
+		case *types.VirtualE1000e:
+			nic = device.(*types.VirtualE1000e)
+			networks = append(networks, nic.DeviceInfo.GetDescription().Summary)
+		}
+	}
+
+	return networks, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

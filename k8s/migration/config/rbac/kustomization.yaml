@@ -13,6 +13,10 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- storagemapping_editor_role.yaml
+- storagemapping_viewer_role.yaml
+- networkmapping_editor_role.yaml
+- networkmapping_viewer_role.yaml
 - vmwarecreds_editor_role.yaml
 - vmwarecreds_viewer_role.yaml
 - openstackcreds_editor_role.yaml

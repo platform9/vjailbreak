@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,6 +37,12 @@ import (
 type OpenstackCredsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+type OpenStackClients struct {
+	BlockStorageClient *gophercloud.ServiceClient
+	ComputeClient      *gophercloud.ServiceClient
+	NetworkingClient   *gophercloud.ServiceClient
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
@@ -69,7 +76,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Check if speck matches with kubectl.kubernetes.io/last-applied-configuration
 		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is being created or updated", openstackcreds.Name))
 		ctxlog.Info(fmt.Sprintf("Validating OpenstackCreds '%s' object", openstackcreds.Name))
-		if err := validateOpenstackCreds(ctxlog, openstackcreds); err != nil {
+		if _, err := validateOpenstackCreds(ctxlog, openstackcreds); err != nil {
 			// Update the status of the OpenstackCreds object
 			openstackcreds.Status.OpenStackValidationStatus = "Failed"
 			openstackcreds.Status.OpenStackValidationMessage = fmt.Sprintf("Error validating OpenstackCreds '%s'", openstackcreds.Name)
@@ -91,7 +98,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
-func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
+func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
 	providerClient, err := openstack.AuthenticatedClient(gophercloud.AuthOptions{
 		IdentityEndpoint: openstackcreds.Spec.OsAuthURL,
 		Username:         openstackcreds.Spec.OsUsername,
@@ -101,15 +108,63 @@ func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alph
 	})
 	if err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Error authenticating to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
-		return err
+		return nil, err
 	}
-	_, err = openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
+	endpoint := gophercloud.EndpointOpts{
 		Region: openstackcreds.Spec.OsRegionName,
-	})
+	}
+	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
 			openstackcreds.Spec.OsRegionName, openstackcreds.Spec.OsAuthURL))
+		return nil, err
+	}
+	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
+	if err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
+			openstackcreds.Spec.OsRegionName, openstackcreds.Spec.OsAuthURL))
+		return nil, err
+	}
+	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
+	if err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
+			openstackcreds.Spec.OsRegionName, openstackcreds.Spec.OsAuthURL))
+		return nil, err
+	}
+	return &OpenStackClients{
+		BlockStorageClient: blockStorageClient,
+		ComputeClient:      computeClient,
+		NetworkingClient:   networkingClient,
+	}, nil
+}
+
+func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetnetworks []string) error {
+	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
+	if err != nil {
 		return err
+	}
+	allPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %s", err)
+	}
+
+	allNetworks, err := networks.ExtractNetworks(allPages)
+	if err != nil {
+		return fmt.Errorf("failed to extract all networks: %s", err)
+	}
+
+	// Verify that all network names in targetnetworks exist in the openstack networks
+	for _, targetNetwork := range targetnetworks {
+		found := false
+		for _, network := range allNetworks {
+			if network.Name == targetNetwork {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("network '%s' not found in OpenStack", targetNetwork)
+		}
 	}
 	return nil
 }

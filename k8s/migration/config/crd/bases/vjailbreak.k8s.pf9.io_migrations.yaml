@@ -43,16 +43,13 @@ spec:
                 description: MigrationDestination defines the destination details
                   for the migration
                 properties:
-                  networknames:
-                    items:
-                      type: string
-                    type: array
                   openstackref:
                     type: string
                 required:
-                - networknames
                 - openstackref
                 type: object
+              networkmapping:
+                type: string
               source:
                 description: MigrationSource defines the source details for the migration
                 properties:
@@ -77,9 +74,13 @@ spec:
                 - virtualmachines
                 - vmwareref
                 type: object
+              storagemapping:
+                type: string
             required:
             - destination
+            - networkmapping
             - source
+            - storagemapping
             type: object
           status:
             description: MigrationStatus defines the observed state of Migration

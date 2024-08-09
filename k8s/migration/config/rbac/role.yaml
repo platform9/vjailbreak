@@ -103,6 +103,14 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - networkmappings
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
   - openstackcreds
   verbs:
   - create
