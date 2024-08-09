@@ -33,14 +33,15 @@ type MigrationSource struct {
 
 // MigrationDestination defines the destination details for the migration
 type MigrationDestination struct {
-	OpenstackRef string   `json:"openstackref"`
-	NetworkNames []string `json:"networknames"`
+	OpenstackRef string `json:"openstackref"`
 }
 
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
-	Source      MigrationSource      `json:"source"`
-	Destination MigrationDestination `json:"destination"`
+	NetworkMapping string               `json:"networkmapping"`
+	StorageMapping string               `json:"storagemapping"`
+	Source         MigrationSource      `json:"source"`
+	Destination    MigrationDestination `json:"destination"`
 }
 
 type VMMigrationStatus struct {

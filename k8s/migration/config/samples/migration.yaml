@@ -21,6 +21,17 @@ spec:
   VCENTER_USERNAME: <>
 ---
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: NetworkMapping
+metadata:
+  name: nwmap1
+spec:
+  networks:
+    - source: VM Network
+      target: OpenstackNet-1
+    - source: VM Network 2
+      target: OpenstackNet-2
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: Migration
 metadata:
   labels:
@@ -28,6 +39,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: vm-migration-sample
 spec:
+  networkmapping: nwmap1
+  storagemapping: stmap1
   source:
     vmwareref: pnapbmc1
     datacenter: PNAP BMC
@@ -38,6 +51,4 @@ spec:
     - dev test2
   destination:
     openstackref: sapmo1
-    networknames: 
-    - vlan-218-uservm-network-1
 ---

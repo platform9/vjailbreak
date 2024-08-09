@@ -3,4 +3,6 @@ resources:
 - vjailbreak_v1alpha1_migration.yaml
 - vjailbreak_v1alpha1_openstackcreds.yaml
 - vjailbreak_v1alpha1_vmwarecreds.yaml
+- vjailbreak_v1alpha1_networkmapping.yaml
+- vjailbreak_v1alpha1_storagemapping.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

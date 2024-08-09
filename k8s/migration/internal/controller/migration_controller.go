@@ -72,10 +72,11 @@ func RemoveString(s []string, r string) []string {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/finalizers,verbs=update
-//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list
-//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list
-//+kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=networkmappings,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -161,8 +162,16 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is not validated", openstackcreds.Name))
 		return ctrl.Result{}, nil
 	}
-	newvmstat := []vjailbreakv1alpha1.VMMigrationStatus{}
 
+	// Fetch the networkmap
+	networkmap := &vjailbreakv1alpha1.NetworkMapping{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.NetworkMapping, Namespace: migration.Namespace}, networkmap)
+	if err != nil {
+		ctxlog.Error(err, "Failed to retrieve NetworkMapping CR")
+		return ctrl.Result{}, err
+	}
+
+	newvmstat := []vjailbreakv1alpha1.VMMigrationStatus{}
 	for _, vm := range migration.Spec.Source.VirtualMachines {
 		vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
 		configMapName := fmt.Sprintf("migration-config-%s", vmname)
@@ -174,9 +183,35 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 			virtiodrivers = migration.Spec.Source.VirtioWinDriver
 		}
 
+		vmnws, err := GetVMwNetworks(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get network")
+			return ctrl.Result{}, err
+		}
+		ctxlog.Info(fmt.Sprintf("Networks on VM %s: %v", vm, vmnws))
+
+		openstacknws := []string{}
+		for _, vmnw := range vmnws {
+			for _, nwm := range networkmap.Spec.Networks {
+				if vmnw == nwm.Source {
+					openstacknws = append(openstacknws, nwm.Target)
+				}
+			}
+		}
+		if len(openstacknws) != len(vmnws) {
+			ctxlog.Info("VMware Network(s) not found in NetworkMapping")
+			return ctrl.Result{}, nil
+		}
+
+		err = VerifyNetworks(ctx, openstackcreds, openstacknws)
+		if err != nil {
+			ctxlog.Error(err, "Failed to verify networks")
+			return ctrl.Result{}, err
+		}
+
 		// Create ConfigMap
 		configMap := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
+		err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
 		if err != nil && apierrors.IsNotFound(err) {
 			ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 			configMap = &corev1.ConfigMap{
@@ -186,7 +221,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 				},
 				Data: map[string]string{
 					"CONVERT":               "true", // Assume that the vm always has to be converted
-					"NEUTRON_NETWORK_NAMES": strings.Join(migration.Spec.Destination.NetworkNames, ","),
+					"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
 					"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
 					"OS_DOMAIN_NAME":        openstackcreds.Spec.OsDomainName,
 					"OS_PASSWORD":           openstackcreds.Spec.OsPassword,

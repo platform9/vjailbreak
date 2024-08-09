@@ -5,6 +5,8 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_migrations.yaml
 - bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml
 - bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml
+- bases/vjailbreak.k8s.pf9.io_networkmappings.yaml
+- bases/vjailbreak.k8s.pf9.io_storagemappings.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
@@ -17,6 +19,8 @@ patches:
 #- path: patches/cainjection_in_migrations.yaml
 #- path: patches/cainjection_in_openstackcreds.yaml
 #- path: patches/cainjection_in_vmwarecreds.yaml
+#- path: patches/cainjection_in_networkmappings.yaml
+#- path: patches/cainjection_in_storagemappings.yaml
 # +kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section
