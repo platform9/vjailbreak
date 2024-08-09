@@ -320,6 +320,13 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 }
 
 func (vmops *VMOps) VMPowerOff() error {
+	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get VM power state: %s", err)
+	}
+	if currstate == types.VirtualMachinePowerStatePoweredOff {
+		return nil
+	}
 	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
 		return err
