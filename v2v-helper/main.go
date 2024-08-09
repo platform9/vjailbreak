@@ -23,7 +23,7 @@ func main() {
 	var envPassword = os.Getenv("VCENTER_PASSWORD")
 	var envInsecure = os.Getenv("VCENTER_INSECURE")
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
-	var networknames = os.Getenv("NEUTRON_NETWORK_NAME")
+	var networknames = os.Getenv("NEUTRON_NETWORK_NAMES")
 	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
 	var envconvert = os.Getenv("CONVERT")

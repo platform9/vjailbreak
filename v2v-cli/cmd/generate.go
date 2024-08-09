@@ -50,13 +50,13 @@ spec:
 `
 
 var (
-	VCENTER_USERNAME     string
-	VCENTER_PASSWORD     string
-	VCENTER_HOST         string
-	SOURCE_VM_NAME       string
-	CONVERT              string
-	VCENTER_INSECURE     string
-	NEUTRON_NETWORK_NAME string
+	VCENTER_USERNAME      string
+	VCENTER_PASSWORD      string
+	VCENTER_HOST          string
+	SOURCE_VM_NAME        string
+	CONVERT               string
+	VCENTER_INSECURE      string
+	NEUTRON_NETWORK_NAMES string
 )
 
 type ConfigMap struct {
@@ -104,7 +104,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 		configMap.Metadata.Name = "migration-config"
 		configMap.Data = make(map[string]string)
 
-		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAME", "OS_TYPE", "VIRTIO_WIN_DRIVER"}
+		envVars := []string{"VCENTER_USERNAME", "VCENTER_PASSWORD", "VCENTER_HOST", "SOURCE_VM_NAME", "CONVERT", "VCENTER_INSECURE", "NEUTRON_NETWORK_NAMES", "OS_TYPE", "VIRTIO_WIN_DRIVER"}
 		for _, env := range envVars {
 			var value string
 			switch env {
@@ -161,7 +161,7 @@ Your admin.rc file should atleast contain the following keys: OS_AUTH_URL, OS_DO
 					fmt.Printf("Enter value for %s (Windows/Linux): ", env)
 					fmt.Scanln(&value)
 				}
-			case "NEUTRON_NETWORK_NAME":
+			case "NEUTRON_NETWORK_NAMES":
 				if neutron_network_name, _ := cmd.Flags().GetString("neutron-network-name"); neutron_network_name != "" {
 					value = neutron_network_name
 				} else {
