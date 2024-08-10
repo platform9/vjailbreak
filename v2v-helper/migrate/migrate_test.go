@@ -36,11 +36,11 @@ func TestAddVolumestoHost(t *testing.T) {
 
 	gomock.InOrder(
 		mockOpenStackOps.EXPECT().
-			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[0].Name, inputvminfo.VMDisks[0].Size, "linux", false).
+			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[0].Name, inputvminfo.VMDisks[0].Size, "linux", false, "voltype-1").
 			Return(&volumes.Volume{ID: "id1", Name: "test-vm-disk1"}, nil).
 			Times(1),
 		mockOpenStackOps.EXPECT().
-			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[1].Name, inputvminfo.VMDisks[1].Size, "linux", false).
+			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[1].Name, inputvminfo.VMDisks[1].Size, "linux", false, "voltype-2").
 			Return(&volumes.Volume{ID: "id2", Name: "test-vm-disk2"}, nil).
 			Times(1),
 	)
@@ -60,6 +60,7 @@ func TestAddVolumestoHost(t *testing.T) {
 	migobj := Migrate{
 		Openstackclients: mockOpenStackOps,
 		InPod:            false,
+		Volumetypes:      []string{"voltype-1", "voltype-2"},
 	}
 
 	outputvminfo, err := migobj.AddVolumestoHost(inputvminfo)

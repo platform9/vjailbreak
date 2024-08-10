@@ -137,6 +137,14 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - storagemappings
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
   - vmwarecreds
   verbs:
   - create

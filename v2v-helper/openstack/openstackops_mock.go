@@ -84,18 +84,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, port
 }
 
 // CreateVolume mocks base method.
-func (m *MockOpenstackOperations) CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
+func (m *MockOpenstackOperations) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVolume", name, size, ostype, uefi)
+	ret := m.ctrl.Call(m, "CreateVolume", name, size, ostype, uefi, volumetype)
 	ret0, _ := ret[0].(*volumes.Volume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVolume indicates an expected call of CreateVolume.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(name, size, ostype, uefi interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(name, size, ostype, uefi, volumetype interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), name, size, ostype, uefi)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), name, size, ostype, uefi, volumetype)
 }
 
 // DeleteVolume mocks base method.

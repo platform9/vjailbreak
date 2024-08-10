@@ -77,6 +77,7 @@ func RemoveString(s []string, r string) []string {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=networkmappings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=storagemappings,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -171,6 +172,14 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	// Fetch the StorageMap
+	storagemap := &vjailbreakv1alpha1.StorageMapping{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.StorageMapping, Namespace: migration.Namespace}, storagemap)
+	if err != nil {
+		ctxlog.Error(err, "Failed to retrieve StorageMapping CR")
+		return ctrl.Result{}, err
+	}
+
 	newvmstat := []vjailbreakv1alpha1.VMMigrationStatus{}
 	for _, vm := range migration.Spec.Source.VirtualMachines {
 		vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
@@ -188,7 +197,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 			ctxlog.Error(err, "Failed to get network")
 			return ctrl.Result{}, err
 		}
-		ctxlog.Info(fmt.Sprintf("Networks on VM %s: %v", vm, vmnws))
+		// ctxlog.Info(fmt.Sprintf("Networks on VM %s: %v", vm, vmnws))
 
 		openstacknws := []string{}
 		for _, vmnw := range vmnws {
@@ -209,6 +218,32 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 
+		vmds, err := GetVMwDatastore(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get datastores")
+			return ctrl.Result{}, err
+		}
+		// ctxlog.Info(fmt.Sprintf("Datastores on VM %s: %v", vm, vmds))
+
+		openstackvolumetypes := []string{}
+		for _, vmdatastore := range vmds {
+			for _, storagemaptype := range storagemap.Spec.Storages {
+				if vmdatastore == storagemaptype.Source {
+					openstackvolumetypes = append(openstackvolumetypes, storagemaptype.Target)
+				}
+			}
+		}
+		if len(openstackvolumetypes) != len(vmds) {
+			ctxlog.Info("VMware Datastore(s) not found in StorageMapping")
+			return ctrl.Result{}, nil
+		}
+
+		err = VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
+		if err != nil {
+			ctxlog.Error(err, "Failed to verify datastores")
+			return ctrl.Result{}, err
+		}
+
 		// Create ConfigMap
 		configMap := &corev1.ConfigMap{}
 		err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
@@ -222,6 +257,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 				Data: map[string]string{
 					"CONVERT":               "true", // Assume that the vm always has to be converted
 					"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
+					"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
 					"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
 					"OS_DOMAIN_NAME":        openstackcreds.Spec.OsDomainName,
 					"OS_PASSWORD":           openstackcreds.Spec.OsPassword,

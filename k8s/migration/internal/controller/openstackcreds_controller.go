@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -164,6 +165,37 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 		}
 		if !found {
 			return fmt.Errorf("network '%s' not found in OpenStack", targetNetwork)
+		}
+	}
+	return nil
+}
+
+func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
+	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
+	if err != nil {
+		return err
+	}
+	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
+	if err != nil {
+		return fmt.Errorf("failed to list volume types: %s", err)
+	}
+
+	allnwtypes, err := volumetypes.ExtractVolumeTypes(allPages)
+	if err != nil {
+		return fmt.Errorf("failed to extract all volume types: %s", err)
+	}
+
+	// Verify that all volume types in targetstorage exist in the openstack volume types
+	for _, targetstorage := range targetstorages {
+		found := false
+		for _, nwtype := range allnwtypes {
+			if nwtype.Name == targetstorage {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("volume type '%s' not found in OpenStack", targetstorage)
 		}
 	}
 	return nil

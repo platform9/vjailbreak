@@ -24,6 +24,7 @@ type Migrate struct {
 	Password         string
 	Insecure         bool
 	Networknames     []string
+	Volumetypes      []string
 	Virtiowin        string
 	Ostype           string
 	Thumbprint       string
@@ -48,7 +49,7 @@ func (migobj *Migrate) AddVolumestoHost(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Creating volumes in OpenStack")
 	for idx, vmdisk := range vminfo.VMDisks {
-		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI)
+		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx])
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to create volume: %s", err)
 		}

@@ -24,6 +24,7 @@ func main() {
 	var envInsecure = os.Getenv("VCENTER_INSECURE")
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
 	var networknames = os.Getenv("NEUTRON_NETWORK_NAMES")
+	var volumeTypes = os.Getenv("CINDER_VOLUME_TYPES")
 	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
 	var envconvert = os.Getenv("CONVERT")
@@ -34,6 +35,7 @@ func main() {
 	log.Println("Source VM Name:", sourcevmname)
 	log.Println("OS Type:", ostype)
 	log.Println("Network Names:", strings.Split(networknames, ","))
+	log.Println("Volume Types:", strings.Split(volumeTypes, ","))
 
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
@@ -71,6 +73,7 @@ func main() {
 		Password:         envPassword,
 		Insecure:         insecure,
 		Networknames:     strings.Split(networknames, ","),
+		Volumetypes:      strings.Split(volumeTypes, ","),
 		Virtiowin:        virtiowin,
 		Ostype:           ostype,
 		Thumbprint:       thumbprint,
