@@ -29,7 +29,7 @@ import (
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
 
 type OpenstackOperations interface {
-	CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error)
+	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error)
 	WaitForVolume(volumeID string) error
 	AttachVolumeToVM(volumeID string) error
 	WaitForVolumeAttachment(volumeID string) error
@@ -133,12 +133,13 @@ func getCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool) (*volumes.Volume, error) {
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
 	opts := volumes.CreateOpts{
-		Size: int(float64(size) / (1024 * 1024 * 1024)),
-		Name: name,
+		VolumeType: volumetype,
+		Size:       int(float64(size) / (1024 * 1024 * 1024)),
+		Name:       name,
 	}
 	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {

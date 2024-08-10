@@ -40,8 +40,6 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
-                description: Foo is an example field of StorageMapping. Edit storagemapping_types.go
-                  to remove/update
                 items:
                   properties:
                     source:

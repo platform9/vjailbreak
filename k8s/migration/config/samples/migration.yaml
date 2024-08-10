@@ -32,6 +32,15 @@ spec:
       target: OpenstackNet-2
 ---
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: StorageMapping
+metadata:
+  name: stmap1
+spec:
+  storages:
+    - source: vcenter-datastore-1
+      target: __DEFAULT__
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: Migration
 metadata:
   labels:

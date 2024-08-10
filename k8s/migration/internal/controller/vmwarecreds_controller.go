@@ -29,6 +29,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -161,6 +162,56 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 	}
 
 	return networks, nil
+}
+
+func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	c, err := validateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %v", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get the vm
+	vm, err := finder.VirtualMachine(ctx, vmname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find vm: %v", err)
+	}
+
+	var vmProps mo.VirtualMachine
+	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %v", err)
+	}
+
+	var datastores []string
+	var ds mo.Datastore
+	var dsref types.ManagedObjectReference
+	for _, device := range vmProps.Config.Hardware.Device {
+		switch device.(type) {
+		case *types.VirtualDisk:
+			disk := device.GetVirtualDevice()
+			if b, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				dsref = b.Datastore.Reference()
+			} else if b, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
+				dsref = b.Datastore.Reference()
+			} else if b, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
+				dsref = b.Datastore.Reference()
+			} else {
+				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+			}
+			err = property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datastore: %v", err)
+			}
+			datastores = append(datastores, ds.Name)
+		}
+	}
+	return datastores, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
