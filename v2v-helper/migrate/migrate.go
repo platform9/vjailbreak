@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"time"
 	"vjailbreak/openstack"
 
@@ -379,12 +378,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.AddVolumestoHost(vminfo)
 	if err != nil {
+		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to add volumes to host: %s", err)
 	}
 
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
+		migobj.cleanup(vminfo)
 		return fmt.Errorf("CBT Failure: %s", err)
 	}
 
@@ -395,37 +396,27 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(vminfo)
 	if err != nil {
-		log.Printf("Failed to live replicate disks: %s\n", err)
-		log.Println("Removing migration snapshot and Openstack volumes.")
-		err = migobj.VMops.DeleteSnapshot("migration-snap")
-		if err != nil {
-			return fmt.Errorf("failed to delete snapshot of source VM: %s", err)
-		}
-		err = migobj.DetachAllDisks(vminfo)
-		if err != nil {
-			return fmt.Errorf("failed to detach all volumes from VM: %s", err)
-		}
-		err = migobj.DeleteAllDisks(vminfo)
-		if err != nil {
-			return fmt.Errorf("failed to delete all volumes from host: %s", err)
-		}
-		os.Exit(1)
+		migobj.cleanup(vminfo)
+		return fmt.Errorf("failed to live replicate disks: %s", err)
 	}
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertDisks(vminfo)
 	if err != nil {
+		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to convert disks: %s", err)
 	}
 
 	// Detatch all volumes from VM
 	err = migobj.DetachAllDisks(vminfo)
 	if err != nil {
+		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to detach all volumes from VM: %s", err)
 	}
 
 	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
+		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to create target instance: %s", err)
 	}
 	return nil
@@ -433,16 +424,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
 	log.Println("Trying to perform cleanup")
-	err := migobj.VMops.DeleteSnapshot("migration-snap")
-	if err != nil {
-		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
-	}
-	err = migobj.DetachAllDisks(vminfo)
+	err := migobj.DetachAllDisks(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
-	}
-	err = migobj.DeleteAllDisks(vminfo)
-	if err != nil {
+	} else if err = migobj.DeleteAllDisks(vminfo); err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
+	}
+	err = migobj.VMops.DeleteSnapshot("migration-snap")
+	if err != nil {
+		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
 	}
 }
