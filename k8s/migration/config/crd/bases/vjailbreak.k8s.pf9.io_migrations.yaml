@@ -43,12 +43,14 @@ spec:
                 description: MigrationDestination defines the destination details
                   for the migration
                 properties:
-                  networkname:
-                    type: string
+                  networknames:
+                    items:
+                      type: string
+                    type: array
                   openstackref:
                     type: string
                 required:
-                - networkname
+                - networknames
                 - openstackref
                 type: object
               source:
@@ -144,6 +146,18 @@ spec:
                       type: string
                   type: object
                   x-kubernetes-map-type: atomic
+                type: array
+              vmmigrationstatus:
+                items:
+                  properties:
+                    status:
+                      type: string
+                    vmname:
+                      type: string
+                  required:
+                  - status
+                  - vmname
+                  type: object
                 type: array
             type: object
         type: object

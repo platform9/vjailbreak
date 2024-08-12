@@ -33,8 +33,8 @@ type MigrationSource struct {
 
 // MigrationDestination defines the destination details for the migration
 type MigrationDestination struct {
-	OpenstackRef string `json:"openstackref"`
-	NetworkName  string `json:"networkname"`
+	OpenstackRef string   `json:"openstackref"`
+	NetworkNames []string `json:"networknames"`
 }
 
 // MigrationSpec defines the desired state of Migration
@@ -43,9 +43,15 @@ type MigrationSpec struct {
 	Destination MigrationDestination `json:"destination"`
 }
 
+type VMMigrationStatus struct {
+	VMName string `json:"vmname"`
+	Status string `json:"status"`
+}
+
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
-	Active []corev1.ObjectReference `json:"active,omitempty"`
+	Active            []corev1.ObjectReference `json:"active,omitempty"`
+	VMMigrationStatus []VMMigrationStatus      `json:"vmmigrationstatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
