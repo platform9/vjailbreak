@@ -43,44 +43,44 @@ spec:
                 description: MigrationDestination defines the destination details
                   for the migration
                 properties:
-                  openstackref:
+                  openstackRef:
                     type: string
                 required:
-                - openstackref
+                - openstackRef
                 type: object
-              networkmapping:
+              networkMapping:
                 type: string
               source:
                 description: MigrationSource defines the source details for the migration
                 properties:
                   datacenter:
                     type: string
-                  ostype:
+                  osType:
                     enum:
                     - windows
                     - linux
                     type: string
-                  virtiowindriver:
+                  virtiowinDriver:
                     type: string
-                  virtualmachines:
+                  vms:
                     items:
                       type: string
                     type: array
-                  vmwareref:
+                  vmwareRef:
                     type: string
                 required:
                 - datacenter
-                - ostype
-                - virtualmachines
-                - vmwareref
+                - osType
+                - vms
+                - vmwareRef
                 type: object
-              storagemapping:
+              storageMapping:
                 type: string
             required:
             - destination
-            - networkmapping
+            - networkMapping
             - source
-            - storagemapping
+            - storageMapping
             type: object
           status:
             description: MigrationStatus defines the observed state of Migration
@@ -148,7 +148,7 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              vmmigrationstatus:
+              vmMigrationStatus:
                 items:
                   properties:
                     status:

@@ -107,7 +107,7 @@ func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 	}
 	u, err := url.Parse(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %v", err)
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
 	// fmt.Println(u)
@@ -122,7 +122,7 @@ func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 	c := new(vim25.Client)
 	err = s.Login(context.Background(), c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to login: %v", err)
+		return nil, fmt.Errorf("failed to login: %w", err)
 	}
 	return c, nil
 }
@@ -131,32 +131,31 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 	var networks []string
 	c, err := validateVMwareCreds(vmwcreds)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %v", err)
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
 	finder.SetDatacenter(dc)
 
 	// Get the vm
 	vm, err := finder.VirtualMachine(ctx, vmname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find vm: %v", err)
+		return nil, fmt.Errorf("failed to find vm: %w", err)
 	}
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
 	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get VM properties: %v", err)
+		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
 	for _, device := range o.Config.Hardware.Device {
-		switch nic := device.(type) {
-		case *types.VirtualE1000e:
-			nic = device.(*types.VirtualE1000e)
+		if _, ok := device.(*types.VirtualE1000e); ok {
+			nic := device.(*types.VirtualE1000e)
 			networks = append(networks, nic.DeviceInfo.GetDescription().Summary)
 		}
 	}
@@ -167,46 +166,45 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
 	c, err := validateVMwareCreds(vmwcreds)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %v", err)
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
 	finder.SetDatacenter(dc)
 
 	// Get the vm
 	vm, err := finder.VirtualMachine(ctx, vmname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find vm: %v", err)
+		return nil, fmt.Errorf("failed to find vm: %w", err)
 	}
 
 	var vmProps mo.VirtualMachine
 	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get VM properties: %v", err)
+		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
 	var datastores []string
 	var ds mo.Datastore
 	var dsref types.ManagedObjectReference
 	for _, device := range vmProps.Config.Hardware.Device {
-		switch device.(type) {
-		case *types.VirtualDisk:
-			disk := device.GetVirtualDevice()
-			if b, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
-				dsref = b.Datastore.Reference()
-			} else if b, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
-				dsref = b.Datastore.Reference()
-			} else if b, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
-				dsref = b.Datastore.Reference()
-			} else {
-				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+		if _, ok := device.(*types.VirtualDisk); ok {
+			switch backing := device.GetVirtualDevice().Backing.(type) {
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskSparseVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				dsref = backing.Datastore.Reference()
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
 			}
-			err = property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get datastore: %v", err)
+				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
 			datastores = append(datastores, ds.Name)
 		}

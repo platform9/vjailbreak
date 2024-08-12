@@ -139,6 +139,7 @@ func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alph
 	}, nil
 }
 
+//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
 func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetnetworks []string) error {
 	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
 	if err != nil {
@@ -146,19 +147,19 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 	}
 	allPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
 	if err != nil {
-		return fmt.Errorf("failed to list networks: %s", err)
+		return fmt.Errorf("failed to list networks: %w", err)
 	}
 
 	allNetworks, err := networks.ExtractNetworks(allPages)
 	if err != nil {
-		return fmt.Errorf("failed to extract all networks: %s", err)
+		return fmt.Errorf("failed to extract all networks: %w", err)
 	}
 
 	// Verify that all network names in targetnetworks exist in the openstack networks
 	for _, targetNetwork := range targetnetworks {
 		found := false
-		for _, network := range allNetworks {
-			if network.Name == targetNetwork {
+		for i := 0; i < len(allNetworks); i++ {
+			if allNetworks[i].Name == targetNetwork {
 				found = true
 				break
 			}
@@ -170,6 +171,7 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 	return nil
 }
 
+//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
 func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
 	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
 	if err != nil {
@@ -177,19 +179,19 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 	}
 	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return fmt.Errorf("failed to list volume types: %s", err)
+		return fmt.Errorf("failed to list volume types: %w", err)
 	}
 
 	allnwtypes, err := volumetypes.ExtractVolumeTypes(allPages)
 	if err != nil {
-		return fmt.Errorf("failed to extract all volume types: %s", err)
+		return fmt.Errorf("failed to extract all volume types: %w", err)
 	}
 
 	// Verify that all volume types in targetstorage exist in the openstack volume types
 	for _, targetstorage := range targetstorages {
 		found := false
-		for _, nwtype := range allnwtypes {
-			if nwtype.Name == targetstorage {
+		for i := 0; i < len(allnwtypes); i++ {
+			if allnwtypes[i].Name == targetstorage {
 				found = true
 				break
 			}
