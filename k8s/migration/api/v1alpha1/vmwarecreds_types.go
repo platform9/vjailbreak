@@ -38,8 +38,8 @@ type VMwareCredsSpec struct {
 type VMwareCredsStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	VMwareValidationStatus  string `json:"VMwareValidationStatus,omitempty"`
-	VMwareValidationMessage string `json:"VMwareValidationMessage,omitempty"`
+	VMwareValidationStatus  string `json:"vmwareValidationStatus,omitempty"`
+	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
