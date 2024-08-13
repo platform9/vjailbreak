@@ -48,8 +48,8 @@ type MigrationReconciler struct {
 
 var migrationFinalizer = "migration.vjailbreak.pf9.io/finalizer"
 
-const success = "Success"
 const v2vimage = "platform9/v2v-helper:v0.1"
+const success = "Succeeded"
 
 //+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites/status,verbs=get;update;patch
@@ -109,7 +109,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			ctxlog.Info(fmt.Sprintf("Migration '%s' CR is being created or updated", migration.Name))
 			ctxlog.Info(fmt.Sprintf("Adding finalizer to Migration '%s'", migration.Name))
 			migration.ObjectMeta.Finalizers = append(migration.ObjectMeta.Finalizers, migrationFinalizer)
-			if err := r.Update(context.Background(), migration); err != nil {
+			if err := r.Update(ctx, migration); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
@@ -128,7 +128,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if slices.Contains(migration.ObjectMeta.Finalizers, migrationFinalizer) {
 			ctxlog.Info(fmt.Sprintf("Removing finalizer from Migration '%s' so that it can be deleted", migration.Name))
 			migration.ObjectMeta.Finalizers = RemoveString(migration.ObjectMeta.Finalizers, migrationFinalizer)
-			if err := r.Update(context.Background(), migration); err != nil {
+			if err := r.Update(ctx, migration); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
@@ -137,13 +137,11 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
-//
-//nolint:funlen // This function is long because it has to reconcile multiple resources
 func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 	migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
 	// Fetch VMwareCreds CR
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migration, migration.Spec.Source.VMwareRef, true, vmwcreds); !ok {
+	if ok, err := r.checkStatusSuccess(ctx, migration.Namespace, migration.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 		return ctrl.Result{
 			RequeueAfter: time.Minute,
 		}, err
@@ -151,27 +149,7 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migration, migration.Spec.Destination.OpenstackRef, false, openstackcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
-	}
-
-	// Fetch the networkmap
-	networkmap := &vjailbreakv1alpha1.NetworkMapping{}
-	err := r.Get(ctx, types.NamespacedName{Name: migration.Spec.NetworkMapping, Namespace: migration.Namespace}, networkmap)
-	if err != nil {
-		ctxlog.Error(err, "Failed to retrieve NetworkMapping CR")
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
-	}
-
-	// Fetch the StorageMap
-	storagemap := &vjailbreakv1alpha1.StorageMapping{}
-	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.StorageMapping, Namespace: migration.Namespace}, storagemap)
-	if err != nil {
-		ctxlog.Error(err, "Failed to retrieve StorageMapping CR")
+	if ok, err := r.checkStatusSuccess(ctx, migration.Namespace, migration.Spec.Destination.OpenstackRef, false, openstackcreds); !ok {
 		return ctrl.Result{
 			RequeueAfter: time.Minute,
 		}, err
@@ -188,11 +166,10 @@ func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
 		} else {
 			virtiodrivers = migration.Spec.Source.VirtioWinDriver
 		}
-		openstacknws, openstackvolumetypes, err := reconcileMapping(ctx,
+		openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx,
 			migration,
 			openstackcreds, vmwcreds,
-			vm,
-			networkmap.Spec.Networks, storagemap.Spec.Storages)
+			vm)
 		if err != nil {
 			ctxlog.Error(err, "Failed to reconcile mappings")
 			return ctrl.Result{}, err
@@ -342,11 +319,10 @@ func newHostPathType(pathType string) *corev1.HostPathType {
 }
 
 func (r *MigrationReconciler) checkStatusSuccess(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration,
-	credsname string,
+	namespace, credsname string,
 	isvmware bool,
 	credsobj client.Object) (bool, error) {
-	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: migration.Namespace}, credsobj)
+	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
 		return false, fmt.Errorf("failed to get VMwareCreds: %w", err)
 	}
@@ -359,50 +335,16 @@ func (r *MigrationReconciler) checkStatusSuccess(ctx context.Context,
 	return true, nil
 }
 
-//nolint:dupl // Similar logic to networks reconciliation, excluding from linting to keep it readable
-func reconcileStorage(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vm string,
-	storages []vjailbreakv1alpha1.Storage) ([]string, error) {
-	vmds, err := GetVMwDatastore(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get datastores: %w", err)
-	}
-
-	openstackvolumetypes := []string{}
-	for _, vmdatastore := range vmds {
-		for _, storagemaptype := range storages {
-			if vmdatastore == storagemaptype.Source {
-				openstackvolumetypes = append(openstackvolumetypes, storagemaptype.Target)
-			}
-		}
-	}
-	if len(openstackvolumetypes) != len(vmds) {
-		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping")
-	}
-
-	err = VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify datastores: %w", err)
-	}
-	return openstackvolumetypes, nil
-}
-
-func reconcileMapping(ctx context.Context,
+func (r *MigrationReconciler) reconcileMapping(ctx context.Context,
 	migration *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string,
-	networks []vjailbreakv1alpha1.Network,
-	storages []vjailbreakv1alpha1.Storage) (openstacknws, openstackvolumetypes []string, err error) {
-	openstacknws, err = reconcileNetwork(ctx, migration, openstackcreds, vmwcreds, vm, networks)
+	vm string) (openstacknws, openstackvolumetypes []string, err error) {
+	openstacknws, err = r.reconcileNetwork(ctx, migration, openstackcreds, vmwcreds, vm)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to reconcile network: %w", err)
 	}
-
-	openstackvolumetypes, err = reconcileStorage(ctx, migration, vmwcreds, openstackcreds, vm, storages)
+	openstackvolumetypes, err = r.reconcileStorage(ctx, migration, vmwcreds, openstackcreds, vm)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to reconcile storage: %w", err)
 	}
@@ -410,20 +352,25 @@ func reconcileMapping(ctx context.Context,
 }
 
 //nolint:dupl // Similar logic to storages reconciliation, excluding from linting to keep it readable
-func reconcileNetwork(ctx context.Context,
+func (r *MigrationReconciler) reconcileNetwork(ctx context.Context,
 	migration *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string,
-	networks []vjailbreakv1alpha1.Network) ([]string, error) {
+	vm string) ([]string, error) {
 	vmnws, err := GetVMwNetworks(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network: %w", err)
 	}
+	// Fetch the networkmap
+	networkmap := &vjailbreakv1alpha1.NetworkMapping{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.NetworkMapping, Namespace: migration.Namespace}, networkmap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve NetworkMapping CR: %w", err)
+	}
 
 	openstacknws := []string{}
 	for _, vmnw := range vmnws {
-		for _, nwm := range networks {
+		for _, nwm := range networkmap.Spec.Networks {
 			if vmnw == nwm.Source {
 				openstacknws = append(openstacknws, nwm.Target)
 			}
@@ -433,11 +380,62 @@ func reconcileNetwork(ctx context.Context,
 		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping")
 	}
 
-	err = VerifyNetworks(ctx, openstackcreds, openstacknws)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify networks: %w", err)
+	if networkmap.Status.NetworkmappingValidationStatus != success {
+		err = VerifyNetworks(ctx, openstackcreds, openstacknws)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify networks: %w", err)
+		}
+		networkmap.Status.NetworkmappingValidationStatus = success
+		networkmap.Status.NetworkmappingValidationMessage = "NetworkMapping validated"
+		err = r.Status().Update(ctx, networkmap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update networkmapping status: %w", err)
+		}
 	}
 	return openstacknws, nil
+}
+
+//nolint:dupl // Similar logic to networks reconciliation, excluding from linting to keep it readable
+func (r *MigrationReconciler) reconcileStorage(ctx context.Context,
+	migration *vjailbreakv1alpha1.Migration,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	vm string) ([]string, error) {
+	vmds, err := GetVMwDatastore(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get datastores: %w", err)
+	}
+	// Fetch the StorageMap
+	storagemap := &vjailbreakv1alpha1.StorageMapping{}
+	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.StorageMapping, Namespace: migration.Namespace}, storagemap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve StorageMapping CR: %w", err)
+	}
+
+	openstackvolumetypes := []string{}
+	for _, vmdatastore := range vmds {
+		for _, storagemaptype := range storagemap.Spec.Storages {
+			if vmdatastore == storagemaptype.Source {
+				openstackvolumetypes = append(openstackvolumetypes, storagemaptype.Target)
+			}
+		}
+	}
+	if len(openstackvolumetypes) != len(vmds) {
+		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping")
+	}
+	if storagemap.Status.StoragemappingValidationStatus != success {
+		err = VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify datastores: %w", err)
+		}
+		storagemap.Status.StoragemappingValidationStatus = success
+		storagemap.Status.StoragemappingValidationMessage = "StorageMapping validated"
+		err = r.Status().Update(ctx, storagemap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update storagemapping status: %w", err)
+		}
+	}
+	return openstackvolumetypes, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
