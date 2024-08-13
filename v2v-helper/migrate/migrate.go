@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 	"vjailbreak/openstack"
 
@@ -44,7 +45,7 @@ func (migobj *Migrate) logMessage(message string) {
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
-func (migobj *Migrate) AddVolumestoHost(vminfo vm.VMInfo) (vm.VMInfo, error) {
+func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Creating volumes in OpenStack")
 	for idx, vmdisk := range vminfo.VMDisks {
@@ -61,26 +62,69 @@ func (migobj *Migrate) AddVolumestoHost(vminfo vm.VMInfo) (vm.VMInfo, error) {
 		}
 	}
 	migobj.logMessage("Volumes created successfully")
+	return vminfo, nil
+}
 
+func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
+	openstackops := migobj.Openstackclients
 	migobj.logMessage("Attaching volumes to VM")
-	for _, vmdisk := range vminfo.VMDisks {
-		err := openstackops.AttachVolumeToVM(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			return vminfo, fmt.Errorf("failed to attach volume to VM: %s", err)
-		}
-		migobj.logMessage(fmt.Sprintf("Volume attached to VM: %s", vmdisk.OpenstackVol.Name))
+
+	err := openstackops.AttachVolumeToVM(disk.OpenstackVol.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to attach volume to VM: %s", err)
 	}
 
 	// Get the Path of the attached volume
-	for idx, vmdisk := range vminfo.VMDisks {
-		devicePath, err := openstackops.FindDevice(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			return vminfo, fmt.Errorf("failed to find device: %s", err)
-		}
-		vminfo.VMDisks[idx].Path = devicePath
-		migobj.logMessage(fmt.Sprintf("Volume %s attached successfully at %s", vmdisk.Name, vminfo.VMDisks[idx].Path))
+	devicePath, err := openstackops.FindDevice(disk.OpenstackVol.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to find device: %s", err)
 	}
-	return vminfo, nil
+	return devicePath, nil
+}
+
+func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
+	openstackops := migobj.Openstackclients
+	err := openstackops.DetachVolumeFromVM(disk.OpenstackVol.ID)
+	if err != nil {
+		return fmt.Errorf("failed to detach volume from VM: %s", err)
+	}
+	err = openstackops.WaitForVolume(disk.OpenstackVol.ID)
+	if err != nil {
+		return fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	return nil
+}
+
+func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
+	openstackops := migobj.Openstackclients
+	for _, vmdisk := range vminfo.VMDisks {
+		err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID)
+		if err != nil {
+			if strings.Contains(err.Error(), "is not attached to volume") {
+				return nil
+			}
+			return fmt.Errorf("failed to detach volume from VM: %s", err)
+		}
+		err = openstackops.WaitForVolume(vmdisk.OpenstackVol.ID)
+		if err != nil {
+			return fmt.Errorf("failed to wait for volume to become available: %s", err)
+		}
+		log.Printf("Volume %s detached from VM\n", vmdisk.Name)
+	}
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func (migobj *Migrate) DeleteAllDisks(vminfo vm.VMInfo) error {
+	openstackops := migobj.Openstackclients
+	for _, vmdisk := range vminfo.VMDisks {
+		err := openstackops.DeleteVolume(vmdisk.OpenstackVol.ID)
+		if err != nil {
+			return fmt.Errorf("failed to delete volume: %s", err)
+		}
+		log.Printf("Volume %s deleted\n", vmdisk.Name)
+	}
+	return nil
 }
 
 // This function enables CBT on the VM if it not enabled and takes a snapshot for initializing CBT
@@ -138,13 +182,11 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 		return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 	}
 
-	// var nbdservers []nbd.NBDOperations
 	for idx, vmdisk := range vminfo.VMDisks {
 		err := nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to start NBD server: %s", err)
 		}
-
 	}
 	// sleep for 2 seconds to allow the NBD server to start
 	time.Sleep(2 * time.Second)
@@ -157,9 +199,18 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			for idx, vmdisk := range vminfo.VMDisks {
 				migobj.logMessage(fmt.Sprintf("Copying disk %d", idx))
 
-				err = nbdops[idx].CopyDisk(vmdisk.Path)
+				vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
+				if err != nil {
+					return vminfo, fmt.Errorf("failed to attach volume: %s", err)
+				}
+
+				err = nbdops[idx].CopyDisk(vminfo.VMDisks[idx].Path)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
+				}
+				err = migobj.DetachVolume(vmdisk)
+				if err != nil {
+					return vminfo, fmt.Errorf("failed to detach volume: %s", err)
 				}
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
@@ -172,9 +223,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			var changedAreas types.DiskChangeInfo
 			done := true
 
-			for idx := range vminfo.VMDisks {
-				// done = true
-				// changedAreas, err = source_vm.QueryChangedDiskAreas(ctx, initial_snapshot, final_snapshot, disk, 0)
+			for idx, vmdisk := range vminfo.VMDisks {
 				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to get changed disk areas: %s", err)
@@ -201,9 +250,17 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 					// 11. Copy Changed Blocks over
 					done = false
 					migobj.logMessage("Copying changed blocks")
+					vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
+					if err != nil {
+						return vminfo, fmt.Errorf("failed to attach volume: %s", err)
+					}
 					err = nbdops[idx].CopyChangedBlocks(changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
+					}
+					err = migobj.DetachVolume(vmdisk)
+					if err != nil {
+						return vminfo, fmt.Errorf("failed to detach volume: %s", err)
 					}
 					migobj.logMessage("Finished copying changed blocks")
 				}
@@ -259,16 +316,20 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 
 func (migobj *Migrate) ConvertDisks(vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
+	path, err := migobj.AttachVolume(vminfo.VMDisks[0])
+	if err != nil {
+		return fmt.Errorf("failed to attach volume: %s", err)
+	}
 	if migobj.Convert {
 		// Fix NTFS
 		if vminfo.OSType == "windows" {
-			err := virtv2v.NTFSFix(vminfo.VMDisks[0].Path)
+			err = virtv2v.NTFSFix(path)
 			if err != nil {
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
 
-		err := virtv2v.ConvertDisk(vminfo.VMDisks[0].Path, vminfo.OSType, migobj.Virtiowin)
+		err := virtv2v.ConvertDisk(path, vminfo.OSType, migobj.Virtiowin)
 		if err != nil {
 			return fmt.Errorf("failed to run virt-v2v: %s", err)
 		}
@@ -277,42 +338,17 @@ func (migobj *Migrate) ConvertDisks(vminfo vm.VMInfo) error {
 	if vminfo.OSType == "linux" {
 		// Add Wildcard Netplan
 		log.Println("Adding wildcard netplan")
-		err := virtv2v.AddWildcardNetplan(vminfo.VMDisks[0].Path)
+		err := virtv2v.AddWildcardNetplan(path)
 		if err != nil {
 			return fmt.Errorf("failed to add wildcard netplan: %s", err)
 		}
 		log.Println("Wildcard netplan added successfully")
 	}
+	err = migobj.DetachVolume(vminfo.VMDisks[0])
+	if err != nil {
+		return fmt.Errorf("failed to detach volume: %s", err)
+	}
 	migobj.logMessage("Successfully converted disk")
-	return nil
-}
-
-func (migobj *Migrate) DetachAllDisks(vminfo vm.VMInfo) error {
-	openstackops := migobj.Openstackclients
-	for _, vmdisk := range vminfo.VMDisks {
-		err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			return fmt.Errorf("failed to detach volume from VM: %s", err)
-		}
-		err = openstackops.WaitForVolume(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			return fmt.Errorf("failed to wait for volume to become available: %s", err)
-		}
-		log.Printf("Volume %s detached from VM\n", vmdisk.Name)
-	}
-	time.Sleep(1 * time.Second)
-	return nil
-}
-
-func (migobj *Migrate) DeleteAllDisks(vminfo vm.VMInfo) error {
-	openstackops := migobj.Openstackclients
-	for _, vmdisk := range vminfo.VMDisks {
-		err := openstackops.DeleteVolume(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			return fmt.Errorf("failed to delete volume: %s", err)
-		}
-		log.Printf("Volume %s deleted\n", vmdisk.Name)
-	}
 	return nil
 }
 
@@ -376,7 +412,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}()
 
 	// Create and Add Volumes to Host
-	vminfo, err = migobj.AddVolumestoHost(vminfo)
+	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to add volumes to host: %s", err)
@@ -407,13 +443,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return fmt.Errorf("failed to convert disks: %s", err)
 	}
 
-	// Detatch all volumes from VM
-	err = migobj.DetachAllDisks(vminfo)
-	if err != nil {
-		migobj.cleanup(vminfo)
-		return fmt.Errorf("failed to detach all volumes from VM: %s", err)
-	}
-
 	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo)
@@ -424,7 +453,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
 	log.Println("Trying to perform cleanup")
-	err := migobj.DetachAllDisks(vminfo)
+	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
 	} else if err = migobj.DeleteAllDisks(vminfo); err != nil {
