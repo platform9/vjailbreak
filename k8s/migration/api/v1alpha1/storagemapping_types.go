@@ -40,6 +40,9 @@ type Storage struct {
 type StorageMappingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	StoragemappingValidationStatus  string `json:"storageMappingValidationStatus,omitempty"`
+	StoragemappingValidationMessage string `json:"storageMappinValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

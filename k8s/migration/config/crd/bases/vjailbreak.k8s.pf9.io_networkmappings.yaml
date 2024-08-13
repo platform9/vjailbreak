@@ -57,6 +57,11 @@ spec:
             type: object
           status:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
+            properties:
+              networkMappinValidationMessage:
+                type: string
+              networkMappingValidationStatus:
+                type: string
             type: object
         type: object
     served: true

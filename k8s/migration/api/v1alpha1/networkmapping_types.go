@@ -41,6 +41,9 @@ type Network struct {
 type NetworkMappingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	NetworkmappingValidationStatus  string `json:"networkMappingValidationStatus,omitempty"`
+	NetworkmappingValidationMessage string `json:"networkMappinValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

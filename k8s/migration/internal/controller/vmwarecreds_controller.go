@@ -83,7 +83,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		} else {
 			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Spec.VcenterHost))
 			// Update the status of the VMwareCreds object
-			vmwcreds.Status.VMwareValidationStatus = "Success"
+			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
 			if err := r.Status().Update(ctx, vmwcreds); err != nil {
 				ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", vmwcreds.Name, err))

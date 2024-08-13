@@ -88,7 +88,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		} else {
 			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
 			// Update the status of the OpenstackCreds object
-			openstackcreds.Status.OpenStackValidationStatus = "Success"
+			openstackcreds.Status.OpenStackValidationStatus = "Succeeded"
 			openstackcreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 			if err := r.Status().Update(ctx, openstackcreds); err != nil {
 				ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", openstackcreds.Name))
