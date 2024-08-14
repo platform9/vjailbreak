@@ -42,7 +42,7 @@ type StorageMappingStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	StoragemappingValidationStatus  string `json:"storageMappingValidationStatus,omitempty"`
-	StoragemappingValidationMessage string `json:"storageMappinValidationMessage,omitempty"`
+	StoragemappingValidationMessage string `json:"storageMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

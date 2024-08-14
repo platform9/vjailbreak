@@ -43,7 +43,7 @@ type NetworkMappingStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	NetworkmappingValidationStatus  string `json:"networkMappingValidationStatus,omitempty"`
-	NetworkmappingValidationMessage string `json:"networkMappinValidationMessage,omitempty"`
+	NetworkmappingValidationMessage string `json:"networkMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

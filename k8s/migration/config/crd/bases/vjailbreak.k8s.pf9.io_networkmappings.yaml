@@ -58,7 +58,7 @@ spec:
           status:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
             properties:
-              networkMappinValidationMessage:
+              networkMappingValidationMessage:
                 type: string
               networkMappingValidationStatus:
                 type: string

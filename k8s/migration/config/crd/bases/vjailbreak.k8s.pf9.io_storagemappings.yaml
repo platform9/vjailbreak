@@ -57,7 +57,7 @@ spec:
           status:
             description: StorageMappingStatus defines the observed state of StorageMapping
             properties:
-              storageMappinValidationMessage:
+              storageMappingValidationMessage:
                 type: string
               storageMappingValidationStatus:
                 type: string
