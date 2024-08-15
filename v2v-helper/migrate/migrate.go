@@ -115,7 +115,7 @@ func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	return nil
 }
 
-func (migobj *Migrate) DeleteAllDisks(vminfo vm.VMInfo) error {
+func (migobj *Migrate) DeleteAllVolumes(vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
 		err := openstackops.DeleteVolume(vmdisk.OpenstackVol.ID)
@@ -314,7 +314,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	return vminfo, nil
 }
 
-func (migobj *Migrate) ConvertDisks(vminfo vm.VMInfo) error {
+func (migobj *Migrate) ConvertVolumes(vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
 	path, err := migobj.AttachVolume(vminfo.VMDisks[0])
 	if err != nil {
@@ -437,7 +437,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	// Convert the Boot Disk to raw format
-	err = migobj.ConvertDisks(vminfo)
+	err = migobj.ConvertVolumes(vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to convert disks: %s", err)
@@ -456,7 +456,7 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
-	} else if err = migobj.DeleteAllDisks(vminfo); err != nil {
+	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
 	}
 	err = migobj.VMops.DeleteSnapshot("migration-snap")
