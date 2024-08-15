@@ -417,7 +417,7 @@ func TestDetachAllVolumes(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestDeleteAllDisks(t *testing.T) {
+func TestDeleteAllVolumes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -436,7 +436,7 @@ func TestDeleteAllDisks(t *testing.T) {
 		InPod:            false,
 	}
 
-	err := migobj.DeleteAllDisks(vminfo)
+	err := migobj.DeleteAllVolumes(vminfo)
 	assert.NoError(t, err)
 }
 
