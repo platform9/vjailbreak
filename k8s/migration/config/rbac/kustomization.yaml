@@ -13,6 +13,10 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- migrationtemplate_editor_role.yaml
+- migrationtemplate_viewer_role.yaml
+- migrationplan_editor_role.yaml
+- migrationplan_viewer_role.yaml
 - storagemapping_editor_role.yaml
 - storagemapping_viewer_role.yaml
 - networkmapping_editor_role.yaml

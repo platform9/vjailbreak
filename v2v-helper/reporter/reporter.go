@@ -188,13 +188,15 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
 					// Channel closed, exit the goroutine
 					return
 				}
-				if strings.Contains(msg, "Progress:") {
-					if err := r.UpdateProgress(msg); err != nil {
-						log.Println(err)
-					}
-				} else if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
+				if err := r.UpdateProgress(msg); err != nil {
 					log.Println(err)
 				}
+				if !strings.Contains(msg, "Progress:") {
+					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
+						log.Println(err)
+					}
+				}
+
 			case <-ctx.Done():
 				// Context cancelled, exit the goroutine
 				return

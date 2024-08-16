@@ -19,25 +19,20 @@ package controller
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strconv"
+	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // MigrationReconciler reconciles a Migration object
@@ -46,39 +41,10 @@ type MigrationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-var migrationFinalizer = "migration.vjailbreak.pf9.io/finalizer"
-
-const v2vimage = "platform9/v2v-helper:v0.1"
-const success = "Succeeded"
-
-//+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=deploy.pf9.io,resources=sites/finalizers,verbs=update
-
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-
-// Used to facilitate removal of our finalizer
-func RemoveString(s []string, r string) []string {
-	for i, v := range s {
-		if v == r {
-			return append(s[:i], s[i+1:]...)
-		}
-	}
-	return s
-}
+// +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/finalizers,verbs=update
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=networkmappings,verbs=get;list;watch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=storagemappings,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -91,6 +57,8 @@ func RemoveString(s []string, r string) []string {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.2/pkg/reconcile
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
+
+	ctxlog.Info("Reconciling Migration object")
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
@@ -102,346 +70,141 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// examine DeletionTimestamp to determine if object is under deletion or not
-	if migration.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Check if finalizer exists and if not, add one
-		if !slices.Contains(migration.ObjectMeta.Finalizers, migrationFinalizer) {
-			ctxlog.Info(fmt.Sprintf("Migration '%s' CR is being created or updated", migration.Name))
-			ctxlog.Info(fmt.Sprintf("Adding finalizer to Migration '%s'", migration.Name))
-			migration.ObjectMeta.Finalizers = append(migration.ObjectMeta.Finalizers, migrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return reconcile.Result{}, err
-			}
+	// Get the pod phase
+	pod := &corev1.Pod{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: migration.Namespace, Name: migration.Spec.PodRef}, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
 		}
-
-		if res, err := r.ReconcileMigrationJob(ctx, migration, ctxlog); err != nil {
-			return res, err
-		}
-	} else {
-		// The object is being deleted
-		ctxlog.Info(fmt.Sprintf("Migration '%s' CR is being deleted", migration.Name))
-
-		// TODO implement finalizer logic
-
-		// Now that the finalizer has completed deletion tasks, we can remove it
-		// to allow deletion of the Migration object
-		if slices.Contains(migration.ObjectMeta.Finalizers, migrationFinalizer) {
-			ctxlog.Info(fmt.Sprintf("Removing finalizer from Migration '%s' so that it can be deleted", migration.Name))
-			migration.ObjectMeta.Finalizers = RemoveString(migration.ObjectMeta.Finalizers, migrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-	return ctrl.Result{}, nil
-}
-
-// Similar to the Reconcile function above, but specifically for reconciling the Jobs
-func (r *MigrationReconciler) ReconcileMigrationJob(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration, ctxlog logr.Logger) (ctrl.Result, error) {
-	// Fetch VMwareCreds CR
-	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migration.Namespace, migration.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		ctxlog.Error(err, fmt.Sprintf("Failed to get Pod '%s'", migration.Spec.PodRef))
+		return ctrl.Result{}, err
 	}
 
-	// Fetch OpenStackCreds CR
-	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migration.Namespace, migration.Spec.Destination.OpenstackRef, false, openstackcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+	// Get events of this pod
+	allevents := &corev1.EventList{}
+	if err := r.List(ctx, allevents, client.InNamespace(migration.Namespace)); err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Failed to get events for Pod '%s'", pod.Name))
+		return ctrl.Result{}, err
+	}
+	filteredEvents := &corev1.EventList{}
+	for i := 0; i < len(allevents.Items); i++ {
+		if allevents.Items[i].InvolvedObject.Name == pod.Name && string(allevents.Items[i].InvolvedObject.UID) == string(pod.UID) {
+			filteredEvents.Items = append(filteredEvents.Items, allevents.Items[i])
+		}
 	}
 
-	newvmstat := []vjailbreakv1alpha1.VMMigrationStatus{}
-	for _, vm := range migration.Spec.Source.VirtualMachines {
-		vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
-		configMapName := fmt.Sprintf("migration-config-%s", vmname)
-		podName := fmt.Sprintf("v2v-helper-%s", vmname)
-		virtiodrivers := ""
-		if migration.Spec.Source.VirtioWinDriver == "" {
-			virtiodrivers = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-		} else {
-			virtiodrivers = migration.Spec.Source.VirtioWinDriver
-		}
-		openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx,
-			migration,
-			openstackcreds, vmwcreds,
-			vm)
-		if err != nil {
-			ctxlog.Error(err, "Failed to reconcile mappings")
-			return ctrl.Result{}, err
-		}
+	ctxlog.Info(fmt.Sprintf("Found %d events for Pod '%s'", len(filteredEvents.Items), pod.Name))
 
-		// Create ConfigMap
-		configMap := &corev1.ConfigMap{}
-		err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migration.Namespace}, configMap)
-		if err != nil && apierrors.IsNotFound(err) {
-			ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
-			configMap = &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      configMapName,
-					Namespace: migration.Namespace,
-				},
-				Data: map[string]string{
-					"CONVERT":               "true", // Assume that the vm always has to be converted
-					"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
-					"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
-					"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
-					"OS_DOMAIN_NAME":        openstackcreds.Spec.OsDomainName,
-					"OS_PASSWORD":           openstackcreds.Spec.OsPassword,
-					"OS_REGION_NAME":        openstackcreds.Spec.OsRegionName,
-					"OS_TENANT_NAME":        openstackcreds.Spec.OsTenantName,
-					"OS_TYPE":               migration.Spec.Source.OSType,
-					"OS_USERNAME":           openstackcreds.Spec.OsUsername,
-					"SOURCE_VM_NAME":        vm,
-					"VCENTER_HOST":          vmwcreds.Spec.VcenterHost,
-					"VCENTER_INSECURE":      strconv.FormatBool(vmwcreds.Spec.VcenterInsecure),
-					"VCENTER_PASSWORD":      vmwcreds.Spec.VcenterPassword,
-					"VCENTER_USERNAME":      vmwcreds.Spec.VcenterUsername,
-					"VIRTIO_WIN_DRIVER":     virtiodrivers,
-				},
-			}
-			err = r.createResource(ctx, migration, configMap)
-			if err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
-				return ctrl.Result{}, err
-			}
-			ctxlog.Info(fmt.Sprintf("ConfigMap '%s' created for VM '%s'", configMapName, vmname))
-		}
+	// Create status conditions
+	statusconditions := []corev1.PodCondition{}
+	if validatedCondition := createValidatedCondition(filteredEvents); validatedCondition != nil {
+		statusconditions = append(statusconditions, *validatedCondition)
+	}
+	statusconditions = append(statusconditions, createDataCopyCondition(filteredEvents)...)
+	if migratedCondition := createMigratedCondition(filteredEvents); migratedCondition != nil {
+		statusconditions = append(statusconditions, *migratedCondition)
+	}
 
-		// Create Pod
-		pointtrue := true
-		pod := &corev1.Pod{}
-		err = r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migration.Namespace}, pod)
-		if err != nil && apierrors.IsNotFound(err) {
-			ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vmname))
-			pod = &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName,
-					Namespace: migration.Namespace,
-					Labels: map[string]string{
-						"vm-name": vmname,
-					},
-				},
-				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyNever,
-					ServiceAccountName: "migration-controller-manager",
-					Containers: []corev1.Container{
-						{
-							Name:            "fedora",
-							Image:           v2vimage,
-							ImagePullPolicy: corev1.PullAlways,
-							Command:         []string{"/home/fedora/manager"},
-							SecurityContext: &corev1.SecurityContext{
-								Privileged: &pointtrue,
-							},
-							EnvFrom: []corev1.EnvFromSource{
-								{
-									ConfigMapRef: &corev1.ConfigMapEnvSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: configMapName,
-										},
-									},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "vddk",
-									MountPath: "/home/fedora/vmware-vix-disklib-distrib",
-								},
-								{
-									Name:      "dev",
-									MountPath: "/dev",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "vddk",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-									Type: newHostPathType("Directory"),
-								},
-							},
-						},
-						{
-							Name: "dev",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/dev",
-									Type: newHostPathType("Directory"),
-								},
-							},
-						},
-					},
-				},
-			}
-			if err := r.createResource(ctx, migration, pod); err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Failed to create Pod '%s'", podName))
-				return ctrl.Result{}, err
-			}
-			ctxlog.Info(fmt.Sprintf("Pod '%s' queued for Migration '%s'", podName, migration.Name))
-		} else {
-			newvmstat = append(newvmstat, vjailbreakv1alpha1.VMMigrationStatus{
-				VMName: vm,
-				Status: "Migration " + string(pod.Status.Phase),
-			})
+	// Sort status conditions by LastTransitionTime
+	// This is necessary because the order of the events is not guaranteed
+	sortConditionsByLastTransitionTime(statusconditions)
+
+	for i := 0; i < len(statusconditions); i++ {
+		if i != len(statusconditions)-1 {
+			statusconditions[i].Status = "True"
+		} else if string(pod.Status.Phase) == string(corev1.PodSucceeded) {
+			statusconditions[i].Status = "True"
+		} else if string(pod.Status.Phase) == string(corev1.PodFailed) {
+			statusconditions[i].Status = "False"
 		}
 	}
-	migration.Status.VMMigrationStatus = newvmstat
+
+	ctxlog.Info(fmt.Sprintf("Status conditions for Pod '%s': %v", pod.Name, statusconditions))
+
+	// Update the status of the Migration object
+	migration.Status.Phase = string(pod.Status.Phase)
+	migration.Status.Conditions = statusconditions
 	if err := r.Status().Update(ctx, migration); err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *MigrationReconciler) createResource(ctx context.Context, owner metav1.Object, controlled client.Object) error {
-	err := ctrl.SetControllerReference(owner, controlled, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to set controller reference")
-	}
-	err = r.Create(ctx, controlled)
-	if err != nil {
-		return fmt.Errorf("failed to create resource")
+func createValidatedCondition(eventList *corev1.EventList) *corev1.PodCondition {
+	statuscondition := &corev1.PodCondition{}
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == "Migration" && eventList.Items[i].Message == "Creating volumes in OpenStack") {
+			continue
+		}
+		statuscondition.Type = "Validated"
+		statuscondition.Status = corev1.ConditionUnknown
+		statuscondition.Reason = "Migration"
+		statuscondition.Message = "Migration validated successfully"
+		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
+		return statuscondition
 	}
 	return nil
 }
 
-func newHostPathType(pathType string) *corev1.HostPathType {
-	hostPathType := corev1.HostPathType(pathType)
-	return &hostPathType
+// SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime
+func sortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
+	sort.Slice(conditions, func(i, j int) bool {
+		return conditions[i].LastTransitionTime.Before(&conditions[j].LastTransitionTime)
+	})
 }
 
-func (r *MigrationReconciler) checkStatusSuccess(ctx context.Context,
-	namespace, credsname string,
-	isvmware bool,
-	credsobj client.Object) (bool, error) {
-	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
-	if err != nil {
-		return false, fmt.Errorf("failed to get VMwareCreds: %w", err)
+func createDataCopyCondition(eventList *corev1.EventList) []corev1.PodCondition {
+	statusconditions := []corev1.PodCondition{}
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == "Migration" && strings.Contains(eventList.Items[i].Message, "Copying disk")) {
+			continue
+		}
+		statuscondition := &corev1.PodCondition{}
+		statuscondition.Type = "DataCopy"
+		statuscondition.Status = corev1.ConditionUnknown
+		statuscondition.Reason = "Migration"
+		statuscondition.Message = eventList.Items[i].Message
+		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
+		statusconditions = append(statusconditions, *statuscondition)
 	}
-
-	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != success {
-		return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.VMwareCreds).Name)
-	} else if !isvmware && credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Status.OpenStackValidationStatus != success {
-		return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Name)
-	}
-	return true, nil
+	return statusconditions
 }
 
-func (r *MigrationReconciler) reconcileMapping(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string) (openstacknws, openstackvolumetypes []string, err error) {
-	openstacknws, err = r.reconcileNetwork(ctx, migration, openstackcreds, vmwcreds, vm)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reconcile network: %w", err)
-	}
-	openstackvolumetypes, err = r.reconcileStorage(ctx, migration, vmwcreds, openstackcreds, vm)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reconcile storage: %w", err)
-	}
-	return openstacknws, openstackvolumetypes, nil
-}
-
-//nolint:dupl // Similar logic to storages reconciliation, excluding from linting to keep it readable
-func (r *MigrationReconciler) reconcileNetwork(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string) ([]string, error) {
-	vmnws, err := GetVMwNetworks(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get network: %w", err)
-	}
-	// Fetch the networkmap
-	networkmap := &vjailbreakv1alpha1.NetworkMapping{}
-	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.NetworkMapping, Namespace: migration.Namespace}, networkmap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve NetworkMapping CR: %w", err)
-	}
-
-	openstacknws := []string{}
-	for _, vmnw := range vmnws {
-		for _, nwm := range networkmap.Spec.Networks {
-			if vmnw == nwm.Source {
-				openstacknws = append(openstacknws, nwm.Target)
-			}
+func createMigratedCondition(eventList *corev1.EventList) *corev1.PodCondition {
+	statuscondition := &corev1.PodCondition{}
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == "Migration" && eventList.Items[i].Message == "Converting disk") {
+			continue
 		}
+		statuscondition.Type = "Migrated"
+		statuscondition.Status = corev1.ConditionUnknown
+		statuscondition.Reason = "Migration"
+		statuscondition.Message = "Migrating VM from VMware to Openstack"
+		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
+		return statuscondition
 	}
-	if len(openstacknws) != len(vmnws) {
-		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping")
-	}
-
-	if networkmap.Status.NetworkmappingValidationStatus != success {
-		err = VerifyNetworks(ctx, openstackcreds, openstacknws)
-		if err != nil {
-			return nil, fmt.Errorf("failed to verify networks: %w", err)
-		}
-		networkmap.Status.NetworkmappingValidationStatus = success
-		networkmap.Status.NetworkmappingValidationMessage = "NetworkMapping validated"
-		err = r.Status().Update(ctx, networkmap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update networkmapping status: %w", err)
-		}
-	}
-	return openstacknws, nil
-}
-
-//nolint:dupl // Similar logic to networks reconciliation, excluding from linting to keep it readable
-func (r *MigrationReconciler) reconcileStorage(ctx context.Context,
-	migration *vjailbreakv1alpha1.Migration,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vm string) ([]string, error) {
-	vmds, err := GetVMwDatastore(ctx, vmwcreds, migration.Spec.Source.DataCenter, vm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get datastores: %w", err)
-	}
-	// Fetch the StorageMap
-	storagemap := &vjailbreakv1alpha1.StorageMapping{}
-	err = r.Get(ctx, types.NamespacedName{Name: migration.Spec.StorageMapping, Namespace: migration.Namespace}, storagemap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve StorageMapping CR: %w", err)
-	}
-
-	openstackvolumetypes := []string{}
-	for _, vmdatastore := range vmds {
-		for _, storagemaptype := range storagemap.Spec.Storages {
-			if vmdatastore == storagemaptype.Source {
-				openstackvolumetypes = append(openstackvolumetypes, storagemaptype.Target)
-			}
-		}
-	}
-	if len(openstackvolumetypes) != len(vmds) {
-		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping")
-	}
-	if storagemap.Status.StoragemappingValidationStatus != success {
-		err = VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to verify datastores: %w", err)
-		}
-		storagemap.Status.StoragemappingValidationStatus = success
-		storagemap.Status.StoragemappingValidationMessage = "StorageMapping validated"
-		err = r.Status().Update(ctx, storagemap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update storagemapping status: %w", err)
-		}
-	}
-	return openstackvolumetypes, nil
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&corev1.Pod{}).
+		Owns(&corev1.Pod{}, builder.WithPredicates(
+			predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldpod := e.ObjectOld.(*corev1.Pod)
+					newpod := e.ObjectNew.(*corev1.Pod)
+					for _, condition := range newpod.Status.Conditions {
+						if condition.Type == "Progressing" && !strings.Contains(condition.Message, "Progress:") {
+							return true
+						}
+					}
+					return oldpod.Status.Phase != newpod.Status.Phase
+				},
+			},
+		)).
 		Complete(r)
 }
