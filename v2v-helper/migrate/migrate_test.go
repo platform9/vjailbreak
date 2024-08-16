@@ -370,6 +370,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		Password:         envPassword,
 		Thumbprint:       thumbprint,
 		EventReporter:    dummychan,
+		MigrationType:    "hot",
 	}
 	updatedVMInfo, err := migobj.LiveReplicateDisks(inputvminfo)
 	assert.NoError(t, err)

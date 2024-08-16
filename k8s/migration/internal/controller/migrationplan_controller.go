@@ -84,6 +84,11 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
+	// Validate Time Field
+	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
+		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
+	}
+
 	if err := r.Get(ctx, req.NamespacedName, migrationplan); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.ctxlog.Info("Received ignorable event for a recently deleted MigrationPlan.")
@@ -130,7 +135,6 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan) (ctrl.Result, error) {
-
 	// Fetch MigrationTemplate CR
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
@@ -153,6 +157,16 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}, err
 	}
 
+	// Starting the Migrations
+	if migrationplan.Status.MigrationStatus == "" {
+		migrationplan.Status.MigrationStatus = string(corev1.PodRunning)
+		migrationplan.Status.MigrationMessage = "Migration(s) in progress"
+		err := r.Status().Update(ctx, migrationplan)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+		}
+	}
+
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		for _, vm := range parallelvms {
@@ -171,17 +185,20 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			}
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
-			if migrationobjs.Items[i].Status.Phase != string(corev1.PodSucceeded) {
-				if migrationobjs.Items[i].Status.Phase == string(corev1.PodFailed) {
-					r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-					migrationplan.Status.MigrationStatus = string(corev1.PodFailed)
-					err := r.Status().Update(ctx, migrationplan)
-					if err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
-					}
-					return ctrl.Result{}, nil
+			switch migrationobjs.Items[i].Status.Phase {
+			case string(corev1.PodFailed):
+				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
+				migrationplan.Status.MigrationStatus = string(corev1.PodFailed)
+				migrationplan.Status.MigrationMessage = fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName)
+				err := r.Status().Update(ctx, migrationplan)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel to complete: %v", parallelvms))
+				return ctrl.Result{}, nil
+			case string(corev1.PodSucceeded):
+				continue
+			default:
+				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
 				return ctrl.Result{}, nil
 			}
 		}
@@ -334,6 +351,10 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 			},
 			Data: map[string]string{
 				"CONVERT":               "true", // Assume that the vm always has to be converted
+				"TYPE":                  migrationplan.Spec.MigrationStrategy.Type,
+				"DATACOPYSTART":         migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+				"CUTOVERSTART":          migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+				"CUTOVEREND":            migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
 				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
 				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
 				"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
