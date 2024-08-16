@@ -25,53 +25,15 @@ import (
 
 type MigrationPlanStrategy struct {
 	// +kubebuilder:validation:Enum=hot;cold
-	Type           string      `json:"type"`
-	DataCopyStart  metav1.Time `json:"dataCopyStart"`
+	Type          string      `json:"type"`
+	DataCopyStart metav1.Time `json:"dataCopyStart"`
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Format:=date-time
 	VMCutoverStart metav1.Time `json:"vmCutoverStart,omitempty"`
-	VMCutoverEnd   metav1.Time `json:"vmCutoverEnd,omitempty"`
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Format:=date-time
+	VMCutoverEnd metav1.Time `json:"vmCutoverEnd,omitempty"`
 }
-
-// // +kubebuilder:validation:Type=array
-// type VMSteps struct {
-// 	VirtualMachine []string `json:"-"`
-// }
-
-// // WorkflowStep is an anonymous list inside of ParallelSteps (i.e. it does not have a key), so it needs its own
-// // custom Unmarshaller
-// func (vms *VMSteps) UnmarshalJSON(value []byte) error {
-// 	// Since we are writing a custom unmarshaller, we have to enforce the "DisallowUnknownFields" requirement manually.
-
-// 	// First, get a generic representation of the contents
-// 	var candidate []map[string]interface{}
-// 	err := json.Unmarshal(value, &candidate)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// Generate a list of all the available JSON fields of the WorkflowStep struct
-// 	availableFields := map[string]bool{}
-// 	reflectType := reflect.TypeOf("")
-// 	for i := 0; i < reflectType.NumField(); i++ {
-// 		cleanString := strings.ReplaceAll(reflectType.Field(i).Tag.Get("json"), ",omitempty", "")
-// 		availableFields[cleanString] = true
-// 	}
-
-// 	// Enforce that no unknown fields are present
-// 	for _, step := range candidate {
-// 		for key := range step {
-// 			if _, ok := availableFields[key]; !ok {
-// 				return fmt.Errorf(`json: unknown field "%s"`, key)
-// 			}
-// 		}
-// 	}
-
-// 	// Finally, attempt to fully unmarshal the struct
-// 	err = json.Unmarshal(value, &vms.VirtualMachine)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan
 type MigrationPlanSpec struct {
@@ -82,7 +44,8 @@ type MigrationPlanSpec struct {
 
 // MigrationPlanStatus defines the observed state of MigrationPlan
 type MigrationPlanStatus struct {
-	MigrationStatus string `json:"migrationStatus"`
+	MigrationStatus  string `json:"migrationStatus"`
+	MigrationMessage string `json:"migrationMessage"`
 }
 
 // +kubebuilder:object:root=true

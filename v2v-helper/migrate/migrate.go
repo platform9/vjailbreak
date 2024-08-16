@@ -35,6 +35,14 @@ type Migrate struct {
 	Nbdops           []nbd.NBDOperations
 	EventReporter    chan string
 	InPod            bool
+	MigrationTimes   MigrationTimes
+	MigrationType    string
+}
+
+type MigrationTimes struct {
+	DataCopyStart  time.Time
+	VMCutoverStart time.Time
+	VMCutoverEnd   time.Time
 }
 
 func (migobj *Migrate) logMessage(message string) {
@@ -163,6 +171,20 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 	return nil
 }
 
+func (migobj *Migrate) WaitforCutover() error {
+	var zerotime time.Time
+	if !migobj.MigrationTimes.VMCutoverStart.Equal(zerotime) && migobj.MigrationTimes.VMCutoverStart.After(time.Now()) {
+		migobj.logMessage("Waiting for VM Cutover start time")
+		time.Sleep(time.Until(migobj.MigrationTimes.VMCutoverStart))
+		migobj.logMessage("VM Cutover start time reached")
+	} else {
+		if !migobj.MigrationTimes.VMCutoverEnd.Equal(zerotime) && migobj.MigrationTimes.VMCutoverEnd.Before(time.Now()) {
+			return fmt.Errorf("VM Cutover End time has already passed")
+		}
+	}
+	return nil
+}
+
 func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
@@ -170,6 +192,12 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	envUserName := migobj.UserName
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
+
+	if migobj.MigrationType == "cold" {
+		if err := vmops.VMPowerOff(); err != nil {
+			return vminfo, fmt.Errorf("failed to power off VM: %s", err)
+		}
+	}
 
 	log.Println("Starting NBD server")
 	err := vmops.TakeSnapshot("migration-snap")
@@ -270,6 +298,9 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			}
 			if done || incrementalCopyCount > 20 {
 				log.Println("No more changes found. Shutting down source VM and performing final copy")
+				if err := migobj.WaitforCutover(); err != nil {
+					return vminfo, fmt.Errorf("failed to start VM Cutover: %s", err)
+				}
 				err = vmops.VMPowerOff()
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to power off VM: %s", err)
@@ -399,6 +430,12 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 }
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
+	// Wait until the data copy start time
+	if migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
+		migobj.logMessage("Waiting for data copy start time")
+		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
+		migobj.logMessage("Data copy start time reached")
+	}
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {

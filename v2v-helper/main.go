@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"vjailbreak/migrate"
 	"vjailbreak/nbd"
 	"vjailbreak/openstack"
@@ -28,6 +29,10 @@ func main() {
 	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
 	var envconvert = os.Getenv("CONVERT")
+	var datacopystart = os.Getenv("DATACOPYSTART")
+	var vmcutoverstart = os.Getenv("CUTOVERSTART")
+	var vmcutoverend = os.Getenv("CUTOVEREND")
+	var migrationtype = os.Getenv("TYPE")
 
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
@@ -36,6 +41,14 @@ func main() {
 	log.Println("OS Type:", ostype)
 	log.Println("Network Names:", strings.Split(networknames, ","))
 	log.Println("Volume Types:", strings.Split(volumeTypes, ","))
+
+	starttime, _ := time.Parse(time.RFC3339, datacopystart)
+	cutstart, _ := time.Parse(time.RFC3339, vmcutoverstart)
+	cutend, _ := time.Parse(time.RFC3339, vmcutoverend)
+	log.Println("Data Copy Start Time:", starttime)
+	log.Println("VM Cutover Start Time:", cutstart)
+	log.Println("VM Cutover End Time:", cutend)
+	log.Println("Migration Type:", migrationtype)
 
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
@@ -84,6 +97,12 @@ func main() {
 		Nbdops:           []nbd.NBDOperations{},
 		EventReporter:    make(chan string),
 		InPod:            reporter.IsRunningInPod(),
+		MigrationTimes: migrate.MigrationTimes{
+			DataCopyStart:  starttime,
+			VMCutoverStart: cutstart,
+			VMCutoverEnd:   cutend,
+		},
+		MigrationType: migrationtype,
 	}
 
 	eventReporter, err := reporter.NewReporter()

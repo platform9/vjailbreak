@@ -75,9 +75,12 @@ spec:
           status:
             description: MigrationPlanStatus defines the observed state of MigrationPlan
             properties:
+              migrationMessage:
+                type: string
               migrationStatus:
                 type: string
             required:
+            - migrationMessage
             - migrationStatus
             type: object
         type: object

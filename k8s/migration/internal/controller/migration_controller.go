@@ -41,6 +41,8 @@ type MigrationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const migrationReason = "Migration"
+
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
@@ -93,8 +95,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	ctxlog.Info(fmt.Sprintf("Found %d events for Pod '%s'", len(filteredEvents.Items), pod.Name))
-
 	// Create status conditions
 	statusconditions := []corev1.PodCondition{}
 	if validatedCondition := createValidatedCondition(filteredEvents); validatedCondition != nil {
@@ -119,8 +119,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	ctxlog.Info(fmt.Sprintf("Status conditions for Pod '%s': %v", pod.Name, statusconditions))
-
 	// Update the status of the Migration object
 	migration.Status.Phase = string(pod.Status.Phase)
 	migration.Status.Conditions = statusconditions
@@ -128,6 +126,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
+	ctxlog.Info("Updated status of Migration object")
 
 	return ctrl.Result{}, nil
 }
@@ -135,12 +134,12 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func createValidatedCondition(eventList *corev1.EventList) *corev1.PodCondition {
 	statuscondition := &corev1.PodCondition{}
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == "Migration" && eventList.Items[i].Message == "Creating volumes in OpenStack") {
+		if !(eventList.Items[i].Reason == migrationReason && eventList.Items[i].Message == "Creating volumes in OpenStack") {
 			continue
 		}
 		statuscondition.Type = "Validated"
 		statuscondition.Status = corev1.ConditionUnknown
-		statuscondition.Reason = "Migration"
+		statuscondition.Reason = migrationReason
 		statuscondition.Message = "Migration validated successfully"
 		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
 		return statuscondition
@@ -158,13 +157,13 @@ func sortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
 func createDataCopyCondition(eventList *corev1.EventList) []corev1.PodCondition {
 	statusconditions := []corev1.PodCondition{}
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == "Migration" && strings.Contains(eventList.Items[i].Message, "Copying disk")) {
+		if !(eventList.Items[i].Reason == migrationReason && strings.Contains(eventList.Items[i].Message, "Copying disk")) {
 			continue
 		}
 		statuscondition := &corev1.PodCondition{}
 		statuscondition.Type = "DataCopy"
 		statuscondition.Status = corev1.ConditionUnknown
-		statuscondition.Reason = "Migration"
+		statuscondition.Reason = migrationReason
 		statuscondition.Message = eventList.Items[i].Message
 		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
 		statusconditions = append(statusconditions, *statuscondition)
@@ -175,12 +174,12 @@ func createDataCopyCondition(eventList *corev1.EventList) []corev1.PodCondition 
 func createMigratedCondition(eventList *corev1.EventList) *corev1.PodCondition {
 	statuscondition := &corev1.PodCondition{}
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == "Migration" && eventList.Items[i].Message == "Converting disk") {
+		if !(eventList.Items[i].Reason == migrationReason && eventList.Items[i].Message == "Converting disk") {
 			continue
 		}
 		statuscondition.Type = "Migrated"
 		statuscondition.Status = corev1.ConditionUnknown
-		statuscondition.Reason = "Migration"
+		statuscondition.Reason = migrationReason
 		statuscondition.Message = "Migrating VM from VMware to Openstack"
 		statuscondition.LastTransitionTime = eventList.Items[i].LastTimestamp
 		return statuscondition
@@ -198,6 +197,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					oldpod := e.ObjectOld.(*corev1.Pod)
 					newpod := e.ObjectNew.(*corev1.Pod)
 					for _, condition := range newpod.Status.Conditions {
+						// Ignores the disk percentage updates in the pod custom conditions
 						if condition.Type == "Progressing" && !strings.Contains(condition.Message, "Progress:") {
 							return true
 						}
