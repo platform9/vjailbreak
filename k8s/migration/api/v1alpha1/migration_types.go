@@ -21,38 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MigrationSource defines the source details for the migration
-type MigrationSource struct {
-	VMwareRef       string   `json:"vmwareRef"`
-	DataCenter      string   `json:"datacenter"`
-	VirtualMachines []string `json:"vms"`
-	// +kubebuilder:validation:Enum=windows;linux
-	OSType          string `json:"osType"`
-	VirtioWinDriver string `json:"virtiowinDriver,omitempty"`
-}
-
-// MigrationDestination defines the destination details for the migration
-type MigrationDestination struct {
-	OpenstackRef string `json:"openstackRef"`
-}
-
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
-	NetworkMapping string               `json:"networkMapping"`
-	StorageMapping string               `json:"storageMapping"`
-	Source         MigrationSource      `json:"source"`
-	Destination    MigrationDestination `json:"destination"`
-}
-
-type VMMigrationStatus struct {
-	VMName string `json:"vmname"`
-	Status string `json:"status"`
+	MigrationPlan string `json:"migrationPlan"`
+	PodRef        string `json:"podRef"`
+	VMName        string `json:"vmName"`
 }
 
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
-	Active            []corev1.ObjectReference `json:"active,omitempty"`
-	VMMigrationStatus []VMMigrationStatus      `json:"vmMigrationStatus,omitempty"`
+	Phase      string                `json:"phase"`
+	Conditions []corev1.PodCondition `json:"conditions"`
 }
 
 // +kubebuilder:object:root=true

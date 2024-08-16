@@ -5,9 +5,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - batch
+  - ""
   resources:
-  - jobs
+  - configmaps
   verbs:
   - create
   - delete
@@ -19,14 +19,10 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
+  - events
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - ""
@@ -49,9 +45,9 @@ rules:
   - patch
   - update
 - apiGroups:
-  - deploy.pf9.io
+  - vjailbreak.k8s.pf9.io
   resources:
-  - sites
+  - migrationplans
   verbs:
   - create
   - delete
@@ -61,15 +57,15 @@ rules:
   - update
   - watch
 - apiGroups:
-  - deploy.pf9.io
+  - vjailbreak.k8s.pf9.io
   resources:
-  - sites/finalizers
+  - migrationplans/finalizers
   verbs:
   - update
 - apiGroups:
-  - deploy.pf9.io
+  - vjailbreak.k8s.pf9.io
   resources:
-  - sites/status
+  - migrationplans/status
   verbs:
   - get
   - patch
@@ -89,17 +85,19 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
-  - migrations/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - migrations/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - migrationtemplates
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
