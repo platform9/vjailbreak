@@ -6,7 +6,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 	"vjailbreak/openstack"
 
@@ -429,6 +432,16 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	return nil
 }
 
+func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo) {
+	gracefulShutdown := make(chan os.Signal, 1)
+	// Handle SIGTERM
+	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
+	<-gracefulShutdown
+	migobj.logMessage("Gracefully terminating")
+	migobj.cleanup(vminfo)
+	os.Exit(0)
+}
+
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Wait until the data copy start time
 	var zerotime time.Time
@@ -443,11 +456,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return fmt.Errorf("failed to get all info: %s", err)
 	}
 
-	// Wait for context cancellation to cleanup
-	go func() {
-		<-ctx.Done()
-		migobj.cleanup(vminfo)
-	}()
+	// Graceful Termination
+	go migobj.gracefulTerminate(vminfo)
 
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)

@@ -115,14 +115,14 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	} else {
 		// The object is being deleted
-		r.ctxlog.Info(fmt.Sprintf("Migration '%s' CR is being deleted", migrationplan.Name))
+		r.ctxlog.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
 
 		// TODO implement finalizer logic
 
 		// Now that the finalizer has completed deletion tasks, we can remove it
 		// to allow deletion of the Migration object
 		if slices.Contains(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer) {
-			r.ctxlog.Info(fmt.Sprintf("Removing finalizer from Migration '%s' so that it can be deleted", migrationplan.Name))
+			r.ctxlog.Info(fmt.Sprintf("Removing finalizer from MigrationPlan '%s' so that it can be deleted", migrationplan.Name))
 			migrationplan.ObjectMeta.Finalizers = RemoveString(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer)
 			if err := r.Update(ctx, migrationplan); err != nil {
 				return reconcile.Result{}, err
