@@ -431,7 +431,8 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Wait until the data copy start time
-	if migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
+	var zerotime time.Time
+	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
 		migobj.logMessage("Waiting for data copy start time")
 		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
 		migobj.logMessage("Data copy start time reached")
