@@ -26,15 +26,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -159,9 +157,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
-		migrationplan.Status.MigrationStatus = string(corev1.PodRunning)
-		migrationplan.Status.MigrationMessage = "Migration(s) in progress"
-		err := r.Status().Update(ctx, migrationplan)
+		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodRunning), "Migration(s) in progress")
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 		}
@@ -188,9 +184,24 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			switch migrationobjs.Items[i].Status.Phase {
 			case string(corev1.PodFailed):
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				migrationplan.Status.MigrationStatus = string(corev1.PodFailed)
-				migrationplan.Status.MigrationMessage = fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName)
-				err := r.Status().Update(ctx, migrationplan)
+				if migrationplan.Spec.Retry {
+					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
+					// Delete the migration so that it can be recreated
+					err := r.Delete(ctx, &migrationobjs.Items[i])
+					if err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to delete Migration: %w", err)
+					}
+					migrationplan.Status.MigrationStatus = "Retrying"
+					migrationplan.Status.MigrationMessage = fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName)
+					migrationplan.Spec.Retry = false
+					err = r.Update(ctx, migrationplan)
+					if err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to update Migration status: %w", err)
+					}
+					return ctrl.Result{}, nil
+				}
+				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodFailed),
+					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
@@ -211,6 +222,17 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, status, message string) error {
+	migrationplan.Status.MigrationStatus = status
+	migrationplan.Status.MigrationMessage = message
+	err := r.Status().Update(ctx, migrationplan)
+	if err != nil {
+		return fmt.Errorf("failed to update MigrationPlan status: %w", err)
+	}
+	return nil
 }
 
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
@@ -286,6 +308,15 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 							{
 								Name:      "dev",
 								MountPath: "/dev",
+							},
+						},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("3Gi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("2500m"),
 							},
 						},
 					},
@@ -521,12 +552,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.MigrationPlan{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(
-			predicate.Funcs{
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					return e.ObjectOld.(*vjailbreakv1alpha1.Migration).Status.Phase != e.ObjectNew.(*vjailbreakv1alpha1.Migration).Status.Phase
-				},
-			})).
+		For(&vjailbreakv1alpha1.MigrationPlan{}).
+		Owns(&vjailbreakv1alpha1.Migration{}).
 		Complete(r)
 }
