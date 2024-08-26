@@ -67,7 +67,14 @@ func validateOpenStack() (*OpenStackClients, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
 	}
-	providerClient, err := openstack.AuthenticatedClient(opts)
+	var providerClient *gophercloud.ProviderClient
+	for i := 0; i < MaxIntervalCount; i++ {
+		providerClient, err = openstack.AuthenticatedClient(opts)
+		if err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to authenticate OpenStack client: %s", err)
 	}
@@ -200,10 +207,16 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
-	_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
-		VolumeID:            volumeID,
-		DeleteOnTermination: false,
-	}).Extract()
+	for i := 0; i < MaxIntervalCount; i++ {
+		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
+			VolumeID:            volumeID,
+			DeleteOnTermination: false,
+		}).Extract()
+		if err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+	}
 	if err != nil {
 		return fmt.Errorf("failed to attach volume to VM: %s", err)
 	}
@@ -253,7 +266,13 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
-	err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
+	for i := 0; i < MaxIntervalCount; i++ {
+		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
+		if err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+	}
 	if err != nil {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
@@ -472,6 +491,5 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
 		}
 	}
-
 	return server, nil
 }

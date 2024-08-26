@@ -462,7 +462,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to add volumes to host: %s", err)
 	}
 
