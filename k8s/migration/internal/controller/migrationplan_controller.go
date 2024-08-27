@@ -50,6 +50,8 @@ var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 
 const v2vimage = "platform9/v2v-helper:v0.1"
 
+const terminationPeriod = int64(120)
+
 // Used to facilitate removal of our finalizer
 func RemoveString(s []string, r string) []string {
 	for i, v := range s {
@@ -261,6 +263,8 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+func int64Ptr(i int64) *int64 { return &i }
+
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName string) error {
@@ -280,8 +284,9 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 				},
 			},
 			Spec: corev1.PodSpec{
-				RestartPolicy:      corev1.RestartPolicyNever,
-				ServiceAccountName: "migration-controller-manager",
+				RestartPolicy:                 corev1.RestartPolicyNever,
+				ServiceAccountName:            "migration-controller-manager",
+				TerminationGracePeriodSeconds: int64Ptr(terminationPeriod),
 				Containers: []corev1.Container{
 					{
 						Name:            "fedora",

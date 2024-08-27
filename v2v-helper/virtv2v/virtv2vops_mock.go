@@ -5,6 +5,7 @@
 package virtv2v
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -48,17 +49,17 @@ func (mr *MockVirtV2VOperationsMockRecorder) AddWildcardNetplan(path interface{}
 }
 
 // ConvertDisk mocks base method.
-func (m *MockVirtV2VOperations) ConvertDisk(path, ostype, virtiowindriver string) error {
+func (m *MockVirtV2VOperations) ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertDisk", path, ostype, virtiowindriver)
+	ret := m.ctrl.Call(m, "ConvertDisk", ctx, path, ostype, virtiowindriver)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ConvertDisk indicates an expected call of ConvertDisk.
-func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(path, ostype, virtiowindriver interface{}) *gomock.Call {
+func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(ctx, path, ostype, virtiowindriver interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), path, ostype, virtiowindriver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), ctx, path, ostype, virtiowindriver)
 }
 
 // GetPartitions mocks base method.

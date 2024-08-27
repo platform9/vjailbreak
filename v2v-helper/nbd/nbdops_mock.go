@@ -5,6 +5,7 @@
 package nbd
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -50,17 +51,17 @@ func (mr *MockNBDOperationsMockRecorder) CopyChangedBlocks(changedAreas, path in
 }
 
 // CopyDisk mocks base method.
-func (m *MockNBDOperations) CopyDisk(dest string) error {
+func (m *MockNBDOperations) CopyDisk(ctx context.Context, dest string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyDisk", dest)
+	ret := m.ctrl.Call(m, "CopyDisk", ctx, dest)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CopyDisk indicates an expected call of CopyDisk.
-func (mr *MockNBDOperationsMockRecorder) CopyDisk(dest interface{}) *gomock.Call {
+func (mr *MockNBDOperationsMockRecorder) CopyDisk(ctx, dest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), dest)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), ctx, dest)
 }
 
 // StartNBDServer mocks base method.

@@ -2,6 +2,7 @@
 package migrate
 
 import (
+	"context"
 	"testing"
 	"vjailbreak/nbd"
 	"vjailbreak/openstack"
@@ -172,13 +173,13 @@ func TestLiveReplicateDisks(t *testing.T) {
 			Times(1),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).Times(1),
-		mockNBD.EXPECT().CopyDisk("/dev/sda").Return(nil).Times(1),
+		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sda").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().WaitForVolume("id1").Return(nil).Times(1),
 
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id2").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sda", nil).Times(1),
-		mockNBD.EXPECT().CopyDisk("/dev/sda").Return(nil).Times(1),
+		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sda").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM("id2").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().WaitForVolume("id2").Return(nil).Times(1),
 		// 1. Both Disks Change
@@ -372,7 +373,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		EventReporter:    dummychan,
 		MigrationType:    "hot",
 	}
-	updatedVMInfo, err := migobj.LiveReplicateDisks(inputvminfo)
+	updatedVMInfo, err := migobj.LiveReplicateDisks(context.TODO(), inputvminfo)
 	assert.NoError(t, err)
 	assert.Equal(t, vm.VMInfo{
 		Name:   "test-vm",

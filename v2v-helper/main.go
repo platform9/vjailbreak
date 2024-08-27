@@ -113,6 +113,7 @@ func main() {
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
+		cancel()
 		log.Fatalf("Failed to migrate VM: %s\n", err)
 	}
 
