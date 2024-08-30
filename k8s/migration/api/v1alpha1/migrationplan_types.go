@@ -25,8 +25,10 @@ import (
 
 type MigrationPlanStrategy struct {
 	// +kubebuilder:validation:Enum=hot;cold
-	Type          string      `json:"type"`
-	DataCopyStart metav1.Time `json:"dataCopyStart"`
+	Type string `json:"type"`
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Format:=date-time
+	DataCopyStart metav1.Time `json:"dataCopyStart,omitempty"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format:=date-time
 	VMCutoverStart metav1.Time `json:"vmCutoverStart,omitempty"`
@@ -39,6 +41,7 @@ type MigrationPlanStrategy struct {
 type MigrationPlanSpec struct {
 	MigrationTemplate string                `json:"migrationTemplate"`
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
+	Retry             bool                  `json:"retry,omitempty"`
 	VirtualMachines   [][]string            `json:"virtualmachines"`
 }
 

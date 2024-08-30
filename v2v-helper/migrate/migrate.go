@@ -188,7 +188,7 @@ func (migobj *Migrate) WaitforCutover() error {
 	return nil
 }
 
-func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
+func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
 	envURL := migobj.URL
@@ -235,7 +235,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 					return vminfo, fmt.Errorf("failed to attach volume: %s", err)
 				}
 
-				err = nbdops[idx].CopyDisk(vminfo.VMDisks[idx].Path)
+				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
@@ -348,7 +348,7 @@ func (migobj *Migrate) LiveReplicateDisks(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	return vminfo, nil
 }
 
-func (migobj *Migrate) ConvertVolumes(vminfo vm.VMInfo) error {
+func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
 	path, err := migobj.AttachVolume(vminfo.VMDisks[0])
 	if err != nil {
@@ -363,7 +363,7 @@ func (migobj *Migrate) ConvertVolumes(vminfo vm.VMInfo) error {
 			}
 		}
 
-		err := virtv2v.ConvertDisk(path, vminfo.OSType, migobj.Virtiowin)
+		err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin)
 		if err != nil {
 			return fmt.Errorf("failed to run virt-v2v: %s", err)
 		}
@@ -432,17 +432,19 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	return nil
 }
 
-func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo) {
+func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.CancelFunc) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
+	cancel()
 	migobj.cleanup(vminfo)
 	os.Exit(0)
 }
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -453,16 +455,16 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("failed to get all info: %s", err)
 	}
 
 	// Graceful Termination
-	go migobj.gracefulTerminate(vminfo)
+	go migobj.gracefulTerminate(vminfo, cancel)
 
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to add volumes to host: %s", err)
 	}
 
@@ -478,14 +480,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	// Live Replicate Disks
-	vminfo, err = migobj.LiveReplicateDisks(vminfo)
+	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to live replicate disks: %s", err)
 	}
 
 	// Convert the Boot Disk to raw format
-	err = migobj.ConvertVolumes(vminfo)
+	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to convert disks: %s", err)
@@ -496,6 +498,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to create target instance: %s", err)
 	}
+	cancel()
 	return nil
 }
 

@@ -5,6 +5,7 @@ package nbd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -25,7 +26,7 @@ import (
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
-	CopyDisk(dest string) error
+	CopyDisk(ctx context.Context, dest string) error
 	CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error
 }
 
@@ -139,7 +140,7 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-func (nbdserver *NBDServer) CopyDisk(dest string) error {
+func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -148,7 +149,7 @@ func (nbdserver *NBDServer) CopyDisk(dest string) error {
 	defer progressRead.Close()
 	defer progressWrite.Close()
 
-	cmd := exec.Command("nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
+	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
 	log.Println(cmd.String())

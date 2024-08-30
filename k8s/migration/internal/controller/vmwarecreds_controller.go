@@ -154,9 +154,11 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 	}
 
 	for _, device := range o.Config.Hardware.Device {
-		if _, ok := device.(*types.VirtualE1000e); ok {
-			nic := device.(*types.VirtualE1000e)
-			networks = append(networks, nic.DeviceInfo.GetDescription().Summary)
+		switch dev := device.(type) {
+		case *types.VirtualE1000e:
+			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+		case *types.VirtualVmxnet3:
+			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
 		}
 	}
 

@@ -9,12 +9,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"time"
 
+	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/soap"
 )
 
 //go:generate mockgen -source=../vcenter/vcenterops.go -destination=../vcenter/vcenterops_mock.go -package=vcenter
@@ -42,18 +45,24 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
-	u.User = url.UserPassword(username, password)
-	// Connect and log in to ESX or vCenter
-	s := &cache.Session{
-		URL:      u,
-		Insecure: disableSSLVerification,
-	}
+	credentials := url.UserPassword(username, password)
+	u.User = credentials
 
-	c := new(vim25.Client)
-	err = s.Login(ctx, c, nil)
+	soapClient := soap.NewClient(u, disableSSLVerification)
+	c, err := vim25.NewClient(ctx, soapClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %v", err)
+	}
+	c.RoundTripper = session.KeepAlive(c.RoundTripper, 10*time.Minute)
+	client := &govmomi.Client{
+		Client:         c,
+		SessionManager: session.NewManager(c),
+	}
+	err = client.SessionManager.Login(ctx, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("failed to login: %v", err)
 	}
+
 	return c, nil
 }
 

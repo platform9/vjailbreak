@@ -5,6 +5,7 @@ package virtv2v
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -21,7 +22,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(path string, ostype string, virtiowindriver string) error
+	ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error
 	AddWildcardNetplan(path string) error
 }
 
@@ -112,7 +113,7 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
-func ConvertDisk(path string, ostype string, virtiowindriver string) error {
+func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error {
 	// Convert the disk
 
 	if ostype == "windows" {
@@ -128,7 +129,7 @@ func ConvertDisk(path string, ostype string, virtiowindriver string) error {
 
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.Command("virt-v2v-in-place", "-i", "disk", path)
+	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", "-i", "disk", path)
 	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

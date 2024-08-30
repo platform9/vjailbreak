@@ -83,14 +83,10 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        # TODO(user): Configure the resources accordingly based on the project requirements.
-        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        # This doesn't need so much. It is just to ensure QoL of the node
         resources:
-          limits:
-            cpu: 500m
-            memory: 128Mi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 200m
+            memory: 256Mi
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

@@ -56,11 +56,12 @@ spec:
                     format: date-time
                     type: string
                 required:
-                - dataCopyStart
                 - type
                 type: object
               migrationTemplate:
                 type: string
+              retry:
+                type: boolean
               virtualmachines:
                 items:
                   items:
