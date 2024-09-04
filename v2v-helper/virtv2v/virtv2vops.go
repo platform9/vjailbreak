@@ -24,6 +24,7 @@ type VirtV2VOperations interface {
 	NTFSFix(path string) error
 	ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error
 	AddWildcardNetplan(path string) error
+	GetOsRelease(path string) (string, error)
 }
 
 func RetainAlphanumeric(input string) string {
@@ -139,6 +140,25 @@ func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindrive
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
 	return nil
+}
+
+func GetOsRelease(path string) (string, error) {
+	// Get the os-release file
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	cmd := exec.Command(
+		"guestfish",
+		"--ro",
+		"-a",
+		path,
+		"-i")
+	input := `cat /etc/os-release`
+	cmd.Stdin = strings.NewReader(input)
+	log.Printf("Executing %s", cmd.String()+" "+input)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get os-release: %s", err)
+	}
+	return strings.ToLower(string(out)), nil
 }
 
 func AddWildcardNetplan(path string) error {

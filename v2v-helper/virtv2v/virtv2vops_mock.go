@@ -62,6 +62,21 @@ func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(ctx, path, ostype, virt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), ctx, path, ostype, virtiowindriver)
 }
 
+// GetOsRelease mocks base method.
+func (m *MockVirtV2VOperations) GetOsRelease(path string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOsRelease", path)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOsRelease indicates an expected call of GetOsRelease.
+func (mr *MockVirtV2VOperationsMockRecorder) GetOsRelease(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOsRelease", reflect.TypeOf((*MockVirtV2VOperations)(nil).GetOsRelease), path)
+}
+
 // GetPartitions mocks base method.
 func (m *MockVirtV2VOperations) GetPartitions(disk string) ([]string, error) {
 	m.ctrl.T.Helper()
