@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -27,7 +28,7 @@ type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
 	CopyDisk(ctx context.Context, dest string) error
-	CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error
+	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
 }
 
 type NBDServer struct {
@@ -107,7 +108,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		"config=/home/fedora/vddk.conf",
 		"transports=file:nbdssl:nbd",
 		fmt.Sprintf("vm=moref=%s", vm.Reference().Value),
-		// fmt.Sprintf("snapshot=%s", snapref),
+		fmt.Sprintf("snapshot=%s", snapref),
 		file,
 	)
 
@@ -342,7 +343,7 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 	return nil
 }
 
-func (nbdserver *NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo, path string) error {
+func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
 	if err != nil {
@@ -358,34 +359,58 @@ func (nbdserver *NBDServer) CopyChangedBlocks(changedAreas types.DiskChangeInfo,
 	}
 	defer handle.Close()
 
-	// log.Println("Opening File")
 	fd, err := os.OpenFile(path, os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-	// log.Println("File Opened")
 
 	defer fd.Close()
 
 	totalsize := int64(0)
-	copiedsize := int64(0)
-
 	for _, extent := range changedAreas.ChangedArea {
 		totalsize += extent.Length
 	}
-	for _, extent := range changedAreas.ChangedArea {
-		blocks := getBlockStatus(handle, extent)
-		for _, block := range blocks {
-			err := copyRange(fd, handle, block)
-			if err != nil {
-				return fmt.Errorf("failed to copy block: %v", err)
-			}
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 16)
+	incrementalcopyprogress := make(chan int64)
+
+	// Goroutine for updating progress
+	go func() {
+		copiedsize := int64(0)
+		for progress := range incrementalcopyprogress {
+			copiedsize += progress
+			prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
+			log.Println(prog)
+			nbdserver.progresschan <- prog
 		}
-		copiedsize += extent.Length
-		prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
-		log.Println(prog)
-		nbdserver.progresschan <- prog
+	}()
+
+	for _, extent := range changedAreas.ChangedArea {
+		wg.Add(1)
+		go func(extent types.DiskChangeExtent) {
+			blocks := getBlockStatus(handle, extent)
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			for _, block := range blocks {
+				if err := copyRange(fd, handle, block); err != nil {
+					log.Printf("Failed to copy block: %v", err)
+				}
+			}
+			// check if context is cancelled
+			select {
+			case <-ctx.Done():
+				if _, ok := <-incrementalcopyprogress; ok {
+					close(incrementalcopyprogress)
+				}
+				return
+			case incrementalcopyprogress <- extent.Length:
+				wg.Done()
+			}
+		}(extent)
 	}
+	wg.Wait()
+	close(incrementalcopyprogress)
 	return nil
 }
 

@@ -285,7 +285,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to attach volume: %s", err)
 					}
-					err = nbdops[idx].CopyChangedBlocks(changedAreas, vminfo.VMDisks[idx].Path)
+					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
 					}
