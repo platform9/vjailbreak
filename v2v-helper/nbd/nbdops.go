@@ -105,6 +105,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		fmt.Sprintf("thumbprint=%s", thumbprint),
 		"compression=fastlz",
 		"config=/home/fedora/vddk.conf",
+		"transports=file:nbdssl:nbd",
 		fmt.Sprintf("vm=moref=%s", vm.Reference().Value),
 		// fmt.Sprintf("snapshot=%s", snapref),
 		file,
