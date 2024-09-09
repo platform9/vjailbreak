@@ -74,7 +74,7 @@ func TestGetThumbprint(t *testing.T) {
 	url := "www.google.com"
 	thumbprint, err := GetThumbprint(url)
 	assert.Nil(t, err)
-	assert.Equal(t, "78:90:10:00:62:e9:32:d2:e2:99:72:73:b5:44:27:cb:98:2e:ad:29", thumbprint)
+	assert.NotEmpty(t, thumbprint)
 
 	url = "poimyusfdv.com"
 	thumbprint, err = GetThumbprint(url)

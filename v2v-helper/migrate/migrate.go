@@ -261,7 +261,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 
 				if len(changedAreas.ChangedArea) == 0 {
-					log.Println("No changed blocks found. Skipping copy")
+					migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
 				} else {
 					migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
 
@@ -285,7 +285,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to attach volume: %s", err)
 					}
-					err = nbdops[idx].CopyChangedBlocks(changedAreas, vminfo.VMDisks[idx].Path)
+					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
 					}
@@ -300,7 +300,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > 20 {
-				log.Println("No more changes found. Shutting down source VM and performing final copy")
+				log.Println("Shutting down source VM and performing final copy")
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, fmt.Errorf("failed to start VM Cutover: %s", err)
 				}
@@ -370,13 +370,19 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	if vminfo.OSType == "linux" {
-		// Add Wildcard Netplan
-		log.Println("Adding wildcard netplan")
-		err := virtv2v.AddWildcardNetplan(path)
+		osRelease, err := virtv2v.GetOsRelease(path)
 		if err != nil {
-			return fmt.Errorf("failed to add wildcard netplan: %s", err)
+			return fmt.Errorf("failed to get os release: %s", err)
 		}
-		log.Println("Wildcard netplan added successfully")
+		if strings.Contains(osRelease, "ubuntu") {
+			// Add Wildcard Netplan
+			log.Println("Adding wildcard netplan")
+			err := virtv2v.AddWildcardNetplan(path)
+			if err != nil {
+				return fmt.Errorf("failed to add wildcard netplan: %s", err)
+			}
+			log.Println("Wildcard netplan added successfully")
+		}
 	}
 	err = migobj.DetachVolume(vminfo.VMDisks[0])
 	if err != nil {

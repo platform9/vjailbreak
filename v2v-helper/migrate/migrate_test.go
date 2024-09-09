@@ -226,7 +226,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 			Times(1),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).Times(1),
-		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, "/dev/sda").Return(nil).Times(1),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().WaitForVolume("id1").Return(nil).Times(1),
 		// Incremental Copy Disk 2
@@ -249,7 +249,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 			Times(1),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id2").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sda", nil).Times(1),
-		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, "/dev/sda").Return(nil).Times(1),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM("id2").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().WaitForVolume("id2").Return(nil).Times(1),
 		// 2. Only Disk 1 Changes
@@ -285,7 +285,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockNBD.EXPECT().StartNBDServer(&object.VirtualMachine{}, envURL, envUserName, envPassword, thumbprint, "migration-snap", "[ds1] test_vm/test_vm.vmdk", dummychan).Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).Times(1),
-		mockNBD.EXPECT().CopyChangedBlocks(changedAreasexample, "/dev/sda").Return(nil).Times(1),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().WaitForVolume("id1").Return(nil).Times(1),
 		// No copy for Disk 2
