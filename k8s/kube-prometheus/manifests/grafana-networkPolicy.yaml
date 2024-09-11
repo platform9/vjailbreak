@@ -13,6 +13,12 @@ spec:
   - {}
   ingress:
   - from:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - port: 3000
+      protocol: TCP
+  - from:
     - podSelector:
         matchLabels:
           app.kubernetes.io/name: prometheus
