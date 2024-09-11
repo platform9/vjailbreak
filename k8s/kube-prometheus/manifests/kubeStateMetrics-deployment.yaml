@@ -32,6 +32,40 @@ spec:
         - --port=8081
         - --telemetry-host=127.0.0.1
         - --telemetry-port=8082
+        - --custom-resource-state-config
+        -  |
+            spec:
+              resources:
+                - groupVersionKind:
+                    group: vjailbreak.k8s.pf9.io
+                    kind: "Migration"
+                    version: "v1alpha1"
+                  labelsFromPath:
+                    name:
+                    - metadata
+                    - name
+                    namespace:
+                    - metadata
+                    - namespace
+                  metricNamePrefix: migration
+                  metrics:
+                    - name: phase
+                      help: "Phase of the Migration resource"
+                      each:
+                        type: StateSet
+                        stateSet:
+                          labelName: phase
+                          path: [status, phase]
+                          list: [Pending, Running, Succeeded, Failed]
+                    - name: conditions
+                      help: "Conditions of the Migration resource"
+                      each:
+                        type: Gauge
+                        gauge:
+                          path: [status, conditions]
+                          labelsFromPath:
+                            type: ["type"]
+                          valueFrom: ["status"]
         image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.18.0
         name: kube-state-metrics
         resources:
