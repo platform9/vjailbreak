@@ -2,6 +2,809 @@ apiVersion: v1
 items:
 - apiVersion: v1
   data:
+    migration-overview.json: |-
+      {
+        "annotations": {
+          "list": [
+            {
+              "builtIn": 1,
+              "datasource": {
+                "type": "grafana",
+                "uid": "-- Grafana --"
+              },
+              "enable": true,
+              "hide": true,
+              "iconColor": "rgba(0, 211, 255, 1)",
+              "name": "Annotations & Alerts",
+              "type": "dashboard"
+            }
+          ]
+        },
+        "editable": true,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 0,
+        "links": [],
+        "panels": [
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 6,
+              "x": 0,
+              "y": 0
+            },
+            "id": 7,
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "percentChangeColorMode": "standard",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "P1809F7CD0C75ACF3"
+                },
+                "disableTextWrap": false,
+                "editorMode": "builder",
+                "expr": "sum(group by(name) (migration_phase))",
+                "fullMetaSearch": false,
+                "includeNullMetadata": true,
+                "instant": false,
+                "legendFormat": "__auto",
+                "range": true,
+                "refId": "A",
+                "useBackend": false
+              }
+            ],
+            "title": "Number Of Migrations",
+            "type": "stat"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "inspect": false
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "Validated": {
+                        "color": "green",
+                        "index": 0
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "DataCopy"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "applyToRow": false,
+                        "mode": "gradient",
+                        "type": "color-background"
+                      }
+                    },
+                    {
+                      "id": "thresholds",
+                      "value": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "color": "transparent",
+                            "value": null
+                          },
+                          {
+                            "color": "dark-red",
+                            "value": 0
+                          },
+                          {
+                            "color": "dark-green",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Migrated"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "applyToRow": false,
+                        "mode": "gradient",
+                        "type": "color-background"
+                      }
+                    },
+                    {
+                      "id": "thresholds",
+                      "value": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "color": "transparent",
+                            "value": null
+                          },
+                          {
+                            "color": "dark-red",
+                            "value": 0
+                          },
+                          {
+                            "color": "dark-green",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Validated"
+                  },
+                  "properties": [
+                    {
+                      "id": "thresholds",
+                      "value": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "color": "transparent",
+                            "value": null
+                          },
+                          {
+                            "color": "dark-red",
+                            "value": 0
+                          },
+                          {
+                            "color": "dark-green",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "applyToRow": false,
+                        "mode": "gradient",
+                        "type": "color-background"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 18,
+              "x": 6,
+              "y": 0
+            },
+            "id": 6,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "frameIndex": 1,
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "Migrated"
+                }
+              ]
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "P1809F7CD0C75ACF3"
+                },
+                "disableTextWrap": false,
+                "editorMode": "code",
+                "exemplar": false,
+                "expr": "migration_conditions",
+                "format": "table",
+                "fullMetaSearch": false,
+                "includeNullMetadata": true,
+                "instant": true,
+                "legendFormat": "{{name}}",
+                "range": false,
+                "refId": "A",
+                "useBackend": false
+              }
+            ],
+            "title": "Migrations Overview",
+            "transformations": [
+              {
+                "id": "groupBy",
+                "options": {
+                  "fields": {
+                    "Time": {
+                      "aggregations": []
+                    },
+                    "Value": {
+                      "aggregations": [],
+                      "operation": "groupby"
+                    },
+                    "name": {
+                      "aggregations": [],
+                      "operation": "groupby"
+                    },
+                    "type": {
+                      "aggregations": [],
+                      "operation": "groupby"
+                    }
+                  }
+                }
+              },
+              {
+                "id": "groupingToMatrix",
+                "options": {
+                  "columnField": "type",
+                  "emptyValue": "empty",
+                  "rowField": "name",
+                  "valueField": "Value"
+                }
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {},
+                  "includeByName": {},
+                  "indexByName": {
+                    "DataCopy": 2,
+                    "Migrated": 3,
+                    "Validated": 1,
+                    "name\\type": 0
+                  },
+                  "renameByName": {
+                    "Migrated": "",
+                    "Validated": "Credentials Validated",
+                    "name\\type": "Migration"
+                  }
+                }
+              }
+            ],
+            "type": "table"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "light-green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "none"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 6,
+              "x": 0,
+              "y": 7
+            },
+            "id": 4,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "$datasource"
+                },
+                "editorMode": "builder",
+                "exemplar": false,
+                "expr": "sum(migration_phase{phase=\"Pending\"})",
+                "format": "time_series",
+                "instant": true,
+                "intervalFactor": 2,
+                "legendFormat": "Succeeded",
+                "range": false,
+                "refId": "A"
+              }
+            ],
+            "title": "Migration Pending",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "none"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 6,
+              "x": 6,
+              "y": 7
+            },
+            "id": 5,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "$datasource"
+                },
+                "editorMode": "builder",
+                "exemplar": false,
+                "expr": "sum(migration_phase{phase=\"Running\"})",
+                "format": "time_series",
+                "instant": true,
+                "intervalFactor": 2,
+                "legendFormat": "Succeeded",
+                "range": false,
+                "refId": "A"
+              }
+            ],
+            "title": "Migration Running",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "dark-red",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "none"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 6,
+              "x": 12,
+              "y": 7
+            },
+            "id": 3,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "$datasource"
+                },
+                "editorMode": "code",
+                "exemplar": false,
+                "expr": "sum(migration_phase{phase=\"Failed\"})",
+                "format": "time_series",
+                "instant": true,
+                "intervalFactor": 2,
+                "legendFormat": "Succeeded",
+                "range": false,
+                "refId": "A"
+              }
+            ],
+            "title": "Migration Failed",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "rgba(50, 172, 45, 0.97)",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "none"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 7,
+              "w": 6,
+              "x": 18,
+              "y": 7
+            },
+            "id": 2,
+            "options": {
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto"
+            },
+            "pluginVersion": "11.2.0",
+            "targets": [
+              {
+                "datasource": {
+                  "uid": "$datasource"
+                },
+                "editorMode": "code",
+                "exemplar": false,
+                "expr": "sum(migration_phase{phase=\"Succeeded\"})",
+                "format": "time_series",
+                "instant": true,
+                "intervalFactor": 2,
+                "legendFormat": "Succeeded",
+                "range": false,
+                "refId": "A"
+              }
+            ],
+            "title": "Migration Succeeded",
+            "type": "gauge"
+          },
+          {
+            "datasource": {
+              "default": true,
+              "type": "prometheus",
+              "uid": "P1809F7CD0C75ACF3"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Failed"
+                  },
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {
+                        "fixedColor": "dark-red",
+                        "mode": "fixed"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Succeeded"
+                  },
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {
+                        "fixedColor": "dark-green",
+                        "mode": "fixed"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Pending"
+                  },
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {
+                        "fixedColor": "dark-yellow",
+                        "mode": "fixed"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Running"
+                  },
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {
+                        "fixedColor": "dark-blue",
+                        "mode": "fixed"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 24,
+              "x": 0,
+              "y": 14
+            },
+            "id": 1,
+            "options": {
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "P1809F7CD0C75ACF3"
+                },
+                "disableTextWrap": false,
+                "editorMode": "builder",
+                "exemplar": false,
+                "expr": "sum by(phase) (migration_phase)",
+                "fullMetaSearch": false,
+                "includeNullMetadata": true,
+                "instant": false,
+                "legendFormat": "{{phase}}",
+                "range": true,
+                "refId": "A",
+                "useBackend": false
+              }
+            ],
+            "title": "Migration History",
+            "type": "timeseries"
+          }
+        ],
+        "schemaVersion": 39,
+        "tags": [],
+        "templating": {
+          "list": []
+        },
+        "time": {
+          "from": "now-30m",
+          "to": "now"
+        },
+        "timepicker": {},
+        "timezone": "UTC",
+        "title": "Migration Dashboard",
+        "uid": "edxirq247bdhca",
+        "version": 1,
+        "weekStart": ""
+      }
+  kind: ConfigMap
+  metadata:
+    labels:
+      app.kubernetes.io/component: grafana
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/part-of: kube-prometheus
+      app.kubernetes.io/version: 11.2.0
+    name: grafana-dashboard-migration-overview
+    namespace: monitoring
+- apiVersion: v1
+  data:
     alertmanager-overview.json: |-
       {
           "__inputs": [
