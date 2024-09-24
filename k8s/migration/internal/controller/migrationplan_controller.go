@@ -84,11 +84,6 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
-	// Validate Time Field
-	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
-		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
-	}
-
 	if err := r.Get(ctx, req.NamespacedName, migrationplan); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.ctxlog.Info("Received ignorable event for a recently deleted MigrationPlan.")
@@ -96,6 +91,11 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		r.ctxlog.Error(err, fmt.Sprintf("Unexpected error reading MigrationPlan '%s' object", migrationplan.Name))
 		return ctrl.Result{}, err
+	}
+
+	// Validate Time Field
+	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
+		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion or not

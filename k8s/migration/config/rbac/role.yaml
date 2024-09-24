@@ -95,9 +95,27 @@ rules:
   resources:
   - migrationtemplates
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - migrationtemplates/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - migrationtemplates/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:

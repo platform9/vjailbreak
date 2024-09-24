@@ -214,6 +214,68 @@ func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCre
 	return datastores, nil
 }
 
+func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
+	c, err := validateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get all the vms
+	vms, err := finder.VirtualMachineList(ctx, "*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vms: %w", err)
+	}
+	var vminfo []vjailbreakv1alpha1.VMInfo
+	for _, vm := range vms {
+		var vmProps mo.VirtualMachine
+		err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get VM properties: %w", err)
+		}
+		var datastores []string
+		var networks []string
+		var ds mo.Datastore
+		var dsref types.ManagedObjectReference
+		for _, device := range vmProps.Config.Hardware.Device {
+			switch dev := device.(type) {
+			case *types.VirtualE1000e:
+				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			case *types.VirtualVmxnet3:
+				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			case *types.VirtualDisk:
+				switch backing := device.GetVirtualDevice().Backing.(type) {
+				case *types.VirtualDiskFlatVer2BackingInfo:
+					dsref = backing.Datastore.Reference()
+				case *types.VirtualDiskSparseVer2BackingInfo:
+					dsref = backing.Datastore.Reference()
+				case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+					dsref = backing.Datastore.Reference()
+				default:
+					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
+				}
+				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get datastore: %w", err)
+				}
+				datastores = append(datastores, ds.Name)
+			}
+		}
+		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
+			Name:       vmProps.Config.Name,
+			Datastores: datastores,
+			Networks:   networks,
+		})
+	}
+
+	return vminfo, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *VMwareCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
