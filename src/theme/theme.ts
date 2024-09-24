@@ -1,18 +1,29 @@
+import { grey } from "@mui/material/colors"
 import { createTheme } from "@mui/material/styles"
+import customTypography from "./typography"
 
 const theme = createTheme({
+  spacing: 8,
   palette: {
-    primary: {
-      main: "#1976d2",
-    },
     secondary: {
-      main: "#f50057",
+      main: "#444f5f",
     },
     background: {
-      default: "#E6E7EA",
+      default: grey[50],
     },
   },
-  spacing: 8,
+  typography: {
+    ...customTypography,
+  },
+  components: {
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          backgroundColor: grey[200],
+        },
+      },
+    },
+  },
 })
 
 export default theme

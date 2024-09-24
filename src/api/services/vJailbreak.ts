@@ -1,4 +1,25 @@
 import config from "app-config"
+import {
+  GetMigrationPlansList,
+  MigrationPlan,
+} from "src/data/migration-plan/model"
+import {
+  GetMigrationTemplatesList,
+  MigrationTemplate,
+} from "src/data/migration-templates/model"
+import {
+  GetNetworkMappingsList,
+  NetworkMapping,
+} from "src/data/network-mappings/model"
+import {
+  GetOpenstackCredsList,
+  OpenstackCreds,
+} from "src/data/openstack-creds/model"
+import {
+  GetStorageMappingsList,
+  StorageMapping,
+} from "src/data/storage-mappings/model"
+import { GetVMWareCredsList, VMwareCreds } from "src/data/vmware-creds/model"
 import ApiService from "./ApiService"
 
 class vJailbreak extends ApiService {
@@ -11,6 +32,14 @@ class vJailbreak extends ApiService {
   }
 
   get baseEndpoint() {
+    if (
+      import.meta.env.MODE === "production" &&
+      !!import.meta.env.VITE_API_PORT
+    ) {
+      return `${
+        import.meta.env.VITE_API_PORT
+      }/apis/vjailbreak.k8s.pf9.io/v1alpha1`
+    }
     return "/apis/vjailbreak.k8s.pf9.io/v1alpha1"
   }
 
@@ -18,28 +47,28 @@ class vJailbreak extends ApiService {
     return "migration-system"
   }
 
-  getOpenstackCredentials = async (
-    openstackCredsName,
-    namespace = this.defaultNamespace
-  ) => {
-    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/openstackcreds/${openstackCredsName}`
-    const response = await this.client.get({
+  getOpenstackCredentialsList = async (namespace = this.defaultNamespace) => {
+    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/openstackcreds`
+    const response = await this.client.get<GetOpenstackCredsList>({
       endpoint,
       options: {
         clsName: this.getClassName(),
-        mthdName: "getOpenstackCredentials",
+        mthdName: "getOpenstackCredentialsList",
       },
     })
     return response
   }
 
-  getOpenstackCredentialsList = async (namespace = this.defaultNamespace) => {
-    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/openstackcreds`
-    const response = await this.client.get({
+  getOpenstackCredentials = async (
+    openstackCredsName,
+    namespace = this.defaultNamespace
+  ) => {
+    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/openstackcreds/${openstackCredsName}`
+    const response = await this.client.get<OpenstackCreds>({
       endpoint,
       options: {
         clsName: this.getClassName(),
-        mthdName: "getOpenstackCredentialsList",
+        mthdName: "getOpenstackCredentials",
       },
     })
     return response
@@ -50,7 +79,7 @@ class vJailbreak extends ApiService {
     namespace = this.defaultNamespace
   ) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/openstackcreds`
-    const response = await this.client.post({
+    const response = await this.client.post<OpenstackCreds>({
       endpoint,
       body,
       options: {
@@ -61,25 +90,10 @@ class vJailbreak extends ApiService {
     return response
   }
 
-  getVmwareCredentials = async (
-    vmwareCredsName,
-    namespace = this.defaultNamespace
-  ) => {
-    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/vmwarecreds/${vmwareCredsName}`
-    const response = await this.client.get({
-      endpoint,
-      options: {
-        clsName: this.getClassName(),
-        mthdName: "getVmwareCredentials",
-      },
-    })
-    return response
-  }
-
   getVmwareCredentialsList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/vmwarecreds`
     const baseUrl = window.location.hostname
-    const response = await this.client.get({
+    const response = await this.client.get<GetVMWareCredsList>({
       endpoint,
       baseUrl,
       options: {
@@ -90,9 +104,24 @@ class vJailbreak extends ApiService {
     return response
   }
 
+  getVmwareCredentials = async (
+    vmwareCredsName,
+    namespace = this.defaultNamespace
+  ) => {
+    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/vmwarecreds/${vmwareCredsName}`
+    const response = await this.client.get<VMwareCreds>({
+      endpoint,
+      options: {
+        clsName: this.getClassName(),
+        mthdName: "getVmwareCredentials",
+      },
+    })
+    return response
+  }
+
   createVmwareCredentials = async (body, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/vmwarecreds`
-    const response = await this.client.post({
+    const response = await this.client.post<VMwareCreds>({
       endpoint,
       body,
       options: {
@@ -108,7 +137,7 @@ class vJailbreak extends ApiService {
     namespace = this.defaultNamespace
   ) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/networkmappings/${networkMappingName}`
-    const response = await this.client.get({
+    const response = await this.client.get<NetworkMapping>({
       endpoint,
       options: {
         clsName: this.getClassName(),
@@ -121,7 +150,7 @@ class vJailbreak extends ApiService {
   getNetworkMappingList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/networkmappings`
     const baseUrl = window.location.hostname
-    const response = await this.client.get({
+    const response = await this.client.get<GetNetworkMappingsList>({
       endpoint,
       baseUrl,
       options: {
@@ -134,7 +163,7 @@ class vJailbreak extends ApiService {
 
   createNetworkMapping = async (body, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/networkmappings`
-    const response = await this.client.post({
+    const response = await this.client.post<NetworkMapping>({
       endpoint,
       body,
       options: {
@@ -150,7 +179,7 @@ class vJailbreak extends ApiService {
     namespace = this.defaultNamespace
   ) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/storagemappings/${storageMappingName}`
-    const response = await this.client.get({
+    const response = await this.client.get<StorageMapping>({
       endpoint,
       options: {
         clsName: this.getClassName(),
@@ -163,7 +192,7 @@ class vJailbreak extends ApiService {
   getStorageMappingList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/storagemappings`
     const baseUrl = window.location.hostname
-    const response = await this.client.get({
+    const response = await this.client.get<GetStorageMappingsList>({
       endpoint,
       baseUrl,
       options: {
@@ -176,7 +205,7 @@ class vJailbreak extends ApiService {
 
   createStorageMapping = async (body, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/storagemappings`
-    const response = await this.client.post({
+    const response = await this.client.post<StorageMapping>({
       endpoint,
       body,
       options: {
@@ -187,24 +216,9 @@ class vJailbreak extends ApiService {
     return response
   }
 
-  getMigrationTemplate = async (
-    templateName,
-    namespace = this.defaultNamespace
-  ) => {
-    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationtemplates/${templateName}`
-    const response = await this.client.get({
-      endpoint,
-      options: {
-        clsName: this.getClassName(),
-        mthdName: "getMigrationTemplate",
-      },
-    })
-    return response
-  }
-
   getMigrationTemplateList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationtemplates`
-    const response = await this.client.get({
+    const response = await this.client.get<GetMigrationTemplatesList>({
       endpoint,
       options: {
         clsName: this.getClassName(),
@@ -214,9 +228,24 @@ class vJailbreak extends ApiService {
     return response
   }
 
+  getMigrationTemplate = async (
+    templateName,
+    namespace = this.defaultNamespace
+  ) => {
+    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationtemplates/${templateName}`
+    const response = await this.client.get<MigrationTemplate>({
+      endpoint,
+      options: {
+        clsName: this.getClassName(),
+        mthdName: "getMigrationTemplate",
+      },
+    })
+    return response
+  }
+
   createMigrationTemplate = async (body, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationtemplates`
-    const response = await this.client.post({
+    const response = await this.client.post<MigrationTemplate>({
       endpoint,
       body,
       options: {
@@ -227,9 +256,31 @@ class vJailbreak extends ApiService {
     return response
   }
 
+  updateMigrationTemplate = async (
+    templateName,
+    body,
+    namespace = this.defaultNamespace
+  ) => {
+    const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationtemplates/${templateName}`
+    const response = await this.client.patch<MigrationTemplate>({
+      endpoint,
+      body,
+      options: {
+        clsName: this.getClassName(),
+        mthdName: "updateMigrationTemplate",
+        config: {
+          headers: {
+            "Content-Type": "application/merge-patch+json",
+          },
+        },
+      },
+    })
+    return response
+  }
+
   getMigrationPlan = async (planName, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationplans/${planName}`
-    const response = await this.client.get({
+    const response = await this.client.get<MigrationPlan>({
       endpoint,
       options: {
         clsName: this.getClassName(),
@@ -241,7 +292,7 @@ class vJailbreak extends ApiService {
 
   getMigrationPlanList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationplans`
-    const response = await this.client.get({
+    const response = await this.client.get<GetMigrationPlansList>({
       endpoint,
       options: {
         clsName: this.getClassName(),
@@ -253,7 +304,7 @@ class vJailbreak extends ApiService {
 
   createMigrationPlan = async (body, namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrationplans`
-    const response = await this.client.post({
+    const response = await this.client.post<MigrationPlan>({
       endpoint,
       body,
       options: {

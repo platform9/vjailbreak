@@ -1,14 +1,11 @@
 import ApiClient from "../ApiClient"
 
 abstract class ApiService {
-  private readonly className: string
   protected apiEndpoint: string = ""
   public abstract getClassName(): string
   protected abstract getEndpoint(): Promise<string>
 
-  constructor(protected client: ApiClient) {
-    this.className = this.getClassName()
-  }
+  constructor(protected client: ApiClient) {}
 
   async initialize(): Promise<string> {
     this.apiEndpoint = await this.getEndpoint()

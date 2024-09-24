@@ -17,7 +17,7 @@ class ApiClient {
   private readonly axiosInstance: AxiosInstance
   private static instance: ApiClient
   private apiServices: { [key: string]: ApiService } = {}
-  private token = null
+  private token = ""
 
   // Define API Services here
   public vjailbreak: vJailbreakService
@@ -49,6 +49,8 @@ class ApiClient {
       },
     })
 
+    this.token = import.meta.env.VITE_API_TOKEN
+
     // Add API Services here
     this.vjailbreak = this.addApiService(new vJailbreakService(this))
   }
@@ -58,9 +60,16 @@ class ApiClient {
     return apiClientInstance
   }
 
+  setToken = (token) => {
+    this.token = token
+  }
+
+  getToken = () => {
+    return this.token
+  }
+
   getAuthHeaders = () => {
     if (!this.token) {
-      //   console.warn('Auth token not initialized')
       return {}
     }
 

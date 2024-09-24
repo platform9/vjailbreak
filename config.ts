@@ -13,7 +13,8 @@ const config = {
   },
   development: {
     // For development, use the specific backend URL for the local environment.
-    apiHost: "http://localhost:3000",
+    apiHost:
+      "https://spot.rackspace.com/apis/ngpc.rxt.io/v1/namespaces/org_D6clXT3Lim42oPwu/cloudspaces/vjailbreak/proxy",
   },
 }
 
