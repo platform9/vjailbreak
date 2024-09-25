@@ -3,7 +3,7 @@ import ApiClient from "../ApiClient"
 abstract class ApiService {
   protected apiEndpoint: string = ""
   public abstract getClassName(): string
-  protected abstract getEndpoint(): Promise<string>
+  protected abstract getEndpoint(): string
 
   constructor(protected client: ApiClient) {}
 

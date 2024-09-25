@@ -27,19 +27,17 @@ class vJailbreak extends ApiService {
     return "vJailbreak"
   }
 
-  protected async getEndpoint() {
-    return Promise.resolve(config.apiHost)
+  protected getEndpoint() {
+    const isProductionMode = import.meta.env.MODE === "production"
+    const port = import.meta.env.VITE_API_PORT
+    const host = config.apiHost
+    if (isProductionMode && port) {
+      return `${host}:${port}`
+    }
+    return host
   }
 
   get baseEndpoint() {
-    if (
-      import.meta.env.MODE === "production" &&
-      !!import.meta.env.VITE_API_PORT
-    ) {
-      return `${
-        import.meta.env.VITE_API_PORT
-      }/apis/vjailbreak.k8s.pf9.io/v1alpha1`
-    }
     return "/apis/vjailbreak.k8s.pf9.io/v1alpha1"
   }
 
