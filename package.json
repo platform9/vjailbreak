@@ -8,9 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "docker:build": "docker build -t vjailbreak:${TAG:-latest} -f ./Dockerfile .",
-    "docker:push": "docker push vjailbreak:${TAG:-latest}",
-    "docker:run": "docker run -p 3000:80 vjailbreak:${TAG:-latest}"
+    "docker:build": "docker build -t vjailbreak -f ./Dockerfile ."
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",
