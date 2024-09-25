@@ -1,42 +1,43 @@
 # vJailbreak UI
 
-# Getting started
+## Getting Started
 
-**Dependencies**
+### Prerequisites
 
-- Node 18
-- yarn 
-- [vJailbreak v2v-helper](https://github.com/platform9/vjailbreak)
+Make sure you have the following installed before getting started:
 
-## Running the app locally for development
+- **Node.js** version 18
+- **Yarn** for package management
+- **[vJailbreak v2v-helper](https://github.com/platform9/vjailbreak)** for backend services
 
-***Initializing the App***
+## Running the App
 
-`yarn`
+### Setting Environment Variables
 
-***Create a custom config***
+Before running the app in **any environment** (development or production), the following environment variables must be set:
 
-`cp config.example.js config.js`
+- **VITE_API_TOKEN**: The API token for authentication.
+- **VITE_API_PORT**: The port number for the API (optional, defaults to 6443).
+- **VITE_API_HOST**: For development only. Specify this if you're developing against a backend with a different domain.
 
-`config.js` is already specified in the .gitignore.
+These variables are necessary for the app to function correctly.
 
-To have the API calls go to a dev server, you can edit the `apiHost` property in `config.js` with the URL like: 
+### Running the App in Development Mode
 
-```apiHost: 'https://dev-server.com'```
+To start the app locally in development mode:
 
-Unless you override the `MODE` environment variable it will look under the `development` section of `config.js`.
+1. Install dependencies:
+   ```yarn```
+  
+2. Run the dev server:
+  ```yarn dev```
+  
+3. Load the UI in your browser at ```http://localhost:3000```
 
-To run the app:
-
-`yarn dev`
-
-Load the UI in your browser at `localhost:3000` as the browser URL.
-
-
-## Building the Docker Image
+# Dockerizing the App
 
 To build the Docker image, run:
 
-`yarn docker:build`
+```yarn docker:build```
 
-The image will be tagged as `vjailbreak:latest`
+The resulting image will be tagged as ```vjailbreak:latest```
