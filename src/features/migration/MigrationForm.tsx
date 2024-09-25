@@ -277,7 +277,7 @@ export default function MigrationFormDrawer({
     const updatedMigrationTemplateResource = await updateMigrationTemplate(
       templateName,
       {
-        metadata: {
+        spec: {
           networkMapping: networkMappingsResource.metadata.name,
           storageMapping: storageMappingsResource.metadata.name,
         },

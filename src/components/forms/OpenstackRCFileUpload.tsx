@@ -104,12 +104,7 @@ export default function OpenstackRCFileUploader({
           />
           <Button variant="contained" component="label" color="primary">
             Choose File
-            <input
-              type="file"
-              accept=".sh"
-              hidden
-              onChange={handleFileChange}
-            />
+            <input type="file" hidden onChange={handleFileChange} />
           </Button>
         </Box>
         <FormHelperText error={!!error}>{error}</FormHelperText>

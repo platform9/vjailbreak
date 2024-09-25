@@ -15,7 +15,6 @@ COPY src ./src
 COPY index.html .
 COPY public .
 COPY vite* .
-COPY config.example.ts ./config.ts
 copy tsconfig.json .
 
 RUN yarn build
