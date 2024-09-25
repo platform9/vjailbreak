@@ -1,50 +1,43 @@
-# React + TypeScript + Vite
+# vJailbreak UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Getting started
 
-Currently, two official plugins are available:
+**Dependencies**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node 18
+- yarn 
+- [vJailbreak v2v-helper](https://github.com/platform9/vjailbreak)
 
-## Expanding the ESLint configuration
+**Initializing the App**
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+`yarn`
 
-- Configure the top-level `parserOptions` property like this:
+**Create a custom config**
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+`cp config.example.js config.js`
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+`config.js` is already specified in the .gitignore.
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+**Targeting a development server**
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+To have the API calls go to a dev server, you can edit the `apiHost` property in `config.js` with the URL like: 
+
+```apiHost: 'https://dev-server.com```
+
+Unless you override the `NODE_ENV` environment variable it will look under the `development` section of `config.js`.
+
+
+**Hosting the App Locally**
+
+`yarn dev`
+
+Load the UI in your browser at `localhost:3000` as the browser URL.
+
+
+## Building the Docker Image
+
+To build the Docker image, run:
+
+`yarn docker:build`
+
+The image will be tagged as `vjailbreak:latest`
