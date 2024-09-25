@@ -28,11 +28,10 @@ class vJailbreak extends ApiService {
 
   getApiHost() {
     const isDevMode = import.meta.env.MODE === "development"
-    const port = import.meta.env.VITE_API_PORT
     if (isDevMode) {
       return import.meta.env.VITE_API_HOST
     }
-    return `http://${window.location.hostname}:${port}`
+    return ""
   }
 
   get baseEndpoint() {

@@ -1,12 +1,6 @@
 # Use an official Node.js runtime as the base image
 FROM node:18 as builder
 
-# Define build arguments for environment variables
-ARG VITE_API_PORT=6443
-
-# Set environment variables during the build process
-ENV VITE_API_PORT=$VITE_API_PORT
-
 # Set the working directory in the container
 WORKDIR /usr/src/app
 

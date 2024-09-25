@@ -17,7 +17,6 @@ Make sure you have the following installed before getting started:
 Before running the app in **any environment** (development or production), the following environment variables must be set:
 
 - **VITE_API_TOKEN**: The API token for authentication.
-- **VITE_API_PORT**: The port number for the API (optional, defaults to 6443).
 - **VITE_API_HOST**: For development only. Specify this if you're developing against a backend with a different domain.
 
 These variables are necessary for the app to function correctly.
@@ -27,17 +26,17 @@ These variables are necessary for the app to function correctly.
 To start the app locally in development mode:
 
 1. Install dependencies:
-   ```yarn```
-  
+   `yarn`
+
 2. Run the dev server:
-  ```yarn dev```
-  
-3. Load the UI in your browser at ```http://localhost:3000```
+   `yarn dev`
+
+3. Load the UI in your browser at `http://localhost:3000`
 
 # Dockerizing the App
 
 To build the Docker image, run:
 
-```yarn docker:build```
+`yarn docker:build`
 
-The resulting image will be tagged as ```vjailbreak:latest```
+The resulting image will be tagged as `vjailbreak:latest`
