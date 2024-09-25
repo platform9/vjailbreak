@@ -79,21 +79,21 @@ class ApiClient {
     return { headers }
   }
 
-  async getBaseUrl(clsName) {
-    return this.apiServices[clsName].getApiEndpoint()
+  async getApiHost(clsName) {
+    return this.apiServices[clsName].getApiHost()
   }
 
   get = async <T>({
     endpoint,
-    baseUrl = undefined,
+    apiHost = undefined,
     params = undefined,
     options: { clsName, mthdName },
   }: IBasicRequestGetParams) => {
-    if (!baseUrl) {
-      baseUrl = await this.getBaseUrl(clsName)
+    if (!apiHost) {
+      apiHost = await this.getApiHost(clsName)
     }
     const response = await this.axiosInstance.get<T>(
-      pathJoin(baseUrl, endpoint),
+      pathJoin(apiHost, endpoint),
       {
         params,
         ...this.getAuthHeaders(),
@@ -105,15 +105,16 @@ class ApiClient {
 
   post = async <T>({
     endpoint,
-    baseUrl = undefined,
+    apiHost = undefined,
     body = undefined,
     options: { clsName, mthdName },
   }: IBasicRequestPostParams) => {
-    if (!baseUrl) {
-      baseUrl = await this.getBaseUrl(clsName)
+    if (!apiHost) {
+      apiHost = await this.getApiHost(clsName)
     }
+    console.log(pathJoin(apiHost, endpoint))
     const response = await this.axiosInstance.post<T>(
-      pathJoin(baseUrl, endpoint),
+      pathJoin(apiHost, endpoint),
       body,
       {
         ...this.getAuthHeaders(),
@@ -125,15 +126,15 @@ class ApiClient {
 
   patch = async <T>({
     endpoint,
-    baseUrl = undefined,
+    apiHost = undefined,
     body = undefined,
     options: { clsName, mthdName, config = {} },
   }: IBasicRequestPostParams) => {
-    if (!baseUrl) {
-      baseUrl = await this.getBaseUrl(clsName)
+    if (!apiHost) {
+      apiHost = await this.getApiHost(clsName)
     }
     const response = await this.axiosInstance.patch<T>(
-      pathJoin(baseUrl, endpoint),
+      pathJoin(apiHost, endpoint),
       body,
       mergeDeepLeft(this.getAuthHeaders(), {
         ...(config || {}),
@@ -145,15 +146,15 @@ class ApiClient {
 
   put = async <T>({
     endpoint,
-    baseUrl = undefined,
+    apiHost = undefined,
     body = undefined,
     options: { clsName, mthdName },
   }: IBasicRequestPostParams) => {
-    if (!baseUrl) {
-      baseUrl = await this.getBaseUrl(clsName)
+    if (!apiHost) {
+      apiHost = await this.getApiHost(clsName)
     }
     const response = await this.axiosInstance.put<T>(
-      pathJoin(baseUrl, endpoint),
+      pathJoin(apiHost, endpoint),
       body,
       {
         ...this.getAuthHeaders(),
@@ -165,15 +166,15 @@ class ApiClient {
 
   delete = async <T>({
     endpoint,
-    baseUrl = undefined,
+    apiHost = undefined,
     options: { clsName, mthdName },
     data = undefined,
   }: IBasicRequestDeleteParams) => {
-    if (!baseUrl) {
-      baseUrl = await this.getBaseUrl(clsName)
+    if (!apiHost) {
+      apiHost = await this.getApiHost(clsName)
     }
     const response = await this.axiosInstance.delete<T>(
-      pathJoin(baseUrl, endpoint),
+      pathJoin(apiHost, endpoint),
       {
         ...this.getAuthHeaders(),
         data,

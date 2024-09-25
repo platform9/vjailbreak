@@ -10,7 +10,7 @@ export interface IBasicRequestGetParams {
   endpoint: string
   version?: string
   params?: AxiosRequestConfig["params"]
-  baseUrl?: string
+  apiHost?: string
   config?: AxiosRequestConfig
   options: IRequestOptions
 }
@@ -19,7 +19,7 @@ export interface IBasicRequestPostParams {
   endpoint: string
   version?: string
   body?: unknown
-  baseUrl?: string
+  apiHost?: string
   config?: AxiosRequestConfig
   options: IRequestOptions
 }
@@ -29,7 +29,7 @@ export interface IBasicRequestDeleteParams {
   version?: string
   params?: AxiosRequestConfig["params"]
   data?: AxiosRequestConfig["data"]
-  baseUrl?: string
+  apiHost?: string
   config?: AxiosRequestConfig
   options: IRequestOptions
 }

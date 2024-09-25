@@ -1,4 +1,3 @@
-import config from "app-config"
 import {
   GetMigrationPlansList,
   MigrationPlan,
@@ -27,14 +26,13 @@ class vJailbreak extends ApiService {
     return "vJailbreak"
   }
 
-  protected getEndpoint() {
-    const isProductionMode = import.meta.env.MODE === "production"
+  getApiHost() {
+    const isDevMode = import.meta.env.MODE === "development"
     const port = import.meta.env.VITE_API_PORT
-    const host = config.apiHost
-    if (isProductionMode && port) {
-      return `${host}:${port}`
+    if (isDevMode) {
+      return import.meta.env.VITE_API_HOST
     }
-    return host
+    return `http://${window.location.hostname}:${port}`
   }
 
   get baseEndpoint() {
@@ -90,10 +88,8 @@ class vJailbreak extends ApiService {
 
   getVmwareCredentialsList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/vmwarecreds`
-    const baseUrl = window.location.hostname
     const response = await this.client.get<GetVMWareCredsList>({
       endpoint,
-      baseUrl,
       options: {
         clsName: this.getClassName(),
         mthdName: "getVmwareCredentialsList",
@@ -147,10 +143,8 @@ class vJailbreak extends ApiService {
 
   getNetworkMappingList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/networkmappings`
-    const baseUrl = window.location.hostname
     const response = await this.client.get<GetNetworkMappingsList>({
       endpoint,
-      baseUrl,
       options: {
         clsName: this.getClassName(),
         mthdName: "getNetworkMappingList",
@@ -189,10 +183,8 @@ class vJailbreak extends ApiService {
 
   getStorageMappingList = async (namespace = this.defaultNamespace) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/storagemappings`
-    const baseUrl = window.location.hostname
     const response = await this.client.get<GetStorageMappingsList>({
       endpoint,
-      baseUrl,
       options: {
         clsName: this.getClassName(),
         mthdName: "getStorageMappingList",

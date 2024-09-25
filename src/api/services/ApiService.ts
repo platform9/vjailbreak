@@ -1,20 +1,20 @@
 import ApiClient from "../ApiClient"
 
 abstract class ApiService {
-  protected apiEndpoint: string = ""
+  protected apiHost: string = ""
   public abstract getClassName(): string
-  protected abstract getEndpoint(): string
+  abstract getApiHost(): string
 
   constructor(protected client: ApiClient) {}
 
   async initialize(): Promise<string> {
-    this.apiEndpoint = await this.getEndpoint()
-    return this.apiEndpoint
+    this.apiHost = await this.getApiHost()
+    return this.apiHost
   }
 
   async getApiEndpoint(): Promise<string> {
-    if (this.apiEndpoint) {
-      return this.apiEndpoint
+    if (this.apiHost) {
+      return this.apiHost
     }
     return this.initialize()
   }
