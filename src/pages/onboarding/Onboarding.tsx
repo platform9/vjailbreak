@@ -7,6 +7,14 @@ import { useState } from "react"
 import MigrationFormDrawer from "../../features/migration/MigrationForm"
 import GuidesList from "./GuidesList"
 
+const OnboardingContainer = styled("div")({
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  height: "100%",
+  width: "100%",
+})
+
 const Container = styled("div")(({ theme }) => ({
   display: "grid",
   alignItems: "center",
@@ -56,7 +64,7 @@ export default function Onboarding() {
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
 
   return (
-    <div>
+    <OnboardingContainer>
       {openMigrationForm && (
         <MigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
       )}
@@ -91,6 +99,6 @@ export default function Onboarding() {
           />
         </InfoSection>
       </Container>
-    </div>
+    </OnboardingContainer>
   )
 }

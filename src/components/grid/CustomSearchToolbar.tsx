@@ -1,17 +1,19 @@
-import { Box } from "@mui/material"
+import { Box, Typography } from "@mui/material"
 import { GridToolbarQuickFilter } from "@mui/x-data-grid"
 
-const CustomSearchToolbar = () => {
+const CustomSearchToolbar = ({ title }) => {
   return (
     <Box
       sx={{
         p: 1,
         display: "flex",
-        justifyContent: "flex-end",
         alignItems: "center",
+        marginLeft: 2,
+        marginRight: 2,
       }}
     >
-      <GridToolbarQuickFilter />
+      {title && <Typography variant="h6">{title}</Typography>}
+      <GridToolbarQuickFilter sx={{ marginLeft: "auto" }} />
     </Box>
   )
 }

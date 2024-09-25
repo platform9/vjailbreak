@@ -1,6 +1,7 @@
 import { Box, Drawer, styled } from "@mui/material"
 import { flatten, uniq } from "ramda"
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { createMigrationPlan } from "src/data/migration-plan/actions"
 import {
   createMigrationTemplate,
@@ -68,6 +69,7 @@ export default function MigrationFormDrawer({
   open,
   onClose,
 }: MigrationFormDrawerProps) {
+  const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
   const { params: errors, getParamsUpdater: getErrorsUpdater } =
     useParams<Errors>({})
@@ -290,8 +292,8 @@ export default function MigrationFormDrawer({
     })
 
     if (!isNilOrEmpty(migrationPlanResource)) {
-      // TODO: Route to list page
-      onClose()
+      navigate("/dashboard")
+      window.location.reload()
     }
   }
 
