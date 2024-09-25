@@ -8,26 +8,25 @@
 - yarn 
 - [vJailbreak v2v-helper](https://github.com/platform9/vjailbreak)
 
-**Initializing the App**
+## Running the app locally for development
+
+***Initializing the App***
 
 `yarn`
 
-**Create a custom config**
+***Create a custom config***
 
 `cp config.example.js config.js`
 
 `config.js` is already specified in the .gitignore.
 
-**Targeting a development server**
-
 To have the API calls go to a dev server, you can edit the `apiHost` property in `config.js` with the URL like: 
 
-```apiHost: 'https://dev-server.com```
+```apiHost: 'https://dev-server.com'```
 
-Unless you override the `NODE_ENV` environment variable it will look under the `development` section of `config.js`.
+Unless you override the `MODE` environment variable it will look under the `development` section of `config.js`.
 
-
-**Hosting the App Locally**
+To run the app:
 
 `yarn dev`
 
