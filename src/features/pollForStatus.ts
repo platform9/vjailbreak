@@ -27,7 +27,7 @@ export const pollForStatus = <T extends Resource>({
   if (!resource?.metadata?.name) return
 
   // Timeout after 30 seconds
-  const timeoutDuration = 10000
+  const timeoutDuration = 30000
 
   // Set up timeout to stop polling after 30 seconds
   const timeoutId = setTimeout(() => {
