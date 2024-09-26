@@ -72,7 +72,7 @@ export default function Dashboard() {
       setMigrations(data?.items || [])
     } catch (error) {
       console.error("Error getting MigrationsList", { error })
-      return []
+      setMigrations([])
     }
   }
 
@@ -84,7 +84,7 @@ export default function Dashboard() {
     if (migrations !== null && migrations.length === 0) {
       navigate("/onboarding")
     }
-  }, [migrations])
+  }, [migrations, navigate])
 
   useInterval(() => {
     getMigrations()

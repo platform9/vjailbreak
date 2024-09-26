@@ -42,7 +42,7 @@ function App() {
       setMigrations(data?.items || [])
     } catch (error) {
       console.error("Error getting MigrationsList", { error })
-      return []
+      return setMigrations([])
     }
   }
 
