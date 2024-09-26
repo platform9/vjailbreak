@@ -1,6 +1,10 @@
 import { v4 as uuidv4 } from "uuid"
 export const createMigrationTemplateJson = (params) => {
-  const { name, namespace = "migration-system", networks = [] } = params || {}
+  const {
+    name,
+    namespace = "migration-system",
+    networkMappings = [],
+  } = params || {}
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
     kind: "NetworkMapping",
@@ -9,7 +13,7 @@ export const createMigrationTemplateJson = (params) => {
       namespace: namespace,
     },
     spec: {
-      networks,
+      networks: networkMappings,
     },
   }
 }
