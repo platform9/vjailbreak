@@ -1,7 +1,11 @@
 import { Box, Typography } from "@mui/material"
 import { GridToolbarQuickFilter } from "@mui/x-data-grid"
 
-const CustomSearchToolbar = ({ title }) => {
+interface CustomSearchToolbarProps {
+  title?: string
+}
+
+const CustomSearchToolbar = ({ title }: CustomSearchToolbarProps) => {
   return (
     <Box
       sx={{
