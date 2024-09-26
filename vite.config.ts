@@ -15,6 +15,7 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  base: '/',
   resolve: {
     alias: {
       "app-config": path.resolve(__dirname, "config.ts"),

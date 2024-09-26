@@ -28,6 +28,9 @@ COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
 # Copy the public directory
 COPY public /usr/share/nginx/html
 
+# Copy the Nginx configuration file
+COPY default.conf /etc/nginx/conf.d/
+
 # Expose port
 EXPOSE 3000
 
