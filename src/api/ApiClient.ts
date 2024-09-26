@@ -112,7 +112,7 @@ class ApiClient {
     if (!apiHost) {
       apiHost = await this.getApiHost(clsName)
     }
-    console.log(pathJoin(apiHost, endpoint))
+
     const response = await this.axiosInstance.post<T>(
       pathJoin(apiHost, endpoint),
       body,

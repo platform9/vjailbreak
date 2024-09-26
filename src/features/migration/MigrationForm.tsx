@@ -43,11 +43,6 @@ const DrawerContent = styled("div")(({ theme }) => ({
   padding: theme.spacing(4, 6, 4, 4),
 }))
 
-interface MigrationFormDrawerProps {
-  open: boolean
-  onClose: () => void
-}
-
 interface FormValues extends Record<string, unknown> {
   vmwareCreds?: {
     vcenterHost: string
@@ -65,9 +60,16 @@ const defaultValues: Partial<FormValues> = {}
 
 type Errors = { [formId: string]: string }
 
+interface MigrationFormDrawerProps {
+  open: boolean
+  onClose: () => void
+  reloadMigrations?: () => void
+}
+
 export default function MigrationFormDrawer({
   open,
   onClose,
+  reloadMigrations,
 }: MigrationFormDrawerProps) {
   const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
@@ -292,8 +294,11 @@ export default function MigrationFormDrawer({
     })
 
     if (!isNilOrEmpty(migrationPlanResource)) {
+      if (reloadMigrations) {
+        reloadMigrations()
+      }
       navigate("/dashboard")
-      window.location.reload()
+      onClose()
     }
   }
 

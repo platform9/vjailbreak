@@ -3,8 +3,9 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import { Box, CircularProgress, Paper, styled, Typography } from "@mui/material"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
+import ApiClient from "src/api/ApiClient"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
-import { getMigrationsList } from "src/data/migrations/actions"
 import { Migration } from "src/data/migrations/model"
 import { useInterval } from "src/hooks/useInterval"
 
@@ -59,17 +60,31 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 25 }
 
+const { vjailbreak } = ApiClient.getInstance()
+
 export default function Dashboard() {
-  const [migrations, setMigrations] = useState<Migration[]>([])
+  const navigate = useNavigate()
+  const [migrations, setMigrations] = useState<Migration[] | null>(null)
 
   const getMigrations = async () => {
-    const migrations = await getMigrationsList()
-    setMigrations(migrations)
+    try {
+      const data = await vjailbreak.getMigrationList()
+      setMigrations(data?.items || [])
+    } catch (error) {
+      console.error("Error getting MigrationsList", { error })
+      return []
+    }
   }
 
   useEffect(() => {
     getMigrations()
   }, [])
+
+  useEffect(() => {
+    if (migrations !== null && migrations.length === 0) {
+      navigate("/onboarding")
+    }
+  }, [migrations])
 
   useInterval(() => {
     getMigrations()
@@ -79,7 +94,7 @@ export default function Dashboard() {
     <DashboardContainer>
       <Paper sx={{ margin: 4 }}>
         <DataGrid
-          rows={migrations}
+          rows={migrations || []}
           columns={columns}
           initialState={{ pagination: { paginationModel } }}
           pageSizeOptions={[25, 50, 100]}

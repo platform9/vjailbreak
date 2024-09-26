@@ -1,10 +1,10 @@
 import { styled } from "@mui/material"
 import { useEffect, useState } from "react"
 import { Route, Routes, useNavigate } from "react-router-dom"
+import ApiClient from "./api/ApiClient"
 import "./App.css"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
-import { getMigrationsList } from "./data/migrations/actions"
 import { Migration } from "./data/migrations/model"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
 import Dashboard from "./pages/dashboard/Dashboard"
@@ -29,16 +29,24 @@ const AppContent = styled("div")(({ theme }) => ({
   },
 }))
 
+const { vjailbreak } = ApiClient.getInstance()
+
 function App() {
   const navigate = useNavigate()
   const [migrations, setMigrations] = useState<Migration[] | null>(null)
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
 
-  useEffect(() => {
-    const getMigrations = async () => {
-      const migrations = await getMigrationsList()
-      setMigrations(migrations)
+  const getMigrations = async () => {
+    try {
+      const data = await vjailbreak.getMigrationList()
+      setMigrations(data?.items || [])
+    } catch (error) {
+      console.error("Error getting MigrationsList", { error })
+      return []
     }
+  }
+
+  useEffect(() => {
     getMigrations()
   }, [])
 
@@ -52,14 +60,20 @@ function App() {
     }
   }, [migrations, navigate])
 
+  const isOnboardingPage = window.location.pathname === "/onboarding"
+
   return (
     <AppFrame>
-      <AppBar setOpenMigrationForm={setOpenMigrationForm} />
+      <AppBar
+        setOpenMigrationForm={setOpenMigrationForm}
+        hide={isOnboardingPage}
+      />
       <AppContent>
         {openMigrationForm && (
           <MigrationFormDrawer
             open
             onClose={() => setOpenMigrationForm(false)}
+            reloadMigrations={() => getMigrations()}
           />
         )}
         <Routes>
