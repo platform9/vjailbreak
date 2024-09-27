@@ -317,10 +317,17 @@ class vJailbreak extends ApiService {
     return response
   }
 
-  getMigrationList = async (namespace = this.defaultNamespace) => {
+  getMigrationList = async (
+    migrationPlanName = "",
+    namespace = this.defaultNamespace
+  ) => {
     const endpoint = `${this.baseEndpoint}/namespaces/${namespace}/migrations`
+    const params = migrationPlanName
+      ? { labelSelector: `migrationplan=${migrationPlanName}` }
+      : {}
     const response = await this.client.get<GetMigrationsList>({
       endpoint,
+      params,
       options: {
         clsName: this.getClassName(),
         mthdName: "getMigrationList",

@@ -1,4 +1,4 @@
-import { Button, styled } from "@mui/material"
+import { Button, CircularProgress, styled } from "@mui/material"
 
 interface FooterProps {
   cancelButtonLabel?: string
@@ -6,6 +6,7 @@ interface FooterProps {
   onClose: () => void
   onSubmit: () => void
   disableSubmit?: boolean
+  submitting?: boolean
 }
 
 const StyledFooter = styled("div")(({ theme }) => ({
@@ -23,6 +24,7 @@ export default function Footer({
   submitButtonLabel = "Submit",
   onClose,
   onSubmit,
+  submitting = false,
   disableSubmit = false,
 }: FooterProps) {
   return (
@@ -40,9 +42,10 @@ export default function Footer({
         variant="contained"
         color="primary"
         onClick={onSubmit}
-        disabled={disableSubmit}
+        disabled={disableSubmit || submitting}
       >
-        {submitButtonLabel}
+        {submitting && <CircularProgress size={20} sx={{ marginRight: 2 }} />}
+        {submitting ? "Submitting" : submitButtonLabel}
       </Button>
     </StyledFooter>
   )

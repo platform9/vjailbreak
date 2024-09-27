@@ -83,6 +83,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (migrations !== null && migrations.length === 0) {
       navigate("/onboarding")
+      window.location.reload()
     }
   }, [migrations, navigate])
 

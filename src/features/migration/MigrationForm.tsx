@@ -1,14 +1,16 @@
 import { Box, Drawer, styled } from "@mui/material"
 import { flatten, uniq } from "ramda"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { createMigrationPlan } from "src/data/migration-plan/actions"
+import { MigrationPlan } from "src/data/migration-plan/model"
 import {
   createMigrationTemplate,
   getMigrationTemplate,
   updateMigrationTemplate,
 } from "src/data/migration-templates/action"
 import { MigrationTemplate, VmData } from "src/data/migration-templates/model"
+import { getMigrationsList } from "src/data/migrations/actions"
 import { createNetworkMapping } from "src/data/network-mappings/actions"
 import {
   createOpenstackCreds,
@@ -78,6 +80,7 @@ export default function MigrationFormDrawer({
   const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
   const [validatingOpenstackCreds, setValidatingOpenstackCreds] =
     useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   // Migration JSON Objects
   const [vmWareCredsResource, setVmwareCredsResource] = useState<VMwareCreds>(
@@ -87,6 +90,8 @@ export default function MigrationFormDrawer({
     useState<OpenstackCreds>({} as OpenstackCreds)
   const [migrationTemplateResource, setMigrationTemplateResource] =
     useState<MigrationTemplate>({} as MigrationTemplate)
+  const [migrationPlanResource, setMigrationPlanResource] =
+    useState<MigrationPlan>({} as MigrationPlan)
 
   useEffect(() => {
     if (isNilOrEmpty(params.vmwareCreds)) return
@@ -264,6 +269,7 @@ export default function MigrationFormDrawer({
   }, [params.vms])
 
   const handleSubmit = async () => {
+    setSubmitting(true)
     // Create NetworkMapping Resource
     const networkMappingsResource = await createNetworkMapping({
       networkMappings: params.networkMappings,
@@ -292,15 +298,56 @@ export default function MigrationFormDrawer({
       migrationTemplateName: updatedMigrationTemplateResource?.metadata?.name,
       virtualmachines: vmsToMigrate,
     })
-
-    if (!isNilOrEmpty(migrationPlanResource)) {
-      if (reloadMigrations) {
-        reloadMigrations()
-      }
-      navigate("/dashboard")
-      onClose()
-    }
+    setMigrationPlanResource(migrationPlanResource)
   }
+
+  const closeAndRedirectToDashboard = useCallback(() => {
+    setSubmitting(false)
+    navigate("/dashboard")
+    window.location.reload()
+    onClose()
+  }, [navigate, onClose])
+
+  useEffect(() => {
+    if (
+      isNilOrEmpty(migrationPlanResource) ||
+      !migrationPlanResource.metadata?.name
+    )
+      return
+
+    let pollingTimeout: NodeJS.Timeout // Declare a variable to store the timeout ID
+
+    const pollForMigrations = async () => {
+      console.log("Polling for migrations")
+      const migrations = await getMigrationsList(
+        migrationPlanResource.metadata.name
+      )
+      if (migrations.length > 0) {
+        console.log("Migrations detected. Polling stopped.")
+        // If migrations are detected, stop polling and trigger the next steps
+        closeAndRedirectToDashboard()
+      } else {
+        // If no migrations are found, continue polling
+        pollingTimeout = setTimeout(pollForMigrations, 5000)
+      }
+    }
+
+    // Start polling for migrations
+    pollForMigrations()
+
+    // Cleanup function to stop polling if the component unmounts
+    return () => {
+      console.log("Clearing polling", pollingTimeout)
+      clearTimeout(pollingTimeout) // Properly clear the timeout using the ID
+      setSubmitting(false)
+    }
+  }, [
+    migrationPlanResource,
+    reloadMigrations,
+    navigate,
+    onClose,
+    closeAndRedirectToDashboard,
+  ])
 
   const vmwareCredsValidated =
     vmWareCredsResource?.status?.vmwareValidationStatus === "Succeeded"
@@ -372,7 +419,8 @@ export default function MigrationFormDrawer({
         submitButtonLabel={"Start Migration"}
         onClose={onClose}
         onSubmit={handleSubmit}
-        disableSubmit={disableSubmit}
+        disableSubmit={disableSubmit || submitting}
+        submitting={submitting}
       />
     </StyledDrawer>
   )
