@@ -84,11 +84,6 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
-	// Validate Time Field
-	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
-		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
-	}
-
 	if err := r.Get(ctx, req.NamespacedName, migrationplan); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.ctxlog.Info("Received ignorable event for a recently deleted MigrationPlan.")
@@ -96,6 +91,11 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		r.ctxlog.Error(err, fmt.Sprintf("Unexpected error reading MigrationPlan '%s' object", migrationplan.Name))
 		return ctrl.Result{}, err
+	}
+
+	// Validate Time Field
+	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
+		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion or not
@@ -248,6 +248,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("migration-%s", vmname),
 				Namespace: migrationplan.Namespace,
+				Labels: map[string]string{
+					"migrationplan": migrationplan.Name,
+				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
 				MigrationPlan: migrationplan.Name,
@@ -434,13 +437,14 @@ func newHostPathType(pathType string) *corev1.HostPathType {
 	return &hostPathType
 }
 
+//nolint:dupl // Same logic to migrationtemplate reconciliation, excluding from linting to keep both reconcilers separate
 func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 	namespace, credsname string,
 	isvmware bool,
 	credsobj client.Object) (bool, error) {
 	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
-		return false, fmt.Errorf("failed to get VMwareCreds: %w", err)
+		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
 	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {

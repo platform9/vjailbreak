@@ -45,10 +45,23 @@ type MigrationTemplateSpec struct {
 	Destination     MigrationTemplateDestination `json:"destination"`
 }
 
+type VMInfo struct {
+	Name       string   `json:"name"`
+	Datastores []string `json:"datastores,omitempty"`
+	Networks   []string `json:"networks,omitempty"`
+}
+
+type OpenstackInfo struct {
+	VolumeTypes []string `json:"volumeTypes,omitempty"`
+	Networks    []string `json:"networks,omitempty"`
+}
+
 // MigrationTemplateStatus defines the observed state of MigrationTemplate
 type MigrationTemplateStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	VMWare    []VMInfo      `json:"vmware,omitempty"`
+	Openstack OpenstackInfo `json:"openstack,omitempty"`
 }
 
 // +kubebuilder:object:root=true

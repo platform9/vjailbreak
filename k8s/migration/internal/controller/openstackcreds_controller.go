@@ -182,7 +182,7 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 		return fmt.Errorf("failed to list volume types: %w", err)
 	}
 
-	allnwtypes, err := volumetypes.ExtractVolumeTypes(allPages)
+	allvoltypes, err := volumetypes.ExtractVolumeTypes(allPages)
 	if err != nil {
 		return fmt.Errorf("failed to extract all volume types: %w", err)
 	}
@@ -190,8 +190,8 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 	// Verify that all volume types in targetstorage exist in the openstack volume types
 	for _, targetstorage := range targetstorages {
 		found := false
-		for i := 0; i < len(allnwtypes); i++ {
-			if allnwtypes[i].Name == targetstorage {
+		for i := 0; i < len(allvoltypes); i++ {
+			if allvoltypes[i].Name == targetstorage {
 				found = true
 				break
 			}
@@ -201,6 +201,47 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 		}
 	}
 	return nil
+}
+
+func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*vjailbreakv1alpha1.OpenstackInfo, error) {
+	var openstackvoltypes []string
+	var openstacknetworks []string
+	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
+	if err != nil {
+		return nil, err
+	}
+	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volume types: %w", err)
+	}
+
+	allvoltypes, err := volumetypes.ExtractVolumeTypes(allVolumeTypePages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract all volume types: %w", err)
+	}
+
+	for i := 0; i < len(allvoltypes); i++ {
+		openstackvoltypes = append(openstackvoltypes, allvoltypes[i].Name)
+	}
+
+	allNetworkPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	allNetworks, err := networks.ExtractNetworks(allNetworkPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract all networks: %w", err)
+	}
+
+	for i := 0; i < len(allNetworks); i++ {
+		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
+	}
+
+	return &vjailbreakv1alpha1.OpenstackInfo{
+		VolumeTypes: openstackvoltypes,
+		Networks:    openstacknetworks,
+	}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

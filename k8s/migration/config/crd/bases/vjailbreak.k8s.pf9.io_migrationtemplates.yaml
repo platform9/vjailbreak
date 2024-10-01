@@ -79,6 +79,38 @@ spec:
             type: object
           status:
             description: MigrationTemplateStatus defines the observed state of MigrationTemplate
+            properties:
+              openstack:
+                properties:
+                  networks:
+                    items:
+                      type: string
+                    type: array
+                  volumeTypes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              vmware:
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
+                items:
+                  properties:
+                    datastores:
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      type: string
+                    networks:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
         type: object
     served: true
