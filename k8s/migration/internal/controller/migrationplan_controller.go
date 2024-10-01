@@ -437,13 +437,14 @@ func newHostPathType(pathType string) *corev1.HostPathType {
 	return &hostPathType
 }
 
+//nolint:dupl // Same logic to migrationtemplate reconciliation, excluding from linting to keep both reconcilers separate
 func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 	namespace, credsname string,
 	isvmware bool,
 	credsobj client.Object) (bool, error) {
 	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
-		return false, fmt.Errorf("failed to get VMwareCreds: %w", err)
+		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
 	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {

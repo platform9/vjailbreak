@@ -105,13 +105,14 @@ func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
+//nolint:dupl // Same logic to migrationplan reconciliation, excluding from linting to keep both reconcilers separate
 func (r *MigrationTemplateReconciler) checkStatusSuccess(ctx context.Context,
 	namespace, credsname string,
 	isvmware bool,
 	credsobj client.Object) (bool, error) {
 	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
-		return false, fmt.Errorf("failed to get VMwareCreds: %w", err)
+		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
 	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
