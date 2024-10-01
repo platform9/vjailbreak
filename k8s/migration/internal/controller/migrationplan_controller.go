@@ -248,6 +248,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("migration-%s", vmname),
 				Namespace: migrationplan.Namespace,
+				Labels: map[string]string{
+					"migrationplan": migrationplan.Name,
+				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
 				MigrationPlan: migrationplan.Name,
