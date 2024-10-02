@@ -1,5 +1,5 @@
 # Use an official Node.js runtime as the base image
-FROM node:18 as builder
+FROM node:18 AS builder
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
@@ -15,7 +15,7 @@ COPY src ./src
 COPY index.html .
 COPY public .
 COPY vite* .
-copy tsconfig.json .
+COPY tsconfig.json .
 
 RUN yarn build
 
@@ -31,8 +31,11 @@ COPY public /usr/share/nginx/html
 # Copy the Nginx configuration file
 COPY default.conf /etc/nginx/conf.d/
 
+# Copy the startup script
+COPY startup.sh /usr/local/bin/start.sh
+
 # Expose port
 EXPOSE 3000
 
 # Start Nginx server
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/usr/local/bin/start.sh"]

@@ -1,10 +1,12 @@
 import react from "@vitejs/plugin-react"
 import path from "path"
 import { defineConfig } from "vite"
+import runtimeEnv from 'vite-plugin-runtime-env';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
+    runtimeEnv(),
     react({
       jsxImportSource: "@emotion/react",
       babel: {

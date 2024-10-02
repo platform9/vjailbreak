@@ -13,6 +13,14 @@ const addApiRequestMetadata = (apiClass, requestMethod) => {
   return { apiClassMetadata: { apiClass, requestMethod } }
 }
 
+declare global {
+  interface Window {
+    env: {
+      [key: string]: string;
+    };
+  }
+}
+
 class ApiClient {
   private readonly axiosInstance: AxiosInstance
   private static instance: ApiClient
