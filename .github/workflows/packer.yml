@@ -1,0 +1,79 @@
+name: Build and Push Images
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  PRODUCT_VERSION: "latest"
+  UI_IMG: tanaypf9/vjailbreak-ui:v0.2
+  V2V_IMG: tanaypf9/v2v-helper:v0.2
+  CONTROLLER_IMG: tanaypf9/vjailbreak-controller:v0.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Enable KVM group perms
+      run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+    - name: Set up QEMU
+      run: sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+
+    # - name: Generate manifests
+    #   run: make generate-manifests
+    - name: Create deploy folder
+      run: mkdir -p image_builder/deploy
+
+    - name: Substitue image tags in manifests
+      uses: danielr1996/envsubst-action@1.0.0
+      with:
+        input: ./ui/deploy/ui.yaml
+        output: ./image_builder/deploy/01ui.yaml
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '>=1.22.5'
+        
+    - name: Generate Controller Manifests
+      run: |
+        make -C ./k8s/migration/ build-installer
+        cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
+    
+    - name: Setup `packer`
+      uses: hashicorp/setup-packer@main
+      id: setup
+      with:
+        version: ${{ env.PRODUCT_VERSION }}
+    
+    - name: Run `packer init`
+      id: init
+      run: "packer init ./image_builder/vjailbreak-image.pkr.hcl"
+    
+    - name: Run `packer validate`
+      id: validate
+      run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
+
+    - name: Run `packer build`
+      id: build
+      run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: vjailbreak-yamls
+        path: |
+          image_builder/deploy/00controller.yaml
+          image_builder/deploy/01ui.yaml
