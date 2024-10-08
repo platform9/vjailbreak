@@ -23,8 +23,9 @@ generate-manifests: vjail-controller ui
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 
 .PHONY: docker-build-image
-build-image: generate-manifests
+docker-build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
+	cp -r k8s/kube-prometheus image_builder/deploy/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
 .PHONY: build-image
