@@ -17,7 +17,7 @@ source "qemu" "vjailbreak-image" {
   disk_size            = "15G"
   format               = "qcow2"
   headless             = true
-  accelerator          = "none" # "kvm" if not running in docker
+  accelerator          = "kvm"
   ssh_password         = "password"
   ssh_username         = "ubuntu"
   ssh_timeout          = "20m"
@@ -30,7 +30,7 @@ source "qemu" "vjailbreak-image" {
 
   # Location of Cloud-Init / Autoinstall Configuration files
   # Will be served via an HTTP Server from Packer
-  http_directory = "cloudinit/"
+  http_directory = "${path.root}/cloudinit/"
 
 
   qemuargs = [
@@ -42,7 +42,7 @@ build {
   sources = ["source.qemu.vjailbreak-image"]
 
   provisioner "file" {
-    source      = "deploy"
+    source      = "${path.root}/deploy"
     destination = "/tmp/yamls"
   }
 
@@ -50,6 +50,27 @@ build {
     inline = [
       "while ! systemctl is-active --quiet k3s; do sleep 10; done",
       "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/"
+    ]
+  }
+
+  provisioner "shell" {
+    inline = [
+      "sudo kubectl --request-timeout=300s apply --server-side -f /tmp/yamls/kube-prometheus/manifests/setup",
+      "sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring",
+      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/"
+    ]
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/restart_kube_resources.sh"
+    destination = "/tmp/restart_kube_resources.sh"
+  }
+
+  provisioner "shell" {
+    inline = [
+      "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
+      "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
+      "sudo systemctl restart restart-kube-resources"
     ]
   }
 }
