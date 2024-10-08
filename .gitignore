@@ -1,1 +1,3 @@
-v2v-helper/Makefile
+artifacts/*
+image_builder/deploy/*
+k8s/migration/dist/*
