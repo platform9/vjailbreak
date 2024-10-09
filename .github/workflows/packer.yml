@@ -13,9 +13,9 @@ on:
 
 env:
   PACKER_VERSION: "latest"
-  UI_IMG: tanaypf9/vjailbreak-ui
-  V2V_IMG: tanaypf9/v2v-helper
-  CONTROLLER_IMG: tanaypf9/vjailbreak-controller
+  UI_IMG: ${{ secrets.DOCKER_USERNAME }}/vjailbreak-ui
+  V2V_IMG: ${{ secrets.DOCKER_USERNAME }}/v2v-helper
+  CONTROLLER_IMG: ${{ secrets.DOCKER_USERNAME }}/vjailbreak-controller
 
 jobs:
   build-containers:
