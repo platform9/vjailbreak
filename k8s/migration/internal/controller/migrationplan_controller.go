@@ -48,7 +48,8 @@ type MigrationPlanReconciler struct {
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 
-const v2vimage = "platform9/v2v-helper:v0.1"
+// The default image. This is replaced by Go linker flags in the Dockerfile
+var v2vimage = "platform9/v2v-helper:v0.1"
 
 const terminationPeriod = int64(120)
 
