@@ -1,6 +1,6 @@
-export UI_IMG ?= platform9/vjailbreak-ui:v0.2
-export V2V_IMG ?= platform9/v2v-helper:v0.2
-export CONTROLLER_IMG ?= platform9/vjailbreak-controller:v0.2
+export UI_IMG ?= tanaypf9/vjailbreak-ui:v0.2
+export V2V_IMG ?= tanaypf9/v2v-helper:v0.2
+export CONTROLLER_IMG ?= tanaypf9/vjailbreak-controller:v0.2
 
 .PHONY: ui
 ui:
@@ -23,8 +23,9 @@ generate-manifests: vjail-controller ui
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 
 .PHONY: docker-build-image
-build-image: generate-manifests
+docker-build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
+	cp -r k8s/kube-prometheus image_builder/deploy/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
 .PHONY: build-image
