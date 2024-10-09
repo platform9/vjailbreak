@@ -51,6 +51,8 @@ jobs:
           TAG=${{ steps.bump_version.outputs.newTag }}-$BRANCH_NAME
         fi
 
+        echo "Hi"
+
         echo "UI_IMG=${{ env.UI_IMG }}:$TAG" >> $GITHUB_ENV
         echo "V2V_IMG=${{ env.V2V_IMG }}:$TAG" >> $GITHUB_ENV
         echo "CONTROLLER_IMG=${{ env.CONTROLLER_IMG }}:$TAG" >> $GITHUB_ENV
