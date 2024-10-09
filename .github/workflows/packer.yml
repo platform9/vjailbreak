@@ -7,9 +7,6 @@ name: Build and Push Images
 #   workflow_dispatch:
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
@@ -99,8 +96,8 @@ jobs:
     - name: Check commit message
       id: check_commit
       run: |
-        echo "Commit message: ${{ github.event.head_commit.message }}"
-        if [[ "${{ github.event.head_commit.message }}" == *"release"* ]]; then
+        echo "Commit message: ${{ github.event.pull_request.title }}"
+        if [[ "${{ github.event.pull_request.title }}" == *"release"* ]]; then
           echo "Release keyword found."
           echo "release_found=true" >> $GITHUB_ENV
         else
