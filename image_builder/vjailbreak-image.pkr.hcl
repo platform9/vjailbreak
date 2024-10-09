@@ -63,11 +63,12 @@ build {
 
   provisioner "file" {
     source      = "${path.root}/restart_kube_resources.sh"
-    destination = "/usr/local/bin/restart_kube_resources.sh"
+    destination = "/tmp/restart_kube_resources.sh"
   }
 
   provisioner "shell" {
     inline = [
+      "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
       "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
       "sudo systemctl restart restart-kube-resources",
       "sleep 30"
