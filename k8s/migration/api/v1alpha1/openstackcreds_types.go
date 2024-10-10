@@ -45,6 +45,10 @@ type OpenstackCredsSpec struct {
 
 	// OsTenantName is the OpenStack tenant name
 	OsTenantName string `json:"OS_TENANT_NAME,omitempty"`
+
+	// OsInsecure is the OpenStack insecure flag
+	// +kubebuilder:default:=false
+	OsInsecure bool `json:"OS_INSECURE,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

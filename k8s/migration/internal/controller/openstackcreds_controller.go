@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud"
@@ -100,7 +102,23 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
-	providerClient, err := openstack.AuthenticatedClient(gophercloud.AuthOptions{
+	providerClient, err := openstack.NewClient(openstackcreds.Spec.OsAuthURL)
+	if err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Error creating Openstack Client'%s'", openstackcreds.Spec.OsAuthURL))
+		return nil, err
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: openstackcreds.Spec.OsInsecure,
+	}
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	providerClient.HTTPClient = http.Client{
+		Transport: transport,
+	}
+	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
 		IdentityEndpoint: openstackcreds.Spec.OsAuthURL,
 		Username:         openstackcreds.Spec.OsUsername,
 		Password:         openstackcreds.Spec.OsPassword,
