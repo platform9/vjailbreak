@@ -290,6 +290,8 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 				RestartPolicy:                 corev1.RestartPolicyNever,
 				ServiceAccountName:            "migration-controller-manager",
 				TerminationGracePeriodSeconds: int64Ptr(terminationPeriod),
+				DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
+				HostNetwork:                   true,
 				Containers: []corev1.Container{
 					{
 						Name:            "fedora",
@@ -298,6 +300,16 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 						Command:         []string{"/home/fedora/manager"},
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &pointtrue,
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name: "POD_NAME",
+								ValueFrom: &corev1.EnvVarSource{
+									FieldRef: &corev1.ObjectFieldSelector{
+										FieldPath: "metadata.name",
+									},
+								},
+							},
 						},
 						EnvFrom: []corev1.EnvFromSource{
 							{
@@ -403,6 +415,7 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 				"OS_TENANT_NAME":        openstackcreds.Spec.OsTenantName,
 				"OS_TYPE":               migrationtemplate.Spec.OSType,
 				"OS_USERNAME":           openstackcreds.Spec.OsUsername,
+				"OS_INSECURE":           strconv.FormatBool(openstackcreds.Spec.OsInsecure),
 				"SOURCE_VM_NAME":        vm,
 				"VCENTER_HOST":          vmwcreds.Spec.VcenterHost,
 				"VCENTER_INSECURE":      strconv.FormatBool(vmwcreds.Spec.VcenterInsecure),

@@ -45,6 +45,11 @@ spec:
               OS_DOMAIN_NAME:
                 description: OsDomainName is the OpenStack domain name
                 type: string
+              OS_INSECURE:
+                default: false
+                description: OsInsecure is the flag to skip verification of the OpenStack
+                  TLS Certificate
+                type: boolean
               OS_PASSWORD:
                 description: OsPassword is the OpenStack password
                 type: string

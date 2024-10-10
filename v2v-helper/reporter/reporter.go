@@ -59,7 +59,7 @@ func (r *Reporter) GetKubernetesClient() error {
 }
 
 func (r *Reporter) GetPodName() error {
-	if podName, ok := os.LookupEnv("HOSTNAME"); !ok {
+	if podName, ok := os.LookupEnv("POD_NAME"); !ok {
 		return fmt.Errorf("failed to get pod name")
 	} else {
 		r.PodName = podName

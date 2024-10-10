@@ -33,6 +33,7 @@ func main() {
 	var vmcutoverstart = os.Getenv("CUTOVERSTART")
 	var vmcutoverend = os.Getenv("CUTOVEREND")
 	var migrationtype = os.Getenv("TYPE")
+	var envopenstackinsecure = os.Getenv("OS_INSECURE")
 
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
@@ -52,6 +53,7 @@ func main() {
 
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
+	openstackinsecure, _ := strconv.ParseBool(envopenstackinsecure)
 
 	// Validate vCenter and Openstack connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, envUserName, envPassword, envURL, insecure)
@@ -61,7 +63,7 @@ func main() {
 	log.Printf("Connected to vCenter: %s\n", envURL)
 
 	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
-	openstackclients, err := openstack.NewOpenStackClients()
+	openstackclients, err := openstack.NewOpenStackClients(openstackinsecure)
 	if err != nil {
 		log.Fatalf("Failed to validate OpenStack connection: %v", err)
 	}

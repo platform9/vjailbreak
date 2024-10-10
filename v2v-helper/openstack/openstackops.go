@@ -3,11 +3,14 @@
 package openstack
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,14 +65,61 @@ const MaxRAM = 9999999
 // Number of intervals to wait for the volume to become available
 const MaxIntervalCount = 6
 
-func validateOpenStack() (*OpenStackClients, error) {
+func getCert(endpoint string) (*x509.Certificate, error) {
+	conf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL: %w", err)
+	}
+	hostname := parsedURL.Hostname()
+	conn, err := tls.Dial("tcp", hostname+":443", conf)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to %s: %w", hostname, err)
+	}
+	defer conn.Close()
+	cert := conn.ConnectionState().PeerCertificates[0]
+	return cert, nil
+}
+
+func validateOpenStack(insecure bool) (*OpenStackClients, error) {
 	opts, err := openstack.AuthOptionsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
 	}
-	var providerClient *gophercloud.ProviderClient
+	providerClient, err := openstack.NewClient(opts.IdentityEndpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provider client: %s", err)
+	}
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	if insecure {
+		tlsConfig.InsecureSkipVerify = true
+	} else {
+		// Get the certificate for the Openstack endpoint
+		caCert, err := getCert(opts.IdentityEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get certificate: %s", err)
+		}
+		caCertPool, _ := x509.SystemCertPool()
+		if caCertPool == nil {
+			caCertPool = x509.NewCertPool()
+		}
+		caCertPool.AddCert(caCert)
+		tlsConfig.RootCAs = caCertPool
+	}
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	providerClient.HTTPClient = http.Client{
+		Transport: transport,
+	}
+
+	// Connection Retry Block
 	for i := 0; i < MaxIntervalCount; i++ {
-		providerClient, err = openstack.AuthenticatedClient(opts)
+		err = openstack.Authenticate(providerClient, opts)
 		if err == nil {
 			break
 		}
@@ -105,8 +155,8 @@ func validateOpenStack() (*OpenStackClients, error) {
 	}, nil
 }
 
-func NewOpenStackClients() (*OpenStackClients, error) {
-	ostackclients, err := validateOpenStack()
+func NewOpenStackClients(insecure bool) (*OpenStackClients, error) {
+	ostackclients, err := validateOpenStack(insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
 	}
