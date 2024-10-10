@@ -6,8 +6,8 @@ import ApiClient from "src/api/ApiClient"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import { Migration } from "src/data/migrations/model"
 import { useInterval } from "src/hooks/useInterval"
-// import MigrationProgress from "./MigrationProgress";
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
+// import MigrationProgress from "./MigrationProgress"
 
 const DashboardContainer = styled("div")({
   // display: "flex",
@@ -26,13 +26,20 @@ const columns: GridColDef[] = [
     flex: 2,
   },
   {
-    field: "status.conditions",
+    field: "status",
     headerName: "Status",
-    valueGetter: (_, row) => row.status?.phase,
+    valueGetter: (_, row) => row?.status?.phase,
     flex: 1,
+  },
+  {
+    field: "status.conditions",
+    headerName: "Progress",
+    valueGetter: (_, row) => row.status?.phase,
+    flex: 2,
     renderCell: (params) => {
       const phase = params.row?.status?.phase
-      return phase ? (
+      const conditions = params.row?.status?.conditions
+      return conditions ? (
         <MigrationProgressWithPopover
           phase={phase}
           conditions={params.row?.status?.conditions}
@@ -40,27 +47,6 @@ const columns: GridColDef[] = [
       ) : null
     },
   },
-  // {
-  //   field: "status",
-  //   headerName: "Status New",
-  //   valueGetter: (_, row) => row.status?.phase,
-  //   flex: 2,
-  //   renderCell: (params) => {
-  //     const conditions = params.row?.status?.conditions;
-  //     return (
-  //       <>
-  //         {conditions ? (
-  //           <Box height={52} display={"flex"} alignItems={"center"}>
-  //             <MigrationProgress
-  //               keyLabel={params?.row?.metadata?.name}
-  //               conditions={conditions}
-  //             />
-  //           </Box>
-  //         ) : null}
-  //       </>
-  //     );
-  //   },
-  // },
 ]
 
 const paginationModel = { page: 0, pageSize: 25 }

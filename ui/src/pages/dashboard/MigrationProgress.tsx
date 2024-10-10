@@ -9,6 +9,7 @@ import {
   stepConnectorClasses,
   Popover,
   Typography,
+  Box,
 } from "@mui/material"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
@@ -117,18 +118,22 @@ export default function MigrationProgress({ keyLabel, conditions }) {
   }, [steps])
 
   return (
-    <StepperContainer key={keyLabel}>
-      <Stepper activeStep={activeStep} connector={<ColorlibConnector />}>
-        {steps.map((step, index) => (
-          <Step
-            key={`${index}+${String(step.type)}`}
-            completed={[Status.Completed, Status.Failed].includes(step.status)}
-          >
-            <StepContent step={step} />
-          </Step>
-        ))}
-      </Stepper>
-    </StepperContainer>
+    <Box height={52} display={"flex"} alignItems={"center"}>
+      <StepperContainer key={keyLabel}>
+        <Stepper activeStep={activeStep} connector={<ColorlibConnector />}>
+          {steps.map((step, index) => (
+            <Step
+              key={`${index}+${String(step.type)}`}
+              completed={[Status.Completed, Status.Failed].includes(
+                step.status
+              )}
+            >
+              <StepContent step={step} />
+            </Step>
+          ))}
+        </Stepper>
+      </StepperContainer>
+    </Box>
   )
 }
 
