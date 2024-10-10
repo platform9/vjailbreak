@@ -1,6 +1,4 @@
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
-import { Box, CircularProgress, Paper, styled, Typography } from "@mui/material"
+import { Paper, styled } from "@mui/material"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -8,6 +6,8 @@ import ApiClient from "src/api/ApiClient"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import { Migration } from "src/data/migrations/model"
 import { useInterval } from "src/hooks/useInterval"
+// import MigrationProgress from "./MigrationProgress";
+import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
 
 const DashboardContainer = styled("div")({
   // display: "flex",
@@ -26,36 +26,41 @@ const columns: GridColDef[] = [
     flex: 2,
   },
   {
-    field: "status",
+    field: "status.conditions",
     headerName: "Status",
     valueGetter: (_, row) => row.status?.phase,
     flex: 1,
     renderCell: (params) => {
       const phase = params.row?.status?.phase
-      let icon
-
-      if (phase === "Succeeded") {
-        icon = <CheckCircleOutlineIcon style={{ color: "green" }} />
-      } else if (phase === "Running") {
-        icon = <CircularProgress size={20} style={{ marginRight: 3 }} />
-      } else if (phase === "Failed") {
-        icon = <ErrorOutlineIcon style={{ color: "red" }} />
-      }
-
-      return (
-        <>
-          {phase ? (
-            <Box height={52} display={"flex"} alignItems={"center"}>
-              {icon}
-              <Typography variant="body2" style={{ marginLeft: 8 }}>
-                {phase}
-              </Typography>
-            </Box>
-          ) : null}
-        </>
-      )
+      return phase ? (
+        <MigrationProgressWithPopover
+          phase={phase}
+          conditions={params.row?.status?.conditions}
+        />
+      ) : null
     },
   },
+  // {
+  //   field: "status",
+  //   headerName: "Status New",
+  //   valueGetter: (_, row) => row.status?.phase,
+  //   flex: 2,
+  //   renderCell: (params) => {
+  //     const conditions = params.row?.status?.conditions;
+  //     return (
+  //       <>
+  //         {conditions ? (
+  //           <Box height={52} display={"flex"} alignItems={"center"}>
+  //             <MigrationProgress
+  //               keyLabel={params?.row?.metadata?.name}
+  //               conditions={conditions}
+  //             />
+  //           </Box>
+  //         ) : null}
+  //       </>
+  //     );
+  //   },
+  // },
 ]
 
 const paginationModel = { page: 0, pageSize: 25 }
