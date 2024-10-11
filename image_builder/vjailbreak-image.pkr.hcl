@@ -70,7 +70,8 @@ build {
     inline = [
       "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
       "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
-      "sudo systemctl restart restart-kube-resources"
+      "sudo systemctl restart restart-kube-resources",
+      "sudo k3s crictl rmi --prune"
     ]
   }
 }
