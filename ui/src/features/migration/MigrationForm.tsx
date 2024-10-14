@@ -31,6 +31,7 @@ import { pollForStatus } from "../pollForStatus"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
+import MigrationOptions from "./MigrationOptions"
 
 const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
@@ -45,7 +46,7 @@ const DrawerContent = styled("div")(({ theme }) => ({
   padding: theme.spacing(4, 6, 4, 4),
 }))
 
-interface FormValues extends Record<string, unknown> {
+export interface FormValues extends Record<string, unknown> {
   vmwareCreds?: {
     vcenterHost: string
     datacenter: string
@@ -56,6 +57,51 @@ interface FormValues extends Record<string, unknown> {
   vms?: VmData[]
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
+  // Optional Params
+  dataCopyMethod?: string
+  dataCopyStartTime?: string
+  dataCopyEndTime?: string
+  cutoverStartTime?: string
+  cutoverEndTime?: string
+  cutoverCommand?: string
+  preDataCopyWebHook?: string
+  postDataCopyWebHook?: string
+  preCutoverWebHook?: string
+  postCutoverWebHook?: string
+  retryOnFailure?: boolean
+}
+
+export interface MigrationOptionsType extends Record<string, unknown> {
+  dataCopyMethod: boolean
+  dataCopyTimeWindow: boolean
+  dataCopyStartTime: boolean
+  dataCopyEndTime: boolean
+  cutoverFromOriginalToMigratedVM: boolean
+  cutoverTimeWindow: boolean
+  cutoverStartTime: boolean
+  cutoverEndTime: boolean
+  cutoverCommand: boolean
+  preDataCopyWebHook: boolean
+  postDataCopyWebHook: boolean
+  preCutoverWebHook: boolean
+  postCutoverWebHook: boolean
+}
+
+// Default state for checkboxes
+const defaultMigrationOptions = {
+  dataCopyMethod: false,
+  dataCopyTimeWindow: false,
+  dataCopyStartTime: false,
+  dataCopyEndTime: false,
+  cutoverFromOriginalToMigratedVM: false,
+  cutoverTimeWindow: false,
+  cutoverStartTime: false,
+  cutoverEndTime: false,
+  cutoverCommand: false,
+  preDataCopyWebHook: false,
+  postDataCopyWebHook: false,
+  preCutoverWebHook: false,
+  postCutoverWebHook: false,
 }
 
 const defaultValues: Partial<FormValues> = {}
@@ -81,6 +127,9 @@ export default function MigrationFormDrawer({
   const [validatingOpenstackCreds, setValidatingOpenstackCreds] =
     useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Migration Options - Checked or Unchecked state
+  const { params: migrationOptions, getParamsUpdater: updateMigrationOptions } =
+    useParams<MigrationOptionsType>(defaultMigrationOptions)
 
   // Migration JSON Objects
   const [vmWareCredsResource, setVmwareCredsResource] = useState<VMwareCreds>(
@@ -297,6 +346,12 @@ export default function MigrationFormDrawer({
     const migrationPlanResource = await createMigrationPlan({
       migrationTemplateName: updatedMigrationTemplateResource?.metadata?.name,
       virtualmachines: vmsToMigrate,
+      // Optional Params
+      type: params.dataCopyMethod,
+      dataCopyStart: params.dataCopyStartTime,
+      vmCutoverStart: params.cutoverStartTime,
+      vmCutoverEnd: params.cutoverEndTime,
+      retry: params.retryOnFailure,
     })
     setMigrationPlanResource(migrationPlanResource)
   }
@@ -412,6 +467,13 @@ export default function MigrationFormDrawer({
             onChange={getParamsUpdater}
             networkMappingError={errors["networksMapping"]}
             storageMappingError={errors["storageMapping"]}
+          />
+          {/* Step 4 */}
+          <MigrationOptions
+            params={params}
+            onChange={getParamsUpdater}
+            migrationOptions={migrationOptions}
+            updateMigrationOptions={updateMigrationOptions}
           />
         </Box>
       </DrawerContent>

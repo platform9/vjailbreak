@@ -1,4 +1,5 @@
-import { styled, Typography } from "@mui/material"
+import { Theme } from "@emotion/react"
+import { styled, SxProps, Typography } from "@mui/material"
 
 const StyledBox = styled("div")(({ theme }) => ({
   display: "flex",
@@ -22,11 +23,12 @@ const StepCircle = styled("div")(({ theme }) => ({
 interface StepProps {
   stepNumber: string
   label: string
+  sx?: SxProps<Theme>
 }
 
-export default function Step({ stepNumber, label }: StepProps) {
+export default function Step({ stepNumber, label, sx }: StepProps) {
   return (
-    <StyledBox>
+    <StyledBox sx={sx}>
       <StepCircle>
         <Typography variant="body1">{stepNumber}</Typography>
       </StepCircle>
