@@ -1,3 +1,4 @@
+import { useCallback } from "react"
 import {
   Box,
   Checkbox,
@@ -6,21 +7,19 @@ import {
   MenuItem,
   Select,
   styled,
-  TextField,
 } from "@mui/material"
 import dayjs from "dayjs"
-import { DesktopTimePicker } from "@mui/x-date-pickers/DesktopTimePicker"
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import Step from "src/components/forms/Step"
-import useParams from "src/hooks/useParams"
+import { FormValues, MigrationOptionsType } from "./MigrationForm"
 
 // Accordian Imports
 import Accordion from "@mui/material/Accordion"
 import AccordionSummary from "@mui/material/AccordionSummary"
 import AccordionDetails from "@mui/material/AccordionDetails"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import { FormValues } from "./MigrationForm"
 
 // Styles
 const FieldsContainer = styled("div")(({ theme }) => ({
@@ -34,41 +33,28 @@ const Fields = styled("div")(({ theme }) => ({
   marginTop: theme.spacing(1),
 }))
 
-const CustomTextField = styled(TextField)({
-  "& .MuiOutlinedInput-root": {
-    height: "40px", // Adjust the overall container height
-    fontFamily: "Monospace",
-  },
-})
+// const CustomTextField = styled(TextField)({
+//   "& .MuiOutlinedInput-root": {
+//     height: "40px", // Adjust the overall container height
+//     fontFamily: "Monospace",
+//   },
+// })
 
 const Dates = styled("div")(() => ({
   [`input`]: {
     padding: "8px 14px",
-    width: "40px",
+    width: "140px",
   },
 }))
 
 // Intefaces
 interface MigrationOptionsPropsInterface {
   params: FormValues
-  onChange: (key: string) => (value: string) => void
-}
-
-// Default state for checkboxes
-const defaultValues = {
-  dataCopyMethod: false,
-  dataCopyTimeWindow: false,
-  dataCopyStartTime: false,
-  dataCopyEndTime: false,
-  cutoverFromOriginalToMigratedVM: false,
-  cutoverTimeWindow: false,
-  cutoverStartTime: false,
-  cutoverEndTime: false,
-  cutoverCommand: false,
-  preDataCopyWebHook: false,
-  postDataCopyWebHook: false,
-  preCutoverWebHook: false,
-  postCutoverWebHook: false,
+  onChange: (key: string) => (value: unknown) => void
+  migrationOptions: MigrationOptionsType
+  updateMigrationOptions: (
+    key: keyof MigrationOptionsType
+  ) => (value: unknown) => void
 }
 
 const DATA_COPY_METHODS = [
@@ -76,21 +62,21 @@ const DATA_COPY_METHODS = [
   { value: "cold", label: "Cold Copy" },
 ]
 
-const PrePostWebHooksList = [
-  { label: "Pre data-copy web hook", identifier: "preDataCopyWebHook" },
-  { label: "Post data-copy web hook", identifier: "postDataCopyWebHook" },
-  { label: "Pre cutover web hook", identifier: "preCutoverWebHook" },
-  { label: "Post cutover web hook", identifier: "postCutoverWebHook" },
-]
+// const PrePostWebHooksList = [
+//   { label: "Pre data-copy web hook", identifier: "preDataCopyWebHook" },
+//   { label: "Post data-copy web hook", identifier: "postDataCopyWebHook" },
+//   { label: "Pre cutover web hook", identifier: "preCutoverWebHook" },
+//   { label: "Post cutover web hook", identifier: "postCutoverWebHook" },
+// ]
 
+// TODO - Commented out the non-required field from the options for now
 export default function MigrationOptions({
   params,
   onChange,
+  migrationOptions,
+  updateMigrationOptions,
 }: MigrationOptionsPropsInterface) {
-  const { params: checkedParams, getParamsUpdater: updateCheckedParams } =
-    useParams(defaultValues)
-
-  console.log(params)
+  console.log("Logs: ", migrationOptions, params)
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -129,18 +115,22 @@ export default function MigrationOptions({
                   label="Data copy method"
                   control={
                     <Checkbox
-                      checked={checkedParams.dataCopyMethod}
+                      checked={migrationOptions.dataCopyMethod}
                       onChange={(e) => {
-                        updateCheckedParams("dataCopyMethod")(e.target.checked)
+                        updateMigrationOptions("dataCopyMethod")(
+                          e.target.checked
+                        )
                       }}
                     />
                   }
                 />
                 <Select
                   labelId="source-item-label"
-                  defaultValue="hot"
-                  value={params.dataCopyMethod}
-                  onChange={(e) => onChange("dataCopyMethod")(e.target.value)}
+                  value={params?.dataCopyMethod || "hot"}
+                  onChange={(e) => {
+                    onChange("dataCopyMethod")(e.target.value)
+                    updateMigrationOptions("dataCopyMethod")(true)
+                  }}
                 >
                   {DATA_COPY_METHODS.map((item) => (
                     <MenuItem key={item.value} value={item.value}>
@@ -155,43 +145,42 @@ export default function MigrationOptions({
                 label="Only copy data within time window"
                 control={
                   <Checkbox
-                    checked={checkedParams.dataCopyTimeWindow}
+                    checked={migrationOptions.dataCopyTimeWindow}
                     onChange={(e) => {
-                      updateCheckedParams("dataCopyTimeWindow")(
+                      updateMigrationOptions("dataCopyTimeWindow")(
                         e.target.checked
                       )
                     }}
                   />
                 }
               />
-              <Fields sx={{ ml: "32px" }}>
+              <Fields sx={{ ml: "32px", gridTemplateColumns: "1fr 1fr" }}>
                 <TimePicker
                   label="Start Time"
                   identifier="dataCopyStartTime"
                   params={params}
-                  checkedParams={checkedParams}
-                  updateCheckedParams={updateCheckedParams}
+                  migrationOptions={migrationOptions}
+                  updateMigrationOptions={updateMigrationOptions}
                   onChange={onChange}
                 />
-                <TimePicker
+                {/* <TimePicker
                   label="End Time"
                   identifier="dataCopyEndTime"
                   params={params}
-                  checkedParams={checkedParams}
-                  updateCheckedParams={updateCheckedParams}
+                  migrationOptions={migrationOptions}
+                  updateMigrationOptions={updateMigrationOptions}
                   onChange={onChange}
-                />
+                /> */}
               </Fields>
-              <br />
 
               {/* Cutover settings*/}
               <FormControlLabel
                 label="Cutover from original to migrated VM"
                 control={
                   <Checkbox
-                    checked={checkedParams.cutoverFromOriginalToMigratedVM}
+                    checked={migrationOptions.cutoverFromOriginalToMigratedVM}
                     onChange={(e) => {
-                      updateCheckedParams("cutoverFromOriginalToMigratedVM")(
+                      updateMigrationOptions("cutoverFromOriginalToMigratedVM")(
                         e.target.checked
                       )
                     }}
@@ -199,46 +188,46 @@ export default function MigrationOptions({
                 }
               />
               <Box sx={{ ml: "32px" }}>
-                <FormControlLabel
+                {/* <FormControlLabel
                   label="Only within time window"
                   control={
                     <Checkbox
-                      checked={checkedParams.cutoverTimeWindow}
+                      checked={migrationOptions.cutoverTimeWindow}
                       onChange={(e) => {
-                        updateCheckedParams("cutoverTimeWindow")(
+                        updateMigrationOptions("cutoverTimeWindow")(
                           e.target.checked
                         )
                       }}
                     />
                   }
-                />
-                <Fields sx={{ ml: "32px" }}>
+                /> */}
+                <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
                   <TimePicker
                     label="Start Time"
                     identifier="cutoverStartTime"
                     params={params}
-                    checkedParams={checkedParams}
-                    updateCheckedParams={updateCheckedParams}
+                    migrationOptions={migrationOptions}
+                    updateMigrationOptions={updateMigrationOptions}
                     onChange={onChange}
                   />
                   <TimePicker
                     label="End Time"
                     identifier="cutoverEndTime"
                     params={params}
-                    checkedParams={checkedParams}
-                    updateCheckedParams={updateCheckedParams}
+                    migrationOptions={migrationOptions}
+                    updateMigrationOptions={updateMigrationOptions}
                     onChange={onChange}
                   />
                 </Fields>
 
-                <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
+                {/* <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
                   <FormControlLabel
                     label="Only if this command succeeds in migrated VM"
                     control={
                       <Checkbox
-                        checked={checkedParams.cutoverCommand}
+                        checked={migrationOptions.cutoverCommand}
                         onChange={(e) => {
-                          updateCheckedParams("cutoverCommand")(
+                          updateMigrationOptions("cutoverCommand")(
                             e.target.checked
                           )
                         }}
@@ -246,27 +235,40 @@ export default function MigrationOptions({
                     }
                   />
                   <CustomTextField
-                    value={params?.cutoverCommand}
+                    value={params?.cutoverCommand || ""}
                     onChange={(e) =>
                       onChange("cutoverCommand")(String(e.target.value))
                     }
                   />
-                </Fields>
+                </Fields> */}
               </Box>
-              <br />
 
-              {PrePostWebHooksList.map((hook) => (
+              {/* Retry on failure */}
+              <FormControlLabel
+                label="Retry on failure"
+                control={
+                  <Checkbox
+                    checked={params?.retryOnFailure || false}
+                    onChange={(e) => {
+                      onChange("retryOnFailure")(e.target.checked)
+                    }}
+                  />
+                }
+              />
+
+              {/* Pre and Post Web Hooks */}
+              {/* {PrePostWebHooksList.map((hook) => (
                 <Fields key={`${hook.label}-${hook.identifier}`}>
                   <PrePostWebHooks
                     label={hook.label}
                     identifier={hook.identifier}
                     params={params}
-                    checkedParams={checkedParams}
-                    updateCheckedParams={updateCheckedParams}
+                    migrationOptions={migrationOptions}
+                    updateMigrationOptions={updateMigrationOptions}
                     onChange={onChange}
                   />
                 </Fields>
-              ))}
+              ))} */}
             </FormControl>
           </FieldsContainer>
         </AccordionDetails>
@@ -279,18 +281,20 @@ const TimePicker = ({
   label,
   identifier,
   params,
-  checkedParams,
-  updateCheckedParams,
+  migrationOptions,
+  updateMigrationOptions,
   onChange,
 }) => {
-  const value = params[identifier]
-    ? dayjs(`1970-01-01T${params[identifier]}:00`)
-    : dayjs(params[identifier])
+  const value = params?.[identifier] ? dayjs(params?.[identifier]) : dayjs()
 
-  const handleTimeChange = (newValue: dayjs.Dayjs | null, identifier) => {
-    const formattedTime = newValue?.format("HH:mm")
-    onChange(identifier)(String(formattedTime))
-  }
+  const handleTimeChange = useCallback(
+    (newValue: dayjs.Dayjs | null, identifier) => {
+      const formattedTime = newValue?.toISOString()
+      onChange(identifier)(String(formattedTime))
+      updateMigrationOptions(identifier)(true)
+    },
+    [onChange]
+  )
 
   return (
     <Dates>
@@ -298,18 +302,17 @@ const TimePicker = ({
         label={label}
         control={
           <Checkbox
-            checked={checkedParams[identifier]}
+            checked={migrationOptions?.[identifier]}
             onChange={(e) => {
-              updateCheckedParams(identifier)(e.target.checked)
+              updateMigrationOptions(identifier)(e.target.checked)
             }}
           />
         }
       />
-      <DesktopTimePicker
+      <DateTimePicker
         ampm={false}
         defaultValue={dayjs()}
         value={value}
-        format="HH:mm"
         onChange={(newValue: dayjs.Dayjs | null) =>
           handleTimeChange(newValue, identifier)
         }
@@ -318,31 +321,31 @@ const TimePicker = ({
   )
 }
 
-const PrePostWebHooks = ({
-  label,
-  identifier,
-  params,
-  onChange,
-  checkedParams,
-  updateCheckedParams,
-}) => {
-  return (
-    <>
-      <FormControlLabel
-        label={label}
-        control={
-          <Checkbox
-            checked={checkedParams[identifier]}
-            onChange={(e) => {
-              updateCheckedParams(identifier)(e.target.checked)
-            }}
-          />
-        }
-      />
-      <CustomTextField
-        value={params[identifier]}
-        onChange={(e) => onChange(identifier)(String(e.target.value))}
-      />
-    </>
-  )
-}
+// const PrePostWebHooks = ({
+//   label,
+//   identifier,
+//   params,
+//   onChange,
+//   migrationOptions,
+//   updateMigrationOptions,
+// }) => {
+//   return (
+//     <>
+//       <FormControlLabel
+//         label={label}
+//         control={
+//           <Checkbox
+//             checked={migrationOptions?.[identifier]}
+//             onChange={(e) => {
+//               updateMigrationOptions(identifier)(e.target.checked)
+//             }}
+//           />
+//         }
+//       />
+//       <CustomTextField
+//         value={params?.[identifier] || ""}
+//         onChange={(e) => onChange(identifier)(String(e.target.value))}
+//       />
+//     </>
+//   )
+// }
