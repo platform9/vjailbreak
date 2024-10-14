@@ -94,7 +94,7 @@ export default function MigrationProgressWithPopover({ phase, conditions }) {
 
     // Convert object back to an array of steps
     setSteps(Object.values(updatedSteps))
-  }, [conditions])
+  }, [defaultSteps, conditions])
 
   // Status Icon
   const statusIcon = useMemo(() => {
@@ -107,17 +107,17 @@ export default function MigrationProgressWithPopover({ phase, conditions }) {
     }
   }, [phase])
 
-  // Active step
+  // Get active step index and active step
   const activeStepIndex: number = useMemo(() => {
     return steps.findIndex(
       (step) =>
         step.status === Status.InProgress || step.status === Status.Failed
     )
-  }, [steps])
+  }, [steps, conditions])
 
   const activeStep: StatusStep = useMemo(
     () => steps[activeStepIndex],
-    [activeStepIndex]
+    [steps, activeStepIndex]
   )
 
   //Popover handlers
