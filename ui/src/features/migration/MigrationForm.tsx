@@ -31,7 +31,7 @@ import { pollForStatus } from "../pollForStatus"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
-import MigrationOptions from "./MigrationOptions"
+import MigrationOptions, { CUTOVER_TYPES } from "./MigrationOptions"
 
 const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
@@ -67,7 +67,7 @@ export interface FormValues extends Record<string, unknown> {
   retryOnFailure?: boolean
 }
 
-export interface MigrationOptionsType extends Record<string, unknown> {
+export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
   cutoverOption: boolean
@@ -110,8 +110,10 @@ export default function MigrationFormDrawer({
     useState(false)
   const [submitting, setSubmitting] = useState(false)
   // Migration Options - Checked or Unchecked state
-  const { params: migrationOptions, getParamsUpdater: updateMigrationOptions } =
-    useParams<MigrationOptionsType>(defaultMigrationOptions)
+  const {
+    params: selectedMigrationOptions,
+    getParamsUpdater: updateSelectedMigrationOptions,
+  } = useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
   // Migration JSON Objects
   const [vmWareCredsResource, setVmwareCredsResource] = useState<VMwareCreds>(
@@ -329,10 +331,17 @@ export default function MigrationFormDrawer({
       migrationTemplateName: updatedMigrationTemplateResource?.metadata?.name,
       virtualmachines: vmsToMigrate,
       // Optional Params
-      type: params.dataCopyMethod,
-      dataCopyStart: params.dataCopyStartTime,
-      vmCutoverStart: params.cutoverStartTime,
-      vmCutoverEnd: params.cutoverEndTime,
+      type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod,
+      dataCopyStart:
+        selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime,
+      vmCutoverStart:
+        selectedMigrationOptions.cutoverOption &&
+        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        params.cutoverStartTime,
+      vmCutoverEnd:
+        selectedMigrationOptions.cutoverOption &&
+        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        params.cutoverEndTime,
       retry: params.retryOnFailure,
     })
     setMigrationPlanResource(migrationPlanResource)
@@ -391,12 +400,30 @@ export default function MigrationFormDrawer({
   const openstackCredsValidated =
     openstackCredsResource?.status?.openstackValidationStatus === "Succeeded"
 
+  // Validate Selected Migration Options
+  const migrationOptionValidated = useMemo(
+    () =>
+      Object.keys(selectedMigrationOptions).every((key) =>
+        selectedMigrationOptions[key]
+          ? key === "cutoverOption" &&
+            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
+            ? params.cutoverStartTime &&
+              params.cutoverEndTime &&
+              !errors["cutoverStartTime"] &&
+              !errors["cutoverEndTime"]
+            : params?.[key] && !errors[key]
+          : true
+      ),
+    [selectedMigrationOptions, params, errors]
+  )
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
     isNilOrEmpty(params.networkMappings) ||
-    isNilOrEmpty(params.storageMappings)
+    isNilOrEmpty(params.storageMappings) ||
+    !migrationOptionValidated
 
   return (
     <StyledDrawer
@@ -454,8 +481,8 @@ export default function MigrationFormDrawer({
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
-            migrationOptions={migrationOptions}
-            updateMigrationOptions={updateMigrationOptions}
+            selectedMigrationOptions={selectedMigrationOptions}
+            updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={errors}
             getErrorsUpdater={getErrorsUpdater}
           />
