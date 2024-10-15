@@ -60,53 +60,35 @@ export interface FormValues extends Record<string, unknown> {
   // Optional Params
   dataCopyMethod?: string
   dataCopyStartTime?: string
-  dataCopyEndTime?: string
+  cutoverOption?: string
   cutoverStartTime?: string
   cutoverEndTime?: string
-  cutoverCommand?: string
-  preDataCopyWebHook?: string
-  postDataCopyWebHook?: string
-  preCutoverWebHook?: string
-  postCutoverWebHook?: string
+  postMigrationScript?: string
   retryOnFailure?: boolean
 }
 
 export interface MigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
-  dataCopyTimeWindow: boolean
   dataCopyStartTime: boolean
-  dataCopyEndTime: boolean
-  cutoverFromOriginalToMigratedVM: boolean
-  cutoverTimeWindow: boolean
+  cutoverOption: boolean
   cutoverStartTime: boolean
   cutoverEndTime: boolean
-  cutoverCommand: boolean
-  preDataCopyWebHook: boolean
-  postDataCopyWebHook: boolean
-  preCutoverWebHook: boolean
-  postCutoverWebHook: boolean
+  postMigrationScript: boolean
 }
 
 // Default state for checkboxes
 const defaultMigrationOptions = {
   dataCopyMethod: false,
-  dataCopyTimeWindow: false,
   dataCopyStartTime: false,
-  dataCopyEndTime: false,
-  cutoverFromOriginalToMigratedVM: false,
-  cutoverTimeWindow: false,
+  cutoverOption: false,
   cutoverStartTime: false,
   cutoverEndTime: false,
-  cutoverCommand: false,
-  preDataCopyWebHook: false,
-  postDataCopyWebHook: false,
-  preCutoverWebHook: false,
-  postCutoverWebHook: false,
+  postMigrationScript: false,
 }
 
 const defaultValues: Partial<FormValues> = {}
 
-type Errors = { [formId: string]: string }
+export type Errors = { [formId: string]: string }
 
 interface MigrationFormDrawerProps {
   open: boolean
@@ -474,6 +456,8 @@ export default function MigrationFormDrawer({
             onChange={getParamsUpdater}
             migrationOptions={migrationOptions}
             updateMigrationOptions={updateMigrationOptions}
+            errors={errors}
+            getErrorsUpdater={getErrorsUpdater}
           />
         </Box>
       </DrawerContent>
