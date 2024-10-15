@@ -27,13 +27,15 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 // Styles
 const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(4),
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gridGap: "32px 16px", // Adds spacing between the columns
+  alignItems: "start",
 }))
 
-const Fields = styled("div")(({ theme }) => ({
+const Fields = styled("div")(() => ({
   display: "grid",
-  gridTemplateColumns: "1fr 2fr 1fr",
-  gridGap: "16px", // Adds spacing between the columns
-  marginTop: theme.spacing(2),
+  gridGap: "12px",
 }))
 
 const CustomTextField = styled(TextField)({
@@ -83,7 +85,7 @@ const VM_CUTOVER_OPTIONS = [
 //   { label: "Post cutover web hook", identifier: "postCutoverWebHook" },
 // ]
 
-export default function MigrationOptions({
+export default function MigrationOptionsAlt({
   params,
   onChange,
   selectedMigrationOptions,
@@ -138,19 +140,6 @@ export default function MigrationOptions({
         </AccordionSummary>
         <AccordionDetails>
           <FieldsContainer>
-            {/* Retry on failure */}
-            <FormControlLabel
-              label="Retry on failure"
-              control={
-                <Checkbox
-                  checked={params?.retryOnFailure || false}
-                  onChange={(e) => {
-                    onChange("retryOnFailure")(e.target.checked)
-                  }}
-                />
-              }
-            />
-
             {/* Data Copy */}
             <Fields>
               <FormControlLabel
@@ -241,38 +230,37 @@ export default function MigrationOptions({
                   </MenuItem>
                 ))}
               </Select>
-            </Fields>
 
-            {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-              selectedMigrationOptions.cutoverOption && (
-                <Fields sx={{ mt: "20px", gridTemplateColumns: "1fr 1fr 1fr" }}>
-                  <TimePicker
-                    label="Start Time"
-                    identifier="cutoverStartTime"
-                    params={params}
-                    errors={errors}
-                    getErrorsUpdater={getErrorsUpdater}
-                    onChange={onChange}
-                    sx={{ ml: "32px" }}
-                    required={
-                      params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                    }
-                  />
-                  <TimePicker
-                    label="End Time"
-                    identifier="cutoverEndTime"
-                    params={params}
-                    errors={errors}
-                    getErrorsUpdater={getErrorsUpdater}
-                    onChange={onChange}
-                    required={
-                      params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                    }
-                    minDateTime={getMinEndTime()}
-                    helperText="Should be greater than data copy/cutover start time"
-                  />
-                </Fields>
-              )}
+              {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+                selectedMigrationOptions.cutoverOption && (
+                  <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
+                    <TimePicker
+                      label="Start Time"
+                      identifier="cutoverStartTime"
+                      params={params}
+                      errors={errors}
+                      getErrorsUpdater={getErrorsUpdater}
+                      onChange={onChange}
+                      required={
+                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
+                      }
+                    />
+                    <TimePicker
+                      label="End Time"
+                      identifier="cutoverEndTime"
+                      params={params}
+                      errors={errors}
+                      getErrorsUpdater={getErrorsUpdater}
+                      onChange={onChange}
+                      required={
+                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
+                      }
+                      minDateTime={getMinEndTime()}
+                      helperText="Should be greater than data copy/cutover start time"
+                    />
+                  </Fields>
+                )}
+            </Fields>
 
             <Fields>
               <FormControlLabel
@@ -298,6 +286,21 @@ export default function MigrationOptions({
                 disabled={!selectedMigrationOptions.postMigrationScript}
                 error={!!errors["postMigrationScript"]}
                 required={selectedMigrationOptions.postMigrationScript}
+              />
+            </Fields>
+
+            <Fields>
+              {/* Retry on failure */}
+              <FormControlLabel
+                label="Retry on failure"
+                control={
+                  <Checkbox
+                    checked={params?.retryOnFailure || false}
+                    onChange={(e) => {
+                      onChange("retryOnFailure")(e.target.checked)
+                    }}
+                  />
+                }
               />
             </Fields>
 
