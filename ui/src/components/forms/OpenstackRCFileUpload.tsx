@@ -16,6 +16,7 @@ const requiredFields = [
   "OS_PASSWORD",
   "OS_REGION_NAME",
   "OS_TENANT_NAME",
+  "OS_INSECURE",
 ]
 
 const FileUploadFieldContainer = styled("div")(({ theme }) => ({
