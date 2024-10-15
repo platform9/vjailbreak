@@ -56,7 +56,7 @@ interface MigrationOptionsPropsInterface {
 
 // Constants
 const DATA_COPY_METHODS = [
-  { value: "hot", label: "Copy live VMs then power off" },
+  { value: "hot", label: "Copy live VMs Then power off" },
   { value: "cold", label: "Power off live VMs then copy" },
 ]
 
@@ -140,7 +140,7 @@ export default function MigrationOptions({
           <FieldsContainer>
             {/* Retry on failure */}
             <FormControlLabel
-              label="Retry on failure"
+              label="Retry On Failure"
               control={
                 <Checkbox
                   checked={params?.retryOnFailure || false}
@@ -155,7 +155,7 @@ export default function MigrationOptions({
             <Fields>
               <FormControlLabel
                 id="data-copy-method"
-                label="Data copy method"
+                label="Data Copy Method"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.dataCopyMethod}
@@ -187,7 +187,7 @@ export default function MigrationOptions({
             {/* Data Copy Time Window */}
             <Fields>
               <FormControlLabel
-                label={"Data copy start time"}
+                label={"Data Copy Start Time"}
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions?.dataCopyStartTime}
@@ -200,7 +200,7 @@ export default function MigrationOptions({
                 }
               />
               <TimePicker
-                label="Start Time"
+                label="Data Copy Start Time"
                 identifier="dataCopyStartTime"
                 params={params}
                 errors={errors}
@@ -247,7 +247,7 @@ export default function MigrationOptions({
               selectedMigrationOptions.cutoverOption && (
                 <Fields sx={{ mt: "20px", gridTemplateColumns: "1fr 1fr 1fr" }}>
                   <TimePicker
-                    label="Start Time"
+                    label="Cutover Start Time"
                     identifier="cutoverStartTime"
                     params={params}
                     errors={errors}
@@ -259,7 +259,7 @@ export default function MigrationOptions({
                     }
                   />
                   <TimePicker
-                    label="End Time"
+                    label="Cutover End Time"
                     identifier="cutoverEndTime"
                     params={params}
                     errors={errors}
@@ -276,7 +276,7 @@ export default function MigrationOptions({
 
             <Fields>
               <FormControlLabel
-                label="Post migration script"
+                label="Post Migration Script"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
@@ -289,7 +289,7 @@ export default function MigrationOptions({
                 }
               />
               <CustomTextField
-                label="Post migration script"
+                label="Post Migration Script"
                 size="small"
                 value={params?.postMigrationScript || ""}
                 onChange={(e) =>

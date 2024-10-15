@@ -144,7 +144,7 @@ export default function MigrationOptionsAlt({
             <Fields>
               <FormControlLabel
                 id="data-copy-method"
-                label="Data copy method"
+                label="Data Copy Method"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.dataCopyMethod}
@@ -189,7 +189,7 @@ export default function MigrationOptionsAlt({
                 }
               />
               <TimePicker
-                label="Start Time"
+                label="Data Copy Start Time"
                 identifier="dataCopyStartTime"
                 params={params}
                 errors={errors}
@@ -235,7 +235,7 @@ export default function MigrationOptionsAlt({
                 selectedMigrationOptions.cutoverOption && (
                   <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
                     <TimePicker
-                      label="Start Time"
+                      label="Cutover Start Time"
                       identifier="cutoverStartTime"
                       params={params}
                       errors={errors}
@@ -246,7 +246,7 @@ export default function MigrationOptionsAlt({
                       }
                     />
                     <TimePicker
-                      label="End Time"
+                      label="Cutover End Time"
                       identifier="cutoverEndTime"
                       params={params}
                       errors={errors}
@@ -264,7 +264,7 @@ export default function MigrationOptionsAlt({
 
             <Fields>
               <FormControlLabel
-                label="Post migration script"
+                label="Post Migration Script"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
@@ -277,7 +277,7 @@ export default function MigrationOptionsAlt({
                 }
               />
               <CustomTextField
-                label="Post migration script"
+                label="Post Migration Script"
                 size="small"
                 value={params?.postMigrationScript || ""}
                 onChange={(e) =>
@@ -292,7 +292,7 @@ export default function MigrationOptionsAlt({
             <Fields>
               {/* Retry on failure */}
               <FormControlLabel
-                label="Retry on failure"
+                label="Retry On Failure"
                 control={
                   <Checkbox
                     checked={params?.retryOnFailure || false}
