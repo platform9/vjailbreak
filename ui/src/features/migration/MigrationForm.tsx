@@ -31,7 +31,7 @@ import { pollForStatus } from "../pollForStatus"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
-import MigrationOptions, { CUTOVER_TYPES } from "./MigrationOptions"
+import MigrationOptions, { CUTOVER_TYPES } from "./MigrationOptionsAlt"
 
 const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
