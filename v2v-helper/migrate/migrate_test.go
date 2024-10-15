@@ -488,3 +488,78 @@ func TestCreateTargetInstance(t *testing.T) {
 	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.NoError(t, err)
 }
+
+func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockOpenStackOps.EXPECT().GetClosestFlavour(gomock.Any(), gomock.Any()).Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).Times(1)
+	mockOpenStackOps.EXPECT().GetPort("port-1").Return(&ports.Port{
+		ID:        "port-1-id",
+		NetworkID: "network-1",
+	}, nil).Times(1)
+	mockOpenStackOps.EXPECT().GetPort("port-2").Return(&ports.Port{
+		ID:        "port-2-id",
+		NetworkID: "network-2",
+	}, nil).Times(1)
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).Times(1)
+
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
+		IPs: []string{
+			"ip-address-1",
+			"ip-address-2",
+		},
+	}
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networknames:     []string{"network-name-1", "network-name-2"},
+		Networkports:     []string{"port-1", "port-2"},
+		InPod:            false,
+	}
+	err := migobj.CreateTargetInstance(inputvminfo)
+	assert.NoError(t, err)
+}
+
+func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockOpenStackOps.EXPECT().GetClosestFlavour(gomock.Any(), gomock.Any()).Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).Times(1)
+
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
+		IPs: []string{
+			"ip-address-1",
+			"ip-address-2",
+		},
+	}
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networknames:     []string{"network-name-1", "network-name-2"},
+		Networkports:     []string{"port-1"},
+		InPod:            false,
+	}
+	err := migobj.CreateTargetInstance(inputvminfo)
+	assert.Contains(t, err.Error(), "number of network ports does not match number of network names")
+}

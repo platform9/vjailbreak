@@ -39,6 +39,21 @@ spec:
           spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
+              advancedOptions:
+                properties:
+                  granularNetworks:
+                    items:
+                      type: string
+                    type: array
+                  granularPorts:
+                    items:
+                      type: string
+                    type: array
+                  granularVolumeTypes:
+                    items:
+                      type: string
+                    type: array
+                type: object
               migrationStrategy:
                 properties:
                   dataCopyStart:

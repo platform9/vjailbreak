@@ -17,6 +17,16 @@ import (
 	"vjailbreak/vm"
 )
 
+func removeEmptyStrings(slice []string) []string {
+	var result []string
+	for _, str := range slice {
+		if str != "" {
+			result = append(result, str)
+		}
+	}
+	return result
+}
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var envURL = os.Getenv("VCENTER_HOST")
@@ -25,6 +35,7 @@ func main() {
 	var envInsecure = os.Getenv("VCENTER_INSECURE")
 	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
 	var networknames = os.Getenv("NEUTRON_NETWORK_NAMES")
+	var networkports = os.Getenv("NEUTRON_PORT_IDS")
 	var volumeTypes = os.Getenv("CINDER_VOLUME_TYPES")
 	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
 	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
@@ -41,6 +52,8 @@ func main() {
 	log.Println("Source VM Name:", sourcevmname)
 	log.Println("OS Type:", ostype)
 	log.Println("Network Names:", strings.Split(networknames, ","))
+	networkportslice := removeEmptyStrings(strings.Split(networkports, ","))
+	log.Println("Network Ports:", networkportslice)
 	log.Println("Volume Types:", strings.Split(volumeTypes, ","))
 
 	starttime, _ := time.Parse(time.RFC3339, datacopystart)
@@ -88,6 +101,7 @@ func main() {
 		Password:         envPassword,
 		Insecure:         insecure,
 		Networknames:     strings.Split(networknames, ","),
+		Networkports:     networkportslice,
 		Volumetypes:      strings.Split(volumeTypes, ","),
 		Virtiowin:        virtiowin,
 		Ostype:           ostype,

@@ -185,6 +185,21 @@ func (mr *MockOpenstackOperationsMockRecorder) GetNetwork(networkname interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetwork", reflect.TypeOf((*MockOpenstackOperations)(nil).GetNetwork), networkname)
 }
 
+// GetPort mocks base method.
+func (m *MockOpenstackOperations) GetPort(portID string) (*ports.Port, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPort", portID)
+	ret0, _ := ret[0].(*ports.Port)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPort indicates an expected call of GetPort.
+func (mr *MockOpenstackOperationsMockRecorder) GetPort(portID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPort", reflect.TypeOf((*MockOpenstackOperations)(nil).GetPort), portID)
+}
+
 // SetVolumeBootable mocks base method.
 func (m *MockOpenstackOperations) SetVolumeBootable(volume *volumes.Volume) error {
 	m.ctrl.T.Helper()
