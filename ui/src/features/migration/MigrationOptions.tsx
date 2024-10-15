@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 import {
   Checkbox,
   FormControlLabel,
@@ -12,7 +12,11 @@ import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import Step from "src/components/forms/Step"
-import { FormValues, MigrationOptionsType, Errors } from "./MigrationForm"
+import {
+  FormValues,
+  SelectedMigrationOptionsType,
+  Errors,
+} from "./MigrationForm"
 
 // Accordian Imports
 import Accordion from "@mui/material/Accordion"
@@ -42,9 +46,9 @@ const CustomTextField = styled(TextField)({
 interface MigrationOptionsPropsInterface {
   params: FormValues
   onChange: (key: string) => (value: unknown) => void
-  migrationOptions: MigrationOptionsType
-  updateMigrationOptions: (
-    key: keyof MigrationOptionsType
+  selectedMigrationOptions: SelectedMigrationOptionsType
+  updateSelectedMigrationOptions: (
+    key: keyof SelectedMigrationOptionsType
   ) => (value: unknown) => void
   errors: Errors
   getErrorsUpdater: (key: string | number) => (value: string) => void
@@ -56,10 +60,19 @@ const DATA_COPY_METHODS = [
   { value: "cold", label: "Power off live VMs then copy" },
 ]
 
+export enum CUTOVER_TYPES {
+  "IMMEDIATE" = "0",
+  "ADMIN_INITIATED" = "1",
+  "TIME_WINDOW" = "2",
+}
+
 const VM_CUTOVER_OPTIONS = [
-  { value: "0", label: "Cutover immediately after data copy" },
-  { value: "1", label: "Admin initiated cutover" },
-  { value: "2", label: "Cutover during time window" },
+  {
+    value: CUTOVER_TYPES.IMMEDIATE,
+    label: "Cutover immediately after data copy",
+  },
+  { value: CUTOVER_TYPES.ADMIN_INITIATED, label: "Admin initiated cutover" },
+  { value: CUTOVER_TYPES.TIME_WINDOW, label: "Cutover during time window" },
 ]
 
 // TODO - Commented out the non-required field from the options for now
@@ -73,12 +86,32 @@ const VM_CUTOVER_OPTIONS = [
 export default function MigrationOptions({
   params,
   onChange,
-  migrationOptions,
-  updateMigrationOptions,
+  selectedMigrationOptions,
+  updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
 }: MigrationOptionsPropsInterface) {
-  // Validate Required fields
+  // Iniitialize fields
+  useEffect(() => {
+    onChange("dataCopyMethod")("hot")
+    onChange("cutoverOption")("0")
+  }, [])
+
+  const getMinEndTime = useCallback(() => {
+    let minDate = params.cutoverStartTime
+    if (selectedMigrationOptions.dataCopyStartTime) {
+      // Which ever is greater
+      minDate =
+        dayjs(params.cutoverStartTime).diff(
+          dayjs(params.dataCopyStartTime),
+          "seconds"
+        ) > 0
+          ? params.cutoverStartTime
+          : params.dataCopyStartTime
+    }
+
+    return dayjs(minDate).add(1, "minute")
+  }, [params, selectedMigrationOptions])
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -125,21 +158,22 @@ export default function MigrationOptions({
                 label="Data copy method"
                 control={
                   <Checkbox
-                    checked={migrationOptions.dataCopyMethod}
+                    checked={selectedMigrationOptions.dataCopyMethod}
                     onChange={(e) => {
-                      updateMigrationOptions("dataCopyMethod")(e.target.checked)
+                      updateSelectedMigrationOptions("dataCopyMethod")(
+                        e.target.checked
+                      )
                     }}
                   />
                 }
               />
               <Select
                 size="small"
-                disabled={!migrationOptions.dataCopyMethod}
+                disabled={!selectedMigrationOptions.dataCopyMethod}
                 labelId="source-item-label"
                 value={params?.dataCopyMethod || "hot"}
                 onChange={(e) => {
                   onChange("dataCopyMethod")(e.target.value)
-                  updateMigrationOptions("dataCopyMethod")(true)
                 }}
               >
                 {DATA_COPY_METHODS.map((item) => (
@@ -156,9 +190,9 @@ export default function MigrationOptions({
                 label={"Data copy start time"}
                 control={
                   <Checkbox
-                    checked={migrationOptions?.dataCopyStartTime}
+                    checked={selectedMigrationOptions?.dataCopyStartTime}
                     onChange={(e) => {
-                      updateMigrationOptions("dataCopyStartTime")(
+                      updateSelectedMigrationOptions("dataCopyStartTime")(
                         e.target.checked
                       )
                     }}
@@ -170,9 +204,10 @@ export default function MigrationOptions({
                 identifier="dataCopyStartTime"
                 params={params}
                 errors={errors}
+                getErrorsUpdater={getErrorsUpdater}
                 onChange={onChange}
-                disabled={!migrationOptions?.dataCopyStartTime}
-                required={!!migrationOptions?.dataCopyStartTime}
+                disabled={!selectedMigrationOptions.dataCopyStartTime}
+                required={!!selectedMigrationOptions.dataCopyStartTime}
               />
             </Fields>
 
@@ -183,22 +218,21 @@ export default function MigrationOptions({
                 label="Cutover Options"
                 control={
                   <Checkbox
-                    checked={migrationOptions.cutoverOption}
+                    checked={selectedMigrationOptions.cutoverOption}
                     onChange={(e) => {
-                      updateMigrationOptions("cutoverOption")(e.target.checked)
-                      onChange("cutoverOption")("0")
+                      updateSelectedMigrationOptions("cutoverOption")(
+                        e.target.checked
+                      )
                     }}
                   />
                 }
               />
               <Select
                 size="small"
-                disabled={!migrationOptions?.cutoverOption}
+                disabled={!selectedMigrationOptions?.cutoverOption}
                 value={params?.cutoverOption || "0"}
                 onChange={(e) => {
                   onChange("cutoverOption")(e.target.value)
-                  onChange("cutoverStartTime")(null)
-                  onChange("cutoverEndTime")(null)
                 }}
               >
                 {VM_CUTOVER_OPTIONS.map((item) => (
@@ -209,24 +243,28 @@ export default function MigrationOptions({
               </Select>
             </Fields>
 
-            {params.cutoverOption === "2" && (
+            {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW && (
               <Fields sx={{ mt: "20px", gridTemplateColumns: "1fr 1fr 1fr" }}>
                 <TimePicker
                   label="Start Time"
                   identifier="cutoverStartTime"
                   params={params}
                   errors={errors}
+                  getErrorsUpdater={getErrorsUpdater}
                   onChange={onChange}
                   sx={{ ml: "32px" }}
-                  required={params.cutoverOption === "2"}
+                  required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                 />
                 <TimePicker
                   label="End Time"
                   identifier="cutoverEndTime"
                   params={params}
                   errors={errors}
+                  getErrorsUpdater={getErrorsUpdater}
                   onChange={onChange}
-                  required={params.cutoverOption === "2"}
+                  required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
+                  minDateTime={getMinEndTime()}
+                  helperText="Should be greater than data copy/cutover start time"
                 />
               </Fields>
             )}
@@ -236,9 +274,9 @@ export default function MigrationOptions({
                 label="Post migration script"
                 control={
                   <Checkbox
-                    checked={migrationOptions.postMigrationScript}
+                    checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateMigrationOptions("postMigrationScript")(
+                      updateSelectedMigrationOptions("postMigrationScript")(
                         e.target.checked
                       )
                     }}
@@ -252,9 +290,9 @@ export default function MigrationOptions({
                 onChange={(e) =>
                   onChange("postMigrationScript")(String(e.target.value))
                 }
-                disabled={!migrationOptions.postMigrationScript}
+                disabled={!selectedMigrationOptions.postMigrationScript}
                 error={!!errors["postMigrationScript"]}
-                required={migrationOptions.postMigrationScript}
+                required={selectedMigrationOptions.postMigrationScript}
               />
             </Fields>
 
@@ -265,8 +303,8 @@ export default function MigrationOptions({
                   label={hook.label}
                   identifier={hook.identifier}
                   params={params}
-                  migrationOptions={migrationOptions}
-                  updateMigrationOptions={updateMigrationOptions}
+                  selectedMigrationOptions={selectedMigrationOptions}
+                  updateSelectedMigrationOptions={updateSelectedMigrationOptions}
                   onChange={onChange}
                 />
               </Fields>
@@ -283,8 +321,9 @@ const TimePicker = ({
   params,
   onChange,
   errors,
-  required,
-  ...props
+  getErrorsUpdater,
+  helperText = "",
+  ...restProps
 }) => {
   const value = params?.[identifier] ? dayjs(params?.[identifier]) : null
 
@@ -303,17 +342,23 @@ const TimePicker = ({
       onChange={(newValue: dayjs.Dayjs | null) =>
         handleTimeChange(newValue, identifier)
       }
+      onError={(error) => {
+        getErrorsUpdater(identifier)(error)
+      }}
       slots={{
         textField: (props) => (
           <TextField
             {...props}
             size="small"
-            required={required}
-            error={!!errors[identifier]} // Show error if validation fails
+            required={restProps?.required}
+            error={!!errors[identifier] && !restProps?.disabled} // Show error if validation fails
+            helperText={
+              !!errors[identifier] && !restProps?.disabled ? helperText : ""
+            }
           />
         ),
       }}
-      {...props}
+      {...restProps}
     />
   )
 }
@@ -323,8 +368,8 @@ const TimePicker = ({
 //   identifier,
 //   params,
 //   onChange,
-//   migrationOptions,
-//   updateMigrationOptions,
+//   selectedMigrationOptions,
+//   updateSelectedMigrationOptions,
 // }) => {
 //   return (
 //     <>
@@ -332,9 +377,9 @@ const TimePicker = ({
 //         label={label}
 //         control={
 //           <Checkbox
-//             checked={migrationOptions?.[identifier]}
+//             checked={selectedMigrationOptions?.[identifier]}
 //             onChange={(e) => {
-//               updateMigrationOptions(identifier)(e.target.checked)
+//               updateSelectedMigrationOptions(identifier)(e.target.checked)
 //             }}
 //           />
 //         }
