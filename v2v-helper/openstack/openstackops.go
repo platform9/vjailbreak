@@ -43,6 +43,7 @@ type OpenstackOperations interface {
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
+	GetPort(portID string) (*ports.Port, error)
 	CreatePort(networkid *networks.Network, mac, ip, vmname string) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error)
 	DeleteVolume(volumeID string) error
@@ -434,6 +435,14 @@ func (osclient *OpenStackClients) GetNetwork(networkname string) (*networks.Netw
 		}
 	}
 	return nil, fmt.Errorf("network not found")
+}
+
+func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
+	port, err := ports.Get(osclient.NetworkingClient, portID).Extract()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get port: %s", err)
+	}
+	return port, nil
 }
 
 func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string) (*ports.Port, error) {

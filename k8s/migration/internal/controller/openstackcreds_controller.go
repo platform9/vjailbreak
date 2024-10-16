@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -217,16 +218,15 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 		return fmt.Errorf("failed to extract all networks: %w", err)
 	}
 
+	// Build a map of all networks
+	networkMap := make(map[string]bool)
+	for i := 0; i < len(allNetworks); i++ {
+		networkMap[allNetworks[i].Name] = true
+	}
+
 	// Verify that all network names in targetnetworks exist in the openstack networks
 	for _, targetNetwork := range targetnetworks {
-		found := false
-		for i := 0; i < len(allNetworks); i++ {
-			if allNetworks[i].Name == targetNetwork {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, found := networkMap[targetNetwork]; !found {
 			return fmt.Errorf("network '%s' not found in OpenStack", targetNetwork)
 		}
 	}
@@ -234,6 +234,37 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 }
 
 //nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
+func VerifyPorts(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetports []string) error {
+	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
+	if err != nil {
+		return err
+	}
+
+	allPages, err := ports.List(openstackClients.NetworkingClient, nil).AllPages()
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return fmt.Errorf("failed to extract all networks: %w", err)
+	}
+
+	// Build a map of all ports
+	portMap := make(map[string]bool)
+	for i := 0; i < len(allPorts); i++ {
+		portMap[allPorts[i].ID] = true
+	}
+
+	// Verify that all port names in targetports exist in the openstack ports
+	for _, targetPort := range targetports {
+		if _, found := portMap[targetPort]; !found {
+			return fmt.Errorf("port '%s' not found in OpenStack", targetPort)
+		}
+	}
+	return nil
+}
+
 func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
 	openstackClients, err := validateOpenstackCreds(log.FromContext(ctx), openstackcreds)
 	if err != nil {

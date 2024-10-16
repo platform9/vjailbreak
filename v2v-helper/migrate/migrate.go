@@ -27,6 +27,7 @@ type Migrate struct {
 	Password         string
 	Insecure         bool
 	Networknames     []string
+	Networkports     []string
 	Volumetypes      []string
 	Virtiowin        string
 	Ostype           string
@@ -404,29 +405,43 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 
 	networkids := []string{}
 	portids := []string{}
-	for idx, networkname := range networknames {
-		// Create Port Group with the same mac address as the source VM
-		// Find the network with the given ID
-		network, err := openstackops.GetNetwork(networkname)
-		if err != nil {
-			return fmt.Errorf("failed to get network: %s", err)
-		}
-		log.Printf("Network ID: %s\n", network.ID)
 
-		ip := ""
-		if len(vminfo.Mac) != len(vminfo.IPs) {
-			ip = ""
-		} else {
-			ip = vminfo.IPs[idx]
+	if len(migobj.Networkports) != 0 {
+		if len(migobj.Networkports) != len(networknames) {
+			return fmt.Errorf("number of network ports does not match number of network names")
 		}
-		port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
-		if err != nil {
-			return fmt.Errorf("failed to create port group: %s", err)
+		for _, port := range migobj.Networkports {
+			retrPort, err := openstackops.GetPort(port)
+			if err != nil {
+				return fmt.Errorf("failed to get port: %s", err)
+			}
+			networkids = append(networkids, retrPort.NetworkID)
+			portids = append(portids, retrPort.ID)
 		}
+	} else {
+		for idx, networkname := range networknames {
+			// Create Port Group with the same mac address as the source VM
+			// Find the network with the given ID
+			network, err := openstackops.GetNetwork(networkname)
+			if err != nil {
+				return fmt.Errorf("failed to get network: %s", err)
+			}
 
-		log.Printf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
-		networkids = append(networkids, network.ID)
-		portids = append(portids, port.ID)
+			ip := ""
+			if len(vminfo.Mac) != len(vminfo.IPs) {
+				ip = ""
+			} else {
+				ip = vminfo.IPs[idx]
+			}
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
+			if err != nil {
+				return fmt.Errorf("failed to create port group: %s", err)
+			}
+
+			log.Printf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
+			networkids = append(networkids, network.ID)
+			portids = append(portids, port.ID)
+		}
 	}
 
 	// Create a new VM in OpenStack
@@ -463,6 +478,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		cancel()
 		return fmt.Errorf("failed to get all info: %s", err)
+	}
+	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
+		return fmt.Errorf("number of volume types does not match number of disks")
+	}
+	if len(vminfo.Mac) != len(migobj.Networknames) {
+		return fmt.Errorf("number of mac addresses does not match number of network names")
 	}
 
 	// Graceful Termination

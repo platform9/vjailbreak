@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -96,6 +97,13 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Validate Time Field
 	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
 		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
+	}
+
+	// If advanced options are set, then there should only be 1 VM in the migrationplan
+	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) &&
+		(len(migrationplan.Spec.VirtualMachines) != 1 || len(migrationplan.Spec.VirtualMachines[0]) != 1) {
+		return ctrl.Result{}, fmt.Errorf(`advanced options can only be set for a single VM.
+		Please remove advanced options or reduce the number of VMs in the migrationplan`)
 	}
 
 	// examine DeletionTimestamp to determine if object is under deletion or not
@@ -390,6 +398,29 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 		return nil, fmt.Errorf("failed to reconcile mapping: %w", err)
 	}
 
+	openstackports := []string{}
+	// If advanced options are set, replace the networks and/or volume types with the ones in the advanced options
+	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
+		if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
+			if err = VerifyNetworks(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
+				return nil, fmt.Errorf("failed to verify networks in advanced mapping: %w", err)
+			}
+			openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
+		}
+		if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
+			if err = VerifyStorage(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
+				return nil, fmt.Errorf("failed to verify volume types in advanced mapping: %w", err)
+			}
+			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
+		}
+		if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
+			if err = VerifyPorts(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
+				return nil, fmt.Errorf("failed to verify ports in advanced mapping: %w", err)
+			}
+			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
+		}
+	}
+
 	// Create ConfigMap
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
@@ -407,6 +438,7 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 				"CUTOVERSTART":          migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
 				"CUTOVEREND":            migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
 				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
+				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
 				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
 				"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
 				"OS_DOMAIN_NAME":        openstackcreds.Spec.OsDomainName,

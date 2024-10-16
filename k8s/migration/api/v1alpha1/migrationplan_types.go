@@ -37,12 +37,19 @@ type MigrationPlanStrategy struct {
 	VMCutoverEnd metav1.Time `json:"vmCutoverEnd,omitempty"`
 }
 
+type AdvancedOptions struct {
+	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
+	GranularNetworks    []string `json:"granularNetworks,omitempty"`
+	GranularPorts       []string `json:"granularPorts,omitempty"`
+}
+
 // MigrationPlanSpec defines the desired state of MigrationPlan
 type MigrationPlanSpec struct {
 	MigrationTemplate string                `json:"migrationTemplate"`
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
 	Retry             bool                  `json:"retry,omitempty"`
 	VirtualMachines   [][]string            `json:"virtualmachines"`
+	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan
