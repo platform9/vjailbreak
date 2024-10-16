@@ -18,7 +18,12 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud"
@@ -99,8 +104,65 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
+func getCert(endpoint string) (*x509.Certificate, error) {
+	conf := &tls.Config{
+		//nolint:gosec // This is required to skip certificate verification
+		InsecureSkipVerify: true,
+	}
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL: %w", err)
+	}
+	hostname := parsedURL.Hostname()
+	conn, err := tls.Dial("tcp", hostname+":443", conf)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to %s: %w", hostname, err)
+	}
+	defer conn.Close()
+	cert := conn.ConnectionState().PeerCertificates[0]
+	return cert, nil
+}
+
 func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
-	providerClient, err := openstack.AuthenticatedClient(gophercloud.AuthOptions{
+	providerClient, err := openstack.NewClient(openstackcreds.Spec.OsAuthURL)
+	if err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Error creating Openstack Client'%s'", openstackcreds.Spec.OsAuthURL))
+		return nil, err
+	}
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	if openstackcreds.Spec.OsInsecure {
+		ctxlog.Info("Insecure flag is set, skipping certificate verification")
+		tlsConfig.InsecureSkipVerify = true
+	} else {
+		// Get the certificate for the Openstack endpoint
+		caCert, certerr := getCert(openstackcreds.Spec.OsAuthURL)
+		if certerr != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error getting certificate for '%s'", openstackcreds.Spec.OsAuthURL))
+			return nil, err
+		}
+		// Logging the certificate
+		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackcreds.Spec.OsAuthURL))
+		ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: caCert.Raw,
+		})))
+		// Trying to fetch the system cert pool and add the Openstack certificate to it
+		caCertPool, _ := x509.SystemCertPool()
+		if caCertPool == nil {
+			caCertPool = x509.NewCertPool()
+		}
+		caCertPool.AddCert(caCert)
+		tlsConfig.RootCAs = caCertPool
+	}
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	providerClient.HTTPClient = http.Client{
+		Transport: transport,
+	}
+	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
 		IdentityEndpoint: openstackcreds.Spec.OsAuthURL,
 		Username:         openstackcreds.Spec.OsUsername,
 		Password:         openstackcreds.Spec.OsPassword,
