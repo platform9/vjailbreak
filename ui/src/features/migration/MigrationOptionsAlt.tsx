@@ -353,18 +353,14 @@ const TimePicker = ({
       onError={(error) => {
         getErrorsUpdater(identifier)(error)
       }}
-      slots={{
-        textField: (props) => (
-          <TextField
-            {...props}
-            size="small"
-            required={restProps?.required}
-            error={!!errors[identifier] && !restProps?.disabled} // Show error if validation fails
-            helperText={
-              !!errors[identifier] && !restProps?.disabled ? helperText : ""
-            }
-          />
-        ),
+      slotProps={{
+        textField: {
+          size: "small",
+          required: restProps?.required,
+          error: !!errors[identifier] && !restProps?.disabled, // Show error if validation fails
+          helperText:
+            !!errors[identifier] && !restProps?.disabled ? helperText : "",
+        },
       }}
       {...restProps}
     />
