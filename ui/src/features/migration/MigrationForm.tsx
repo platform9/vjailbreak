@@ -330,18 +330,21 @@ export default function MigrationFormDrawer({
     const migrationPlanResource = await createMigrationPlan({
       migrationTemplateName: updatedMigrationTemplateResource?.metadata?.name,
       virtualmachines: vmsToMigrate,
-      // Optional Params
-      type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod,
-      dataCopyStart:
-        selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime,
-      vmCutoverStart:
-        selectedMigrationOptions.cutoverOption &&
+      // Optional Migration Params
+      type:
+        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+          ? params.dataCopyMethod
+          : "hot",
+      ...(selectedMigrationOptions.dataCopyStartTime &&
+        params?.dataCopyStartTime && {
+          dataCopyStart: params.dataCopyStartTime,
+        }),
+      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverStartTime,
-      vmCutoverEnd:
-        selectedMigrationOptions.cutoverOption &&
+        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
+      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverEndTime,
+        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
       retry: params.retryOnFailure,
     })
     setMigrationPlanResource(migrationPlanResource)
