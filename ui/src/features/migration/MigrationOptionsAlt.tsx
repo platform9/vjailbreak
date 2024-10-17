@@ -58,8 +58,8 @@ interface MigrationOptionsPropsInterface {
 
 // Constants
 const DATA_COPY_METHODS = [
-  { value: "hot", label: "Copy live VMs then power off" },
-  { value: "cold", label: "Power off live VMs then copy" },
+  { value: "hot", label: "Copy live VMs, then power off" },
+  { value: "cold", label: "Power off live VMs, then copy" },
 ]
 
 export enum CUTOVER_TYPES {
