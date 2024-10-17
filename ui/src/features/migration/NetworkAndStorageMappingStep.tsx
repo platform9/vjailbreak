@@ -1,7 +1,8 @@
 import { FormControl, FormHelperText, styled } from "@mui/material"
 import { useEffect, useMemo } from "react"
-import ResourceMapping from "../../components/forms/ResourceMapping"
 import Step from "../../components/forms/Step"
+import ResourceMappingTable from "src/components/forms/ResourceMappingTableNew"
+// import ResourceMapping from "../../components/forms/ResourceMapping"
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -81,7 +82,7 @@ export default function NetworkAndStorageMappingStep({
       <Step stepNumber="3" label="Network and Storage Mapping" />
       <FieldsContainer>
         <FormControl error={!!networkMappingError}>
-          <ResourceMapping
+          <ResourceMappingTable
             label="Map Networks"
             sourceItems={vmwareNetworks}
             targetItems={openstackNetworks}
@@ -95,7 +96,7 @@ export default function NetworkAndStorageMappingStep({
           )}
         </FormControl>
         <FormControl error={!!storageMappingError}>
-          <ResourceMapping
+          <ResourceMappingTable
             label="Map Storage"
             sourceItems={vmWareStorage}
             targetItems={openstackStorage}
