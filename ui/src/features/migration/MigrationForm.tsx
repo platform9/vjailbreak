@@ -335,22 +335,16 @@ export default function MigrationFormDrawer({
         selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
           ? params.dataCopyMethod
           : "hot",
-      dataCopyStart:
-        selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime
-          ? params.dataCopyStartTime
-          : "unset",
-      vmCutoverStart:
-        selectedMigrationOptions.cutoverOption &&
+      ...(selectedMigrationOptions.dataCopyStartTime &&
+        params?.dataCopyStartTime && {
+          dataCopyStart: params.dataCopyStartTime,
+        }),
+      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverStartTime
-          ? params.cutoverStartTime
-          : "unset",
-      vmCutoverEnd:
-        selectedMigrationOptions.cutoverOption &&
+        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
+      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverEndTime
-          ? params.cutoverEndTime
-          : "unset",
+        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
       retry: params.retryOnFailure,
     })
     setMigrationPlanResource(migrationPlanResource)
