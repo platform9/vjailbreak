@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -53,6 +55,7 @@ var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 var v2vimage = "platform9/v2v-helper:v0.1"
 
 const terminationPeriod = int64(120)
+const namemexlength = 242
 
 // Used to facilitate removal of our finalizer
 func RemoveString(s []string, r string) []string {
@@ -246,12 +249,37 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	return nil
 }
 
+func convertToK8sName(name string) (string, error) {
+	// Convert to lowercase
+	name = strings.ToLower(name)
+	// Replace separators with hyphens
+	re := regexp.MustCompile(`[_\s]`)
+	name = re.ReplaceAllString(name, "-")
+	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
+	re = regexp.MustCompile(`[^a-z0-9\-.]`)
+	name = re.ReplaceAllString(name, "")
+	// Remove leading and trailing hyphens
+	name = strings.Trim(name, "-")
+	// Truncate to 242 characters, as we prepend v2v-helper- to the name
+	if len(name) > namemexlength {
+		name = name[:namemexlength]
+	}
+	nameerrors := validation.IsQualifiedName(name)
+	if len(nameerrors) == 0 {
+		return name, nil
+	}
+	return name, fmt.Errorf("name '%s' is not a valid K8s name: %v", name, nameerrors)
+}
+
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string) (*vjailbreakv1alpha1.Migration, error) {
-	vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
+	vmname, err := convertToK8sName(vm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert VM name: %w", err)
+	}
 	migrationobj := &vjailbreakv1alpha1.Migration{}
-	err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("migration-%s", vmname), Namespace: migrationplan.Namespace}, migrationobj)
+	err = r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("migration-%s", vmname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
@@ -281,7 +309,10 @@ func int64Ptr(i int64) *int64 { return &i }
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName string) error {
-	vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
+	vmname, err := convertToK8sName(vm)
+	if err != nil {
+		return fmt.Errorf("failed to convert VM name: %w", err)
+	}
 	podName := fmt.Sprintf("v2v-helper-%s", vmname)
 	pointtrue := true
 	cutoverlabel := "yes"
@@ -289,7 +320,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 		cutoverlabel = "no"
 	}
 	pod := &corev1.Pod{}
-	err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migrationplan.Namespace}, pod)
+	err = r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migrationplan.Namespace}, pod)
 	if err != nil && apierrors.IsNotFound(err) {
 		r.ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vmname))
 		pod = &corev1.Pod{
@@ -392,7 +423,10 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string) (*corev1.ConfigMap, error) {
-	vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
+	vmname, err := convertToK8sName(vm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert VM name: %w", err)
+	}
 	configMapName := fmt.Sprintf("migration-config-%s", vmname)
 	virtiodrivers := ""
 	if migrationtemplate.Spec.VirtioWinDriver == "" {
@@ -477,11 +511,11 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner metav1.Object, controlled client.Object) error {
 	err := ctrl.SetControllerReference(owner, controlled, r.Scheme)
 	if err != nil {
-		return fmt.Errorf("failed to set controller reference")
+		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 	err = r.Create(ctx, controlled)
 	if err != nil {
-		return fmt.Errorf("failed to create resource")
+		return fmt.Errorf("failed to create resource: %w", err)
 	}
 	return nil
 }
