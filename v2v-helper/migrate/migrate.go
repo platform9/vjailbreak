@@ -4,8 +4,10 @@ package migrate
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,29 +20,33 @@ import (
 	"vjailbreak/virtv2v"
 	"vjailbreak/vm"
 
+	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
 type Migrate struct {
-	URL              string
-	UserName         string
-	Password         string
-	Insecure         bool
-	Networknames     []string
-	Networkports     []string
-	Volumetypes      []string
-	Virtiowin        string
-	Ostype           string
-	Thumbprint       string
-	Convert          bool
-	Openstackclients openstack.OpenstackOperations
-	Vcclient         vcenter.VCenterOperations
-	VMops            vm.VMOperations
-	Nbdops           []nbd.NBDOperations
-	EventReporter    chan string
-	InPod            bool
-	MigrationTimes   MigrationTimes
-	MigrationType    string
+	URL                 string
+	UserName            string
+	Password            string
+	Insecure            bool
+	Networknames        []string
+	Networkports        []string
+	Volumetypes         []string
+	Virtiowin           string
+	Ostype              string
+	Thumbprint          string
+	Convert             bool
+	Openstackclients    openstack.OpenstackOperations
+	Vcclient            vcenter.VCenterOperations
+	VMops               vm.VMOperations
+	Nbdops              []nbd.NBDOperations
+	EventReporter       chan string
+	PodLabelWatcher     chan string
+	InPod               bool
+	MigrationTimes      MigrationTimes
+	MigrationType       string
+	PerformHealthChecks bool
+	HealthCheckPort     string
 }
 
 type MigrationTimes struct {
@@ -404,6 +410,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", closestFlavour.Name, closestFlavour.VCPUs, closestFlavour.RAM)
 
 	networkids := []string{}
+	ipaddresses := []string{}
 	portids := []string{}
 
 	if len(migobj.Networkports) != 0 {
@@ -417,6 +424,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			}
 			networkids = append(networkids, retrPort.NetworkID)
 			portids = append(portids, retrPort.ID)
+			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
 		}
 	} else {
 		for idx, networkname := range networknames {
@@ -441,6 +449,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			log.Printf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress)
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
+			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
 		}
 	}
 
@@ -450,6 +459,130 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
 	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))
+
+	if migobj.PerformHealthChecks {
+		err = migobj.HealthCheck(vminfo, ipaddresses)
+		if err != nil {
+			migobj.logMessage(fmt.Sprintf("Health Check failed: %s", err))
+		}
+	} else {
+		migobj.logMessage("Skipping Health Checks")
+	}
+
+	return nil
+}
+
+func (migobj *Migrate) pingVM(ips []string) error {
+	for _, ip := range ips {
+		migobj.logMessage(fmt.Sprintf("Pinging VM: %s", ip))
+		pinger, err := probing.NewPinger(ip)
+		if err != nil {
+			return fmt.Errorf("failed to create pinger: %s", err)
+		}
+		pinger.Count = 1
+		pinger.Timeout = time.Second * 10
+		err = pinger.Run()
+		if err != nil {
+			return fmt.Errorf("failed to run pinger: %s", err)
+		}
+		if pinger.Statistics().PacketLoss == 0 {
+			migobj.logMessage("Ping succeeded")
+		} else {
+			return fmt.Errorf("Ping failed")
+		}
+	}
+	return nil
+}
+
+func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Timeout: time.Second * 10,
+	}
+	for _, ip := range ips {
+		// Try HTTP first
+		httpURL := fmt.Sprintf("http://%s:%s", ip, port)
+		if err := migobj.tryConnection(client, httpURL); err == nil {
+			migobj.logMessage("HTTP succeeded")
+			continue // Success with HTTP, move to next IP
+		}
+
+		// If HTTP fails, try HTTPS
+		httpsURL := fmt.Sprintf("https://%s:%s", ip, port)
+		if err := migobj.tryConnection(client, httpsURL); err == nil {
+			migobj.logMessage("HTTPS succeeded")
+			continue // Success with HTTPS, move to next IP
+		}
+
+		// Both HTTP and HTTPS failed
+		return fmt.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
+	}
+
+	return nil
+}
+
+func (migobj *Migrate) tryConnection(client *http.Client, url string) error {
+	resp, err := client.Get(url)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("GET failed for %s: %v", url, err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	migobj.logMessage(fmt.Sprintf("GET response for %s: %d", url, resp.StatusCode))
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET returned non-OK status for %s: %d", url, resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
+	migobj.logMessage("Performing Health Checks")
+	healthChecks := make(map[string]bool)
+	healthChecks["Ping"] = false
+	healthChecks["HTTP Get"] = false
+	for i := 0; i < len(vminfo.IPs); i++ {
+		if ips[i] != vminfo.IPs[i] {
+			migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
+		}
+	}
+	for i := 0; i < 10; i++ {
+		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
+		// 1. Ping
+		if !healthChecks["Ping"] {
+			err := migobj.pingVM(ips)
+			if err != nil {
+				migobj.logMessage(fmt.Sprintf("Ping(s) failed: %s", err))
+			} else {
+				healthChecks["Ping"] = true
+			}
+		}
+		// 2. HTTP GET check
+		if !healthChecks["HTTP Get"] {
+			err := migobj.checkHTTPGet(ips, migobj.HealthCheckPort)
+			if err != nil {
+				migobj.logMessage(fmt.Sprintf("HTTP Get failed: %s", err))
+			} else {
+				healthChecks["HTTP Get"] = true
+			}
+		}
+		if healthChecks["Ping"] && healthChecks["HTTP Get"] {
+			break
+		}
+		migobj.logMessage("Waiting for 60 seconds before retrying health checks")
+		time.Sleep(60 * time.Second)
+	}
+	for key, value := range healthChecks {
+		if !value {
+			migobj.logMessage(fmt.Sprintf("Health Check %s failed", key))
+		} else {
+			migobj.logMessage(fmt.Sprintf("Health Check %s succeeded", key))
+		}
+	}
 	return nil
 }
 
@@ -525,6 +658,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.cleanup(vminfo)
 		return fmt.Errorf("failed to create target instance: %s", err)
 	}
+
 	cancel()
 	return nil
 }

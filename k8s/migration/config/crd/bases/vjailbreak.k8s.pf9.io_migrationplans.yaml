@@ -59,6 +59,12 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  healthCheckPort:
+                    default: "443"
+                    type: string
+                  performHealthChecks:
+                    default: true
+                    type: boolean
                   type:
                     enum:
                     - hot

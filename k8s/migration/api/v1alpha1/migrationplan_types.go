@@ -35,6 +35,12 @@ type MigrationPlanStrategy struct {
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format:=date-time
 	VMCutoverEnd metav1.Time `json:"vmCutoverEnd,omitempty"`
+	// +kubebuilder:default:=false
+	AdminInitiatedCutOver bool `json:"adminInitiatedCutOver,omitempty"`
+	// +kubebuilder:default:=true
+	PerformHealthChecks bool `json:"performHealthChecks,omitempty"`
+	// +kubebuilder:default:="443"
+	HealthCheckPort string `json:"healthCheckPort,omitempty"`
 }
 
 type AdvancedOptions struct {

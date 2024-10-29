@@ -4,6 +4,7 @@ package migrate
 import (
 	"context"
 	"testing"
+	"time"
 	"vjailbreak/nbd"
 	"vjailbreak/openstack"
 	"vjailbreak/vm"
@@ -129,6 +130,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 	envPassword := "envPassword"
 	thumbprint := "thumbprint"
 	dummychan := make(chan string)
+	dummychan2 := make(chan string)
 
 	mockVMOps := vm.NewMockVMOperations(ctrl)
 	mockNBD := nbd.NewMockNBDOperations(ctrl)
@@ -371,8 +373,13 @@ func TestLiveReplicateDisks(t *testing.T) {
 		Password:         envPassword,
 		Thumbprint:       thumbprint,
 		EventReporter:    dummychan,
+		PodLabelWatcher:  dummychan2,
 		MigrationType:    "hot",
 	}
+	go func() {
+		time.Sleep(30 * time.Second)
+		migobj.PodLabelWatcher <- "yes"
+	}()
 	updatedVMInfo, err := migobj.LiveReplicateDisks(context.TODO(), inputvminfo)
 	assert.NoError(t, err)
 	assert.Equal(t, vm.VMInfo{
@@ -501,10 +508,16 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 	mockOpenStackOps.EXPECT().GetPort("port-1").Return(&ports.Port{
 		ID:        "port-1-id",
 		NetworkID: "network-1",
+		FixedIPs: []ports.IP{
+			{IPAddress: "ip-address-1"},
+		},
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().GetPort("port-2").Return(&ports.Port{
 		ID:        "port-2-id",
 		NetworkID: "network-2",
+		FixedIPs: []ports.IP{
+			{IPAddress: "ip-address-2"},
+		},
 	}, nil).Times(1)
 	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).Times(1)
 

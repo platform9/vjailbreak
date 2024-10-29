@@ -45,6 +45,8 @@ func main() {
 	var vmcutoverend = os.Getenv("CUTOVEREND")
 	var migrationtype = os.Getenv("TYPE")
 	var envopenstackinsecure = os.Getenv("OS_INSECURE")
+	var performhealthchecks = os.Getenv("PERFORM_HEALTH_CHECKS")
+	var healthcheckport = os.Getenv("HEALTH_CHECK_PORT")
 
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
@@ -67,6 +69,7 @@ func main() {
 	insecure, _ := strconv.ParseBool(envInsecure)
 	convert, _ := strconv.ParseBool(envconvert)
 	openstackinsecure, _ := strconv.ParseBool(envopenstackinsecure)
+	performhealthchecksbool, _ := strconv.ParseBool(performhealthchecks)
 
 	// Validate vCenter and Openstack connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, envUserName, envPassword, envURL, insecure)
@@ -118,7 +121,9 @@ func main() {
 			VMCutoverStart: cutstart,
 			VMCutoverEnd:   cutend,
 		},
-		MigrationType: migrationtype,
+		MigrationType:       migrationtype,
+		PerformHealthChecks: performhealthchecksbool,
+		HealthCheckPort:     healthcheckport,
 	}
 
 	eventReporter, err := reporter.NewReporter()
