@@ -455,6 +455,8 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 				"VCENTER_PASSWORD":      vmwcreds.Spec.VcenterPassword,
 				"VCENTER_USERNAME":      vmwcreds.Spec.VcenterUsername,
 				"VIRTIO_WIN_DRIVER":     virtiodrivers,
+				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 			},
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
