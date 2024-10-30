@@ -23,6 +23,13 @@ import Accordion from "@mui/material/Accordion"
 import AccordionSummary from "@mui/material/AccordionSummary"
 import AccordionDetails from "@mui/material/AccordionDetails"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import {
+  CUTOVER_TYPES,
+  DATA_COPY_OPTIONS,
+  OS_TYPES_OPTIONS,
+  VM_CUTOVER_OPTIONS,
+  OS_TYPES,
+} from "./constants"
 
 // Styles
 const FieldsContainer = styled("div")(({ theme }) => ({
@@ -54,27 +61,6 @@ interface MigrationOptionsPropsInterface {
   getErrorsUpdater: (key: string | number) => (value: string) => void
 }
 
-// Constants
-const DATA_COPY_METHODS = [
-  { value: "hot", label: "Copy live VMs, then power off" },
-  { value: "cold", label: "Power off live VMs, then copy" },
-]
-
-export enum CUTOVER_TYPES {
-  "IMMEDIATE" = "0",
-  "ADMIN_INITIATED" = "1",
-  "TIME_WINDOW" = "2",
-}
-
-const VM_CUTOVER_OPTIONS = [
-  {
-    value: CUTOVER_TYPES.IMMEDIATE,
-    label: "Cutover immediately after data copy",
-  },
-  { value: CUTOVER_TYPES.ADMIN_INITIATED, label: "Admin initiated cutover" },
-  { value: CUTOVER_TYPES.TIME_WINDOW, label: "Cutover during time window" },
-]
-
 // TODO - Commented out the non-required field from the options for now
 // const PrePostWebHooksList = [
 //   { label: "Pre data-copy web hook", identifier: "preDataCopyWebHook" },
@@ -94,7 +80,8 @@ export default function MigrationOptions({
   // Iniitialize fields
   useEffect(() => {
     onChange("dataCopyMethod")("hot")
-    onChange("cutoverOption")("0")
+    onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
+    onChange("osType")(OS_TYPES.AUTO_DETECT)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -176,7 +163,7 @@ export default function MigrationOptions({
                   onChange("dataCopyMethod")(e.target.value)
                 }}
               >
-                {DATA_COPY_METHODS.map((item) => (
+                {DATA_COPY_OPTIONS.map((item) => (
                   <MenuItem key={item.value} value={item.value}>
                     {item.label}
                   </MenuItem>
@@ -230,7 +217,7 @@ export default function MigrationOptions({
               <Select
                 size="small"
                 disabled={!selectedMigrationOptions?.cutoverOption}
-                value={params?.cutoverOption || "0"}
+                value={params?.cutoverOption || CUTOVER_TYPES.IMMEDIATE}
                 onChange={(e) => {
                   onChange("cutoverOption")(e.target.value)
                 }}
@@ -299,6 +286,35 @@ export default function MigrationOptions({
                 error={!!errors["postMigrationScript"]}
                 required={selectedMigrationOptions.postMigrationScript}
               />
+            </Fields>
+
+            <Fields>
+              <FormControlLabel
+                id="os-type"
+                label="OS Type"
+                control={
+                  <Checkbox
+                    checked={selectedMigrationOptions.osType}
+                    onChange={(e) => {
+                      updateSelectedMigrationOptions("osType")(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions?.osType}
+                value={params?.osType || OS_TYPES.AUTO_DETECT}
+                onChange={(e) => {
+                  onChange("osType")(e.target.value)
+                }}
+              >
+                {OS_TYPES_OPTIONS.map((item) => (
+                  <MenuItem key={item.value} value={item.value}>
+                    {item.label}
+                  </MenuItem>
+                ))}
+              </Select>
             </Fields>
 
             {/* Pre and Post Web Hooks */}

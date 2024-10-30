@@ -31,7 +31,8 @@ import { pollForStatus } from "../pollForStatus"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
-import MigrationOptions, { CUTOVER_TYPES } from "./MigrationOptionsAlt"
+import MigrationOptions from "./MigrationOptionsAlt"
+import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 
 const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
@@ -65,6 +66,7 @@ export interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   retryOnFailure?: boolean
+  osType?: string
 }
 
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
@@ -74,6 +76,7 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
+  osType: boolean
 }
 
 // Default state for checkboxes
@@ -84,6 +87,7 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
+  osType: false,
 }
 
 const defaultValues: Partial<FormValues> = {}
@@ -321,6 +325,10 @@ export default function MigrationFormDrawer({
         spec: {
           networkMapping: networkMappingsResource.metadata.name,
           storageMapping: storageMappingsResource.metadata.name,
+          ...(selectedMigrationOptions.osType &&
+            params.osType !== OS_TYPES.AUTO_DETECT && {
+              osType: params.osType,
+            }),
         },
       }
     )
