@@ -406,17 +406,23 @@ export default function MigrationFormDrawer({
   // Validate Selected Migration Options
   const migrationOptionValidated = useMemo(
     () =>
-      Object.keys(selectedMigrationOptions).every((key) =>
-        selectedMigrationOptions[key]
-          ? key === "cutoverOption" &&
+      Object.keys(selectedMigrationOptions).every((key) => {
+        if (selectedMigrationOptions[key]) {
+          if (
+            key === "cutoverOption" &&
             params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-            ? params.cutoverStartTime &&
+          ) {
+            return (
+              params.cutoverStartTime &&
               params.cutoverEndTime &&
               !errors["cutoverStartTime"] &&
               !errors["cutoverEndTime"]
-            : params?.[key] && !errors[key]
-          : true
-      ),
+            )
+          }
+          return params?.[key] && !errors[key]
+        }
+        return true
+      }),
     [selectedMigrationOptions, params, errors]
   )
 
