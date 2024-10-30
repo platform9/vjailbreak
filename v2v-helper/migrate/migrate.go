@@ -195,6 +195,19 @@ func (migobj *Migrate) WaitforCutover() error {
 	return nil
 }
 
+func (migobj *Migrate) WaitforAdminCutover() error {
+	migobj.logMessage("Waiting for Cutover conditions to be met")
+	for {
+		label := <-migobj.PodLabelWatcher
+		migobj.logMessage(fmt.Sprintf("Label: %s", label))
+		if label == "yes" {
+			break
+		}
+	}
+	migobj.logMessage("Cutover conditions met")
+	return nil
+}
+
 func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
@@ -310,6 +323,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				log.Println("Shutting down source VM and performing final copy")
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, fmt.Errorf("failed to start VM Cutover: %s", err)
+				}
+				if err := migobj.WaitforAdminCutover(); err != nil {
+					return vminfo, fmt.Errorf("failed to start Admin initated Cutover: %s", err)
 				}
 				err = vmops.VMPowerOff()
 				if err != nil {

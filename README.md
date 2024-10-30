@@ -146,6 +146,9 @@ Deploy all the following resources in the same namespace where you installed the
            dataCopyStart: 2024-08-27T17:30:25.230Z
            vmCutoverStart: 2024-08-27T17:30:25.230Z
            vmCutoverEnd: 2024-08-28T17:30:25.230Z
+           adminInitiatedCutOver: true/false
+           performHealthChecks: true/false
+           healthCheckPort: string
          virtualmachines:
            - - winserver2k12
              - winserver2k16
@@ -164,6 +167,9 @@ Deploy all the following resources in the same namespace where you installed the
     - dataCopyStart: Optional.  ISO 8601 timestamp indicating when to start data copy
     - vmCutoverStart: Optional. ISO 8601 timestamp indicating when to start VM cutover
     - vmCutoverEnd: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
+    - adminInitiatedCutOver: Set to true if you wish to manually trigger the cutover process. Default false
+    - performHealthChecks: Set to false if you want to disable Ping and HTTP GET health check. Failing these checks does not clean up the targeted VM. Default true
+    - healthCheckPort: Port to run the HTTP GET health check against. Default "443"
   - virtualmachines: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or parallelly within a plan.
 
 Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.

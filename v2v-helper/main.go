@@ -115,6 +115,7 @@ func main() {
 		VMops:            vmops,
 		Nbdops:           []nbd.NBDOperations{},
 		EventReporter:    make(chan string),
+		PodLabelWatcher:  make(chan string),
 		InPod:            reporter.IsRunningInPod(),
 		MigrationTimes: migrate.MigrationTimes{
 			DataCopyStart:  starttime,
@@ -131,6 +132,7 @@ func main() {
 		log.Fatalf("Failed to create reporter: %s\n", err)
 	}
 	eventReporter.UpdatePodEvents(ctx, migrationobj.EventReporter)
+	eventReporter.WatchPodLabels(ctx, migrationobj.PodLabelWatcher)
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {

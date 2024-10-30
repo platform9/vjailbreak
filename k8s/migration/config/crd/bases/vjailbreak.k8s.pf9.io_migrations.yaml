@@ -39,6 +39,8 @@ spec:
           spec:
             description: MigrationSpec defines the desired state of Migration
             properties:
+              initiateCutover:
+                type: boolean
               migrationPlan:
                 type: string
               podRef:
@@ -46,6 +48,7 @@ spec:
               vmName:
                 type: string
             required:
+            - initiateCutover
             - migrationPlan
             - podRef
             - vmName

@@ -24,6 +24,8 @@ type ReporterOps interface {
 	GetPodNamespace() error
 	CreateKubernetesEvent(ctx context.Context, eventType, reason, message string) error
 	UpdatePodEvents(ch <-chan string)
+	GetCutoverLabel() (string, error)
+	WatchPodLabels(ctx context.Context, ch chan<- string) error
 }
 
 type Reporter struct {
@@ -206,6 +208,41 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
 			case <-ctx.Done():
 				// Context cancelled, exit the goroutine
 				return
+			}
+		}
+	}()
+}
+
+func (r *Reporter) GetCutoverLabel() (string, error) {
+	if err := r.GetPod(); err != nil {
+		return "", fmt.Errorf("failed to get pod: %v", err)
+	}
+	if cutover, ok := r.Pod.Labels["startCutover"]; ok {
+		return cutover, nil
+	}
+	return "", fmt.Errorf("failed to get cutover label")
+}
+
+func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
+	go func() {
+		watch, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
+			FieldSelector: fmt.Sprintf("metadata.name=%s", r.PodName),
+		})
+		if err != nil {
+			fmt.Printf("Failed to watch pod labels: %v\n", err)
+		}
+		defer watch.Stop()
+		originalStartCutover := "no"
+		for event := range watch.ResultChan() {
+			pod, ok := event.Object.(*corev1.Pod)
+			if !ok {
+				continue
+			}
+			if cutover, ok := pod.Labels["startCutover"]; ok {
+				if cutover != originalStartCutover {
+					ch <- cutover
+					originalStartCutover = cutover
+				}
 			}
 		}
 	}()
