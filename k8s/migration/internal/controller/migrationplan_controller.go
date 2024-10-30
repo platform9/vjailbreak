@@ -262,9 +262,10 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan: migrationplan.Name,
-				VMName:        vm,
-				PodRef:        fmt.Sprintf("v2v-helper-%s", vmname),
+				MigrationPlan:   migrationplan.Name,
+				VMName:          vm,
+				PodRef:          fmt.Sprintf("v2v-helper-%s", vmname),
+				InitiateCutover: !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 			},
 		}
 		err = r.createResource(ctx, migrationplan, migrationobj)
@@ -283,6 +284,10 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	vmname := strings.ReplaceAll(strings.ReplaceAll(vm, " ", "-"), "_", "-")
 	podName := fmt.Sprintf("v2v-helper-%s", vmname)
 	pointtrue := true
+	cutoverlabel := "yes"
+	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
+		cutoverlabel = "no"
+	}
 	pod := &corev1.Pod{}
 	err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migrationplan.Namespace}, pod)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -292,7 +297,8 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 				Name:      podName,
 				Namespace: migrationplan.Namespace,
 				Labels: map[string]string{
-					"vm-name": vmname,
+					"vm-name":      vmname,
+					"startCutover": cutoverlabel,
 				},
 			},
 			Spec: corev1.PodSpec{

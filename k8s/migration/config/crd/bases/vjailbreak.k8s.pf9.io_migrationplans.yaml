@@ -56,6 +56,9 @@ spec:
                 type: object
               migrationStrategy:
                 properties:
+                  adminInitiatedCutOver:
+                    default: false
+                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string

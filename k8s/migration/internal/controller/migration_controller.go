@@ -42,6 +42,8 @@ type MigrationReconciler struct {
 }
 
 const migrationReason = "Migration"
+const startCutoveryes = "yes"
+const startCutoverno = "no"
 
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 
@@ -79,6 +81,12 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, fmt.Sprintf("Failed to get Pod '%s'", migration.Spec.PodRef))
+		return ctrl.Result{}, err
+	}
+
+	pod.Labels["startCutover"] = setCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
+	if err := r.Update(ctx, pod); err != nil {
+		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
 		return ctrl.Result{}, err
 	}
 
@@ -185,6 +193,19 @@ func createMigratedCondition(eventList *corev1.EventList) *corev1.PodCondition {
 		return statuscondition
 	}
 	return nil
+}
+
+func setCutoverLabel(initiateCutover bool, currentLabel string) string {
+	if initiateCutover {
+		if currentLabel != startCutoveryes {
+			currentLabel = startCutoveryes
+		}
+	} else {
+		if currentLabel != startCutoverno {
+			currentLabel = startCutoverno
+		}
+	}
+	return currentLabel
 }
 
 // SetupWithManager sets up the controller with the Manager.

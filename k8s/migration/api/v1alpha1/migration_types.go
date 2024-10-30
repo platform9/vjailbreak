@@ -23,9 +23,10 @@ import (
 
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
-	MigrationPlan string `json:"migrationPlan"`
-	PodRef        string `json:"podRef"`
-	VMName        string `json:"vmName"`
+	MigrationPlan   string `json:"migrationPlan"`
+	PodRef          string `json:"podRef"`
+	VMName          string `json:"vmName"`
+	InitiateCutover bool   `json:"initiateCutover"`
 }
 
 // MigrationStatus defines the observed state of Migration
