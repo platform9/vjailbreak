@@ -1,12 +1,27 @@
-# vjailbreak
-
+# vJailbreak
 Helping VMware users migrate to Openstack
 
 ## v2v-helper
 The main application that runs the migration. It is expected to run as a pod in a VM running in the target Openstack Environment.
 
+## UI
+This is the UI for vJailbreak.
+
+## migration-controller
+This is the k8s controller that schedules migrations. 
+
 ## v2v-cli
-A CLI tool that starts the migration. This will be the tool that most users will interact with to migrate VMs.
+A CLI tool that starts the migration. It is not needed in the current version of vJailbreak.
+
+## Sample Screenshots
+
+### Form to start a migraiton
+![alt text](assets/migrationform1.png)
+![alt text](assets/migrationform2.png)
+
+### Migration Progress
+![alt text](assets/migrationprogress1.png)
+![alt text](assets/migrationprogress2.png)
 
 
 ## Building
@@ -14,13 +29,23 @@ vJailbreak is intended to be run in a kubernetes environment (k3s) on the applia
 
 In order to build v2v-helper,
 
-    cd v2v-helper
-    docker build -t <repository>:<tag> .
-    docker push <repository>:<tag>
+    make v2v-helper
+
+In order to build migration-controller,
+
+    make vjail-controller
+
+In order to build the UI,
+
+    make ui
+
+Change the image names in the makefile to push to another repository
 
 ## Usage
 
-Firstly, you need to ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. 
+Firstly, you need to ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an Openstack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
+
+
 Deploy all the following resources in the same namespace where you installed the Migration Controller. By default, it is `migration-system`.
 1. Create the Creds objects. Ensure that after you create these objects, their status reflects that the credentials have been validated. If it is not validated, the migration will not proceed.
 
@@ -36,6 +61,7 @@ Deploy all the following resources in the same namespace where you installed the
          OS_PASSWORD:
          OS_REGION_NAME:  
          OS_TENANT_NAME:  
+         OS_INSECURE: true/false <optional>
        ---
        apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
        kind: VMwareCreds
@@ -44,9 +70,12 @@ Deploy all the following resources in the same namespace where you installed the
          namespace: migration-system
        spec:
          VCENTER_HOST: vcenter.phx.pnap.platform9.horse
-         VCENTER_INSECURE:  
+         VCENTER_INSECURE:  true/false
          VCENTER_PASSWORD:
          VCENTER_USERNAME: 
+  
+  - OpenstackCreds use the variables from the openstack.rc file. All these fields are compulsory except OS_INSECURE
+  - All the fields in VMwareCreds are compulsory
 
 2. Create the mapping between networks in VMware and networks in Openstack
 
@@ -82,14 +111,17 @@ Deploy all the following resources in the same namespace where you installed the
          name: migrationtemplate-windows
          namespace: migration-system
        spec:
-         networkMapping: nwmap1
-         storageMapping: stmap1
-         osType: windows
+         networkMapping: name_of_networkMapping
+         storageMapping: name_of_storageMapping
+         osType: windows/linux <optional>
          source:
-           datacenter: PNAP BMC
-           vmwareRef: pnapbmc1
+           datacenter: name_of_datacenter
+           vmwareRef: name_of_VMwareCreds
          destination:
-           openstackRef: sapmo1
+           openstackRef: name_of_OpenstackCreds
+
+  - osType is optional. If not provided, the osType is retrieved from vcenter. If it could be automatically determined, migration will not proceed.
+
 5. Finally, create the MigrationPlan
 
        apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
@@ -99,9 +131,18 @@ Deploy all the following resources in the same namespace where you installed the
          namespace: migration-system
        spec:
          migrationTemplate: migrationtemplate-windows
-         retry: true
+         retry: true/false <optional>
+         advancedOptions:
+           granularVolumeTypes: 
+           - newvoltype1
+           granularNetworks:
+           - newnetworkname1
+           - newnetworkname2
+           granularPorts:
+           - <port uuid 1>
+           - <port uuid 2>
          migrationStrategy:
-           type: cold
+           type: hot/cold
            dataCopyStart: 2024-08-27T17:30:25.230Z
            vmCutoverStart: 2024-08-27T17:30:25.230Z
            vmCutoverEnd: 2024-08-28T17:30:25.230Z
@@ -110,14 +151,19 @@ Deploy all the following resources in the same namespace where you installed the
              - winserver2k16
            - - winserver2k19
              - winserver2k22
-		  
-	- retry: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
-	- type: 
-	  - cold: Cold indicates to power off VMs in migrationplan at the start of the migration. Quicker than hot
-	  - hot: Powers VM off just before cutover starts. Data copy occurs with the source VM powered on. May take longer
-	- dataCopyStart: Optional.  ISO 8601 timestamp indicating when to start data copy
-	- vmCutoverStart: Optional. ISO 8601 timestamp indicating when to start VM cutover
-	- vmCutoverEnd: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
-	- virtualmachines: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or parallelly within a plan.
+
+  - retry: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
+  - advancedOptions: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
+    - granularVolumeTypes: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can speccify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
+    - granularNetworks: In case you wish to override the default network mapping for a VM, you can provide a list of openstack network names to use in for each NIC on the VM, in order.
+    - granularPorts: In case you wish to pre-create ports for a VM with certain configs and directly ptovide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in granularNetworks.
+  - migrationStrategy: This is an optional field
+    - type: 
+      - cold: Cold indicates to power off VMs in migrationplan at the start of the migration. Quicker than hot
+      - hot: Powers VM off just before cutover starts. Data copy occurs with the source VM powered on. May take longer
+    - dataCopyStart: Optional.  ISO 8601 timestamp indicating when to start data copy
+    - vmCutoverStart: Optional. ISO 8601 timestamp indicating when to start VM cutover
+    - vmCutoverEnd: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
+  - virtualmachines: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or parallelly within a plan.
 
 Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
