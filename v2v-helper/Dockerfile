@@ -24,6 +24,8 @@ COPY vcenter/ vcenter/
 COPY vm/ vm/
 COPY virtv2v/ virtv2v/
 
+# Test
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
