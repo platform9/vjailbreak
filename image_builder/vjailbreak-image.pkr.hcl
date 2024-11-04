@@ -10,10 +10,11 @@ packer {
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = "https://ngpc-prod-public-data.s3.us-east-2.amazonaws.com/vjailbreak/vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:8da72a4179373fcb442c0b274f4b3c3d8d0d5b210d6cd44e296edb2f696c36e8"
+  iso_url              = "vjailbreak-image.qcow2"
+  iso_checksum         = "sha256:67d312441a401c75389b063e1331c5fa11f35813f531dcbcceba765a4895251f"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
+  vm_name              = "vjailbreak-image.qcow2"
   disk_size            = "15G"
   format               = "qcow2"
   headless             = true
@@ -49,7 +50,6 @@ build {
   provisioner "shell" {
     inline = [
       "while ! systemctl is-active --quiet k3s; do sleep 10; done",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/"
     ]
   }
 
@@ -57,7 +57,8 @@ build {
     inline = [
       "sudo kubectl --request-timeout=300s apply --server-side -f /tmp/yamls/kube-prometheus/manifests/setup",
       "sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/"
+      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/",
+      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/"
     ]
   }
 
@@ -71,7 +72,8 @@ build {
       "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
       "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
       "sudo systemctl restart restart-kube-resources",
-      "sudo k3s crictl rmi --prune"
+      "sudo k3s crictl rmi --prune",
+      "sudo rm -rf /home/ubuntu/vmware-vix-disklib-distrib"
     ]
   }
 }
