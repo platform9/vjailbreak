@@ -130,7 +130,7 @@ func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindrive
 
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", "-i", "disk", path)
+	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", "--firstboot", "/home/fedora/scripts/user_firstboot.sh", "-i", "disk", path)
 	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

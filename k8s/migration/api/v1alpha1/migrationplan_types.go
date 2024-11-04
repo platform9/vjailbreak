@@ -56,6 +56,8 @@ type MigrationPlanSpec struct {
 	Retry             bool                  `json:"retry,omitempty"`
 	VirtualMachines   [][]string            `json:"virtualmachines"`
 	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
+	// +kubebuilder:default:="echo \"Add your startup script here!\""
+	FirstBootScript string `json:"firstBootScript,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan
