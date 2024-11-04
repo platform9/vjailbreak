@@ -43,8 +43,13 @@ Change the image names in the makefile to push to another repository
 
 ## Usage
 
-Firstly, you need to ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an Openstack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
+Download and install [ORAS](https://oras.land/docs/installation). Download the latest version of the vjailbreak image with the following command. 
 
+    oras pull quay.io/platform9/vjailbreak:v0.1
+
+This will download the vjailbreak qcow2 image locally. Upload it to your Openstack enviroment and create your appliance VM with it.
+
+Then, ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an Openstack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
 
 Deploy all the following resources in the same namespace where you installed the Migration Controller. By default, it is `migration-system`.
 1. Create the Creds objects. Ensure that after you create these objects, their status reflects that the credentials have been validated. If it is not validated, the migration will not proceed.
