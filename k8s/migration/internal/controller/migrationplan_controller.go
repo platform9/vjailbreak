@@ -189,7 +189,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create ConfigMap for VM %s: %w", vm, err)
 			}
-			err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name)
+			fbcm, err := r.CreateFirstbootConfigMap(ctx, migrationplan, vm)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
+			}
+			err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
 			}
@@ -308,7 +312,7 @@ func int64Ptr(i int64) *int64 { return &i }
 
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName string) error {
+	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName, firstbootconfigMapName string) error {
 	vmname, err := convertToK8sName(vm)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
@@ -375,6 +379,10 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 								Name:      "dev",
 								MountPath: "/dev",
 							},
+							{
+								Name:      "firstboot",
+								MountPath: "/home/fedora/scripts",
+							},
 						},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -406,6 +414,16 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 							},
 						},
 					},
+					{
+						Name: "firstboot",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: firstbootconfigMapName,
+								},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -415,6 +433,35 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 		}
 	}
 	return nil
+}
+
+func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) (*corev1.ConfigMap, error) {
+	vmname, err := convertToK8sName(vm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert VM name: %w", err)
+	}
+	configMapName := fmt.Sprintf("firstboot-config-%s", vmname)
+	configMap := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
+	if err != nil && apierrors.IsNotFound(err) {
+		r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
+		configMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: migrationplan.Namespace,
+			},
+			Data: map[string]string{
+				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
+			},
+		}
+		err = r.createResource(ctx, migrationplan, configMap)
+		if err != nil {
+			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
+			return nil, err
+		}
+	}
+	return configMap, nil
 }
 
 func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
