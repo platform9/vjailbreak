@@ -1,6 +1,9 @@
 name: Build and Push Images
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -102,6 +105,12 @@ jobs:
           echo "Release keyword not found."
           echo "release_found=false" >> $GITHUB_ENV
         fi
+        echo "Push Message=${{ github.event.push.head_commit.message }}"
+        if [[ "${{ github.event.push.head_commit.message }}" == *"release"* ]]; then
+          echo "Release keyword found."
+          echo "release_found=true" >> $GITHUB_ENV
+        fi
+        
 
     - name: Enable KVM group perms
       if: env.release_found == 'true'
