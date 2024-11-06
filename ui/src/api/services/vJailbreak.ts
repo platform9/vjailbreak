@@ -30,7 +30,9 @@ class vJailbreak extends ApiService {
   getApiHost() {
     const isDevMode = import.meta.env.MODE === "development"
     if (isDevMode) {
-      return import.meta.env.VITE_API_HOST
+      // Add this prefix so that the requests are proxied to the backend server
+      // Proxy config is in vite.config.ts
+      return "/api"
     }
     return ""
   }
