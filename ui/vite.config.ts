@@ -1,27 +1,44 @@
 import react from "@vitejs/plugin-react"
 import path from "path"
-import { defineConfig } from "vite"
-import runtimeEnv from 'vite-plugin-runtime-env';
+import { defineConfig, loadEnv } from "vite"
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    runtimeEnv(),
-    react({
-      jsxImportSource: "@emotion/react",
-      babel: {
-        plugins: ["@emotion/babel-plugin"],
+export default defineConfig(({ mode }) => {
+  // Load env variables based on the current mode (development, production, etc.)
+  const env = loadEnv(mode, process.cwd())
+
+  return {
+    plugins: [
+      react({
+        jsxImportSource: "@emotion/react",
+        babel: {
+          plugins: ["@emotion/babel-plugin"],
+        },
+      }),
+    ],
+    server: {
+      port: 3000,
+      // Proxy api requests with the /api prefix to the target server. This is useful for development
+      // since it can bypass CORS restrictions. Vite intercepts requests that
+      // match the path and forwards them to the target. The browser sees the request
+      // as being made to the same origin as the Vite server instead of the API server
+      // so it doesn't trigger CORS checks.
+      proxy: {
+        "/api": {
+          target: `${env.VITE_API_HOST}`,
+          changeOrigin: true,
+          headers: {
+            Authorization: `Bearer ${env.VITE_API_TOKEN}`,
+          },
+          rewrite: (path) => path.replace(/^\/api/, ""),
+        },
       },
-    }),
-  ],
-  server: {
-    port: 3000,
-  },
-  base: '/',
-  resolve: {
-    alias: {
-      "app-config": path.resolve(__dirname, "config.ts"),
-      src: path.resolve(__dirname, "src"), // Alias src directly
     },
-  },
+    base: "/",
+    resolve: {
+      alias: {
+        "app-config": path.resolve(__dirname, "config.ts"),
+        src: path.resolve(__dirname, "src"),
+      },
+    },
+  }
 })
