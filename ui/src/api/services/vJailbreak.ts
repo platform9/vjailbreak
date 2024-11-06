@@ -32,7 +32,7 @@ class vJailbreak extends ApiService {
     if (isDevMode) {
       // Add this prefix so that the requests are proxied to the backend server
       // Proxy config is in vite.config.ts
-      return "/api"
+      return "/dev-api"
     }
     return ""
   }

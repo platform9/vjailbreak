@@ -23,13 +23,13 @@ export default defineConfig(({ mode }) => {
       // as being made to the same origin as the Vite server instead of the API server
       // so it doesn't trigger CORS checks.
       proxy: {
-        "/api": {
+        "/dev-api": {
           target: `${env.VITE_API_HOST}`,
           changeOrigin: true,
           headers: {
             Authorization: `Bearer ${env.VITE_API_TOKEN}`,
           },
-          rewrite: (path) => path.replace(/^\/api/, ""),
+          rewrite: (path) => path.replace(/^\/dev-api/, ""),
         },
       },
     },
