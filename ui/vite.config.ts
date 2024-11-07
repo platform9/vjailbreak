@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react"
 import path from "path"
 import { defineConfig, loadEnv } from "vite"
+import runtimeEnv from "vite-plugin-runtime-env"
 
 export default defineConfig(({ mode }) => {
   // Load env variables based on the current mode (development, production, etc.)
@@ -8,6 +9,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      runtimeEnv(),
       react({
         jsxImportSource: "@emotion/react",
         babel: {
