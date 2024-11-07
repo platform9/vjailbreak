@@ -19,11 +19,7 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       port: 3000,
-      // Proxy api requests with the /api prefix to the target server. This is useful for development
-      // since it can bypass CORS restrictions. Vite intercepts requests that
-      // match the path and forwards them to the target. The browser sees the request
-      // as being made to the same origin as the Vite server instead of the API server
-      // so it doesn't trigger CORS checks.
+      // For dev mode: proxy api requests with the /dev-api prefix to the target server.
       proxy: {
         "/dev-api": {
           target: `${env.VITE_API_HOST}`,
