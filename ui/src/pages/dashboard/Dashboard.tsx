@@ -92,7 +92,6 @@ export default function Dashboard() {
           slots={{
             toolbar: () => <CustomSearchToolbar title="Migrations" />,
           }}
-          autosizeOnMount
         />
       </Paper>
     </DashboardContainer>
