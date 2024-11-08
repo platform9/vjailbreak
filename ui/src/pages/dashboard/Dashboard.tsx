@@ -7,14 +7,11 @@ import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import { Migration } from "src/data/migrations/model"
 import { useInterval } from "src/hooks/useInterval"
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
-// import MigrationProgress from "./MigrationProgress"
 
 const DashboardContainer = styled("div")({
-  // display: "flex",
-  // justifyContent: "center",
-  // alignItems: "center",
-  // height: "100%",
-  // width: "100%",
+  display: "flex",
+  justifyContent: "center",
+  width: "100%",
   marginTop: "40px",
 })
 
@@ -84,7 +81,7 @@ export default function Dashboard() {
 
   return (
     <DashboardContainer>
-      <Paper sx={{ margin: 4 }}>
+      <Paper sx={{ width: "95%", margin: "auto" }}>
         <DataGrid
           rows={migrations || []}
           columns={columns}
@@ -95,6 +92,7 @@ export default function Dashboard() {
           slots={{
             toolbar: () => <CustomSearchToolbar title="Migrations" />,
           }}
+          autosizeOnMount
         />
       </Paper>
     </DashboardContainer>
