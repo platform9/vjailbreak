@@ -1,13 +1,10 @@
 import { Paper, styled } from "@mui/material"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import ApiClient from "src/api/ApiClient"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
-import { Migration } from "src/data/migrations/model"
-import { useInterval } from "src/hooks/useInterval"
+import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
-// import MigrationProgress from "./MigrationProgress"
 
 const DashboardContainer = styled("div")({
   // display: "flex",
@@ -51,36 +48,21 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 25 }
 
-const { vjailbreak } = ApiClient.getInstance()
-
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [migrations, setMigrations] = useState<Migration[] | null>(null)
 
-  const getMigrations = async () => {
-    try {
-      const data = await vjailbreak.getMigrationList()
-      setMigrations(data?.items || [])
-    } catch (error) {
-      console.error("Error getting MigrationsList", { error })
-      setMigrations([])
-    }
-  }
+  const { data: migrations, isPending: loadingMigrations } = useMigrationsQuery(
+    undefined,
+    { refetchInterval: 1000 * 30 }
+  )
 
   useEffect(() => {
-    getMigrations()
-  }, [])
-
-  useEffect(() => {
-    if (migrations !== null && migrations.length === 0) {
+    if (!!migrations && migrations.length === 0) {
       navigate("/onboarding")
-      window.location.reload()
     }
   }, [migrations, navigate])
 
-  useInterval(() => {
-    getMigrations()
-  }, 1000 * 20)
+  console.log("loadingMigrations", loadingMigrations)
 
   return (
     <DashboardContainer>

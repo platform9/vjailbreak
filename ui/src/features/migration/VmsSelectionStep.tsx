@@ -1,8 +1,8 @@
 import { FormControl, FormHelperText, Paper, styled } from "@mui/material"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
+import { VmData } from "src/api/migration-templates/model"
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
-import { VmData } from "src/data/migration-templates/model"
 import Step from "../../components/forms/Step"
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
