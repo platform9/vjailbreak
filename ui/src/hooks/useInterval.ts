@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 
-export const useInterval = (callback, delay) => {
+export const useInterval = (callback, delay, condition) => {
   const savedCallback = useRef<() => void>()
 
   useEffect(() => {
@@ -8,14 +8,20 @@ export const useInterval = (callback, delay) => {
   }, [callback])
 
   useEffect(() => {
-    function tick() {
+    let intervalId: NodeJS.Timeout | null = null
+
+    const tick = () => {
       if (savedCallback.current) {
         savedCallback.current()
       }
     }
-    if (delay !== null) {
-      const id = setInterval(tick, delay)
-      return () => clearInterval(id)
+    if (delay !== null && condition) {
+      intervalId = setInterval(tick, delay)
     }
-  }, [delay])
+    return () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [delay, condition])
 }
