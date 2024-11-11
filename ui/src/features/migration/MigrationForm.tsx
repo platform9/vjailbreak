@@ -1,5 +1,6 @@
 import { Alert, AlertTitle, Box, Drawer, styled } from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
+import axios from "axios"
 import { flatten, uniq } from "ramda"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -31,6 +32,7 @@ import {
   getVmwareCredentials,
   postVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
+import { THREE_SECONDS } from "src/constants"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
@@ -202,7 +204,8 @@ export default function MigrationFormDrawer({
         const body = createOpenstackCredsJson(params.openstackCreds)
         const response = await postOpenstackCredentials(body)
         setOpenstackCredentials(response)
-      } catch {
+      } catch (err) {
+        console.error("Error validating Openstack credentials", err)
         getFieldErrorsUpdater("openstackCreds")(
           "Error validating Openstack credentials"
         )
@@ -256,14 +259,15 @@ export default function MigrationFormDrawer({
               )
             }
           }
-        } catch {
+        } catch (err) {
+          console.error("Error validating VMware credentials", err)
           getFieldErrorsUpdater("vmwareCreds")(
             "Error validating VMware credentials"
           )
         }
       }
     },
-    1000 * 3,
+    THREE_SECONDS,
     shouldPollVmwareCreds
   )
 
@@ -285,7 +289,8 @@ export default function MigrationFormDrawer({
             }
           }
           setValidatingOpenstackCreds(false)
-        } catch {
+        } catch (err) {
+          console.error("Error validating Openstack credentials", err)
           getFieldErrorsUpdater("openstackCreds")(
             "Error validating Openstack credentials"
           )
@@ -293,7 +298,7 @@ export default function MigrationFormDrawer({
         }
       }
     },
-    1000 * 3,
+    THREE_SECONDS,
     shouldPollOpenstackCreds
   )
 
@@ -305,14 +310,15 @@ export default function MigrationFormDrawer({
             migrationTemplate?.metadata?.name
           )
           setMigrationTemplate(response)
-        } catch {
+        } catch (err) {
+          console.error("Error retrieving migration templates", err)
           getFieldErrorsUpdater("migrationTemplate")(
             "Error retrieving migration templates"
           )
         }
       }
     },
-    1000 * 3,
+    THREE_SECONDS,
     shouldPollMigrationTemplate
   )
 
@@ -341,9 +347,10 @@ export default function MigrationFormDrawer({
       const data = postNetworkMapping(body)
       return data
     } catch (err) {
-      // Handle error
-      console.error("Error creating network mapping", err)
-      setError({ title: "Error creating network mapping", message: "" })
+      setError({
+        title: "Error creating network mapping",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
     }
   }
 
@@ -355,9 +362,11 @@ export default function MigrationFormDrawer({
       const data = postStorageMapping(body)
       return data
     } catch (err) {
-      // Handle error
       console.error("Error creating storage mapping", err)
-      setError({ title: "Error creating storage mapping", message: "" })
+      setError({
+        title: "Error creating storage mapping",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
     }
   }
 
@@ -384,9 +393,10 @@ export default function MigrationFormDrawer({
       )
       return data
     } catch (err) {
-      // Handle error
-      console.error("Error updating migration template", err)
-      setError({ title: "Error updating migration template", message: "" })
+      setError({
+        title: "Error updating migration template",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
     }
   }
 
@@ -419,7 +429,10 @@ export default function MigrationFormDrawer({
     } catch (err) {
       // Handle error
       console.error("Error creating migration plan", err)
-      setError({ title: "Error creating migration plan", message: "" })
+      setError({
+        title: "Error creating migration plan",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
     }
   }
 
@@ -464,7 +477,7 @@ export default function MigrationFormDrawer({
         }
       }
     },
-    1000 * 3,
+    THREE_SECONDS,
     shouldPollMigrationPlan
   )
 

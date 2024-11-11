@@ -12,7 +12,7 @@ export const getMigrationPlansList = async (
   const response = await axios.get<GetMigrationPlansList>({
     endpoint,
   })
-  return response
+  return response?.items
 }
 
 export const getMigrationPlan = async (

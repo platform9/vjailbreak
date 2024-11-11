@@ -15,7 +15,7 @@ export const getMigrationTemplatesList = async (
   const response = await axios.get<GetMigrationTemplatesList>({
     endpoint,
   })
-  return response
+  return response?.items
 }
 
 export const getMigrationTemplate = async (

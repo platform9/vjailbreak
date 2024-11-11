@@ -26,8 +26,7 @@ import {
 export const cleanupAllResources = async () => {
   // Clean up vmware creds
   try {
-    const vmwareCredsResponse = await getVmwareCredentialsList()
-    const vmwareCreds = vmwareCredsResponse?.items || []
+    const vmwareCreds = await getVmwareCredentialsList()
     for (const vmwareCred of vmwareCreds) {
       await deleteVmwareCredentials(vmwareCred.metadata.name)
     }
@@ -37,8 +36,7 @@ export const cleanupAllResources = async () => {
 
   // Clean up openstack creds
   try {
-    const openstackCredsResponse = await getOpenstackCredentialsList()
-    const openstackCreds = openstackCredsResponse?.items || []
+    const openstackCreds = await getOpenstackCredentialsList()
     for (const openstackCred of openstackCreds) {
       await deleteOpenstackCredentials(openstackCred.metadata.name)
     }
@@ -48,8 +46,7 @@ export const cleanupAllResources = async () => {
 
   // Clean up network mappings
   try {
-    const networkMappingsResponse = await getNetworkMappingList()
-    const networkMappings = networkMappingsResponse?.items || []
+    const networkMappings = await getNetworkMappingList()
     for (const networkMapping of networkMappings) {
       await deleteNetworkMapping(networkMapping.metadata.name)
     }
@@ -59,8 +56,7 @@ export const cleanupAllResources = async () => {
 
   // Clean up storage mappings
   try {
-    const storageMappingsResponse = await getStorageMappingsList()
-    const storageMappings = storageMappingsResponse?.items || []
+    const storageMappings = await getStorageMappingsList()
     for (const storageMapping of storageMappings) {
       await deleteStorageMapping(storageMapping.metadata.name)
     }
@@ -70,8 +66,7 @@ export const cleanupAllResources = async () => {
 
   // Clean up migration templates
   try {
-    const migrationTemplatesResponse = await getMigrationTemplatesList()
-    const migrationTemplates = migrationTemplatesResponse?.items || []
+    const migrationTemplates = await getMigrationTemplatesList()
     for (const migrationTemplate of migrationTemplates) {
       await deleteMigrationTemplate(migrationTemplate.metadata.name)
     }
@@ -81,8 +76,7 @@ export const cleanupAllResources = async () => {
 
   // Clean up migration plans. This will also clean up migrations
   try {
-    const migrationPlansResponse = await getMigrationPlansList()
-    const migrationPlans = migrationPlansResponse?.items || []
+    const migrationPlans = await getMigrationPlansList()
     for (const migrationPlan of migrationPlans) {
       await deleteMigrationPlan(migrationPlan.metadata.name)
     }

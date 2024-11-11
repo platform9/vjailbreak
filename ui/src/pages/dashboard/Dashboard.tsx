@@ -3,6 +3,7 @@ import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
+import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
 
@@ -25,7 +26,7 @@ const columns: GridColDef[] = [
   {
     field: "status",
     headerName: "Status",
-    valueGetter: (_, row) => row?.status?.phase,
+    valueGetter: (_, row) => row?.status?.phase || "Pending",
     flex: 1,
   },
   {
@@ -51,30 +52,21 @@ const paginationModel = { page: 0, pageSize: 25 }
 export default function Dashboard() {
   const navigate = useNavigate()
 
-  const { data: migrations, isPending: loadingMigrations } = useMigrationsQuery(
-    undefined,
-    { refetchInterval: 1000 * 30 }
-  )
+  const { data: migrations } = useMigrationsQuery(undefined, {
+    refetchInterval: (query) => {
+      const migrations = query?.state?.data || []
+      const hasPendingMigration = !!migrations.find(
+        (m) => m.status === undefined
+      )
+      return hasPendingMigration ? FIVE_SECONDS : THIRTY_SECONDS
+    },
+  })
 
   useEffect(() => {
     if (!!migrations && migrations.length === 0) {
       navigate("/onboarding")
     }
   }, [migrations, navigate])
-
-  // useEffect(() => {
-  //   const cleanupVmwareCreds = async () => {
-  //     const response = await getVmwareCredentialsList()
-  //     if (response?.items) {
-  //       // Delete all creds
-  //       for (const cred of response.items) {
-  //         console.log("Deleting VMware creds", cred)
-  //         await deleteVmwareCredentials(cred?.metadata?.name)
-  //       }
-  //     }
-  //   }
-  //   cleanupVmwareCreds()
-  // }, [])
 
   return (
     <DashboardContainer>

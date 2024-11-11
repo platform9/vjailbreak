@@ -12,7 +12,7 @@ export const getStorageMappingsList = async (
   const response = await axios.get<GetStorageMappingsList>({
     endpoint,
   })
-  return response
+  return response?.items
 }
 
 export const getStorageMapping = async (

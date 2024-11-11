@@ -12,7 +12,7 @@ export const getNetworkMappingList = async (
   const response = await axios.get<GetNetworkMappingsList>({
     endpoint,
   })
-  return response
+  return response?.items
 }
 
 export const getNetworkMapping = async (

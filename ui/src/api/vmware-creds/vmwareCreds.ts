@@ -12,7 +12,7 @@ export const getVmwareCredentialsList = async (
   const response = await axios.get<GetVMWareCredsList>({
     endpoint,
   })
-  return response
+  return response?.items
 }
 
 export const getVmwareCredentials = async (
