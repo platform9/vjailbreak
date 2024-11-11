@@ -62,7 +62,19 @@ export default function Dashboard() {
     }
   }, [migrations, navigate])
 
-  console.log("loadingMigrations", loadingMigrations)
+  // useEffect(() => {
+  //   const cleanupVmwareCreds = async () => {
+  //     const response = await getVmwareCredentialsList()
+  //     if (response?.items) {
+  //       // Delete all creds
+  //       for (const cred of response.items) {
+  //         console.log("Deleting VMware creds", cred)
+  //         await deleteVmwareCredentials(cred?.metadata?.name)
+  //       }
+  //     }
+  //   }
+  //   cleanupVmwareCreds()
+  // }, [])
 
   return (
     <DashboardContainer>

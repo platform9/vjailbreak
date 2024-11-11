@@ -8,7 +8,7 @@ import {
   VJAILBREAK_DEFAULT_NAMESPACE,
 } from "../constants"
 
-export const getMigrationTemplateList = async (
+export const getMigrationTemplatesList = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates`
@@ -29,7 +29,7 @@ export const getMigrationTemplate = async (
   return response
 }
 
-export const createMigrationTemplate = async (
+export const postMigrationTemplate = async (
   body,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -41,7 +41,7 @@ export const createMigrationTemplate = async (
   return response
 }
 
-export const updateMigrationTemplate = async (
+export const patchMigrationTemplate = async (
   templateName,
   body,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
@@ -55,6 +55,17 @@ export const updateMigrationTemplate = async (
         "Content-Type": "application/merge-patch+json",
       },
     },
+  })
+  return response
+}
+
+export const deleteMigrationTemplate = async (
+  templateName,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates/${templateName}`
+  const response = await axios.del<MigrationTemplate>({
+    endpoint,
   })
   return response
 }

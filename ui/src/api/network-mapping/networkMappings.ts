@@ -26,7 +26,7 @@ export const getNetworkMapping = async (
   return response
 }
 
-export const createNetworkMapping = async (
+export const postNetworkMapping = async (
   body,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -34,6 +34,17 @@ export const createNetworkMapping = async (
   const response = await axios.post<NetworkMapping>({
     endpoint,
     data: body,
+  })
+  return response
+}
+
+export const deleteNetworkMapping = async (
+  networkMappingName,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/networkmappings/${networkMappingName}`
+  const response = await axios.del<NetworkMapping>({
+    endpoint,
   })
   return response
 }

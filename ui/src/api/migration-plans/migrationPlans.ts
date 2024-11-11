@@ -5,7 +5,7 @@ import {
 } from "../constants"
 import { GetMigrationPlansList, MigrationPlan } from "./model"
 
-export const getMigrationPlanList = async (
+export const getMigrationPlansList = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans`
@@ -26,7 +26,7 @@ export const getMigrationPlan = async (
   return response
 }
 
-export const createMigrationPlan = async (
+export const postMigrationPlan = async (
   body,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -34,6 +34,17 @@ export const createMigrationPlan = async (
   const response = await axios.post<MigrationPlan>({
     endpoint,
     data: body,
+  })
+  return response
+}
+
+export const deleteMigrationPlan = async (
+  planName,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
+  const response = await axios.del<MigrationPlan>({
+    endpoint,
   })
   return response
 }

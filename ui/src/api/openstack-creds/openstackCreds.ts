@@ -39,3 +39,14 @@ export const postOpenstackCredentials = async (
   })
   return response
 }
+
+export const deleteOpenstackCredentials = async (
+  name,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds/${name}`
+  const response = await axios.del<OpenstackCreds>({
+    endpoint,
+  })
+  return response
+}

@@ -37,3 +37,14 @@ export const postVmwareCredentials = async (
   })
   return response
 }
+
+export const deleteVmwareCredentials = async (
+  vmwareCredsName,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds/${vmwareCredsName}`
+  const response = await axios.del<VMwareCreds>({
+    endpoint,
+  })
+  return response
+}

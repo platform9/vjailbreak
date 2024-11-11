@@ -32,3 +32,14 @@ export const getMigration = async (
   })
   return response
 }
+
+export const deleteMigration = async (
+  migrationName,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrations/${migrationName}`
+  const response = await axios.del<Migration>({
+    endpoint,
+  })
+  return response
+}
