@@ -54,6 +54,9 @@ spec:
                       type: string
                     type: array
                 type: object
+              firstBootScript:
+                default: echo "Add your startup script here!"
+                type: string
               migrationStrategy:
                 properties:
                   adminInitiatedCutOver:

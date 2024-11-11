@@ -37,8 +37,9 @@ spec:
           name: http
         readinessProbe:
           httpGet:
-            path: /api/health
+            path: /grafana/api/health
             port: http
+            scheme: HTTPS
         resources:
           limits:
             cpu: 200m

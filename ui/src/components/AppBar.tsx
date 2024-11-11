@@ -6,6 +6,10 @@ import Toolbar from "@mui/material/Toolbar"
 import { cleanupAllResources } from "src/api/helpers"
 
 export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
+  const openGrafanaDashboard = () => {
+    window.open(`https://${window.location.host}/grafana`, "_blank")
+  }
+
   const openMigrationForm = () => {
     setOpenMigrationForm(true)
   }
@@ -26,6 +30,14 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
                 DEV ONLY: Clean Up Resources
               </Button>
             )}
+            <Button
+              size="large"
+              onClick={openGrafanaDashboard}
+              color="primary"
+              variant="outlined"
+            >
+              Open Grafana
+            </Button>
             <Button
               size="large"
               onClick={openMigrationForm}

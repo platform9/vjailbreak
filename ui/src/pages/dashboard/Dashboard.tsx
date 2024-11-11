@@ -8,11 +8,9 @@ import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
 
 const DashboardContainer = styled("div")({
-  // display: "flex",
-  // justifyContent: "center",
-  // alignItems: "center",
-  // height: "100%",
-  // width: "100%",
+  display: "flex",
+  justifyContent: "center",
+  width: "100%",
   marginTop: "40px",
 })
 
@@ -70,7 +68,7 @@ export default function Dashboard() {
 
   return (
     <DashboardContainer>
-      <Paper sx={{ margin: 4 }}>
+      <Paper sx={{ width: "95%", margin: "auto" }}>
         <DataGrid
           rows={migrations || []}
           columns={columns}
