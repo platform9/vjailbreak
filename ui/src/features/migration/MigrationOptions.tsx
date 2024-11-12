@@ -1,4 +1,3 @@
-import { useCallback, useEffect } from "react"
 import {
   Checkbox,
   FormControlLabel,
@@ -7,28 +6,29 @@ import {
   styled,
   TextField,
 } from "@mui/material"
-import dayjs from "dayjs"
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
+import dayjs from "dayjs"
+import { useCallback, useEffect } from "react"
 import Step from "src/components/forms/Step"
 import {
+  FieldErrors,
   FormValues,
   SelectedMigrationOptionsType,
-  Errors,
 } from "./MigrationForm"
 
 // Accordian Imports
-import Accordion from "@mui/material/Accordion"
-import AccordionSummary from "@mui/material/AccordionSummary"
-import AccordionDetails from "@mui/material/AccordionDetails"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import Accordion from "@mui/material/Accordion"
+import AccordionDetails from "@mui/material/AccordionDetails"
+import AccordionSummary from "@mui/material/AccordionSummary"
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
+  OS_TYPES,
   OS_TYPES_OPTIONS,
   VM_CUTOVER_OPTIONS,
-  OS_TYPES,
 } from "./constants"
 
 // Styles
@@ -57,7 +57,7 @@ interface MigrationOptionsPropsInterface {
   updateSelectedMigrationOptions: (
     key: keyof SelectedMigrationOptionsType
   ) => (value: unknown) => void
-  errors: Errors
+  errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
 }
 
