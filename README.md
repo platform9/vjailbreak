@@ -13,6 +13,11 @@ This is the k8s controller that schedules migrations.
 ## v2v-cli
 A CLI tool that starts the migration. It is not needed in the current version of vJailbreak.
 
+## Video Demo
+
+https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
+
+
 ## Sample Screenshots
 
 ### Form to start a migraiton
