@@ -48,6 +48,8 @@ jobs:
         # If the branch is 'main', don't append the branch name to the tag
         if [ "$BRANCH_NAME" == "main" ]; then
           TAG=${{ steps.bump_version.outputs.newTag }}
+        elif [[ "${{ github.event_name }}" == "release" ]]; then
+          TAG=${{ steps.bump_version.outputs.newTag }}
         else
           TAG=${{ steps.bump_version.outputs.newTag }}-$BRANCH_NAME
         fi
