@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid"
-export const createMigrationTemplateJson = (params) => {
+
+export const createNetworkMappingJson = (params) => {
   const {
     name,
     namespace = "migration-system",

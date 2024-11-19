@@ -1,11 +1,10 @@
 import { Paper, styled } from "@mui/material"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import ApiClient from "src/api/ApiClient"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
-import { Migration } from "src/data/migrations/model"
-import { useInterval } from "src/hooks/useInterval"
+import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
+import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
 
 const DashboardContainer = styled("div")({
@@ -25,7 +24,7 @@ const columns: GridColDef[] = [
   {
     field: "status",
     headerName: "Status",
-    valueGetter: (_, row) => row?.status?.phase,
+    valueGetter: (_, row) => row?.status?.phase || "Pending",
     flex: 1,
   },
   {
@@ -48,36 +47,24 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 25 }
 
-const { vjailbreak } = ApiClient.getInstance()
-
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [migrations, setMigrations] = useState<Migration[] | null>(null)
 
-  const getMigrations = async () => {
-    try {
-      const data = await vjailbreak.getMigrationList()
-      setMigrations(data?.items || [])
-    } catch (error) {
-      console.error("Error getting MigrationsList", { error })
-      setMigrations([])
-    }
-  }
-
-  useEffect(() => {
-    getMigrations()
-  }, [])
+  const { data: migrations } = useMigrationsQuery(undefined, {
+    refetchInterval: (query) => {
+      const migrations = query?.state?.data || []
+      const hasPendingMigration = !!migrations.find(
+        (m) => m.status === undefined
+      )
+      return hasPendingMigration ? FIVE_SECONDS : THIRTY_SECONDS
+    },
+  })
 
   useEffect(() => {
-    if (migrations !== null && migrations.length === 0) {
+    if (!!migrations && migrations.length === 0) {
       navigate("/onboarding")
-      window.location.reload()
     }
   }, [migrations, navigate])
-
-  useInterval(() => {
-    getMigrations()
-  }, 1000 * 20)
 
   return (
     <DashboardContainer>

@@ -1,37 +1,48 @@
-import { Box, Drawer, styled } from "@mui/material"
+import { Alert, AlertTitle, Box, Drawer, styled } from "@mui/material"
+import { useQueryClient } from "@tanstack/react-query"
+import axios from "axios"
 import { flatten, uniq } from "ramda"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { createMigrationPlan } from "src/data/migration-plan/actions"
-import { MigrationPlan } from "src/data/migration-plan/model"
+import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
+import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
+import { MigrationPlan } from "src/api/migration-plans/model"
+import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
 import {
-  createMigrationTemplate,
   getMigrationTemplate,
-  updateMigrationTemplate,
-} from "src/data/migration-templates/action"
-import { MigrationTemplate, VmData } from "src/data/migration-templates/model"
-import { getMigrationsList } from "src/data/migrations/actions"
-import { createNetworkMapping } from "src/data/network-mappings/actions"
+  patchMigrationTemplate,
+  postMigrationTemplate,
+} from "src/api/migration-templates/migrationTemplates"
+import { MigrationTemplate, VmData } from "src/api/migration-templates/model"
+import { getMigrations } from "src/api/migrations/migrations"
+import { Migration } from "src/api/migrations/model"
+import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
+import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
+import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers"
+import { OpenstackCreds } from "src/api/openstack-creds/model"
 import {
-  createOpenstackCreds,
-  getOpenstackCreds,
-} from "src/data/openstack-creds/actions"
-import { OpenstackCreds } from "src/data/openstack-creds/model"
-import { createStorageMapping } from "src/data/storage-mappings/actions"
+  getOpenstackCredentials,
+  postOpenstackCredentials,
+} from "src/api/openstack-creds/openstackCreds"
+import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
+import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
+import { createVmwareCredsJson } from "src/api/vmware-creds/helpers"
+import { VMwareCreds } from "src/api/vmware-creds/model"
 import {
-  createVmwareCreds,
-  getVmwareCreds,
-} from "src/data/vmware-creds/actions"
-import { VMwareCreds } from "src/data/vmware-creds/model"
+  getVmwareCredentials,
+  postVmwareCredentials,
+} from "src/api/vmware-creds/vmwareCreds"
+import { THREE_SECONDS } from "src/constants"
+import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
+import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
 import { isNilOrEmpty } from "src/utils"
 import Footer from "../../components/forms/Footer"
 import Header from "../../components/forms/Header"
-import { pollForStatus } from "../pollForStatus"
+import MigrationOptions from "./MigrationOptionsAlt"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
-import MigrationOptions from "./MigrationOptionsAlt"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 
 const StyledDrawer = styled(Drawer)(() => ({
@@ -92,7 +103,7 @@ const defaultMigrationOptions = {
 
 const defaultValues: Partial<FormValues> = {}
 
-export type Errors = { [formId: string]: string }
+export type FieldErrors = { [formId: string]: string }
 
 interface MigrationFormDrawerProps {
   open: boolean
@@ -103,197 +114,219 @@ interface MigrationFormDrawerProps {
 export default function MigrationFormDrawer({
   open,
   onClose,
-  reloadMigrations,
 }: MigrationFormDrawerProps) {
   const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
-  const { params: errors, getParamsUpdater: getErrorsUpdater } =
-    useParams<Errors>({})
-  const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
-  const [validatingOpenstackCreds, setValidatingOpenstackCreds] =
-    useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<{ title: string; message: string } | null>(
+    null
+  )
+  // Theses are the errors that will be displayed on the form
+  const { params: fieldErrors, getParamsUpdater: getFieldErrorsUpdater } =
+    useParams<FieldErrors>({})
+  const queryClient = useQueryClient()
+
   // Migration Options - Checked or Unchecked state
   const {
     params: selectedMigrationOptions,
     getParamsUpdater: updateSelectedMigrationOptions,
   } = useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
-  // Migration JSON Objects
-  const [vmWareCredsResource, setVmwareCredsResource] = useState<VMwareCreds>(
-    {} as VMwareCreds
+  // Form Statuses
+  const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
+  const [validatingOpenstackCreds, setValidatingOpenstackCreds] =
+    useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Migration Resources
+  const [vmwareCredentials, setVmwareCredentials] = useState<
+    VMwareCreds | undefined
+  >(undefined)
+  const [openstackCredentials, setOpenstackCredentials] = useState<
+    OpenstackCreds | undefined
+  >(undefined)
+  const [migrationTemplate, setMigrationTemplate] = useState<
+    MigrationTemplate | undefined
+  >(undefined)
+  const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | undefined>(
+    undefined
   )
-  const [openstackCredsResource, setOpenstackCredsResource] =
-    useState<OpenstackCreds>({} as OpenstackCreds)
-  const [migrationTemplateResource, setMigrationTemplateResource] =
-    useState<MigrationTemplate>({} as MigrationTemplate)
-  const [migrationPlanResource, setMigrationPlanResource] =
-    useState<MigrationPlan>({} as MigrationPlan)
+  const [migrations, setMigrations] = useState<Migration[] | undefined>(
+    undefined
+  )
+
+  const vmwareCredsValidated =
+    vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
+
+  const openstackCredsValidated =
+    openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
+
+  // Polling Conditions
+  const shouldPollVmwareCreds =
+    !!vmwareCredentials?.metadata?.name &&
+    vmwareCredentials?.status === undefined
+
+  const shouldPollOpenstackCreds =
+    !!openstackCredentials?.metadata?.name &&
+    openstackCredentials?.status === undefined
+
+  const shouldPollMigrationTemplate =
+    !!migrationTemplate?.metadata?.name &&
+    migrationTemplate?.status === undefined
+
+  const shouldPollMigrationPlan =
+    !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
 
   useEffect(() => {
-    if (isNilOrEmpty(params.vmwareCreds)) return
-
-    // Function to create the VMwareCreds object
-    const createVmwareCredsResource = async () => {
-      setValidatingVmwareCreds(true)
-      const response = await createVmwareCreds(params.vmwareCreds)
-      setVmwareCredsResource(response)
-    }
-
-    // Reset the VMwareCreds object if the user changes the credentials
-    setVmwareCredsResource({} as VMwareCreds)
-
-    createVmwareCredsResource()
-  }, [params.vmwareCreds])
-
-  useEffect(() => {
-    if (
-      isNilOrEmpty(vmWareCredsResource) ||
-      !isNilOrEmpty(vmWareCredsResource?.status)
-    )
-      return
-
-    const stopPolling = pollForStatus({
-      resource: vmWareCredsResource,
-      getResourceFunc: getVmwareCreds,
-      onUpdate: (resource) => {
-        const status = resource?.status?.vmwareValidationStatus
-        if (status === "Succeeded") {
-          getErrorsUpdater("vmwareCreds")("")
-          setVmwareCredsResource(resource)
-          setValidatingVmwareCreds(false)
-        } else if (!!status && status !== "Succeeded") {
-          getErrorsUpdater("vmwareCreds")(
-            resource.status?.vmwareValidationMessage
-          )
-          setValidatingVmwareCreds(false)
-        }
-      },
-      stopPollingCond: (creds) =>
-        creds?.status?.vmwareValidationStatus !== undefined,
-      onSuccess: () => setValidatingVmwareCreds(false),
-      onError: (error) => {
-        getErrorsUpdater("vmwareCreds")(error)
+    const postCreds = async () => {
+      try {
+        setValidatingVmwareCreds(true)
+        const body = createVmwareCredsJson(params.vmwareCreds)
+        const response = await postVmwareCredentials(body)
+        setVmwareCredentials(response)
+      } catch {
+        getFieldErrorsUpdater("vmwareCreds")(
+          "Error validating VMware credentials"
+        )
         setValidatingVmwareCreds(false)
-      },
-      pollingInterval: 5000,
-    })
-
-    return () => stopPolling && stopPolling()
-  }, [
-    getErrorsUpdater,
-    vmWareCredsResource,
-    vmWareCredsResource?.metadata?.name,
-    vmWareCredsResource?.status,
-  ])
+      }
+    }
+    if (isNilOrEmpty(params.vmwareCreds)) return
+    // Reset the VMwareCreds object if the user changes the credentials
+    setVmwareCredentials(undefined)
+    getFieldErrorsUpdater("vmwareCreds")("")
+    postCreds()
+  }, [params.vmwareCreds, getFieldErrorsUpdater])
 
   useEffect(() => {
-    if (isNilOrEmpty(params.openstackCreds)) return
-
-    // Function to create the OpenstackCreds object
-    const createOpenstackCredsResource = async () => {
+    const postCreds = async () => {
       setValidatingOpenstackCreds(true)
-      const response = await createOpenstackCreds(params.openstackCreds)
-      setOpenstackCredsResource(response)
+      try {
+        const body = createOpenstackCredsJson(params.openstackCreds)
+        const response = await postOpenstackCredentials(body)
+        setOpenstackCredentials(response)
+      } catch (err) {
+        console.error("Error validating Openstack credentials", err)
+        getFieldErrorsUpdater("openstackCreds")(
+          "Error validating Openstack credentials"
+        )
+        setValidatingOpenstackCreds(false)
+      }
     }
 
+    if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
-    setOpenstackCredsResource({} as OpenstackCreds)
-
-    createOpenstackCredsResource()
-  }, [params.openstackCreds])
+    setOpenstackCredentials(undefined)
+    getFieldErrorsUpdater("openstackCreds")("")
+    postCreds()
+  }, [params.openstackCreds, getFieldErrorsUpdater])
 
   useEffect(() => {
-    if (
-      isNilOrEmpty(openstackCredsResource) ||
-      !isNilOrEmpty(openstackCredsResource?.status)
-    )
-      return
+    const createMigrationTemplate = async () => {
+      const body = createMigrationTemplateJson({
+        datacenter: params.vmwareCreds?.datacenter,
+        vmwareRef: vmwareCredentials?.metadata.name,
+        openstackRef: openstackCredentials?.metadata.name,
+      })
+      const response = await postMigrationTemplate(body)
+      setMigrationTemplate(response)
+    }
+    // Once the Openstack and VMware creds are validated, create the migration template
 
-    const stopPolling = pollForStatus({
-      resource: openstackCredsResource,
-      getResourceFunc: getOpenstackCreds,
-      onUpdate: (resource) => {
-        const status = resource?.status?.openstackValidationStatus
-        if (status === "Succeeded") {
-          getErrorsUpdater("openstackCreds")("")
-          setOpenstackCredsResource(resource)
+    if (!vmwareCredsValidated || !openstackCredsValidated) return
+    createMigrationTemplate()
+  }, [
+    vmwareCredsValidated,
+    openstackCredsValidated,
+    params.vmwareCreds?.datacenter,
+    vmwareCredentials?.metadata.name,
+    openstackCredentials?.metadata.name,
+  ])
+
+  useInterval(
+    async () => {
+      if (shouldPollVmwareCreds) {
+        try {
+          const response = await getVmwareCredentials(
+            vmwareCredentials?.metadata?.name
+          )
+          setVmwareCredentials(response)
+          const validationStatus = response?.status?.vmwareValidationStatus
+          if (validationStatus) {
+            setValidatingVmwareCreds(false)
+            if (validationStatus !== "Succeeded") {
+              getFieldErrorsUpdater("vmwareCreds")(
+                response?.status?.vmwareValidationMessage
+              )
+            }
+          }
+        } catch (err) {
+          console.error("Error validating VMware credentials", err)
+          getFieldErrorsUpdater("vmwareCreds")(
+            "Error validating VMware credentials"
+          )
+        }
+      }
+    },
+    THREE_SECONDS,
+    shouldPollVmwareCreds
+  )
+
+  useInterval(
+    async () => {
+      if (shouldPollOpenstackCreds) {
+        try {
+          const response = await getOpenstackCredentials(
+            openstackCredentials?.metadata?.name
+          )
+          setOpenstackCredentials(response)
+          const validationStatus = response?.status?.openstackValidationStatus
+          if (validationStatus) {
+            setValidatingOpenstackCreds(false)
+            if (validationStatus !== "Succeeded") {
+              getFieldErrorsUpdater("openstackCreds")(
+                response?.status?.openstackValidationMessage
+              )
+            }
+          }
           setValidatingOpenstackCreds(false)
-        } else if (!!status && status !== "Succeeded") {
-          getErrorsUpdater("openstackCreds")(
-            resource.status?.openstackValidationMessage
+        } catch (err) {
+          console.error("Error validating Openstack credentials", err)
+          getFieldErrorsUpdater("openstackCreds")(
+            "Error validating Openstack credentials"
           )
           setValidatingOpenstackCreds(false)
         }
-      },
-      stopPollingCond: (creds) =>
-        creds?.status?.openstackValidationStatus !== undefined,
-      onSuccess: () => setValidatingOpenstackCreds(false),
-      onError: (error) => {
-        getErrorsUpdater("openstackCreds")(error)
-        setValidatingOpenstackCreds(false)
-      },
-      pollingInterval: 5000,
-    })
+      }
+    },
+    THREE_SECONDS,
+    shouldPollOpenstackCreds
+  )
 
-    return () => stopPolling && stopPolling()
-  }, [getErrorsUpdater, openstackCredsResource])
-
-  useEffect(() => {
-    // Once the Openstack and VMware creds are validated, create the migration template
-    if (
-      vmWareCredsResource?.status?.vmwareValidationStatus !== "Succeeded" ||
-      openstackCredsResource?.status?.openstackValidationStatus !==
-        "Succeeded" ||
-      !vmWareCredsResource?.metadata?.name ||
-      !openstackCredsResource?.metadata?.name
-    )
-      return
-    const createMigrationTemplateResource = async () => {
-      const response = await createMigrationTemplate({
-        datacenter: params.vmwareCreds?.datacenter,
-        vmwareRef: vmWareCredsResource.metadata.name,
-        openstackRef: openstackCredsResource.metadata.name,
-      })
-      setMigrationTemplateResource(response)
-    }
-    createMigrationTemplateResource()
-  }, [
-    vmWareCredsResource?.metadata?.name,
-    openstackCredsResource?.metadata?.name,
-    vmWareCredsResource?.status?.vmwareValidationStatus,
-    openstackCredsResource?.status?.openstackValidationStatus,
-    params.vmwareCreds?.datacenter,
-  ])
+  useInterval(
+    async () => {
+      if (shouldPollMigrationTemplate) {
+        try {
+          const response = await getMigrationTemplate(
+            migrationTemplate?.metadata?.name
+          )
+          setMigrationTemplate(response)
+        } catch (err) {
+          console.error("Error retrieving migration templates", err)
+          getFieldErrorsUpdater("migrationTemplate")(
+            "Error retrieving migration templates"
+          )
+        }
+      }
+    },
+    THREE_SECONDS,
+    shouldPollMigrationTemplate
+  )
 
   useEffect(() => {
-    if (
-      isNilOrEmpty(migrationTemplateResource) ||
-      !isNilOrEmpty(migrationTemplateResource.status)
-    )
-      return
-
-    const stopPolling = pollForStatus({
-      resource: migrationTemplateResource,
-      getResourceFunc: getMigrationTemplate,
-      onUpdate: (resource) => {
-        getErrorsUpdater("vms")("")
-        setMigrationTemplateResource(resource)
-      },
-      stopPollingCond: (template) => template?.status !== undefined,
-      onError: (error) => {
-        getErrorsUpdater("vms")(error)
-      },
-      pollingInterval: 2000,
-    })
-
-    return () => stopPolling && stopPolling()
-  }, [
-    getErrorsUpdater,
-    migrationTemplateResource,
-    migrationTemplateResource?.metadata?.name,
-    migrationTemplateResource?.status,
-  ])
+    if (vmwareCredsValidated && openstackCredsValidated) return
+    // Reset all the migration resources if the user changes the credentials
+    setMigrationTemplate(undefined)
+  }, [vmwareCredsValidated, openstackCredsValidated])
 
   const availableVmwareNetworks = useMemo(() => {
     if (params.vms === undefined) return []
@@ -305,38 +338,72 @@ export default function MigrationFormDrawer({
     return uniq(flatten(params.vms.map((vm) => vm.datastores || [])))
   }, [params.vms])
 
-  const handleSubmit = async () => {
-    setSubmitting(true)
-    // Create NetworkMapping Resource
-    const networkMappingsResource = await createNetworkMapping({
-      networkMappings: params.networkMappings,
+  const createNetworkMapping = async (networkMappingParams) => {
+    const body = createNetworkMappingJson({
+      networkMappings: networkMappingParams,
     })
 
-    // Create StorageMapping Resource
-    const storageMappingsResource = await createStorageMapping({
-      storageMappings: params.storageMappings,
+    try {
+      const data = postNetworkMapping(body)
+      return data
+    } catch (err) {
+      setError({
+        title: "Error creating network mapping",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
+    }
+  }
+
+  const createStorageMapping = async (storageMappingsParams) => {
+    const body = createStorageMappingJson({
+      storageMappings: storageMappingsParams,
     })
+    try {
+      const data = postStorageMapping(body)
+      return data
+    } catch (err) {
+      console.error("Error creating storage mapping", err)
+      setError({
+        title: "Error creating storage mapping",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
+    }
+  }
 
-    // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
-    const templateName = migrationTemplateResource?.metadata?.name
-    const updatedMigrationTemplateResource = await updateMigrationTemplate(
-      templateName,
-      {
-        spec: {
-          networkMapping: networkMappingsResource.metadata.name,
-          storageMapping: storageMappingsResource.metadata.name,
-          ...(selectedMigrationOptions.osType &&
-            params.osType !== OS_TYPES.AUTO_DETECT && {
-              osType: params.osType,
-            }),
-        },
-      }
-    )
+  const updateMigrationTemplate = async (
+    migrationTemplate,
+    networkMappings,
+    storageMappings
+  ) => {
+    const migrationTemplateName = migrationTemplate?.metadata?.name
+    const updatedMigrationTemplateFields = {
+      spec: {
+        networkMapping: networkMappings.metadata.name,
+        storageMapping: storageMappings.metadata.name,
+        ...(selectedMigrationOptions.osType &&
+          params.osType !== OS_TYPES.AUTO_DETECT && {
+            osType: params.osType,
+          }),
+      },
+    }
+    try {
+      const data = await patchMigrationTemplate(
+        migrationTemplateName,
+        updatedMigrationTemplateFields
+      )
+      return data
+    } catch (err) {
+      setError({
+        title: "Error updating migration template",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
+    }
+  }
 
-    // Create MigrationPlan Resource
+  const createMigrationPlan = async (updatedMigrationTemplate) => {
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
-    const migrationPlanResource = await createMigrationPlan({
-      migrationTemplateName: updatedMigrationTemplateResource?.metadata?.name,
+    const migrationFields = {
+      migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualmachines: vmsToMigrate,
       // Optional Migration Params
       type:
@@ -354,62 +421,74 @@ export default function MigrationFormDrawer({
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
       retry: params.retryOnFailure,
-    })
-    setMigrationPlanResource(migrationPlanResource)
+    }
+    const body = createMigrationPlanJson(migrationFields)
+    try {
+      const data = await postMigrationPlan(body)
+      return data
+    } catch (err) {
+      // Handle error
+      console.error("Error creating migration plan", err)
+      setError({
+        title: "Error creating migration plan",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
+    }
   }
 
-  const closeAndRedirectToDashboard = useCallback(() => {
-    setSubmitting(false)
-    navigate("/dashboard")
-    window.location.reload()
-    onClose()
-  }, [navigate, onClose])
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    setError(null)
+
+    // Create NetworkMapping
+    const networkMappings = await createNetworkMapping(params.networkMappings)
+
+    // Create StorageMapping
+    const storageMappings = await createStorageMapping(params.storageMappings)
+
+    if (!networkMappings || !storageMappings) {
+      setSubmitting(false)
+      return
+    }
+
+    // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
+    const updatedMigrationTemplate = await updateMigrationTemplate(
+      migrationTemplate,
+      networkMappings,
+      storageMappings
+    )
+
+    // Create MigrationPlan
+    const migrationPlanResource = await createMigrationPlan(
+      updatedMigrationTemplate
+    )
+    setMigrationPlan(migrationPlanResource)
+  }
+
+  useInterval(
+    async () => {
+      if (shouldPollMigrationPlan) {
+        try {
+          const response = await getMigrations(migrationPlan?.metadata?.name)
+          setMigrations(response)
+        } catch (error) {
+          console.error("Error getting MigrationPlan", { error })
+          setSubmitting(false)
+        }
+      }
+    },
+    THREE_SECONDS,
+    shouldPollMigrationPlan
+  )
 
   useEffect(() => {
-    if (
-      isNilOrEmpty(migrationPlanResource) ||
-      !migrationPlanResource.metadata?.name
-    )
-      return
-
-    let pollingTimeout: NodeJS.Timeout // Declare a variable to store the timeout ID
-
-    const pollForMigrations = async () => {
-      console.log("Polling for migrations")
-      const migrations = await getMigrationsList(
-        migrationPlanResource.metadata.name
-      )
-      if (migrations.length > 0) {
-        console.log("Migrations detected. Polling stopped.")
-        // If migrations are detected, stop polling and trigger the next steps
-        closeAndRedirectToDashboard()
-      } else {
-        // If no migrations are found, continue polling
-        pollingTimeout = setTimeout(pollForMigrations, 5000)
-      }
-    }
-
-    // Start polling for migrations
-    pollForMigrations()
-
-    // Cleanup function to stop polling if the component unmounts
-    return () => {
-      console.log("Clearing polling", pollingTimeout)
-      clearTimeout(pollingTimeout) // Properly clear the timeout using the ID
+    if (migrations && migrations.length > 0 && !error) {
       setSubmitting(false)
+      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+      onClose()
+      navigate("/dashboard")
     }
-  }, [
-    migrationPlanResource,
-    reloadMigrations,
-    navigate,
-    onClose,
-    closeAndRedirectToDashboard,
-  ])
-
-  const vmwareCredsValidated =
-    vmWareCredsResource?.status?.vmwareValidationStatus === "Succeeded"
-  const openstackCredsValidated =
-    openstackCredsResource?.status?.openstackValidationStatus === "Succeeded"
+  }, [migrations, error, onClose, navigate, queryClient])
 
   // Validate Selected Migration Options
   const migrationOptionValidated = useMemo(
@@ -423,15 +502,15 @@ export default function MigrationFormDrawer({
             return (
               params.cutoverStartTime &&
               params.cutoverEndTime &&
-              !errors["cutoverStartTime"] &&
-              !errors["cutoverEndTime"]
+              !fieldErrors["cutoverStartTime"] &&
+              !fieldErrors["cutoverEndTime"]
             )
           }
-          return params?.[key] && !errors[key]
+          return params?.[key] && !fieldErrors[key]
         }
         return true
       }),
-    [selectedMigrationOptions, params, errors]
+    [selectedMigrationOptions, params, fieldErrors]
   )
 
   const disableSubmit =
@@ -452,31 +531,36 @@ export default function MigrationFormDrawer({
       <Header title="Migration Form" />
       <DrawerContent>
         <Box sx={{ display: "grid", gap: 4 }}>
+          {error && (
+            <Alert severity="error">
+              <AlertTitle>{error.title}</AlertTitle>
+              {error.message}
+            </Alert>
+          )}
           {/* Step 1 */}
           <SourceAndDestinationEnvStep
             params={params}
             onChange={getParamsUpdater}
-            errors={errors}
+            errors={fieldErrors}
             validatingVmwareCreds={validatingVmwareCreds}
             validatingOpenstackCreds={validatingOpenstackCreds}
             vmwareCredsValidated={
-              vmWareCredsResource?.status?.vmwareValidationStatus ===
-              "Succeeded"
+              vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
             }
             openstackCredsValidated={
-              openstackCredsResource?.status?.openstackValidationStatus ===
+              openstackCredentials?.status?.openstackValidationStatus ===
               "Succeeded"
             }
           />
           {/* Step 2 */}
           <VmsSelectionStep
-            vms={migrationTemplateResource?.status?.vmware}
+            vms={migrationTemplate?.status?.vmware || []}
             onChange={getParamsUpdater}
-            error={errors["vms"]}
+            error={fieldErrors["vms"]}
             loadingVms={
-              !isNilOrEmpty(migrationTemplateResource) &&
-              migrationTemplateResource?.status === undefined &&
-              !errors["vms"]
+              !isNilOrEmpty(migrationTemplate) &&
+              migrationTemplate?.status === undefined &&
+              !fieldErrors["vms"]
             }
           />
           {/* Step 3 */}
@@ -484,15 +568,15 @@ export default function MigrationFormDrawer({
             vmwareNetworks={availableVmwareNetworks}
             vmWareStorage={availableVmwareDatastores}
             openstackNetworks={
-              migrationTemplateResource?.status?.openstack?.networks
+              migrationTemplate?.status?.openstack?.networks || []
             }
             openstackStorage={
-              migrationTemplateResource?.status?.openstack?.volumeTypes
+              migrationTemplate?.status?.openstack?.volumeTypes || []
             }
             params={params}
             onChange={getParamsUpdater}
-            networkMappingError={errors["networksMapping"]}
-            storageMappingError={errors["storageMapping"]}
+            networkMappingError={fieldErrors["networksMapping"]}
+            storageMappingError={fieldErrors["storageMapping"]}
           />
           {/* Step 4 */}
           <MigrationOptions
@@ -500,8 +584,8 @@ export default function MigrationFormDrawer({
             onChange={getParamsUpdater}
             selectedMigrationOptions={selectedMigrationOptions}
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
-            errors={errors}
-            getErrorsUpdater={getErrorsUpdater}
+            errors={fieldErrors}
+            getErrorsUpdater={getFieldErrorsUpdater}
           />
         </Box>
       </DrawerContent>
