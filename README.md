@@ -23,6 +23,19 @@ A CLI tool that starts the migration. It is not needed in the current version of
 ![alt text](assets/migrationprogress1.png)
 ![alt text](assets/migrationprogress2.png)
 
+## FAQ
+
+### Are IPs and MAC addresses persisted?
+Yes, if your Openstack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
+
+### What OS versions are supported?
+We internally use virt-v2v, so all operating systems supported for conversion by virt-v2v are supported by vJailbreak. You can find a detailed list of them [here](https://libguestfs.org/virt-v2v-support.1.html#guests).
+
+### Do I need to perform any manual steps to remove VMware Tools?
+No, vJailbreak will remove them for you, with the help of virt-v2v. The process that virt-v2v uses along with alternative approaches can be found [here](https://libguestfs.org/virt-v2v.1.html#converting-a-windows-guest).
+
+### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
+No, vJailbreak will install it for you. For windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
 ## Building
 vJailbreak is intended to be run in a kubernetes environment (k3s) on the appliance VM. In order to build and deploy the kubernetes components, follow the instructions in `k8s/migration` to build and deploy the custom resources in the cluster.
@@ -50,6 +63,8 @@ Download and install [ORAS](https://oras.land/docs/installation). Download the l
 This will download the vjailbreak qcow2 image locally. Upload it to your Openstack enviroment and create your appliance VM with it.
 
 Then, ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an Openstack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
+
+Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vjailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory.
 
 Deploy all the following resources in the same namespace where you installed the Migration Controller. By default, it is `migration-system`.
 1. Create the Creds objects. Ensure that after you create these objects, their status reflects that the credentials have been validated. If it is not validated, the migration will not proceed.
