@@ -300,7 +300,7 @@ func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, err
 }
 
 func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error) {
-	var noChange types.DiskChangeInfo
+	var changedblocks types.DiskChangeInfo
 	v := vmops.VMObj
 
 	req := types.QueryChangedDiskAreas{
@@ -310,13 +310,28 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 		StartOffset: offset,
 		ChangeId:    baseChangeID,
 	}
-
-	res, err := methods.QueryChangedDiskAreas(vmops.ctx, v.Client(), &req)
-	if err != nil {
-		return noChange, fmt.Errorf("failed to query changed disk areas: %s", err)
+	for {
+		res, err := methods.QueryChangedDiskAreas(vmops.ctx, v.Client(), &req)
+		if err != nil {
+			return changedblocks, fmt.Errorf("failed to query changed disk areas: %s", err)
+		}
+		// If there are no more changes, stop fetching the changed blocks
+		if len(res.Returnval.ChangedArea) == 0 {
+			break
+		}
+		// Append the changed blocks to the result
+		changedblocks.ChangedArea = append(changedblocks.ChangedArea, res.Returnval.ChangedArea...)
+		// Update the total length of the changed blocks
+		changedblocks.Length += res.Returnval.Length
+		// If the total length of the changed blocks is greater or equal to the disk capacity, break the loop
+		if changedblocks.Length >= disk.CapacityInBytes {
+			break
+		}
+		// Update the start offset for the next iteration
+		req.StartOffset = changedblocks.Length
 	}
 
-	return res.Returnval, nil
+	return changedblocks, nil
 }
 
 func (vmops *VMOps) VMPowerOff() error {
