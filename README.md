@@ -37,6 +37,9 @@ No, vJailbreak will remove them for you, with the help of virt-v2v. The process 
 ### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
 No, vJailbreak will install it for you. For windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
+### What access do I need for my vCenter user to be able to perform this migration?
+Please refer the following for [vCenter Role permissions](https://libguestfs.org/virt-v2v-input-vmware.1.html#vcenter%3A-non-administrator-role) and [vCenter Port requirements](https://libguestfs.org/virt-v2v-input-vmware.1.html#vcenter%3A-ports).
+
 ## Building
 vJailbreak is intended to be run in a kubernetes environment (k3s) on the appliance VM. In order to build and deploy the kubernetes components, follow the instructions in `k8s/migration` to build and deploy the custom resources in the cluster.
 
