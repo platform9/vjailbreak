@@ -44,7 +44,7 @@ No, vJailbreak will install it for you. For windows, we allow you to specify a U
 
 ### What access do I need for my vCenter user to be able to perform this migration?
 Please refer the following:
- * [vCenter Role permissions](https://libguestfs.org/virt-v2v-input-vmware.1.html#vcenter%3A-non-administrator-role)
+ * [vCenter Role permissions](https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/2.7/html/installing_and_using_the_migration_toolkit_for_virtualization/prerequisites_mtv#vmware-prerequisites_mtv)
  * [vCenter Port requirements](https://libguestfs.org/virt-v2v-input-vmware.1.html#vcenter%3A-ports).
  * [ESXi Port requirements](https://docs.redhat.com/en/documentation/migration_toolkit_for_virtualization/2.7/html/installing_and_using_the_migration_toolkit_for_virtualization/prerequisites_mtv#ports_mtv)
 
