@@ -47,6 +47,7 @@ type Migrate struct {
 	MigrationType       string
 	PerformHealthChecks bool
 	HealthCheckPort     string
+	Debug               bool
 }
 
 type MigrationTimes struct {
@@ -652,7 +653,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	for range vminfo.VMDisks {
-		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
+		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{
+			Debug: migobj.Debug,
+		})
 	}
 
 	// Live Replicate Disks
