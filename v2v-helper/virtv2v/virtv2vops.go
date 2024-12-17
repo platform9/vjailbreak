@@ -22,9 +22,10 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
+	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
 }
 
 func RetainAlphanumeric(input string) string {
@@ -114,7 +115,7 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
-func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindriver string) error {
+func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error {
 	// Convert the disk
 
 	if ostype == "windows" {
@@ -130,7 +131,15 @@ func ConvertDisk(ctx context.Context, path string, ostype string, virtiowindrive
 
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", "--firstboot", "/home/fedora/scripts/user_firstboot.sh", "-i", "disk", path)
+	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	for _, script := range firstbootscripts {
+		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
+	}
+	args = append(args, "-i", "disk", path)
+	cmd := exec.CommandContext(ctx,
+		"virt-v2v-in-place",
+		args...,
+	)
 	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -191,5 +200,15 @@ DHCP=yes`
 	if err != nil {
 		return fmt.Errorf("failed to upload netplan file: %s", err)
 	}
+	return nil
+}
+func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
+	// Create the firstboot script
+	firstbootscriptpath := fmt.Sprintf("/home/fedora/%s.sh", firstbootscriptname)
+	err := os.WriteFile(firstbootscriptpath, []byte(firstbootscript), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create firstboot script: %s", err)
+	}
+	log.Printf("Created firstboot script %s", firstbootscriptname)
 	return nil
 }
