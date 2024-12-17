@@ -47,6 +47,7 @@ type Migrate struct {
 	MigrationType       string
 	PerformHealthChecks bool
 	HealthCheckPort     string
+	Debug               bool
 }
 
 type MigrationTimes struct {
@@ -165,7 +166,7 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 		if err != nil {
 			return fmt.Errorf("failed to check if CBT is enabled: %s", err)
 		}
-		fmt.Println("Creating temporary snapshot of the source VM")
+		migobj.logMessage("Creating temporary snapshot of the source VM")
 		err = vmops.TakeSnapshot("tmp-snap")
 		if err != nil {
 			return fmt.Errorf("failed to take snapshot of source VM: %s", err)
@@ -377,7 +378,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if err != nil {
 		return fmt.Errorf("failed to attach volume: %s", err)
 	}
+	osRelease, err := virtv2v.GetOsRelease(path)
+	if err != nil {
+		return fmt.Errorf("failed to get os release: %s", err)
+	}
 	if migobj.Convert {
+		firstbootscripts := []string{}
 		// Fix NTFS
 		if vminfo.OSType == "windows" {
 			err = virtv2v.NTFSFix(path)
@@ -385,18 +391,37 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
-
-		err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin)
+		// Turn on DHCP for interfaces in rhel VMs
+		if vminfo.OSType == "linux" {
+			if strings.Contains(osRelease, "rhel") {
+				firstbootscriptname := "rhel_enable_dhcp"
+				firstbootscript := `#!/bin/bash
+nmcli -t -f NAME connection show | while read -r conn; do
+    nmcli con modify "$conn" ipv4.method auto
+    nmcli con modify "$conn" ipv4.gateway ""
+    nmcli con modify "$conn" ipv4.addresses ""
+    nmcli con modify "$conn" ipv6.method auto
+    nmcli con modify "$conn" ipv6.gateway ""
+    nmcli con modify "$conn" ipv6.addresses ""
+    nmcli con reload
+    nmcli con down "$conn"
+    nmcli con up "$conn"
+done
+systemctl enable --now serial-getty@ttyS0.service`
+				firstbootscripts = append(firstbootscripts, firstbootscriptname)
+				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
+				if err != nil {
+					return fmt.Errorf("failed to add first boot script: %s", err)
+				}
+			}
+		}
+		err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin, firstbootscripts)
 		if err != nil {
 			return fmt.Errorf("failed to run virt-v2v: %s", err)
 		}
 	}
 
 	if vminfo.OSType == "linux" {
-		osRelease, err := virtv2v.GetOsRelease(path)
-		if err != nil {
-			return fmt.Errorf("failed to get os release: %s", err)
-		}
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			log.Println("Adding wildcard netplan")
@@ -652,7 +677,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	for range vminfo.VMDisks {
-		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
+		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{
+			Debug: migobj.Debug,
+		})
 	}
 
 	// Live Replicate Disks

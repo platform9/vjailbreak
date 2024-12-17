@@ -35,6 +35,7 @@ type NBDServer struct {
 	cmd          *exec.Cmd
 	tmp_dir      string
 	progresschan chan string
+	Debug        bool
 }
 
 type BlockStatusData struct {
@@ -95,9 +96,11 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		"--exit-with-parent",
 		"--readonly",
 		"--foreground",
-		// "--verbose",
 		fmt.Sprintf("--unix=%s", socket),
 		fmt.Sprintf("--pidfile=%s", pidFile),
+		"--verbose",
+		"-D vddk.datapath=0",
+		"-D nbdkit.backend.datapath=0",
 		"vddk",
 		"libdir=/home/fedora/vmware-vix-disklib-distrib",
 		fmt.Sprintf("server=%s", server),
@@ -121,6 +124,10 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		} else {
 			cmdstring += fmt.Sprintf("%s ", arg)
 		}
+	}
+	if nbdserver.Debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
 	log.Printf("Executing %s\n", cmdstring)
 	err = cmd.Start()
@@ -163,6 +170,10 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string) error {
 			nbdserver.progresschan <- prog
 		}
 	}()
+	if nbdserver.Debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	err = cmd.Run()
 	if err != nil {
 		log.Println("Error running nbdcopy")
