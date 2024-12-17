@@ -397,12 +397,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				firstbootscriptname := "rhel_enable_dhcp"
 				firstbootscript := `#!/bin/bash
 nmcli -t -f NAME connection show | while read -r conn; do
-    nmcli con modify "$conn" ipv4.method auto
-    nmcli con modify "$conn" ipv4.gateway ""
-    nmcli con modify "$conn" ipv4.addresses ""
-    nmcli con modify "$conn" ipv6.method auto
-    nmcli con modify "$conn" ipv6.gateway ""
-    nmcli con modify "$conn" ipv6.addresses ""
+    nmcli con modify "$conn" ipv4.method auto ipv4.address "" ipv4.gateway ""
+    nmcli con modify "$conn" ipv6.method auto ipv6.address "" ipv6.gateway ""
     nmcli con reload
     nmcli con down "$conn"
     nmcli con up "$conn"
