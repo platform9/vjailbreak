@@ -39,7 +39,6 @@ type VMInfo struct {
 	UUID    string
 	Host    string
 	VMDisks []VMDisk
-	VddkURL string
 	UEFI    bool
 	Name    string
 	OSType  string
