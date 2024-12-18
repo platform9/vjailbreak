@@ -115,22 +115,6 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
-// func checkForKVM() error {
-// 	// Execute the command 'lsmod | grep kvm'
-// 	cmd := exec.Command("lsmod")
-// 	output, err := cmd.Output()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to execute lsmod: %v", err)
-// 	}
-
-// 	// Check if the output contains 'kvm'
-// 	if strings.Contains(string(output), "kvm") {
-// 		return nil // KVM is installed
-// 	}
-
-// 	return fmt.Errorf("KVM is not installed")
-// }
-
 func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error {
 	// Convert the disk
 
@@ -147,14 +131,6 @@ func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firs
 
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	// LIBGUESTFS_BACKEND_SETTINGS=force_kvm
-	// if err := checkForKVM(); err != nil {
-	// 	log.Printf("Check for KVM failed: %v", err)
-	// 	log.Println("KVM is not found, using software emulation")
-	// } else {
-	// 	log.Println("KVM is found, using hardware acceleration")
-	os.Setenv("LIBGUESTFS_BACKEND_SETTINGS", "force_kvm")
-	// }
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))

@@ -118,6 +118,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	// Log the command
 	cmdstring := ""
 	for _, arg := range cmd.Args {
+
 		if strings.Contains(arg, password) {
 			cmdstring += "password=[REDACTED] "
 		} else {
