@@ -64,7 +64,7 @@ const MaxCPU = 9999999
 const MaxRAM = 9999999
 
 // Number of intervals to wait for the volume to become available
-const MaxIntervalCount = 6
+const MaxIntervalCount = 12
 
 func getCert(endpoint string) (*x509.Certificate, error) {
 	conf := &tls.Config{
