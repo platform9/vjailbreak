@@ -1,3 +1,4 @@
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline"
 import {
   FormControl,
   FormHelperText,
@@ -6,8 +7,7 @@ import {
   Select,
   Typography,
 } from "@mui/material"
-import { useMemo, useState, useCallback } from "react"
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline"
+import { useCallback, useMemo, useState } from "react"
 
 import DeleteIcon from "@mui/icons-material/Delete"
 import {
@@ -35,6 +35,7 @@ interface ResourceMappingProps {
   values: ResourceMap[]
   onChange: (mappings: ResourceMap[]) => void
   error?: string
+  oneToManyMapping?: boolean
 }
 
 export default function ResourceMappingTable({
@@ -46,6 +47,7 @@ export default function ResourceMappingTable({
   values = [],
   onChange,
   error,
+  oneToManyMapping = false,
 }: ResourceMappingProps) {
   const [selectedSourceItem, setSelectedSourceItem] = useState("")
   const [selectedTargetItem, setSelectedTargetItem] = useState("")
@@ -87,13 +89,14 @@ export default function ResourceMappingTable({
     [sourceItems, values]
   )
 
-  const availableTargetItems = useMemo(
-    () =>
-      targetItems.filter(
-        (item) => !values.some((mapping) => mapping.target === item)
-      ),
-    [targetItems, values]
-  )
+  const availableTargetItems = useMemo(() => {
+    if (oneToManyMapping) {
+      return targetItems
+    }
+    return targetItems.filter(
+      (item) => !values.some((mapping) => mapping.target === item)
+    )
+  }, [oneToManyMapping, targetItems, values])
 
   const renderValues = useCallback(() => {
     return values.length ? (
