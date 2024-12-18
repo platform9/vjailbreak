@@ -378,9 +378,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if err != nil {
 		return fmt.Errorf("failed to attach volume: %s", err)
 	}
-	osRelease, err := virtv2v.GetOsRelease(path)
-	if err != nil {
-		return fmt.Errorf("failed to get os release: %s", err)
+	osRelease := ""
+	if vminfo.OSType == "linux" {
+		osRelease, err = virtv2v.GetOsRelease(path)
+		if err != nil {
+			return fmt.Errorf("failed to get os release: %s", err)
+		}
 	}
 	if migobj.Convert {
 		firstbootscripts := []string{}
