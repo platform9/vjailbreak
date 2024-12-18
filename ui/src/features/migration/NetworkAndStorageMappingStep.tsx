@@ -1,7 +1,7 @@
 import { FormControl, FormHelperText, styled } from "@mui/material"
 import { useEffect, useMemo } from "react"
-import Step from "../../components/forms/Step"
 import ResourceMappingTable from "src/components/forms/ResourceMappingTableNew"
+import Step from "../../components/forms/Step"
 // import ResourceMapping from "../../components/forms/ResourceMapping"
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
@@ -104,6 +104,7 @@ export default function NetworkAndStorageMappingStep({
             targetLabel="OpenStack VolumeType"
             values={params.storageMappings || []}
             onChange={(value) => onChange("storageMappings")(value)}
+            oneToManyMapping
           />
           {storageMappingError && (
             <FormHelperText error>{storageMappingError}</FormHelperText>
