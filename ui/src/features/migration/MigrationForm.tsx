@@ -45,6 +45,9 @@ import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 
+const stringsCompareFn = (a, b) =>
+  a.toLowerCase().localeCompare(b.toLowerCase())
+
 const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
     display: "grid",
@@ -330,12 +333,16 @@ export default function MigrationFormDrawer({
 
   const availableVmwareNetworks = useMemo(() => {
     if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.networks || [])))
+    return uniq(flatten(params.vms.map((vm) => vm.networks || []))).sort(
+      stringsCompareFn
+    )
   }, [params.vms])
 
   const availableVmwareDatastores = useMemo(() => {
     if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.datastores || [])))
+    return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(
+      stringsCompareFn
+    )
   }, [params.vms])
 
   const createNetworkMapping = async (networkMappingParams) => {
@@ -521,6 +528,21 @@ export default function MigrationFormDrawer({
     isNilOrEmpty(params.storageMappings) ||
     !migrationOptionValidated
 
+  const sortedOpenstackNetworks = useMemo(
+    () =>
+      (migrationTemplate?.status?.openstack?.networks || []).sort(
+        stringsCompareFn
+      ),
+    [migrationTemplate?.status?.openstack?.networks]
+  )
+  const sortedOpenstackVolumeTypes = useMemo(
+    () =>
+      (migrationTemplate?.status?.openstack?.volumeTypes || []).sort(
+        stringsCompareFn
+      ),
+    [migrationTemplate?.status?.openstack?.volumeTypes]
+  )
+
   return (
     <StyledDrawer
       anchor="right"
@@ -567,12 +589,8 @@ export default function MigrationFormDrawer({
           <NetworkAndStorageMappingStep
             vmwareNetworks={availableVmwareNetworks}
             vmWareStorage={availableVmwareDatastores}
-            openstackNetworks={
-              migrationTemplate?.status?.openstack?.networks || []
-            }
-            openstackStorage={
-              migrationTemplate?.status?.openstack?.volumeTypes || []
-            }
+            openstackNetworks={sortedOpenstackNetworks}
+            openstackStorage={sortedOpenstackVolumeTypes}
             params={params}
             onChange={getParamsUpdater}
             networkMappingError={fieldErrors["networksMapping"]}
