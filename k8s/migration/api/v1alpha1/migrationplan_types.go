@@ -37,7 +37,7 @@ type MigrationPlanStrategy struct {
 	VMCutoverEnd metav1.Time `json:"vmCutoverEnd,omitempty"`
 	// +kubebuilder:default:=false
 	AdminInitiatedCutOver bool `json:"adminInitiatedCutOver,omitempty"`
-	// +kubebuilder:default:=true
+	// +kubebuilder:default:=false
 	PerformHealthChecks bool `json:"performHealthChecks,omitempty"`
 	// +kubebuilder:default:="443"
 	HealthCheckPort string `json:"healthCheckPort,omitempty"`
