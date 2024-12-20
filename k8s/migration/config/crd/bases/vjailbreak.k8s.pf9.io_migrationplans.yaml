@@ -69,7 +69,7 @@ spec:
                     default: "443"
                     type: string
                   performHealthChecks:
-                    default: true
+                    default: false
                     type: boolean
                   type:
                     enum:
