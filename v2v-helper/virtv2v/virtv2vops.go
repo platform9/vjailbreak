@@ -202,6 +202,7 @@ DHCP=yes`
 	}
 	return nil
 }
+
 func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 	// Create the firstboot script
 	firstbootscriptpath := fmt.Sprintf("/home/fedora/%s.sh", firstbootscriptname)

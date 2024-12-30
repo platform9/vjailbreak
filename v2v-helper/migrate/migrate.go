@@ -146,7 +146,7 @@ func (migobj *Migrate) DeleteAllVolumes(vminfo vm.VMInfo) error {
 	return nil
 }
 
-// This function enables CBT on the VM if it not enabled and takes a snapshot for initializing CBT
+// This function enables CBT on the VM if it is not enabled and takes a snapshot for initializing CBT
 func (migobj *Migrate) EnableCBTWrapper() error {
 	vmops := migobj.VMops
 	cbt, err := vmops.IsCBTEnabled()
@@ -420,6 +420,7 @@ systemctl enable --now serial-getty@ttyS0.service`
 		}
 	}
 
+	//TODO(omkar): can disable DHCP here
 	if vminfo.OSType == "linux" {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan

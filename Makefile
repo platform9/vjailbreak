@@ -1,6 +1,8 @@
-export UI_IMG ?= platform9/vjailbreak-ui:v0.2
-export V2V_IMG ?= platform9/v2v-helper:v0.2
-export CONTROLLER_IMG ?= platform9/vjailbreak-controller:v0.2
+export REPO ?= platform9
+export UI_IMG ?= ${REPO}/vjailbreak-ui
+export V2V_IMG ?= ${REPO}/v2v-helper
+export TAG ?= latest 
+export CONTROLLER_IMG ?= ${REPO}/vjailbreak-controller:${TAG}
 
 .PHONY: ui
 ui:
@@ -14,6 +16,10 @@ v2v-helper:
 
 .PHONY: vjail-controller
 vjail-controller: v2v-helper
+	make -C k8s/migration/ docker-build docker-push
+
+.PHONY: vjail-controller-only
+vjail-controller-only:
 	make -C k8s/migration/ docker-build docker-push
 
 .PHONY: generate-manifests
@@ -32,4 +38,3 @@ docker-build-image: generate-manifests
 build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
-
