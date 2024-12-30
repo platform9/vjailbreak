@@ -1,7 +1,7 @@
 export REPO ?= platform9
 export UI_IMG ?= ${REPO}/vjailbreak-ui
 export V2V_IMG ?= ${REPO}/v2v-helper
-export TAG ?= latest 
+export TAG ?= latest
 export CONTROLLER_IMG ?= ${REPO}/vjailbreak-controller:${TAG}
 
 .PHONY: ui
