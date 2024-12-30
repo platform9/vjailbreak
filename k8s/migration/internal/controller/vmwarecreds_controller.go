@@ -271,7 +271,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
 			Networks:   networks,
-			IpAddress:  vmProps.Guest.IpAddress,
+			IPAddress:  vmProps.Guest.IpAddress,
 			VMState:    vmProps.Guest.GuestState,
 		})
 	}
