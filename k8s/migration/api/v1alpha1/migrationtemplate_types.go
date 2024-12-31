@@ -50,7 +50,8 @@ type VMInfo struct {
 	Datastores []string `json:"datastores,omitempty"`
 	Networks   []string `json:"networks,omitempty"`
 	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmstate,omitempty"`
+	VMState    string   `json:"vmState,omitempty"`
+	OSType     string   `json:"osType,omitempty"`
 }
 
 type OpenstackInfo struct {

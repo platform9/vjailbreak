@@ -109,7 +109,9 @@ spec:
                       items:
                         type: string
                       type: array
-                    vmstate:
+                    osType:
+                      type: string
+                    vmState:
                       type: string
                   required:
                   - name
