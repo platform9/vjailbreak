@@ -146,7 +146,7 @@ export default function VmsSelectionStep({
       <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
       <FieldsContainer>
         <FormControl error={!!error} required>
-          <Paper sx={{ width: "100%", height: 500 }}>
+          <Paper sx={{ width: "100%", height: 389 }}>
             <DataGrid
               rows={vms}
               columns={columns}
@@ -158,7 +158,7 @@ export default function VmsSelectionStep({
               }}
               pageSizeOptions={[5, 10, 25]}
               localeText={{ noRowsLabel: "No VMs discovered" }}
-              rowHeight={90}
+              rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               getRowId={(row) => row.name}
               isRowSelectable={(params) => params.row.vmState === "running"}
