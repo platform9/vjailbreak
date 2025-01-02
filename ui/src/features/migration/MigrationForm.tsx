@@ -12,6 +12,7 @@ import {
   getMigrationTemplate,
   patchMigrationTemplate,
   postMigrationTemplate,
+  deleteMigrationTemplate,
 } from "src/api/migration-templates/migrationTemplates"
 import { MigrationTemplate, VmData } from "src/api/migration-templates/model"
 import { getMigrations } from "src/api/migrations/migrations"
@@ -23,6 +24,7 @@ import { OpenstackCreds } from "src/api/openstack-creds/model"
 import {
   getOpenstackCredentials,
   postOpenstackCredentials,
+  deleteOpenstackCredentials,
 } from "src/api/openstack-creds/openstackCreds"
 import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
 import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
@@ -31,6 +33,7 @@ import { VMwareCreds } from "src/api/vmware-creds/model"
 import {
   getVmwareCredentials,
   postVmwareCredentials,
+  deleteVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
 import { THREE_SECONDS } from "src/constants"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
@@ -389,8 +392,8 @@ export default function MigrationFormDrawer({
         storageMapping: storageMappings.metadata.name,
         ...(selectedMigrationOptions.osType &&
           params.osType !== OS_TYPES.AUTO_DETECT && {
-            osType: params.osType,
-          }),
+          osType: params.osType,
+        }),
       },
     }
     try {
@@ -419,8 +422,8 @@ export default function MigrationFormDrawer({
           : "hot",
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
-          dataCopyStart: params.dataCopyStartTime,
-        }),
+        dataCopyStart: params.dataCopyStartTime,
+      }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
@@ -543,11 +546,42 @@ export default function MigrationFormDrawer({
     [migrationTemplate?.status?.openstack?.volumeTypes]
   )
 
+  const handleClose = async () => {
+    try {
+
+      setMigrationTemplate(undefined)
+      setVmwareCredentials(undefined)
+      setOpenstackCredentials(undefined)
+      setError(null)
+
+
+      onClose()
+      // Delete migration template if it exists
+      if (migrationTemplate?.metadata?.name) {
+        await deleteMigrationTemplate(migrationTemplate.metadata.name)
+      }
+
+      // Delete VMware credentials if they exist
+      if (vmwareCredentials?.metadata?.name) {
+        await deleteVmwareCredentials(vmwareCredentials.metadata.name)
+      }
+
+      // Delete OpenStack credentials if they exist
+      if (openstackCredentials?.metadata?.name) {
+        await deleteOpenstackCredentials(openstackCredentials.metadata.name)
+      }
+
+    } catch (err) {
+      console.error("Error cleaning up resources", err)
+      onClose()
+    }
+  }
+
   return (
     <StyledDrawer
       anchor="right"
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       ModalProps={{ keepMounted: false }}
     >
       <Header title="Migration Form" />
@@ -609,7 +643,7 @@ export default function MigrationFormDrawer({
       </DrawerContent>
       <Footer
         submitButtonLabel={"Start Migration"}
-        onClose={onClose}
+        onClose={handleClose}
         onSubmit={handleSubmit}
         disableSubmit={disableSubmit || submitting}
         submitting={submitting}
