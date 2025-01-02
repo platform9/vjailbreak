@@ -389,8 +389,8 @@ export default function MigrationFormDrawer({
         storageMapping: storageMappings.metadata.name,
         ...(selectedMigrationOptions.osType &&
           params.osType !== OS_TYPES.AUTO_DETECT && {
-            osType: params.osType,
-          }),
+          osType: params.osType,
+        }),
       },
     }
     try {
@@ -419,8 +419,8 @@ export default function MigrationFormDrawer({
           : "hot",
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
-          dataCopyStart: params.dataCopyStartTime,
-        }),
+        dataCopyStart: params.dataCopyStartTime,
+      }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
