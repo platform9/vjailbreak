@@ -11,27 +11,21 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
+import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
-import { useState } from "react";
-import { Edit, EditNote, EditNoteRounded, EditNoteTwoTone, Warning } from "@mui/icons-material";
+import { useEffect, useRef, useState } from "react";
+import { Edit, EditNote, EditNoteRounded, EditNoteTwoTone, Warning, RefreshRounded } from "@mui/icons-material";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
   gridGap: theme.spacing(1),
-}));
-
-const IP_REGEX =
-  /^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$/;
-
-const FormControlContainer = styled("div")(({ theme }) => ({
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  justifyContent: "center",
+  "& .disabled-row": {
+    opacity: 0.6,
+    cursor: "not-allowed",
+  }
 }));
 
 const FieldsContainer = styled("div")(({ theme }) => ({
@@ -39,214 +33,106 @@ const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(6),
 }));
 
-const CellContainer = styled("div")(({ theme }) => ({
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  justifyContent: "center",
-}));
+// const TruncatedCell = ({ value }: { value: string }) => (
+//   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+//     {value}
+//   </div>
+// );
 
-const IpCell = ({ params }) => {
-  const [isEditing, setEditing] = useState(false);
-  const [customIP, setCustomIP] = useState(params.row.customIP || "");
-  const [error, setError] = useState("");
+const TruncatedCell = ({ value }: { value: string }) => {
+  const [isTruncated, setIsTruncated] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
 
-  const handleDoubleClick = () => {
-    setEditing(true);
-  };
-
-  const handleBlur = () => {
-    if (!customIP) {
-      setEditing(false);
-    }
-    if (!IP_REGEX.test(customIP)) {
-      setError("Invalid IP address. ");
-    } else {
-      setError("");
-      setEditing(false);
-    }
-  };
-
-  return (
-    <CellContainer>
-      {params?.value ? (
-        <span>{params.value}</span>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center" }}>
-          {isEditing ? (
-            <TextField
-              size="small"
-              value={customIP}
-              onChange={(e) => setCustomIP(e.target.value)}
-              onBlur={handleBlur}
-              error={!!error}
-              helperText={error}
-              placeholder="Enter custom IP"
-              autoFocus
-            />
-          ) : (
-            <Tooltip
-              title={
-                customIP
-                  ? `Custom IP: ${customIP}. Double-click to edit.`
-                  : "IP is not assigned to your VM. It will auto-assign using DHCP or you can give a custom IP by double-clicking the icon."
-              }
-              arrow
-              sx={{
-                cursor: "pointer",
-                color: customIP ? "inherit" : "gray",
-              }}
-            >
-              {/* {!customIP && <IconButton>-</IconButton>} */}
-              <IconButton
-                onClick={handleDoubleClick}
-                sx={{
-                  cursor: "pointer",
-                  color: customIP ? "inherit" : "grey",
-                }}
-              >
-                <EditNoteTwoTone />
-              </IconButton>
-            </Tooltip>
-          )}
-          {customIP && !isEditing && (
-            <Typography
-              variant="body1"
-              sx={{
-                color: "text.secondary",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {customIP}
-            </Typography>
-          )}
-        </div>
-      )
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (cellRef.current) {
+        setIsTruncated(
+          cellRef.current.scrollWidth > cellRef.current.clientWidth
+        );
       }
-    </CellContainer >
+    };
+    checkTruncation();
+  }, [value]);
+
+  const cellContent = (
+    <div
+      ref={cellRef}
+      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}
+    >
+      {value}
+    </div>
   );
+
+  return isTruncated ? (
+    <Tooltip title={value}>
+      {cellContent}
+    </Tooltip>
+  ) : cellContent;
 };
 
 const columns: GridColDef[] = [
-  { field: "name", headerName: "VM Name", flex: 1 },
   {
-    field: "status",
+    field: "name",
+    headerName: "VM Name",
+    flex: 1.5,
+    renderCell: (params) => <TruncatedCell value={params.value} />,
+  },
+  {
+    field: "vmState",
     headerName: "Status",
     flex: 1,
+    valueGetter: (value) => value === "running" ? "running" : "stopped", // needed for search to work.
+    sortComparator: (v1, v2) => {
+      if (v1 === "running" && v2 === "stopped") return -1;
+      if (v1 === "stopped" && v2 === "running") return 1;
+      return 0;
+    },
     renderCell: (params) => (
       <Chip
         variant="outlined"
-        label={params.value}
-        color={params.value === "Running" ? "success" : "error"}
+        label={params.value === "running" ? "Running" : "Stopped"}
+        color={params.value === "running" ? "success" : "error"}
         size="small"
       />
     ),
   },
   {
-    field: "ip",
-    headerName: "IP",
-    flex: 1.5,
-    renderCell: (params) => <IpCell params={params} />
-  },
-  // {
-  //   field: "ip",
-  //   headerName: "IP",
-  //   flex: 2,
-  //   renderCell: (params) =>
-  //     params.value ? (
-  //       <span>{params.value}</span>
-  //     ) : (
-  //       <FormControlContainer>
-  //         <FormControl fullWidth size="small">
-  //           <Select
-  //             defaultValue=""
-  //             displayEmpty
-  //             size="small"
-  //             renderValue={(selected) => {
-  //               if (selected === "custom") {
-  //                 return (
-  //                   <TextField
-  //                     placeholder="Custom IP"
-  //                     size="small"
-  //                     onClick={(e) => e.stopPropagation()}
-  //                   />
-  //                 );
-  //               }
-  //               return selected || <em>Select IP Option</em>;
-  //             }}
-  //           >
-  //             <MenuItem value="">
-  //               <em>Select IP Option</em>
-  //             </MenuItem>
-  //             <MenuItem value="Auto Assign using DHCP">
-  //               Auto Assign using DHCP
-  //             </MenuItem>
-  //             <MenuItem value="custom">Custom IP</MenuItem>
-  //           </Select>
-  //         </FormControl>
-  //       </FormControlContainer>
-  //     ),
-  // },
-  {
-    field: "network_details",
-    headerName: "Network Details",
-    flex: 2.5,
-    renderCell: (params) => (
-      <CellContainer>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            rowGap: "2px",
-          }}
-        >
-          <Typography variant="subtitle2" component="span" fontWeight="bold">
-            Network
-          </Typography>
-          <Typography variant="body2" component="span">
-            {params.row.network_details?.network || ""}
-          </Typography>
-          <Typography variant="subtitle2" component="span" fontWeight="bold">
-            IP Address
-          </Typography>
-          <Typography variant="body2" component="span">
-            {params.row.network_details?.ip_address || ""}
-          </Typography>
-          <Typography variant="subtitle2" component="span" fontWeight="bold">
-            MAC Address
-          </Typography>
-          <Typography variant="body2" component="span">
-            {params.row.network_details?.mac_address || ""}
-          </Typography>
-        </div>
-      </CellContainer>
-    ),
-  },
-  {
-    field: "os",
-    headerName: "OS",
+    field: "ipAddress",
+    headerName: "Current IP",
     flex: 1,
-    renderCell: (params) => (
-      <CellContainer>
-        <Typography variant="body2">
-          {params.value.name}
-          <Typography variant="body2">({params.value.edition})</Typography>
-        </Typography>
-      </CellContainer>
-    ),
+    valueGetter: (value) => value || " -",
+  },
+  {
+    field: "networks",
+    headerName: "Network Interface(s)",
+    flex: 1.2,
+    valueGetter: (value: string[]) => value?.join(", "),
+    renderCell: (params) => <TruncatedCell value={params.value} />,
+  },
+  {
+    field: "osType",
+    headerName: "OS",
+    valueGetter: (value) => {
+      if (value === "linuxGuest") return "Linux";
+      if (value === "windowsGuest") return "Windows";
+      if (value === "otherGuestFamily") return "Other";
+      return "";
+    },
+    flex: 1,
   },
   // { field: "version", headerName: "Version", flex: 1 },
 ];
 
 const paginationModel = { page: 0, pageSize: 5 };
 
+const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
+
 interface VmsSelectionStepProps {
   vms: VmData[];
   onChange: (id: string) => (value: unknown) => void;
   error: string;
   loadingVms?: boolean;
+  onRefresh?: () => void;
 }
 
 export default function VmsSelectionStep({
@@ -254,62 +140,12 @@ export default function VmsSelectionStep({
   onChange,
   error,
   loadingVms = false,
+  onRefresh,
 }: VmsSelectionStepProps) {
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
     const selectedVms = vms.filter((vm) => selectedRowIds.includes(vm.name));
     onChange("vms")(selectedVms);
   };
-
-  const vmsMockData = [
-    {
-      id: 1,
-      name: "VM 1",
-      status: "Running",
-      ip: "89.207.132.170",
-      network_details: {
-        network: "POD Network",
-        ip_address: "89.207.132.170",
-        mac_address: "00:00:00:00:00:00",
-      },
-      os: {
-        name: "Windows",
-        edition: "Enterprise",
-      },
-      version: "kubevert-c7",
-    },
-    {
-      id: 2,
-      name: "VM 2",
-      status: "Stopped",
-      ip: "",
-      network_details: {
-        network: "POD Network",
-        ip_address: "89.207.132.170",
-        mac_address: "00:00:00:00:00:00",
-      },
-      os: {
-        name: "Windows",
-        edition: "Enterprise",
-      },
-      version: "kubevert-c7",
-    },
-    {
-      id: 3,
-      name: "VM 3",
-      status: "Running",
-      ip: "89.207.132.170",
-      network_details: {
-        network: "POD Network",
-        ip_address: "89.207.132.170",
-        mac_address: "00:00:00:00:00:00",
-      },
-      os: {
-        name: "Windows",
-        edition: "Enterprise",
-      },
-      version: "kubevert-c7",
-    },
-  ];
 
   return (
     <VmsSelectionStepContainer>
@@ -318,24 +154,52 @@ export default function VmsSelectionStep({
         <FormControl error={!!error} required>
           <Paper sx={{ width: "100%", height: 500 }}>
             <DataGrid
-              rows={vmsMockData}
+              rows={vms}
               columns={columns}
-              initialState={{ pagination: { paginationModel } }}
+              initialState={{
+                pagination: { paginationModel },
+                sorting: {
+                  sortModel: [{ field: 'vmState', sort: 'asc' }],
+                },
+              }}
               pageSizeOptions={[5, 10, 25]}
               localeText={{ noRowsLabel: "No VMs discovered" }}
               rowHeight={90}
               onRowSelectionModelChange={handleVmSelection}
               getRowId={(row) => row.name}
+              isRowSelectable={(params) => params.row.vmState === "running"}
               slots={{
-                toolbar: CustomSearchToolbar,
+                toolbar: (props) => (
+                  <CustomSearchToolbar
+                    {...props}
+                    onRefresh={onRefresh}
+                    disableRefresh={loadingVms}
+                  />
+                ),
                 loadingOverlay: () => (
                   <CustomLoadingOverlay loadingMessage="Scanning for VMs" />
                 ),
+                row: (props) => {
+                  const isDisabled = props.row.vmState !== "running";
+                  return (
+                    <Tooltip
+                      title={isDisabled ? DISABLED_TOOLTIP_MESSAGE : ""}
+                      followCursor
+                    >
+                      <span style={{ display: 'contents' }}>
+                        <GridRow {...props} />
+                      </span>
+                    </Tooltip>
+                  );
+                },
               }}
               loading={loadingVms}
               checkboxSelection
               disableColumnMenu
               disableColumnResize
+              getRowClassName={(params) =>
+                params.row.vmState !== "running" ? "disabled-row" : ""
+              }
             />
           </Paper>
         </FormControl>
