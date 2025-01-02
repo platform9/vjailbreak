@@ -2,14 +2,9 @@ import {
   Chip,
   FormControl,
   FormHelperText,
-  IconButton,
-  MenuItem,
   Paper,
-  Select,
   styled,
-  TextField,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
@@ -17,7 +12,6 @@ import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
 import { useEffect, useRef, useState } from "react";
-import { Edit, EditNote, EditNoteRounded, EditNoteTwoTone, Warning, RefreshRounded } from "@mui/icons-material";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -74,7 +68,7 @@ const columns: GridColDef[] = [
   {
     field: "name",
     headerName: "VM Name",
-    flex: 1.5,
+    flex: 2,
     renderCell: (params) => <TruncatedCell value={params.value} />,
   },
   {
