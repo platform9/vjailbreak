@@ -234,7 +234,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	var vminfo []vjailbreakv1alpha1.VMInfo
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -266,10 +266,14 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				datastores = append(datastores, ds.Name)
 			}
 		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
 			Networks:   networks,
+			IPAddress:  vmProps.Guest.IpAddress,
+			VMState:    vmProps.Guest.GuestState,
+			OSType:     vmProps.Guest.GuestFamily,
 		})
 	}
 
