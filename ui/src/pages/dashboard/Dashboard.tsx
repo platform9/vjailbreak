@@ -77,7 +77,7 @@ export default function Dashboard() {
           localeText={{ noRowsLabel: "No Migrations Available" }}
           getRowId={(row) => row.metadata?.name}
           slots={{
-            toolbar: () => <CustomSearchToolbar title="Migrations" />,
+            toolbar: () => <CustomSearchToolbar title="Migrations" placeholder="Search by Name, Status, or Progress" />,
           }}
         />
       </Paper>

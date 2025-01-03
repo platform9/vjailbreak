@@ -6,12 +6,14 @@ interface CustomSearchToolbarProps {
   title?: string;
   onRefresh?: () => void;
   disableRefresh?: boolean;
+  placeholder?: string;
 }
 
 const CustomSearchToolbar = ({
   title,
   onRefresh,
-  disableRefresh = false
+  disableRefresh = false,
+  placeholder = "Search"
 }: CustomSearchToolbarProps) => {
   return (
     <Box
@@ -38,7 +40,18 @@ const CustomSearchToolbar = ({
             </span>
           </Tooltip>
         )}
-        <GridToolbarQuickFilter />
+        <Box sx={{ maxWidth: "300px" }}>
+          <div>
+            <GridToolbarQuickFilter
+              placeholder={placeholder}
+              sx={{
+                "& .MuiInputBase-input": {
+                  textOverflow: "ellipsis",
+                }
+              }}
+            />
+          </div>
+        </Box>
       </Box>
     </Box>
   )
