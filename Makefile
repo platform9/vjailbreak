@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 export REPO ?= platform9
 export TAG ?= latest
 export UI_IMG ?= ${REPO}/vjailbreak-ui:${TAG}
@@ -13,6 +15,10 @@ ui:
 v2v-helper:
 	docker build --platform linux/amd64 -t $(V2V_IMG) v2v-helper/
 	docker push $(V2V_IMG)
+
+.PHONY: test-v2v-helper
+test-v2v-helper:
+	cd v2v-helper && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v
 
 .PHONY: vjail-controller
 vjail-controller: v2v-helper

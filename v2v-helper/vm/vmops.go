@@ -59,6 +59,7 @@ type VMDisk struct {
 	Snapname        string
 	SnapBackingDisk string
 	ChangeID        string
+	Boot            bool
 }
 
 type VMOps struct {
