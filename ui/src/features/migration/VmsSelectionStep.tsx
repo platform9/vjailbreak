@@ -11,7 +11,6 @@ import { VmData } from "src/api/migration-templates/model";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
-import { useEffect, useRef, useState } from "react";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -27,49 +26,12 @@ const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(6),
 }));
 
-// const TruncatedCell = ({ value }: { value: string }) => (
-//   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
-//     {value}
-//   </div>
-// );
-
-const TruncatedCell = ({ value }: { value: string }) => {
-  const [isTruncated, setIsTruncated] = useState(false);
-  const cellRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const checkTruncation = () => {
-      if (cellRef.current) {
-        setIsTruncated(
-          cellRef.current.scrollWidth > cellRef.current.clientWidth
-        );
-      }
-    };
-    checkTruncation();
-  }, [value]);
-
-  const cellContent = (
-    <div
-      ref={cellRef}
-      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}
-    >
-      {value}
-    </div>
-  );
-
-  return isTruncated ? (
-    <Tooltip title={value}>
-      {cellContent}
-    </Tooltip>
-  ) : cellContent;
-};
 
 const columns: GridColDef[] = [
   {
     field: "name",
     headerName: "VM Name",
     flex: 2,
-    renderCell: (params) => <TruncatedCell value={params.value} />,
   },
   {
     field: "vmState",
@@ -101,7 +63,6 @@ const columns: GridColDef[] = [
     headerName: "Network Interface(s)",
     flex: 1.2,
     valueGetter: (value: string[]) => value?.join(", "),
-    renderCell: (params) => <TruncatedCell value={params.value} />,
   },
   {
     field: "osType",
@@ -168,6 +129,7 @@ export default function VmsSelectionStep({
                     {...props}
                     onRefresh={onRefresh}
                     disableRefresh={loadingVms}
+                    placeholder="Search by  Name, Status, IP Address, or Network Interface(s)"
                   />
                 ),
                 loadingOverlay: () => (

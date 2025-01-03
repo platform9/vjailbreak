@@ -1,3 +1,9 @@
 artifacts/*
 image_builder/deploy/*
 k8s/migration/dist/*
+.vite
+.env
+.env.local
+.vscode
+node_modules
+openstack.rc
