@@ -308,14 +308,26 @@ export default function MigrationFormDrawer({
     shouldPollOpenstackCreds
   )
 
+  const fetchMigrationTemplate = async () => {
+    try {
+      const response = await getMigrationTemplate(
+        migrationTemplate?.metadata?.name
+      )
+      setMigrationTemplate(response)
+    } catch (err) {
+      console.error("Error retrieving migration templates", err)
+      getFieldErrorsUpdater("migrationTemplate")(
+        "Error retrieving migration templates"
+      )
+    }
+  }
+
+
   useInterval(
     async () => {
       if (shouldPollMigrationTemplate) {
         try {
-          const response = await getMigrationTemplate(
-            migrationTemplate?.metadata?.name
-          )
-          setMigrationTemplate(response)
+          fetchMigrationTemplate()
         } catch (err) {
           console.error("Error retrieving migration templates", err)
           getFieldErrorsUpdater("migrationTemplate")(
@@ -618,6 +630,7 @@ export default function MigrationFormDrawer({
               migrationTemplate?.status === undefined &&
               !fieldErrors["vms"]
             }
+            onRefresh={fetchMigrationTemplate}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep

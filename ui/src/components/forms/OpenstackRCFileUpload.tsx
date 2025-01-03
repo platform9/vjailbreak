@@ -68,7 +68,18 @@ export default function OpenstackRCFileUploader({
   const parseFields = (content: string) => {
     // Remove 'export' from each line before parsing with dotenv
     const cleanedContent = content.replace(/^export\s+/gm, "")
-    return parse(cleanedContent)
+    const parsedFields = parse(cleanedContent)
+
+    // Map alternative field names if they exist
+    if (parsedFields.OS_PROJECT_DOMAIN_NAME && !parsedFields.OS_DOMAIN_NAME) {
+      parsedFields.OS_DOMAIN_NAME = parsedFields.OS_PROJECT_DOMAIN_NAME
+    }
+
+    if (parsedFields.OS_PROJECT_NAME && !parsedFields.OS_TENANT_NAME) {
+      parsedFields.OS_TENANT_NAME = parsedFields.OS_PROJECT_NAME
+    }
+
+    return parsedFields
   }
 
   const validateFields = (fields: Record<string, string>) => {

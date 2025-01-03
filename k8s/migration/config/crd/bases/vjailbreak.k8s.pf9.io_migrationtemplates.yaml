@@ -101,12 +101,18 @@ spec:
                       items:
                         type: string
                       type: array
+                    ipAddress:
+                      type: string
                     name:
                       type: string
                     networks:
                       items:
                         type: string
                       type: array
+                    osType:
+                      type: string
+                    vmState:
+                      type: string
                   required:
                   - name
                   type: object

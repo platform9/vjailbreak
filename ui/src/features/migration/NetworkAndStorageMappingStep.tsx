@@ -90,6 +90,7 @@ export default function NetworkAndStorageMappingStep({
             targetLabel="Openstack Network"
             values={params.networkMappings || []}
             onChange={(value) => onChange("networkMappings")(value)}
+            oneToManyMapping
           />
           {networkMappingError && (
             <FormHelperText error>{networkMappingError}</FormHelperText>
