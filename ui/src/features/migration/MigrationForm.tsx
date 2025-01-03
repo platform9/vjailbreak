@@ -305,14 +305,26 @@ export default function MigrationFormDrawer({
     shouldPollOpenstackCreds
   )
 
+  const fetchMigrationTemplate = async () => {
+    try {
+      const response = await getMigrationTemplate(
+        migrationTemplate?.metadata?.name
+      )
+      setMigrationTemplate(response)
+    } catch (err) {
+      console.error("Error retrieving migration templates", err)
+      getFieldErrorsUpdater("migrationTemplate")(
+        "Error retrieving migration templates"
+      )
+    }
+  }
+
+
   useInterval(
     async () => {
       if (shouldPollMigrationTemplate) {
         try {
-          const response = await getMigrationTemplate(
-            migrationTemplate?.metadata?.name
-          )
-          setMigrationTemplate(response)
+          fetchMigrationTemplate()
         } catch (err) {
           console.error("Error retrieving migration templates", err)
           getFieldErrorsUpdater("migrationTemplate")(
@@ -389,8 +401,8 @@ export default function MigrationFormDrawer({
         storageMapping: storageMappings.metadata.name,
         ...(selectedMigrationOptions.osType &&
           params.osType !== OS_TYPES.AUTO_DETECT && {
-            osType: params.osType,
-          }),
+          osType: params.osType,
+        }),
       },
     }
     try {
@@ -419,8 +431,8 @@ export default function MigrationFormDrawer({
           : "hot",
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
-          dataCopyStart: params.dataCopyStartTime,
-        }),
+        dataCopyStart: params.dataCopyStartTime,
+      }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
@@ -584,6 +596,7 @@ export default function MigrationFormDrawer({
               migrationTemplate?.status === undefined &&
               !fieldErrors["vms"]
             }
+            onRefresh={fetchMigrationTemplate}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep
