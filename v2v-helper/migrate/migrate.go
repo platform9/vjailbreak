@@ -17,6 +17,7 @@ import (
 	"vjailbreak/openstack"
 
 	"vjailbreak/nbd"
+	"vjailbreak/utils"
 	"vjailbreak/vcenter"
 	"vjailbreak/virtv2v"
 	"vjailbreak/vm"
@@ -385,17 +386,20 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 		if vminfo.OSType == "linux" {
 			osRelease, err = virtv2v.GetOsRelease(path)
-
 			if err != nil {
-				// ignore error and move to next disk
-				// this disk probably does not have OS installed
-				fmt.Printf("failed to get os release: %s", err)
-				delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
-				if delErr != nil {
-					return fmt.Errorf("failed to detach volume: %s", delErr)
-				}
-				continue
+				return fmt.Errorf("failed to get os release: %s", err)
 			}
+		}
+
+		ans, err := RunCommandInGuest(path, "ls /boot")
+		if err != nil {
+			fmt.Printf("failed to list files in '/boot': %s", err)
+			continue
+		}
+		fmt.Printf("Output from 'ls /boot' - '%s'", ans)
+
+		if ans == "" {
+			continue
 		}
 
 		// save the index of bootVolume
@@ -414,15 +418,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if vminfo.OSType == "linux" {
 				if strings.Contains(osRelease, "rhel") {
 					firstbootscriptname := "rhel_enable_dhcp"
-					firstbootscript := `#!/bin/bash
-nmcli -t -f NAME connection show | while read -r conn; do
-    nmcli con modify "$conn" ipv4.method auto ipv4.address "" ipv4.gateway ""
-    nmcli con modify "$conn" ipv6.method auto ipv6.address "" ipv6.gateway ""
-    nmcli con reload
-    nmcli con down "$conn"
-    nmcli con up "$conn"
-done
-systemctl enable --now serial-getty@ttyS0.service`
+					firstbootscript := utils.RhelFirstBootScript
 					firstbootscripts = append(firstbootscripts, firstbootscriptname)
 					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
 					if err != nil {

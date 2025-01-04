@@ -128,7 +128,6 @@ func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firs
 		log.Println("Downloaded virtio windrivers")
 		defer os.Remove(filePath)
 		os.Setenv("VIRTIO_WIN", filePath)
-
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
