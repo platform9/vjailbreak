@@ -387,6 +387,10 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if vminfo.OSType == "linux" {
 			osRelease, err = virtv2v.GetOsRelease(path)
 			if err != nil {
+				delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
+				if delErr != nil {
+					return fmt.Errorf("failed to detach volume: %s", delErr)
+				}
 				return fmt.Errorf("failed to get os release: %s", err)
 			}
 		}
@@ -394,11 +398,19 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		ans, err := RunCommandInGuest(path, "ls /boot")
 		if err != nil {
 			fmt.Printf("failed to list files in '/boot': %s", err)
+			delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if delErr != nil {
+				return fmt.Errorf("failed to detach volume: %s", delErr)
+			}
 			continue
 		}
 		fmt.Printf("Output from 'ls /boot' - '%s'", ans)
 
 		if ans == "" {
+			delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if delErr != nil {
+				return fmt.Errorf("failed to detach volume: %s", delErr)
+			}
 			continue
 		}
 
