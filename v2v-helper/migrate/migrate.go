@@ -416,6 +416,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 		// save the index of bootVolume
 		bootVolumeIndex = idx
+		log.Printf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name)
+
 		vminfo.VMDisks[bootVolumeIndex].Boot = true
 		if migobj.Convert {
 			firstbootscripts := []string{}
