@@ -387,10 +387,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if vminfo.OSType == "linux" {
 			osRelease, err = virtv2v.GetOsRelease(path)
 			if err != nil {
-				delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
-				if delErr != nil {
-					return fmt.Errorf("failed to detach volume: %s", delErr)
-				}
 				return fmt.Errorf("failed to get os release: %s", err)
 			}
 		}
@@ -398,19 +394,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		ans, err := RunCommandInGuest(path, "ls /boot")
 		if err != nil {
 			fmt.Printf("failed to list files in '/boot': %s", err)
-			delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
-			if delErr != nil {
-				return fmt.Errorf("failed to detach volume: %s", delErr)
-			}
 			continue
 		}
 		fmt.Printf("Output from 'ls /boot' - '%s'", ans)
 
 		if ans == "" {
-			delErr := migobj.DetachVolume(vminfo.VMDisks[idx])
-			if delErr != nil {
-				return fmt.Errorf("failed to detach volume: %s", delErr)
-			}
 			continue
 		}
 
@@ -444,10 +432,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if err != nil {
 				return fmt.Errorf("failed to run virt-v2v: %s", err)
 			}
-		}
-		err = migobj.DetachVolume(vminfo.VMDisks[idx])
-		if err != nil {
-			return fmt.Errorf("failed to detach volume: %s", err)
+			openstackops := migobj.Openstackclients
+			err = openstackops.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol)
+			if err != nil {
+				return fmt.Errorf("failed to set volume as bootable: %s", err)
+			}
 		}
 	}
 	//TODO(omkar): can disable DHCP here
@@ -462,7 +451,10 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			log.Println("Wildcard netplan added successfully")
 		}
 	}
-
+	err := migobj.DetachVolume(vminfo.VMDisks[bootVolumeIndex])
+	if err != nil {
+		return fmt.Errorf("failed to detach volume: %s", err)
+	}
 	migobj.logMessage("Successfully converted disk")
 	return nil
 }
