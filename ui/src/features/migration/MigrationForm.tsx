@@ -35,7 +35,7 @@ import {
   postVmwareCredentials,
   deleteVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
-import { TEN_SECONDS, THREE_SECONDS } from "src/constants"
+import { THREE_SECONDS, TWENTY_SECONDS } from "src/constants"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
@@ -345,8 +345,8 @@ export default function MigrationFormDrawer({
         },
       })
 
-      // Wait for 10 seconds before fetching, as the VM statuses are not updated immediately
-      await new Promise(resolve => setTimeout(resolve, TEN_SECONDS))
+      // Wait for 20 seconds before fetching, as the VM statuses are not updated immediately
+      await new Promise(resolve => setTimeout(resolve, TWENTY_SECONDS))
       await fetchMigrationTemplate()
 
     } catch (err) {
