@@ -35,7 +35,7 @@ import {
   postVmwareCredentials,
   deleteVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
-import { THREE_SECONDS } from "src/constants"
+import { TEN_SECONDS, THREE_SECONDS } from "src/constants"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
@@ -160,6 +160,8 @@ export default function MigrationFormDrawer({
     undefined
   )
 
+  const [loadingVms, setLoadingVms] = useState(!isNilOrEmpty(migrationTemplate) && migrationTemplate?.status === undefined)
+
   const vmwareCredsValidated =
     vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
 
@@ -178,6 +180,7 @@ export default function MigrationFormDrawer({
   const shouldPollMigrationTemplate =
     !!migrationTemplate?.metadata?.name &&
     migrationTemplate?.status === undefined
+
 
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
@@ -308,17 +311,50 @@ export default function MigrationFormDrawer({
     shouldPollOpenstackCreds
   )
 
+
   const fetchMigrationTemplate = async () => {
     try {
-      const response = await getMigrationTemplate(
+      setLoadingVms(true)
+
+      const updatedMigrationTemplate = await getMigrationTemplate(
         migrationTemplate?.metadata?.name
       )
-      setMigrationTemplate(response)
+      setMigrationTemplate(updatedMigrationTemplate)
+      setLoadingVms(false)
     } catch (err) {
       console.error("Error retrieving migration templates", err)
       getFieldErrorsUpdater("migrationTemplate")(
         "Error retrieving migration templates"
       )
+      setLoadingVms(false)
+    }
+  }
+
+  const refreshMigrationTemplate = async () => {
+    try {
+      setLoadingVms(true)
+
+      const currentRefresh = migrationTemplate?.metadata?.labels?.refresh || "0"
+      const nextRefreshValue = (parseInt(currentRefresh) + 1).toString()
+
+      await patchMigrationTemplate(migrationTemplate?.metadata?.name, {
+        metadata: {
+          labels: {
+            refresh: nextRefreshValue,
+          },
+        },
+      })
+
+      // Wait for 10 seconds before fetching, as the VM statuses are not updated immediately
+      await new Promise(resolve => setTimeout(resolve, TEN_SECONDS))
+      await fetchMigrationTemplate()
+
+    } catch (err) {
+      console.error("Error refreshing migration template", err)
+      getFieldErrorsUpdater("migrationTemplate")(
+        "Error refreshing migration template"
+      )
+      setLoadingVms(false)
     }
   }
 
@@ -625,12 +661,8 @@ export default function MigrationFormDrawer({
             vms={migrationTemplate?.status?.vmware || []}
             onChange={getParamsUpdater}
             error={fieldErrors["vms"]}
-            loadingVms={
-              !isNilOrEmpty(migrationTemplate) &&
-              migrationTemplate?.status === undefined &&
-              !fieldErrors["vms"]
-            }
-            onRefresh={fetchMigrationTemplate}
+            loadingVms={loadingVms}
+            onRefresh={refreshMigrationTemplate}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep

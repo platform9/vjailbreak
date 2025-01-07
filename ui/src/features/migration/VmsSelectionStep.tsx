@@ -81,6 +81,7 @@ const columns: GridColDef[] = [
 const paginationModel = { page: 0, pageSize: 5 };
 
 const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
+const NO_IP_TOOLTIP_MESSAGE = "VM is running but does not have an IP, try refreshing.";
 
 interface VmsSelectionStepProps {
   vms: VmData[];
@@ -122,7 +123,9 @@ export default function VmsSelectionStep({
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               getRowId={(row) => row.name}
-              isRowSelectable={(params) => params.row.vmState === "running"}
+              isRowSelectable={(params) =>
+                params.row.vmState === "running" && !!params.row.ipAddress
+              }
               slots={{
                 toolbar: (props) => (
                   <CustomSearchToolbar
@@ -136,10 +139,18 @@ export default function VmsSelectionStep({
                   <CustomLoadingOverlay loadingMessage="Scanning for VMs" />
                 ),
                 row: (props) => {
-                  const isDisabled = props.row.vmState !== "running";
+                  const isVmStopped = props.row.vmState !== "running";
+                  const runningButNoIp = props.row.vmState === "running" && !props.row.ipAddress;
+
+                  const tooltipMessage = isVmStopped
+                    ? DISABLED_TOOLTIP_MESSAGE
+                    : runningButNoIp
+                      ? NO_IP_TOOLTIP_MESSAGE
+                      : "";
+
                   return (
                     <Tooltip
-                      title={isDisabled ? DISABLED_TOOLTIP_MESSAGE : ""}
+                      title={tooltipMessage}
                       followCursor
                     >
                       <span style={{ display: 'contents' }}>
@@ -154,7 +165,7 @@ export default function VmsSelectionStep({
               disableColumnMenu
               disableColumnResize
               getRowClassName={(params) =>
-                params.row.vmState !== "running" ? "disabled-row" : ""
+                params.row.vmState !== "running" || !params.row.ipAddress ? "disabled-row" : ""
               }
             />
           </Paper>
