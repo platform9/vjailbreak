@@ -81,7 +81,7 @@ const columns: GridColDef[] = [
 const paginationModel = { page: 0, pageSize: 5 };
 
 const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
-const NO_IP_TOOLTIP_MESSAGE = "VM is running but does not have an IP, try refreshing.";
+const NO_IP_TOOLTIP_MESSAGE = "VM has not been assigned an IP address yet. Please refresh again.";
 
 interface VmsSelectionStepProps {
   vms: VmData[];
