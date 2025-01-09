@@ -164,7 +164,7 @@ func GetOsRelease(path string) (string, error) {
 	log.Printf("Executing %s", cmd.String()+" "+input)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get os-release: %s", err)
+		return "", fmt.Errorf("failed to get os-release: %s, %s", out, err)
 	}
 	return strings.ToLower(string(out)), nil
 }

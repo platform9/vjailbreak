@@ -384,22 +384,23 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if err != nil {
 			return fmt.Errorf("failed to attach volume: %s", err)
 		}
-		if vminfo.OSType == "linux" {
-			osRelease, err = virtv2v.GetOsRelease(path)
-			if err != nil {
-				return fmt.Errorf("failed to get os release: %s", err)
-			}
-		}
-
 		ans, err := RunCommandInGuest(path, "ls /boot")
 		if err != nil {
 			fmt.Printf("failed to list files in '/boot': %s", err)
 			continue
 		}
+
 		fmt.Printf("Output from 'ls /boot' - '%s'", ans)
 
 		if ans == "" {
 			continue
+		}
+
+		if vminfo.OSType == "linux" {
+			osRelease, err = virtv2v.GetOsRelease(path)
+			if err != nil {
+				return fmt.Errorf("failed to get os release: %s", err)
+			}
 		}
 
 		// save the index of bootVolume
