@@ -41,6 +41,19 @@ export const postMigrationTemplate = async (
   return response
 }
 
+export const putMigrationTemplate = async (
+  templateName,
+  body,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates/${templateName}`
+  const response = await axios.put<MigrationTemplate>({
+    endpoint,
+    data: body,
+  })
+  return response
+}
+
 export const patchMigrationTemplate = async (
   templateName,
   body,
