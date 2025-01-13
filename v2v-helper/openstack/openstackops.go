@@ -495,11 +495,23 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 }
 
 func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
+
+	uuid := ""
+	for _, disk := range vminfo.VMDisks {
+		if disk.Boot {
+			uuid = disk.OpenstackVol.ID
+			break
+		}
+	}
+	if uuid == "" {
+		return nil, fmt.Errorf("unable to determine boot volume for VM: %s", vminfo.Name)
+	}
+
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,
 		SourceType:          bootfromvolume.SourceVolume,
-		UUID:                vminfo.VMDisks[0].OpenstackVol.ID,
+		UUID:                uuid,
 	}
 	// Create the server
 	openstacknws := []servers.Network{}

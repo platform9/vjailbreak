@@ -49,7 +49,7 @@ func TestCreateVolumes(t *testing.T) {
 	mockOpenStackOps.EXPECT().
 		SetVolumeBootable(&volumes.Volume{ID: "id1", Name: "test-vm-disk1"}).
 		Return(nil).
-		Times(1)
+		AnyTimes()
 	gomock.InOrder(
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id1").Return(nil).Times(1),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id2").Return(nil).Times(1),

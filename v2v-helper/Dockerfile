@@ -23,6 +23,7 @@ COPY reporter/ reporter/
 COPY vcenter/ vcenter/
 COPY vm/ vm/
 COPY virtv2v/ virtv2v/
+COPY utils/ utils/
 
 # Test
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v

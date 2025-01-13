@@ -391,7 +391,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 								corev1.ResourceEphemeralStorage: resource.MustParse("200Mi"),
 							},
 							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:              resource.MustParse("4000m"),
+								corev1.ResourceCPU:              resource.MustParse("2000m"),
 								corev1.ResourceMemory:           resource.MustParse("5Gi"),
 								corev1.ResourceEphemeralStorage: resource.MustParse("2Gi"),
 							},
