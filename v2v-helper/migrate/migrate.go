@@ -387,12 +387,20 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		ans, err := RunCommandInGuest(path, "ls /boot")
 		if err != nil {
 			fmt.Printf("failed to list files in '/boot': %s", err)
+			detachError := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if detachError != nil {
+				return fmt.Errorf("failed to detach volume: %s", detachError)
+			}
 			continue
 		}
 
-		fmt.Printf("Output from 'ls /boot' - '%s'", ans)
+		fmt.Printf("Output from 'ls /boot' - '%s'\n", ans)
 
 		if ans == "" {
+			err := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if err != nil {
+				return fmt.Errorf("failed to detach volume: %s", err)
+			}
 			continue
 		}
 
