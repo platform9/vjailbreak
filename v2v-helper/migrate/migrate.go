@@ -378,15 +378,24 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	migobj.logMessage("Converting disk")
 	osRelease := ""
 	bootVolumeIndex := 0
+	getBootCommand := ""
+
+	if vminfo.OSType == "windows" {
+		getBootCommand = "ls /Windows"
+	} else if vminfo.OSType == "linux" {
+		getBootCommand = "ls /boot"
+	} else {
+		getBootCommand = "inspect-os"
+	}
 
 	for idx, _ := range vminfo.VMDisks {
 		path, err := migobj.AttachVolume(vminfo.VMDisks[idx])
 		if err != nil {
 			return fmt.Errorf("failed to attach volume: %s", err)
 		}
-		ans, err := RunCommandInGuest(path, "ls /boot")
+		ans, err := RunCommandInGuest(path, getBootCommand)
 		if err != nil {
-			fmt.Printf("failed to list files in '/boot': %s", err)
+			fmt.Printf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, ans)
 			detachError := migobj.DetachVolume(vminfo.VMDisks[idx])
 			if detachError != nil {
 				return fmt.Errorf("failed to detach volume: %s", detachError)
@@ -394,7 +403,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			continue
 		}
 
-		fmt.Printf("Output from 'ls /boot' - '%s'\n", ans)
+		fmt.Printf("Output from '%s' - '%s'\n", getBootCommand, ans)
 
 		if ans == "" {
 			err := migobj.DetachVolume(vminfo.VMDisks[idx])
