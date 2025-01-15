@@ -195,9 +195,9 @@ DHCP=yes`
 	input := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 	cmd.Stdin = strings.NewReader(input)
 	log.Printf("Executing %s", cmd.String()+" "+input)
-	err = cmd.Run()
+	ans, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to upload netplan file: %s", err)
+		return fmt.Errorf("failed to upload netplan file: %s, Output: %s", err, ans)
 	}
 	return nil
 }
