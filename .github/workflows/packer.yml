@@ -145,7 +145,10 @@ jobs:
       if: env.release_found == 'true'
       id: validate
       run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
-    
+
+    - name: setup-oras
+      uses: oras-project/setup-oras@v1.2.1
+          
     - name: Download base image
       if: env.release_found == 'true'
       run: |
