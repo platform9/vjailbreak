@@ -128,7 +128,6 @@ func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firs
 		log.Println("Downloaded virtio windrivers")
 		defer os.Remove(filePath)
 		os.Setenv("VIRTIO_WIN", filePath)
-
 	}
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
@@ -165,7 +164,7 @@ func GetOsRelease(path string) (string, error) {
 	log.Printf("Executing %s", cmd.String()+" "+input)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get os-release: %s", err)
+		return "", fmt.Errorf("failed to get os-release: %s, %s", out, err)
 	}
 	return strings.ToLower(string(out)), nil
 }
@@ -196,9 +195,9 @@ DHCP=yes`
 	input := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 	cmd.Stdin = strings.NewReader(input)
 	log.Printf("Executing %s", cmd.String()+" "+input)
-	err = cmd.Run()
+	ans, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to upload netplan file: %s", err)
+		return fmt.Errorf("failed to upload netplan file: %s, Output: %s", err, ans)
 	}
 	return nil
 }

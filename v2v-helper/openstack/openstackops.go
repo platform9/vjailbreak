@@ -495,11 +495,25 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 }
 
 func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
+
+	uuid := ""
+	bootableDiskIndex := 0
+	for idx, disk := range vminfo.VMDisks {
+		if disk.Boot {
+			uuid = disk.OpenstackVol.ID
+			bootableDiskIndex = idx
+			break
+		}
+	}
+	if uuid == "" {
+		return nil, fmt.Errorf("unable to determine boot volume for VM: %s", vminfo.Name)
+	}
+
 	blockDevice := bootfromvolume.BlockDevice{
 		DeleteOnTermination: false,
 		DestinationType:     bootfromvolume.DestinationVolume,
 		SourceType:          bootfromvolume.SourceVolume,
-		UUID:                vminfo.VMDisks[0].OpenstackVol.ID,
+		UUID:                uuid,
 	}
 	// Create the server
 	openstacknws := []servers.Network{}
@@ -542,7 +556,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 
 	log.Println("Attaching Additional Disks")
 
-	for _, disk := range vminfo.VMDisks[1:] {
+	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
 		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,

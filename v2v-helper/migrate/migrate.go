@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"vjailbreak/openstack"
 
 	"vjailbreak/nbd"
+	"vjailbreak/utils"
 	"vjailbreak/vcenter"
 	"vjailbreak/virtv2v"
 	"vjailbreak/vm"
@@ -73,7 +75,7 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 			return vminfo, fmt.Errorf("failed to create volume: %s", err)
 		}
 		vminfo.VMDisks[idx].OpenstackVol = volume
-		if idx == 0 {
+		if vminfo.VMDisks[idx].Boot {
 			err = openstackops.SetVolumeBootable(volume)
 			if err != nil {
 				return vminfo, fmt.Errorf("failed to set volume as bootable: %s", err)
@@ -374,65 +376,100 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
-	path, err := migobj.AttachVolume(vminfo.VMDisks[0])
-	if err != nil {
-		return fmt.Errorf("failed to attach volume: %s", err)
-	}
 	osRelease := ""
-	if vminfo.OSType == "linux" {
-		osRelease, err = virtv2v.GetOsRelease(path)
-		if err != nil {
-			return fmt.Errorf("failed to get os release: %s", err)
-		}
-	}
-	if migobj.Convert {
-		firstbootscripts := []string{}
-		// Fix NTFS
-		if vminfo.OSType == "windows" {
-			err = virtv2v.NTFSFix(path)
-			if err != nil {
-				return fmt.Errorf("failed to run ntfsfix: %s", err)
-			}
-		}
-		// Turn on DHCP for interfaces in rhel VMs
-		if vminfo.OSType == "linux" {
-			if strings.Contains(osRelease, "rhel") {
-				firstbootscriptname := "rhel_enable_dhcp"
-				firstbootscript := `#!/bin/bash
-nmcli -t -f NAME connection show | while read -r conn; do
-    nmcli con modify "$conn" ipv4.method auto ipv4.address "" ipv4.gateway ""
-    nmcli con modify "$conn" ipv6.method auto ipv6.address "" ipv6.gateway ""
-    nmcli con reload
-    nmcli con down "$conn"
-    nmcli con up "$conn"
-done
-systemctl enable --now serial-getty@ttyS0.service`
-				firstbootscripts = append(firstbootscripts, firstbootscriptname)
-				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
-				if err != nil {
-					return fmt.Errorf("failed to add first boot script: %s", err)
-				}
-			}
-		}
-		err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin, firstbootscripts)
-		if err != nil {
-			return fmt.Errorf("failed to run virt-v2v: %s", err)
-		}
+	bootVolumeIndex := 0
+	getBootCommand := ""
+
+	if vminfo.OSType == "windows" {
+		getBootCommand = "ls /Windows"
+	} else if vminfo.OSType == "linux" {
+		getBootCommand = "ls /boot"
+	} else {
+		getBootCommand = "inspect-os"
 	}
 
+	for idx, _ := range vminfo.VMDisks {
+		path, err := migobj.AttachVolume(vminfo.VMDisks[idx])
+		if err != nil {
+			return fmt.Errorf("failed to attach volume: %s", err)
+		}
+		ans, err := RunCommandInGuest(path, getBootCommand)
+		if err != nil {
+			fmt.Printf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, ans)
+			detachError := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if detachError != nil {
+				return fmt.Errorf("failed to detach volume: %s", detachError)
+			}
+			continue
+		}
+
+		fmt.Printf("Output from '%s' - '%s'\n", getBootCommand, ans)
+
+		if ans == "" {
+			err := migobj.DetachVolume(vminfo.VMDisks[idx])
+			if err != nil {
+				return fmt.Errorf("failed to detach volume: %s", err)
+			}
+			continue
+		}
+
+		if vminfo.OSType == "linux" {
+			osRelease, err = virtv2v.GetOsRelease(path)
+			if err != nil {
+				return fmt.Errorf("failed to get os release: %s", err)
+			}
+		}
+
+		// save the index of bootVolume
+		bootVolumeIndex = idx
+		log.Printf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name)
+
+		vminfo.VMDisks[bootVolumeIndex].Boot = true
+		if migobj.Convert {
+			firstbootscripts := []string{}
+			// Fix NTFS
+			if vminfo.OSType == "windows" {
+				err = virtv2v.NTFSFix(path)
+				if err != nil {
+					return fmt.Errorf("failed to run ntfsfix: %s", err)
+				}
+			}
+			// Turn on DHCP for interfaces in rhel VMs
+			if vminfo.OSType == "linux" {
+				if strings.Contains(osRelease, "rhel") {
+					firstbootscriptname := "rhel_enable_dhcp"
+					firstbootscript := utils.RhelFirstBootScript
+					firstbootscripts = append(firstbootscripts, firstbootscriptname)
+					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
+					if err != nil {
+						return fmt.Errorf("failed to add first boot script: %s", err)
+					}
+				}
+			}
+			err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin, firstbootscripts)
+			if err != nil {
+				return fmt.Errorf("failed to run virt-v2v: %s", err)
+			}
+			openstackops := migobj.Openstackclients
+			err = openstackops.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol)
+			if err != nil {
+				return fmt.Errorf("failed to set volume as bootable: %s", err)
+			}
+		}
+	}
 	//TODO(omkar): can disable DHCP here
 	if vminfo.OSType == "linux" {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			log.Println("Adding wildcard netplan")
-			err := virtv2v.AddWildcardNetplan(path)
+			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to add wildcard netplan: %s", err)
 			}
 			log.Println("Wildcard netplan added successfully")
 		}
 	}
-	err = migobj.DetachVolume(vminfo.VMDisks[0])
+	err := migobj.DetachVolume(vminfo.VMDisks[bootVolumeIndex])
 	if err != nil {
 		return fmt.Errorf("failed to detach volume: %s", err)
 	}
@@ -660,7 +697,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return fmt.Errorf("number of mac addresses does not match number of network names")
 	}
 
-	// Graceful Termination
+	// Graceful Termination clean-up volumes and snapshots
 	go migobj.gracefulTerminate(vminfo, cancel)
 
 	// Create and Add Volumes to Host
@@ -718,4 +755,23 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
 	}
+}
+
+// Runs command inside temporary qemu-kvm that virt-v2v creates
+func RunCommandInGuest(path string, command string) (string, error) {
+	// Get the os-release file
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	cmd := exec.Command(
+		"guestfish",
+		"--ro",
+		"-a",
+		path,
+		"-i")
+	cmd.Stdin = strings.NewReader(command)
+	log.Printf("Executing %s", cmd.String()+" "+command)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+	return strings.ToLower(string(out)), nil
 }
