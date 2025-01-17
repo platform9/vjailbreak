@@ -10,6 +10,8 @@ on:
   release:
     types:
       - created
+  workflow_dispatch:
+
 
 env:
   PACKER_VERSION: "latest"
