@@ -124,7 +124,7 @@ jobs:
           echo "release_found=true" >> $GITHUB_ENV
         fi
 
-    - name: Check if manual trigger from
+    - name: Check if manual trigger from main branch
       if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
       run: echo "release_found=true" >> $GITHUB_ENV
       id: check_manual_trigger
