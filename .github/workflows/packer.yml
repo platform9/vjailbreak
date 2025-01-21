@@ -124,6 +124,11 @@ jobs:
           echo "release_found=true" >> $GITHUB_ENV
         fi
 
+    - name: Check if manual trigger from
+      if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      run: echo "release_found=true" >> $GITHUB_ENV
+      id: check_manual_trigger
+
     - name: Enable KVM group perms
       if: env.release_found == 'true'
       run: |
