@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
 
 ## Sample Screenshots
 
-### Form to start a migraiton
+### Form to start a migration
 ![alt text](assets/migrationform1.png)
 ![alt text](assets/migrationform2.png)
 
