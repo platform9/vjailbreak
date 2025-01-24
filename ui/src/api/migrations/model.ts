@@ -133,7 +133,7 @@ export interface Condition {
 export enum Message {
   CopyingDisk0 = "Copying disk 0",
   CopyingDisk1 = "Copying disk 1",
-  MigratingVMFromVMwareToOpenstack = "Migrating VM from VMware to Openstack",
+  MigratingVMFromVMwareToOpenstack = "Migrating VM from VMware to OpenStack",
   MigrationValidatedSuccessfully = "Migration validated successfully",
 }
 
