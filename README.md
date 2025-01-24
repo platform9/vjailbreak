@@ -1,8 +1,8 @@
 # vJailbreak
-Helping VMware users migrate to Openstack
+Helping VMware users migrate to OpenStack
 
 ## v2v-helper
-The main application that runs the migration. It is expected to run as a pod in a VM running in the target Openstack Environment.
+The main application that runs the migration. It is expected to run as a pod in a VM running in the target OpenStack Environment.
 
 ## UI
 This is the UI for vJailbreak.
@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
 ## FAQ
 
 ### Are IPs and MAC addresses persisted?
-Yes, if your Openstack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
+Yes, if your OpenStack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
 
 ### What OS versions are supported?
 We internally use virt-v2v, so all operating systems supported for conversion by virt-v2v are supported by vJailbreak. You can find a detailed list of them [here](https://libguestfs.org/virt-v2v-support.1.html#guests).
@@ -40,7 +40,7 @@ We internally use virt-v2v, so all operating systems supported for conversion by
 No, vJailbreak will remove them for you, with the help of virt-v2v. The process that virt-v2v uses along with alternative approaches can be found [here](https://libguestfs.org/virt-v2v.1.html#converting-a-windows-guest).
 
 ### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
-No, vJailbreak will install it for you. For windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
+No, vJailbreak will install it for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
 ### What access do I need for my vCenter user to be able to perform this migration?
 Please refer to the following table for the required privileges:
@@ -113,9 +113,9 @@ Download and install [ORAS](https://oras.land/docs/installation). Download the l
 
     oras pull quay.io/platform9/vjailbreak:0.1.2
 
-This will download the vjailbreak qcow2 image locally. Upload it to your Openstack enviroment and create your appliance VM with it.
+This will download the vjailbreak qcow2 image locally. Upload it to your OpenStack enviroment and create your appliance VM with it.
 
-Then, ensure that your appliance can talk to your Openstack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an Openstack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
+Then, ensure that your appliance can talk to your OpenStack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an OpenStack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
 
 Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vjailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory.
 
@@ -150,7 +150,7 @@ Deploy all the following resources in the same namespace where you installed the
   - OpenstackCreds use the variables from the openstack.rc file. All these fields are compulsory except OS_INSECURE
   - All the fields in VMwareCreds are compulsory
 
-2. Create the mapping between networks in VMware and networks in Openstack
+2. Create the mapping between networks in VMware and networks in OpenStack
 
        apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
        kind: NetworkMapping
@@ -163,7 +163,7 @@ Deploy all the following resources in the same namespace where you installed the
            target: vlan3002
          - source: VM Network 2
            target: vlan3003
-3. Create the mapping between datastores in VMware and volume types in Openstack
+3. Create the mapping between datastores in VMware and volume types in OpenStack
 
 		apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 		kind: StorageMapping
@@ -231,7 +231,7 @@ Deploy all the following resources in the same namespace where you installed the
   - retry: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
   - advancedOptions: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
     - granularVolumeTypes: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can speccify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
-    - granularNetworks: In case you wish to override the default network mapping for a VM, you can provide a list of openstack network names to use in for each NIC on the VM, in order.
+    - granularNetworks: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use in for each NIC on the VM, in order.
     - granularPorts: In case you wish to pre-create ports for a VM with certain configs and directly ptovide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in granularNetworks.
   - migrationStrategy: This is an optional field
     - type: 
