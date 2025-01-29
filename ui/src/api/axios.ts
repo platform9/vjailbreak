@@ -19,6 +19,10 @@ const axiosInstance = axios.create({
 })
 
 const getDefaultBaseUrl = () => {
+  if (import.meta.env.VITE_USE_MOCK_API === "true") {
+    return "http://localhost:3001/mock-server"
+  }
+
   if (import.meta.env.MODE === "development") {
     return "/dev-api"
   }
