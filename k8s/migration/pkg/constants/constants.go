@@ -3,6 +3,9 @@ package constants
 import vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 const (
+	TerminationPeriod = int64(120)
+	NameMaxLength     = 242
+
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
 	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/master"
 	NodeRoleMaster               = "master"
