@@ -20,11 +20,14 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,9 +35,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -54,19 +58,6 @@ var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 // The default image. This is replaced by Go linker flags in the Dockerfile
 var v2vimage = "platform9/v2v-helper:v0.1"
 
-const terminationPeriod = int64(120)
-const namemexlength = 242
-
-// Used to facilitate removal of our finalizer
-func RemoveString(s []string, r string) []string {
-	for i, v := range s {
-		if v == r {
-			return append(s[:i], s[i+1:]...)
-		}
-	}
-	return s
-}
-
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -85,62 +76,75 @@ func RemoveString(s []string, r string) []string {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
 	if err := r.Get(ctx, req.NamespacedName, migrationplan); err != nil {
 		if apierrors.IsNotFound(err) {
-			r.ctxlog.Info("Received ignorable event for a recently deleted MigrationPlan.")
 			return ctrl.Result{}, nil
 		}
 		r.ctxlog.Error(err, fmt.Sprintf("Unexpected error reading MigrationPlan '%s' object", migrationplan.Name))
 		return ctrl.Result{}, err
 	}
 
-	// Validate Time Field
-	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
-		return ctrl.Result{}, fmt.Errorf("cutover start time is after cutover end time")
+	err := utils.ValidateMigrationPlan(migrationplan)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to validate MigrationPlan")
 	}
 
-	// If advanced options are set, then there should only be 1 VM in the migrationplan
-	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) &&
-		(len(migrationplan.Spec.VirtualMachines) != 1 || len(migrationplan.Spec.VirtualMachines[0]) != 1) {
-		return ctrl.Result{}, fmt.Errorf(`advanced options can only be set for a single VM.
-		Please remove advanced options or reduce the number of VMs in the migrationplan`)
+	migrationPlanScope, err := scope.NewMigrationPlanScope(scope.MigrationPlanScopeParams{
+		Logger:        r.ctxlog,
+		Client:        r.Client,
+		MigrationPlan: migrationplan,
+	})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
+
+	// Always close the scope when exiting this function such that we can persist any MigrationPlan changes.
+	defer func() {
+		if err := migrationPlanScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
 
 	// examine DeletionTimestamp to determine if object is under deletion or not
-	if migrationplan.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Check if finalizer exists and if not, add one
-		if !slices.Contains(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer) {
-			r.ctxlog.Info(fmt.Sprintf("MigrationPlan '%s' CR is being created or updated", migrationplan.Name))
-			r.ctxlog.Info(fmt.Sprintf("Adding finalizer to MigrationPlan '%s'", migrationplan.Name))
-			migrationplan.ObjectMeta.Finalizers = append(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer)
-			if err := r.Update(ctx, migrationplan); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-
-		if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan); err != nil {
-			return res, err
-		}
-	} else {
-		// The object is being deleted
-		r.ctxlog.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
-
-		// TODO implement finalizer logic
-
-		// Now that the finalizer has completed deletion tasks, we can remove it
-		// to allow deletion of the Migration object
-		if slices.Contains(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer) {
-			r.ctxlog.Info(fmt.Sprintf("Removing finalizer from MigrationPlan '%s' so that it can be deleted", migrationplan.Name))
-			migrationplan.ObjectMeta.Finalizers = RemoveString(migrationplan.ObjectMeta.Finalizers, migrationPlanFinalizer)
-			if err := r.Update(ctx, migrationplan); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
+	if !migrationplan.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, migrationPlanScope)
 	}
+
+	return r.reconcileNormal(ctx, migrationPlanScope)
+}
+
+func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	migrationplan := scope.MigrationPlan
+	scope.Logger.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
+
+	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
+
+	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan); err != nil {
+		return res, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *MigrationPlanReconciler) reconcileDelete(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	migrationplan := scope.MigrationPlan
+	log := scope.Logger
+
+	// The object is being deleted
+	log.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
+
+	// TODO implement finalizer logic
+
+	// Now that the finalizer has completed deletion tasks, we can remove it
+	// to allow deletion of the Migration object
+	controllerutil.RemoveFinalizer(migrationplan, migrationPlanFinalizer)
+	if err := r.Update(ctx, migrationplan); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -253,41 +257,19 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	return nil
 }
 
-func convertToK8sName(name string) (string, error) {
-	// Convert to lowercase
-	name = strings.ToLower(name)
-	// Replace separators with hyphens
-	re := regexp.MustCompile(`[_\s]`)
-	name = re.ReplaceAllString(name, "-")
-	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
-	re = regexp.MustCompile(`[^a-z0-9\-.]`)
-	name = re.ReplaceAllString(name, "")
-	// Remove leading and trailing hyphens
-	name = strings.Trim(name, "-")
-	// Truncate to 242 characters, as we prepend v2v-helper- to the name
-	if len(name) > namemexlength {
-		name = name[:namemexlength]
-	}
-	nameerrors := validation.IsQualifiedName(name)
-	if len(nameerrors) == 0 {
-		return name, nil
-	}
-	return name, fmt.Errorf("name '%s' is not a valid K8s name: %v", name, nameerrors)
-}
-
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string) (*vjailbreakv1alpha1.Migration, error) {
-	vmname, err := convertToK8sName(vm)
+	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
 	migrationobj := &vjailbreakv1alpha1.Migration{}
-	err = r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("migration-%s", vmname), Namespace: migrationplan.Namespace}, migrationobj)
+	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("migration-%s", vmname),
+				Name:      utils.MigrationNameFromVMName(vmname),
 				Namespace: migrationplan.Namespace,
 				Labels: map[string]string{
 					"migrationplan": migrationplan.Name,
@@ -308,12 +290,10 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
-func int64Ptr(i int64) *int64 { return &i }
-
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName, firstbootconfigMapName string) error {
-	vmname, err := convertToK8sName(vm)
+	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
@@ -339,7 +319,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 			Spec: corev1.PodSpec{
 				RestartPolicy:                 corev1.RestartPolicyNever,
 				ServiceAccountName:            "migration-controller-manager",
-				TerminationGracePeriodSeconds: int64Ptr(terminationPeriod),
+				TerminationGracePeriodSeconds: ptr.To(int64(constants.TerminationPeriod)),
 				DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 				HostNetwork:                   true,
 				Containers: []corev1.Container{
@@ -404,7 +384,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
 								Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-								Type: newHostPathType("Directory"),
+								Type: utils.NewHostPathType("Directory"),
 							},
 						},
 					},
@@ -413,7 +393,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
 								Path: "/dev",
-								Type: newHostPathType("Directory"),
+								Type: utils.NewHostPathType("Directory"),
 							},
 						},
 					},
@@ -440,7 +420,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) (*corev1.ConfigMap, error) {
-	vmname, err := convertToK8sName(vm)
+	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
@@ -473,7 +453,7 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string) (*corev1.ConfigMap, error) {
-	vmname, err := convertToK8sName(vm)
+	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
@@ -568,11 +548,6 @@ func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner meta
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
 	return nil
-}
-
-func newHostPathType(pathType string) *corev1.HostPathType {
-	hostPathType := corev1.HostPathType(pathType)
-	return &hostPathType
 }
 
 //nolint:dupl // Same logic to migrationtemplate reconciliation, excluding from linting to keep both reconcilers separate
