@@ -11,6 +11,8 @@ import { useQueryClient } from "@tanstack/react-query"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteConfirmationDialog from "./DeleteConfirmationDialog"
+import { deleteMigrationPlan } from "src/api/migration-plans/migrationPlans"
+import { deleteMigrationTemplate } from "src/api/migration-templates/migrationTemplates"
 
 const DashboardContainer = styled("div")({
   display: "flex",
@@ -124,12 +126,43 @@ export default function Dashboard() {
       try {
         setIsDeleting(true);
         setDeleteError(null);
+
+        // Get the migration to find related resources
+        const migration = migrations?.find(m => m.metadata?.name === deleteDialog.migrationName);
+        if (!migration) {
+          throw new Error('Migration not found');
+        }
+
+        // Find and delete the migration plan
+        const migrationPlanName = migration.metadata?.labels?.migrationplan;
+        if (migrationPlanName) {
+          try {
+            await deleteMigrationPlan(migrationPlanName);
+          } catch (error) {
+            console.error('Failed to delete migration plan:', error);
+          }
+        }
+
+        // Find and delete the migration template
+        const migrationTemplateName = migration.metadata?.labels?.migrationtemplate;
+        if (migrationTemplateName) {
+          try {
+            await deleteMigrationTemplate(migrationTemplateName);
+          } catch (error) {
+            console.error('Failed to delete migration template:', error);
+          }
+        }
+
+
+        // Delete migration first
         await deleteMigration(deleteDialog.migrationName);
+
+        // Refresh the migrations list
         queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
         handleDeleteClose();
       } catch (error) {
         console.error('Failed to delete migration:', error);
-        setDeleteError(error instanceof Error ? error.message : 'Failed to delete migration');
+        setDeleteError(error instanceof Error ? error.message : 'Failed to delete migration and related resources');
       } finally {
         setIsDeleting(false);
       }
