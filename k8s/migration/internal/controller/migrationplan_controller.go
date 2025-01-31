@@ -67,15 +67,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationplans/finalizers,verbs=update
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates,verbs=get;list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the MigrationPlan object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
+// Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
 func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
@@ -204,7 +196,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
 			switch migrationobjs.Items[i].Status.Phase {
-			case string(corev1.PodFailed):
+			case vjailbreakv1alpha1.MigrationPhaseFailed:
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if migrationplan.Spec.Retry {
 					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
@@ -228,7 +220,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
 				return ctrl.Result{}, nil
-			case string(corev1.PodSucceeded):
+			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
 				continue
 			default:
 				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
