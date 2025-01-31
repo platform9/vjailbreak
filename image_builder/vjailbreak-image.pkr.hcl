@@ -11,11 +11,11 @@ source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
   iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:67d312441a401c75389b063e1331c5fa11f35813f531dcbcceba765a4895251f"
+  iso_checksum         = "sha256:224ed336b3d87ce2e3be7e0189bd956b974cc32254aad9ba1c2493264246de16"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
-  disk_size            = "15G"
+  disk_size            = "16G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
@@ -45,46 +45,5 @@ build {
   provisioner "file" {
     source      = "${path.root}/deploy"
     destination = "/tmp/yamls"
-  }
-
-    provisioner "shell" {
-    inline = [
-      "cat <<EOF | sudo tee /etc/systemd/system/setup-k3s.service",
-      "[Unit]",
-      "Description=Setup and Start K3s",
-      "After=network-online.target",
-      "",
-      "[Service]",
-      "Type=oneshot",
-      "ExecStart=/usr/local/bin/k3s server &",
-      "RemainAfterExit=true",
-      "",
-      "[Install]",
-      "WantedBy=multi-user.target",
-      "EOF",
-      "sudo systemctl enable setup-k3s"
-    ]
-  }
-  
-  provisioner "shell" {
-    inline = [
-      "while ! systemctl is-active --quiet k3s; do sleep 10; done",
-    ]
-  }
-
-  provisioner "shell" {
-    inline = [
-      "sudo kubectl --request-timeout=300s apply --server-side -f /tmp/yamls/kube-prometheus/manifests/setup",
-      "sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/"
-    ]
-  }
-
-  provisioner "shell" {
-    inline = [
-      "sudo k3s crictl rmi --prune",
-      "sudo rm -rf /home/ubuntu/vmware-vix-disklib-distrib"
-    ]
   }
 }

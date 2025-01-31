@@ -163,7 +163,7 @@ jobs:
     - name: Download base image
       if: env.release_found == 'true'
       run: |
-          oras pull docker.io/spaip9/vjailb:vjail
+          oras pull quay.io/platform9/vjailbreak:base
 
     - name: Run `packer build`
       if: env.release_found == 'true'
@@ -173,7 +173,7 @@ jobs:
     - name: Upload vjailbreak qcow2 to quay
       if: env.release_found == 'true'
       run: |
-          oras push  docker.io/spaip9/vjailb:vjail-master \
+          oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
     
