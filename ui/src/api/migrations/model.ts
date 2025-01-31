@@ -25,57 +25,19 @@ export interface ItemMetadata {
   annotations: Annotations
   creationTimestamp: Date
   generation: number
-  managedFields: ManagedField[]
   name: string
   namespace: Namespace
   resourceVersion: string
   uid: string
+  labels: Labels
+}
+
+export interface Labels {
+  migrationplan: string
 }
 
 export interface Annotations {
   "kubectl.kubernetes.io/last-applied-configuration": string
-}
-
-export interface ManagedField {
-  apiVersion: APIVersion
-  fieldsType: FieldsType
-  fieldsV1: FieldsV1
-  manager: Manager
-  operation: Operation
-  time?: Date
-  subresource?: Subresource
-}
-
-export enum FieldsType {
-  FieldsV1 = "FieldsV1",
-}
-
-export interface FieldsV1 {
-  "f:metadata"?: FMetadata
-  "f:spec"?: FSpec
-  "f:status"?: FStatus
-}
-
-export interface FMetadata {
-  "f:annotations": FAnnotations
-}
-
-export interface FAnnotations {
-  "f:kubectl.kubernetes.io/last-applied-configuration": FMigrationPlan
-}
-
-export type FMigrationPlan = object
-
-export interface FSpec {
-  "f:migrationPlan": FMigrationPlan
-  "f:podRef": FMigrationPlan
-  "f:vmName": FMigrationPlan
-}
-
-export interface FStatus {
-  ".": FMigrationPlan
-  "f:conditions": FMigrationPlan
-  "f:phase": FMigrationPlan
 }
 
 export enum Manager {
