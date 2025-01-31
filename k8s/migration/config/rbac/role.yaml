@@ -197,6 +197,32 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - vjailbreaknodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
   - vmwarecreds
   verbs:
   - create
