@@ -47,6 +47,25 @@ build {
     destination = "/tmp/yamls"
   }
 
+    provisioner "shell" {
+    inline = [
+      "cat <<EOF | sudo tee /etc/systemd/system/setup-k3s.service",
+      "[Unit]",
+      "Description=Setup and Start K3s",
+      "After=network-online.target",
+      "",
+      "[Service]",
+      "Type=oneshot",
+      "ExecStart=/usr/local/bin/k3s server &",
+      "RemainAfterExit=true",
+      "",
+      "[Install]",
+      "WantedBy=multi-user.target",
+      "EOF",
+      "sudo systemctl enable setup-k3s"
+    ]
+  }
+  
   provisioner "shell" {
     inline = [
       "while ! systemctl is-active --quiet k3s; do sleep 10; done",
@@ -62,16 +81,8 @@ build {
     ]
   }
 
-  provisioner "file" {
-    source      = "${path.root}/restart_kube_resources.sh"
-    destination = "/tmp/restart_kube_resources.sh"
-  }
-
   provisioner "shell" {
     inline = [
-      "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
-      "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
-      "sudo systemctl restart restart-kube-resources",
       "sudo k3s crictl rmi --prune",
       "sudo rm -rf /home/ubuntu/vmware-vix-disklib-distrib"
     ]
