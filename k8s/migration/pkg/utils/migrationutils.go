@@ -1,0 +1,153 @@
+package utils
+
+import (
+	"slices"
+	"sort"
+	"strings"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// MigrationUtils defines the interface for migration utility functions.
+type MigrationUtils interface {
+	// CreateValidatedCondition creates a validated condition for the migration.
+	CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
+
+	// CreateDataCopyCondition creates a data copy condition for the migration.
+	CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
+
+	// CreateMigratedCondition creates a migrated condition for the migration.
+	CreateMigratedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
+
+	// SetCutoverLabel sets the cutover label based on the initiateCutover flag.
+	SetCutoverLabel(initiateCutover bool, currentLabel string) string
+
+	// SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
+	SplitEventStringOnComma(input string) (string, string)
+
+	// GetSatusConditions returns the status conditions of the migration.
+	GetSatusConditions(migration *vjailbreakv1alpha1.Migration) []corev1.PodCondition
+
+	// GetConditonIndex returns the index of the condition in the conditions slice.
+	GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.PodConditionType, reasons ...string) int
+
+	// GeneratePodCondition generates a pod condition.
+	GeneratePodCondition(conditionType corev1.PodConditionType, status corev1.ConditionStatus, reason, message string, timestamp metav1.Time) *corev1.PodCondition
+
+	// SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime.
+	SortConditionsByLastTransitionTime(conditions []corev1.PodCondition)
+}
+
+func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == constants.MigrationReason && eventList.Items[i].Message == "Creating volumes in OpenStack") {
+			continue
+		}
+
+		if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidated] {
+			migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidated
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeValidated, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeValidated, corev1.ConditionTrue, constants.MigrationReason, "Migration validated successfully", eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+		break
+	}
+	return existingConditions
+}
+
+func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "Copying disk")) {
+			continue
+		}
+		reason, message := SplitEventStringOnComma(eventList.Items[i].Message)
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeDataCopy, reason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeDataCopy, corev1.ConditionTrue, reason, message, eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+		break
+	}
+	return existingConditions
+}
+
+func CreateMigratedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == constants.MigrationReason && eventList.Items[i].Message == "Converting disk") {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrated, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated, corev1.ConditionTrue, constants.MigrationReason, "Migrating VM from VMware to Openstack", eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+	}
+	return existingConditions
+}
+
+func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
+	if initiateCutover {
+		if currentLabel != constants.StartCutOverYes {
+			currentLabel = constants.StartCutOverYes
+		}
+	} else {
+		if currentLabel != constants.StartCutOverNo {
+			currentLabel = constants.StartCutOverNo
+		}
+	}
+	return currentLabel
+}
+
+// SplitStringOnComma splits a string by comma and returns a slice of substrings.
+func SplitEventStringOnComma(input string) (string, string) {
+	s := strings.Split(input, ",")
+	return strings.TrimSpace(s[0]), strings.TrimSpace(s[1])
+}
+
+func GetSatusConditions(migration *vjailbreakv1alpha1.Migration) []corev1.PodCondition {
+	return migration.Status.Conditions
+}
+
+func GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.PodConditionType, reasons ...string) int {
+	for i, c := range conditions {
+		if c.Type == conditionType && slices.Contains(reasons, c.Reason) {
+			return i
+		}
+	}
+	return -1
+}
+
+func GeneratePodCondition(conditionType corev1.PodConditionType, status corev1.ConditionStatus, reason, message string, timestamp metav1.Time) *corev1.PodCondition {
+	return &corev1.PodCondition{
+		Type:    conditionType,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
+	}
+}
+
+// SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime
+func SortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
+	sort.Slice(conditions, func(i, j int) bool {
+		return conditions[i].LastTransitionTime.Before(&conditions[j].LastTransitionTime)
+	})
+}
