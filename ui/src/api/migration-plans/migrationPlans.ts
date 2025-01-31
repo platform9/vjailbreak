@@ -48,3 +48,21 @@ export const deleteMigrationPlan = async (
   })
   return response
 }
+
+export const patchMigrationPlan = async (
+  planName: string,
+  body: any,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
+  const response = await axios.patch<MigrationPlan>({
+    endpoint,
+    data: body,
+    config: {
+      headers: {
+        "Content-Type": "application/merge-patch+json",
+      },
+    },
+  })
+  return response
+}

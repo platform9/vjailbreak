@@ -1,5 +1,5 @@
-import { Paper, styled, IconButton, Tooltip } from "@mui/material"
-import { DataGrid, GridColDef } from "@mui/x-data-grid"
+import { Paper, styled, IconButton, Tooltip, Button, Box, Typography } from "@mui/material"
+import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } from "@mui/x-data-grid"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
@@ -11,16 +11,31 @@ import { useQueryClient } from "@tanstack/react-query"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteConfirmationDialog from "./DeleteConfirmationDialog"
-import { deleteMigrationPlan } from "src/api/migration-plans/migrationPlans"
-import { deleteMigrationTemplate } from "src/api/migration-templates/migrationTemplates"
+import { getMigrationPlan, patchMigrationPlan } from "src/api/migration-plans/migrationPlans"
+import { Migration } from "src/api/migrations/model"
+
+const STATUS_ORDER = {
+  'Running': 0,
+  'Failed': 1,
+  'Succeeded': 2,
+  'Pending': 3
+}
 
 const DashboardContainer = styled("div")({
   display: "flex",
   justifyContent: "center",
   width: "100%",
-  marginTop: "40px",
+  height: "100%",
+  padding: "40px 20px",
+  boxSizing: "border-box"
 })
 
+const StyledPaper = styled(Paper)({
+  width: "100%",
+  "& .MuiDataGrid-virtualScroller": {
+    overflowX: "hidden"
+  }
+})
 
 const columns: GridColDef[] = [
   {
@@ -34,6 +49,11 @@ const columns: GridColDef[] = [
     headerName: "Status",
     valueGetter: (_, row) => row?.status?.phase || "Pending",
     flex: 1,
+    sortComparator: (v1, v2) => {
+      const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
+      const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
+      return order1 - order2;
+    }
   },
   {
     field: "status.conditions",
@@ -57,7 +77,7 @@ const columns: GridColDef[] = [
     flex: 1,
     renderCell: (params) => {
       const phase = params.row?.status?.phase;
-      const isDisabled = phase === "Running" || phase === "Pending";
+      const isDisabled = !phase || phase === "Running" || phase === "Pending";
 
       return (
         <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
@@ -85,15 +105,57 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 25 }
 
+interface CustomToolbarProps {
+  numSelected: number;
+  onDeleteSelected: () => void;
+}
+
+const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) => {
+  return (
+    <GridToolbarContainer
+      sx={{
+        p: 2,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}
+    >
+      <div>
+        <Typography variant="h6" component="h2">
+          Migrations
+        </Typography>
+      </div>
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        {numSelected > 0 && (
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={onDeleteSelected}
+            sx={{ height: 40 }}
+          >
+            Delete Selected ({numSelected})
+          </Button>
+        )}
+        <CustomSearchToolbar
+          hideTitle
+          placeholder="Search by Name, Status, or Progress"
+        />
+      </Box>
+    </GridToolbarContainer>
+  );
+};
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean, migrationName: string | null }>({
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean, migrationName: string | null, selectedMigrations?: Migration[] }>({
     open: false,
     migrationName: null
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
 
   const { data: migrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -121,53 +183,82 @@ export default function Dashboard() {
     });
   };
 
-  const handleDeleteConfirm = async () => {
-    if (deleteDialog.migrationName) {
-      try {
-        setIsDeleting(true);
-        setDeleteError(null);
-
-        // Get the migration to find related resources
-        const migration = migrations?.find(m => m.metadata?.name === deleteDialog.migrationName);
-        if (!migration) {
-          throw new Error('Migration not found');
-        }
-
-        // Find and delete the migration plan
-        const migrationPlanName = migration.metadata?.labels?.migrationplan;
-        if (migrationPlanName) {
-          try {
-            await deleteMigrationPlan(migrationPlanName);
-          } catch (error) {
-            console.error('Failed to delete migration plan:', error);
-          }
-        }
-
-        // Find and delete the migration template
-        const migrationTemplateName = migration.metadata?.labels?.migrationtemplate;
-        if (migrationTemplateName) {
-          try {
-            await deleteMigrationTemplate(migrationTemplateName);
-          } catch (error) {
-            console.error('Failed to delete migration template:', error);
-          }
-        }
-
-
-        // Delete migration first
-        await deleteMigration(deleteDialog.migrationName);
-
-        // Refresh the migrations list
-        queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
-        handleDeleteClose();
-      } catch (error) {
-        console.error('Failed to delete migration:', error);
-        setDeleteError(error instanceof Error ? error.message : 'Failed to delete migration and related resources');
-      } finally {
-        setIsDeleting(false);
-      }
-    }
+  const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
+    setSelectedRows(newSelection);
   };
+
+  const handleDeleteSelected = () => {
+    const selectedMigrations = migrations?.filter(
+      m => selectedRows.includes(m.metadata?.name)
+    );
+    if (!selectedMigrations?.length) return;
+
+    setDeleteDialog({
+      open: true,
+      migrationName: null,
+      selectedMigrations
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.selectedMigrations?.length) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    const results = await Promise.allSettled(
+      deleteDialog.selectedMigrations.map(async (migration) => {
+        try {
+          await handleDeleteMigration(migration);
+          return { success: true, name: migration.metadata.name };
+        } catch (error) {
+          return {
+            success: false,
+            name: migration.metadata.name,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      })
+    );
+
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+
+    if (failures.length) {
+      setDeleteError(
+        `Failed to delete some migrations: ${failures
+          .map(f => f.reason.name)
+          .join(', ')}`
+      );
+    }
+
+    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
+    setIsDeleting(false);
+    handleDeleteClose();
+    setSelectedRows([]);
+  };
+
+  const handleDeleteMigration = async (migration: Migration) => {
+    try {
+      const migrationPlan = await getMigrationPlan(migration.spec.migrationPlan)
+
+      const updatedVirtualMachines = migrationPlan.spec.virtualmachines[0].filter(
+        vm => vm !== migration.spec.vmName
+      )
+
+      await patchMigrationPlan(migration.spec.migrationPlan, {
+        spec: {
+          virtualmachines: updatedVirtualMachines
+        }
+      })
+
+      await deleteMigration(migration.metadata.name)
+
+    } catch (error) {
+      console.error("Error removing VM from migration plan", error)
+    }
+  }
 
   useEffect(() => {
     if (!!migrations && migrations.length === 0) {
@@ -180,24 +271,44 @@ export default function Dashboard() {
     onDelete: handleDeleteClick
   })) || []
 
+  const isRowSelectable = (params) => {
+    const phase = params.row?.status?.phase;
+    return !(!phase || phase === "Running" || phase === "Pending");
+  };
+
   return (
     <DashboardContainer>
-      <Paper sx={{ width: "95%", margin: "auto" }}>
+      <StyledPaper>
         <DataGrid
           rows={migrationsWithActions}
           columns={columns}
-          initialState={{ pagination: { paginationModel } }}
+          initialState={{
+            pagination: { paginationModel },
+            sorting: {
+              sortModel: [{ field: 'status', sort: 'asc' }],
+            },
+          }}
           pageSizeOptions={[25, 50, 100]}
           localeText={{ noRowsLabel: "No Migrations Available" }}
           getRowId={(row) => row.metadata?.name}
+          checkboxSelection
+          isRowSelectable={isRowSelectable}
+          onRowSelectionModelChange={handleSelectionChange}
+          rowSelectionModel={selectedRows}
           slots={{
-            toolbar: () => <CustomSearchToolbar title="Migrations" placeholder="Search by Name, Status, or Progress" />,
+            toolbar: () => (
+              <CustomToolbar
+                numSelected={selectedRows.length}
+                onDeleteSelected={handleDeleteSelected}
+              />
+            ),
           }}
         />
-      </Paper>
+      </StyledPaper>
       <DeleteConfirmationDialog
         open={deleteDialog.open}
         migrationName={deleteDialog.migrationName}
+        selectedMigrations={deleteDialog.selectedMigrations}
         onClose={handleDeleteClose}
         onConfirm={handleDeleteConfirm}
         isDeleting={isDeleting}
