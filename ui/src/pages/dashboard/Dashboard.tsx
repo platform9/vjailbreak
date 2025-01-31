@@ -200,65 +200,70 @@ export default function Dashboard() {
     });
   };
 
+  const handleDeleteMigration = async (migrations: Migration[]) => {
+    try {
+      // Group VMs by migration plan
+      const migrationPlanUpdates = migrations.reduce((acc, migration) => {
+        const planId = migration.metadata.labels["migrationplan"];
+        if (!acc[planId]) {
+          acc[planId] = {
+            vmsToRemove: new Set<string>(),
+            migrationsToDelete: new Set<string>()
+          };
+        }
+        acc[planId].vmsToRemove.add(migration.spec.vmName);
+        acc[planId].migrationsToDelete.add(migration.metadata.name);
+        return acc;
+      }, {} as Record<string, { vmsToRemove: Set<string>, migrationsToDelete: Set<string> }>);
+
+      // Update each migration plan once
+      await Promise.all(
+        Object.entries(migrationPlanUpdates).map(async ([planId, { vmsToRemove, migrationsToDelete }]) => {
+          const migrationPlan = await getMigrationPlan(planId);
+          const updatedVirtualMachines = migrationPlan.spec.virtualmachines[0].filter(
+            vm => !vmsToRemove.has(vm)
+          );
+
+          await patchMigrationPlan(planId, {
+            spec: {
+              virtualmachines: [updatedVirtualMachines]
+            }
+          });
+
+          // Delete all migrations for this plan
+          await Promise.all(
+            Array.from(migrationsToDelete).map(migrationName =>
+              deleteMigration(migrationName)
+            )
+          );
+        })
+      );
+
+    } catch (error) {
+      console.error("Error removing VMs from migration plan", error);
+      throw error;
+    }
+  };
+
   const handleDeleteConfirm = async () => {
     if (!deleteDialog.selectedMigrations?.length) return;
 
     setIsDeleting(true);
     setDeleteError(null);
 
-    const results = await Promise.allSettled(
-      deleteDialog.selectedMigrations.map(async (migration) => {
-        try {
-          await handleDeleteMigration(migration);
-          return { success: true, name: migration.metadata.name };
-        } catch (error) {
-          return {
-            success: false,
-            name: migration.metadata.name,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          };
-        }
-      })
-    );
-
-    const failures = results.filter(
-      (r): r is PromiseRejectedResult => r.status === 'rejected'
-    );
-
-    if (failures.length) {
-      setDeleteError(
-        `Failed to delete some migrations: ${failures
-          .map(f => f.reason.name)
-          .join(', ')}`
-      );
-    }
-
-    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
-    setIsDeleting(false);
-    handleDeleteClose();
-    setSelectedRows([]);
-  };
-
-  const handleDeleteMigration = async (migration: Migration) => {
     try {
-      const migrationPlan = await getMigrationPlan(migration.spec.migrationPlan)
-
-      const updatedVirtualMachines = migrationPlan.spec.virtualmachines[0].filter(
-        vm => vm !== migration.spec.vmName
-      )
-
-      await patchMigrationPlan(migration.spec.migrationPlan, {
-        spec: {
-          virtualmachines: updatedVirtualMachines
-        }
-      })
-
-      await deleteMigration(migration.metadata.name)
-
+      await handleDeleteMigration(deleteDialog.selectedMigrations);
+      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
     } catch (error) {
-      console.error("Error removing VM from migration plan", error)
+      setDeleteError(
+        error instanceof Error ? error.message : 'Failed to delete migrations'
+      );
+    } finally {
+      setIsDeleting(false);
+      handleDeleteClose();
+      setSelectedRows([]);
     }
-  }
+  };
 
   useEffect(() => {
     if (!!migrations && migrations.length === 0) {
