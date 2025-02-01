@@ -320,7 +320,7 @@ export default function MigrationOptionsAlt({
                 }
               />
               <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                Select this option to retry the migration incase of failure
+                Select this option to retry the migration in case of failure
               </Typography>
             </Fields>
 
