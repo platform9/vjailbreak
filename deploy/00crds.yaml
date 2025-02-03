@@ -839,6 +839,7 @@ rules:
   - ""
   resources:
   - events
+  - nodes
   verbs:
   - get
   - list
@@ -1389,9 +1390,18 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - mountPath: /etc/pf9/k3s
+          name: master-token
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
-        runAsNonRoot: true
+        runAsGroup: 0
+        runAsUser: 0
       serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 10
+      volumes:
+      - hostPath:
+          path: /var/lib/rancher/k3s/server
+          type: Directory
+        name: master-token

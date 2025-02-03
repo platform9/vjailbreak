@@ -15,17 +15,23 @@ const (
 	NamespaceMigrationSystem = "migration-system"
 	MasterVjailbreakNodeName = "vjailbreak-master"
 	VjailbreakNodeFinalizer  = "vjailbreak.k8s.pf9.io/finalizer"
+
+	K3sTokenFileLocation = "/etc/pf9/k3s/token"
+	ENVFileLocation      = "/etc/pf9/k3s.env"
 )
 
 var (
 	// Cloud-Init Script (User Data)
 	CloudInitScript = `#cloud-config
+password: platform9
+chpasswd: { expire: False }
 write_files:
-  - path: /home/ubuntu/test.txt
-    content: |
-		export MASTER_IP=%s
-		export IS_MASTER=%s
+- path: %s
+  content: |
+    export IS_MASTER=%s
+    export MASTER_IP=%s
+    export K3S_TOKEN=%s
 runcmd:
-  - echo "Cloud-Init Worked!" >> /home/ubuntu/cloud-init.log
+  - echo "Created k3s env variables!" > /home/ubuntu/cloud-init.log
 `
 )

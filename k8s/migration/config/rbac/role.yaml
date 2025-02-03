@@ -21,6 +21,7 @@ rules:
   - ""
   resources:
   - events
+  - nodes
   verbs:
   - get
   - list
