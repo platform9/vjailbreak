@@ -9,4 +9,7 @@ const (
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 
 	VjailbreakNodePhaseCreated = vjailbreakv1alpha1.VjailbreakNodePhase("Created")
+
+	NamespaceMigrationSystem = "migration-system"
+	MasterVjailbreakNodeName = "vjailbreak-master"
 )

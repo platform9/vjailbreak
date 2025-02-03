@@ -19,12 +19,17 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
 // VjailbreakNodeReconciler reconciles a VjailbreakNode object
@@ -36,21 +41,77 @@ type VjailbreakNodeReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=,resources=nodes,verbs=get;list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the VjailbreakNode object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
 
-	// TODO(user): your logic here
+	// Fetch the VjailbreakNode instance.
+	log.Info("Fetching VjailbreakNode")
+	vjailbreakNode := vjailbreakv1alpha1.VjailbreakNode{}
+	err := r.Client.Get(ctx, req.NamespacedName, &vjailbreakNode, &client.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	vjailbreakNodeScope, err := scope.NewVjailbreakNodeScope(scope.VjailbreakNodeScopeParams{
+		Logger:         log,
+		Client:         r.Client,
+		VjailbreakNode: &vjailbreakNode,
+	})
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to create vjailbreak node scope")
+	}
 
+	// Always close the scope when exiting this function such that we can persist any VjailbreakNode changes.
+	defer func() {
+		if err := vjailbreakNodeScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	// Handle deleted VjailbreakNode
+	if !vjailbreakNode.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, vjailbreakNodeScope)
+	}
+
+	// Handle regular VjailbreakNode reconcile
+	return r.reconcileNormal(ctx, vjailbreakNodeScope)
+}
+
+// reconcileNormal handles regular VjailbreakNode reconcile
+func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
+	log := scope.Logger
+	vjNode := scope.VjailbreakNode
+
+	// Check and create master node entry
+	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
+	}
+
+	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
+		log.Info("Skipping master node")
+		return ctrl.Result{}, nil
+	}
+
+	// Create Openstack VM for worker node
+	vmid, err := utils.CreateOpenstackVMForWorkerNode(ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
+	}
+
+	if vmid != "" {
+		vjNode.Status.OpenstackUUID = vmid
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// reconcileDelete handles deleted VjailbreakNode
+func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 

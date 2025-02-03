@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
-	"github.com/platform9/vjailbreak/v2v-helper/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -439,7 +439,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if vminfo.OSType == "linux" {
 				if strings.Contains(osRelease, "rhel") {
 					firstbootscriptname := "rhel_enable_dhcp"
-					firstbootscript := utils.RhelFirstBootScript
+					firstbootscript := constants.RhelFirstBootScript
 					firstbootscripts = append(firstbootscripts, firstbootscriptname)
 					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
 					if err != nil {
