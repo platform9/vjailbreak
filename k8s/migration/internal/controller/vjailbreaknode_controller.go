@@ -160,7 +160,17 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context, scope *s
 		return ctrl.Result{}, nil
 	}
 
-	err := utils.DeleteOpenstackVM(scope.VjailbreakNode.Status.OpenstackUUID, ctx, r.Client, scope)
+	uuid, err := utils.GetOpenstackVMByName(scope.VjailbreakNode.Name, ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
+	}
+
+	if uuid == "" {
+		log.Info("node already deleted", "name", scope.VjailbreakNode.Name)
+		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
+	}
+
+	err = utils.DeleteOpenstackVM(scope.VjailbreakNode.Status.OpenstackUUID, ctx, r.Client, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -129,6 +130,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
 
+	token, err := os.ReadFile(constants.K3sTokenFileLocation)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read k3s token file")
+	}
+
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get master node")
@@ -139,7 +145,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
 
-	networkID, err := GetCurrentInstanceNetworkInfo()
+	networkIDs, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get network info")
 	}
@@ -149,8 +155,8 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		Name:      vjNode.Name,
 		FlavorRef: vjNode.Spec.OpenstackFlavorId,
 		ImageRef:  vjNode.Spec.ImageID,
-		Networks:  []servers.Network{{UUID: networkID}},
-		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, GetNodeInternalIp(masterNode), "false")),
+		Networks:  networkIDs,
+		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, constants.ENVFileLocation, "false", GetNodeInternalIp(masterNode), token)),
 	}
 
 	// Create the VM
@@ -179,30 +185,36 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client, scope *scop
 
 }
 
-func GetCurrentInstanceNetworkInfo() (string, error) {
+func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	client := &http.Client{}
+	networks := []servers.Network{}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/network_data.json", nil)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create request")
+		return nil, errors.Wrap(err, "failed to create request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get response")
+		return nil, errors.Wrap(err, "failed to get response")
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to read response body")
+		return nil, errors.Wrap(err, "failed to read response body")
 	}
 
 	var metadata OpenStackMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return "", errors.Wrap(err, "failed to unmarshal response body")
+		return nil, errors.Wrap(err, "failed to unmarshal response body")
 	}
 
-	return metadata.Networks[0].NetworkId, nil
+	for _, Network := range metadata.Networks {
+		networks = append(networks, servers.Network{
+			UUID: Network.NetworkId,
+		})
+	}
+	return networks, nil
 }
 
 func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
@@ -293,4 +305,14 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 
 	vmID := allServers[0].ID
 	return vmID, nil
+}
+
+func ReadFileContent(filePath string) (string, error) {
+	// Read entire file content
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read file")
+	}
+
+	return string(data), nil
 }
