@@ -17,25 +17,37 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type VjailbreakNodePhase string
 
 // VjailbreakNodeSpec defines the desired state of VjailbreakNode
 type VjailbreakNodeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// NodeRole is the role assigned to the node
+	NodeRole string `json:"noderole"`
 
-	// Foo is an example field of VjailbreakNode. Edit vjailbreaknode_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// OpenstackCreds is the credentials for Openstack Environment
+	OpenstackCreds corev1.ObjectReference `json:"openstackcreds"`
+
+	// OpenstackFlavorId is the flavor of the VM
+	OpenstackFlavorId string `json:"openstackflavorid"`
+
+	// OpenstackImageID is the image of the VM
+	ImageID string `json:"imageid"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode
 type VjailbreakNodeStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// OpenstackUUID is the UUID of the VM in OpenStack
+	OpenstackUUID string `json:"openstackuuid,omitempty"`
+
+	// VMIP is the IP address of the VM
+	VMIP string `json:"vmip"`
+
+	// Phase is the current phase of the node
+	Phase VjailbreakNodePhase `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -46,7 +58,10 @@ type VjailbreakNode struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   VjailbreakNodeSpec   `json:"spec,omitempty"`
+	// Spec defines the desired state of VjailbreakNode
+	Spec VjailbreakNodeSpec `json:"spec,omitempty"`
+
+	// Status defines the observed state of VjailbreakNode
 	Status VjailbreakNodeStatus `json:"status,omitempty"`
 }
 

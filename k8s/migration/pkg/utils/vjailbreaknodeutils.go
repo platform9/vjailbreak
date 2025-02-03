@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -38,11 +39,13 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
 	}
+
 	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjailbreakv1alpha1.VjailbreakNode{})
 	if err == nil {
 		// VjailbreakNode already exists
 		return nil
 	}
+
 	// Controller manager is always on the master node due to pod affinity
 	openstackuuid, err := openstackutils.GetCurrentInstanceUUID()
 	if err != nil {
@@ -51,10 +54,10 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: masterNode.Name,
+			Name:      constants.MasterVjailbreakNodeName,
+			Namespace: constants.NamespaceMigrationSystem,
 		},
 		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
-			NodeName: masterNode.Name,
 			NodeRole: constants.NodeRoleMaster,
 		},
 		Status: vjailbreakv1alpha1.VjailbreakNodeStatus{
@@ -65,15 +68,32 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 	}
 
 	err = k3sclient.Create(ctx, &vjNode)
-	if err != nil && apierrors.IsAlreadyExists(err) {
+	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create vjailbreak node")
+	}
+
+	err = k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      constants.MasterVjailbreakNodeName,
+	}, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak node")
+	}
+
+	vjNode.Status.VMIP = GetNodeInternalIp(masterNode)
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseCreated
+	vjNode.Status.OpenstackUUID = openstackuuid
+
+	err = k3sclient.Status().Update(ctx, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
 	return nil
 }
 
 func IsMasterNode(node *corev1.Node) bool {
-	_, ok := node.Annotations[constants.K8sMasterNodeAnnotation]
+	_, ok := node.Labels[constants.K8sMasterNodeAnnotation]
 	return ok
 }
 
@@ -125,23 +145,25 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		Username:         creds.Spec.OsUsername,
 		Password:         creds.Spec.OsPassword,
 		DomainName:       creds.Spec.OsDomainName,
-		TenantID:         creds.Spec.OsTenantName,
+		TenantName:       creds.Spec.OsTenantName,
 	}
 
 	provider, err := openstack.AuthenticatedClient(opts)
 	if err != nil {
-		log.Error(err, "Failed to authenticate")
+		return "", errors.Wrap(err, "failed to authenticate")
 	}
 
 	// Get the compute client
-	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{})
+	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{
+		Region: creds.Spec.OsRegionName,
+	})
 	if err != nil {
-		log.Error(err, "Failed to create compute client")
+		return "", errors.Wrap(err, "failed to create compute client")
 	}
 
 	networkID, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to get network info")
 	}
 
 	// Define server creation parameters
@@ -180,25 +202,25 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client, scope *scop
 
 func GetCurrentInstanceNetworkInfo() (string, error) {
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
+	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/network_data.json", nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %s", err)
+		return "", errors.Wrap(err, "failed to create request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to get response: %s", err)
+		return "", errors.Wrap(err, "failed to get response")
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %s", err)
+		return "", errors.Wrap(err, "failed to read response body")
 	}
 
 	var metadata OpenStackMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return "", fmt.Errorf("failed to unmarshal metadata: %s", err)
+		return "", errors.Wrap(err, "failed to unmarshal response body")
 	}
 
 	return metadata.Networks[0].NetworkId, nil
