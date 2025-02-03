@@ -8,8 +8,24 @@ const (
 	NodeRoleMaster               = "master"
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 
-	VjailbreakNodePhaseCreated = vjailbreakv1alpha1.VjailbreakNodePhase("Created")
+	VjailbreakNodePhaseVMCreating  = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
+	VjailbreakNodePhaseVMCreated   = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
+	VjailbreakNodePhaseNodeCreated = vjailbreakv1alpha1.VjailbreakNodePhase("NodeCreated")
 
 	NamespaceMigrationSystem = "migration-system"
 	MasterVjailbreakNodeName = "vjailbreak-master"
+	VjailbreakNodeFinalizer  = "vjailbreak.k8s.pf9.io/finalizer"
+)
+
+var (
+	// Cloud-Init Script (User Data)
+	CloudInitScript = `#cloud-config
+write_files:
+  - path: /home/ubuntu/test.txt
+    content: |
+		export MASTER_IP=%s
+		export IS_MASTER=%s
+runcmd:
+  - echo "Cloud-Init Worked!" >> /home/ubuntu/cloud-init.log
+`
 )
