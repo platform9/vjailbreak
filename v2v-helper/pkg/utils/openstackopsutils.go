@@ -1,25 +1,20 @@
-// Copyright © 2024 The vjailbreak authors
-
-package openstack
+package utils
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
@@ -29,27 +24,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
-
-//go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
-
-type OpenstackOperations interface {
-	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error)
-	WaitForVolume(volumeID string) error
-	AttachVolumeToVM(volumeID string) error
-	WaitForVolumeAttachment(volumeID string) error
-	DetachVolumeFromVM(volumeID string) error
-	SetVolumeUEFI(volume *volumes.Volume) error
-	EnableQGA(volume *volumes.Volume) error
-	SetVolumeImageMetadata(volume *volumes.Volume) error
-	SetVolumeBootable(volume *volumes.Volume) error
-	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
-	GetNetwork(networkname string) (*networks.Network, error)
-	GetPort(portID string) (*ports.Port, error)
-	CreatePort(networkid *networks.Network, mac, ip, vmname string) (*ports.Port, error)
-	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error)
-	DeleteVolume(volumeID string) error
-	FindDevice(volumeID string) (string, error)
-}
 
 type OpenStackClients struct {
 	BlockStorageClient *gophercloud.ServiceClient
@@ -61,111 +35,7 @@ type OpenStackMetadata struct {
 	UUID string `json:"uuid"`
 }
 
-const MaxCPU = 9999999
-const MaxRAM = 9999999
-
-// Number of intervals to wait for the volume to become available
-const MaxIntervalCount = 12
-
-func getCert(endpoint string) (*x509.Certificate, error) {
-	conf := &tls.Config{
-		InsecureSkipVerify: true,
-	}
-	parsedURL, err := url.Parse(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL: %w", err)
-	}
-	hostname := parsedURL.Hostname()
-	conn, err := tls.Dial("tcp", hostname+":443", conf)
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to %s: %w", hostname, err)
-	}
-	defer conn.Close()
-	cert := conn.ConnectionState().PeerCertificates[0]
-	return cert, nil
-}
-
-func validateOpenStack(insecure bool) (*OpenStackClients, error) {
-	opts, err := openstack.AuthOptionsFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
-	}
-	providerClient, err := openstack.NewClient(opts.IdentityEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider client: %s", err)
-	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-	if insecure {
-		tlsConfig.InsecureSkipVerify = true
-	} else {
-		// Get the certificate for the Openstack endpoint
-		caCert, err := getCert(opts.IdentityEndpoint)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get certificate: %s", err)
-		}
-		caCertPool, _ := x509.SystemCertPool()
-		if caCertPool == nil {
-			caCertPool = x509.NewCertPool()
-		}
-		caCertPool.AddCert(caCert)
-		tlsConfig.RootCAs = caCertPool
-	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-	}
-
-	// Connection Retry Block
-	for i := 0; i < MaxIntervalCount; i++ {
-		err = openstack.Authenticate(providerClient, opts)
-		if err == nil {
-			break
-		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate OpenStack client: %s", err)
-	}
-
-	endpoint := gophercloud.EndpointOpts{
-		Region: os.Getenv("OS_REGION_NAME"),
-	}
-
-	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create block storage client: %s", err)
-	}
-
-	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create compute client: %s", err)
-	}
-
-	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create networking client: %s", err)
-	}
-
-	return &OpenStackClients{
-		BlockStorageClient: blockStorageClient,
-		ComputeClient:      computeClient,
-		NetworkingClient:   networkingClient,
-	}, nil
-}
-
-func NewOpenStackClients(insecure bool) (*OpenStackClients, error) {
-	ostackclients, err := validateOpenStack(insecure)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
-	}
-	return ostackclients, nil
-}
-
-func getCurrentInstanceUUID() (string, error) {
+func GetCurrentInstanceUUID() (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
 	if err != nil {
@@ -240,7 +110,7 @@ func (osclient *OpenStackClients) DeleteVolume(volumeID string) error {
 }
 
 func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
-	for i := 0; i < MaxIntervalCount; i++ {
+	for i := 0; i < constants.MaxIntervalCount; i++ {
 		volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
@@ -251,15 +121,15 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	return fmt.Errorf("volume did not become available within %d seconds", MaxIntervalCount*5)
+	return fmt.Errorf("volume did not become available within %d seconds", constants.MaxIntervalCount*5)
 }
 
 func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
-	instanceID, err := getCurrentInstanceUUID()
+	instanceID, err := GetCurrentInstanceUUID()
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
-	for i := 0; i < MaxIntervalCount; i++ {
+	for i := 0; i < constants.MaxIntervalCount; i++ {
 		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
@@ -303,22 +173,22 @@ func (osclient *OpenStackClients) FindDevice(volumeID string) (string, error) {
 }
 
 func (osclient *OpenStackClients) WaitForVolumeAttachment(volumeID string) error {
-	for i := 0; i < MaxIntervalCount; i++ {
+	for i := 0; i < constants.MaxIntervalCount; i++ {
 		devicePath, _ := osclient.FindDevice(volumeID)
 		if devicePath != "" {
 			return nil
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	return fmt.Errorf("volume attachment not found within %d seconds", MaxIntervalCount*5)
+	return fmt.Errorf("volume attachment not found within %d seconds", constants.MaxIntervalCount*5)
 }
 
 func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
-	instanceID, err := getCurrentInstanceUUID()
+	instanceID, err := GetCurrentInstanceUUID()
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
-	for i := 0; i < MaxIntervalCount; i++ {
+	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
 			break
@@ -398,8 +268,8 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 	log.Println("Current requirements:", cpu, "CPUs and", memory, "MB of RAM")
 
 	bestFlavor := new(flavors.Flavor)
-	bestFlavor.VCPUs = MaxCPU
-	bestFlavor.RAM = MaxRAM
+	bestFlavor.VCPUs = constants.MaxCPU
+	bestFlavor.RAM = constants.MaxRAM
 	// Find the smallest flavor that meets the requirements
 	for _, flavor := range allFlavors {
 		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
@@ -409,7 +279,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 		}
 	}
 
-	if bestFlavor.VCPUs != MaxCPU {
+	if bestFlavor.VCPUs != constants.MaxCPU {
 		log.Printf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {

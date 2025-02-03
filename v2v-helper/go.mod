@@ -1,4 +1,4 @@
-module vjailbreak
+module github.com/platform9/vjailbreak/v2v-helper
 
 go 1.22.3
 

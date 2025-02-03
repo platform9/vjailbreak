@@ -6,7 +6,7 @@ package openstack
 
 import (
 	reflect "reflect"
-	vm "vjailbreak/vm"
+	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	gomock "github.com/golang/mock/gomock"
 	volumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
