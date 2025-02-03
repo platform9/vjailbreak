@@ -138,7 +138,6 @@ const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) =>
           </Button>
         )}
         <CustomSearchToolbar
-          hideTitle
           placeholder="Search by Name, Status, or Progress"
         />
       </Box>
@@ -204,7 +203,7 @@ export default function Dashboard() {
     try {
       // Group VMs by migration plan
       const migrationPlanUpdates = migrations.reduce((acc, migration) => {
-        const planId = migration.metadata.labels["migrationplan"];
+        const planId = migration.spec.migrationPlan;
         if (!acc[planId]) {
           acc[planId] = {
             vmsToRemove: new Set<string>(),
