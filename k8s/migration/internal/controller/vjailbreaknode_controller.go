@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
@@ -47,7 +48,6 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
 
 	// Fetch the VjailbreakNode instance.
-	log.Info("Fetching VjailbreakNode")
 	vjailbreakNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err := r.Client.Get(ctx, req.NamespacedName, &vjailbreakNode, &client.GetOptions{})
 	if err != nil {
@@ -84,7 +84,12 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // reconcileNormal handles regular VjailbreakNode reconcile
 func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
+	log.Info("Reconciling VjailbreakNode")
+	var vmip string
+
 	vjNode := scope.VjailbreakNode
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
 	// Check and create master node entry
 	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
@@ -97,21 +102,69 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *s
 		return ctrl.Result{}, nil
 	}
 
+	uuid, err := utils.GetOpenstackVMByName(vjNode.Name, ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
+	}
+
+	if uuid != "" {
+		log.Info("Skipping already created node", "name", vjNode.Name)
+		if vjNode.Status.OpenstackUUID == "" {
+			// This will error until the the IP is available
+			vmip, err := utils.GetOpenstackVMIP(uuid, ctx, r.Client, scope)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
+			}
+			vjNode.Status.OpenstackUUID = uuid
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+			vjNode.Status.VMIP = vmip
+
+			// Update the VjailbreakNode status
+			err = r.Client.Status().Update(ctx, vjNode)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// Create Openstack VM for worker node
 	vmid, err := utils.CreateOpenstackVMForWorkerNode(ctx, r.Client, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
-	if vmid != "" {
-		vjNode.Status.OpenstackUUID = vmid
+	vjNode.Status.OpenstackUUID = uuid
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+	vjNode.Status.VMIP = vmip
+
+	// Update the VjailbreakNode status
+	err = r.Client.Status().Update(ctx, vjNode)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
+
+	log.Info("Successfully created openstack vm for worker node", "vmid", vmid)
 
 	return ctrl.Result{}, nil
 }
 
 // reconcileDelete handles deleted VjailbreakNode
 func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("Reconciling VjailbreakNode Delete")
+
+	if scope.VjailbreakNode.Spec.NodeRole == constants.NodeRoleMaster {
+		log.Info("Skipping master node deletion")
+		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
+		return ctrl.Result{}, nil
+	}
+
+	err := utils.DeleteOpenstackVM(scope.VjailbreakNode.Status.OpenstackUUID, ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
+	}
+	controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
 	return ctrl.Result{}, nil
 }
 

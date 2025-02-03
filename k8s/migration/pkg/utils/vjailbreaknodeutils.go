@@ -60,11 +60,6 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
 			NodeRole: constants.NodeRoleMaster,
 		},
-		Status: vjailbreakv1alpha1.VjailbreakNodeStatus{
-			VMIP:          GetNodeInternalIp(masterNode),
-			Phase:         constants.VjailbreakNodePhaseCreated,
-			OpenstackUUID: openstackuuid,
-		},
 	}
 
 	err = k3sclient.Create(ctx, &vjNode)
@@ -81,7 +76,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 	}
 
 	vjNode.Status.VMIP = GetNodeInternalIp(masterNode)
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseCreated
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeCreated
 	vjNode.Status.OpenstackUUID = openstackuuid
 
 	err = k3sclient.Status().Update(ctx, &vjNode)
@@ -134,31 +129,14 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
 
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to get master node")
 	}
 
-	// Authenticate with OpenStack
-	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: creds.Spec.OsAuthURL,
-		Username:         creds.Spec.OsUsername,
-		Password:         creds.Spec.OsPassword,
-		DomainName:       creds.Spec.OsDomainName,
-		TenantName:       creds.Spec.OsTenantName,
-	}
-
-	provider, err := openstack.AuthenticatedClient(opts)
+	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to authenticate")
-	}
-
-	// Get the compute client
-	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{
-		Region: creds.Spec.OsRegionName,
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create compute client")
+		return "", errors.Wrap(err, "failed to get compute client")
 	}
 
 	networkID, err := GetCurrentInstanceNetworkInfo()
@@ -172,6 +150,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		FlavorRef: vjNode.Spec.OpenstackFlavorId,
 		ImageRef:  vjNode.Spec.ImageID,
 		Networks:  []servers.Network{{UUID: networkID}},
+		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, GetNodeInternalIp(masterNode), "false")),
 	}
 
 	// Create the VM
@@ -224,4 +203,94 @@ func GetCurrentInstanceNetworkInfo() (string, error) {
 	}
 
 	return metadata.Networks[0].NetworkId, nil
+}
+
+func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
+	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get compute client")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(computeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to get server details")
+	}
+
+	// Extract IP addresses
+	for _, addresses := range server.Addresses {
+		for _, addr := range addresses.([]interface{}) {
+			ipInfo := addr.(map[string]interface{})
+			return ipInfo["addr"].(string), nil
+		}
+	}
+	return "", errors.New("failed to get vm ip")
+}
+
+func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
+	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	if err != nil {
+		return errors.Wrap(err, "failed to get compute client")
+	}
+
+	// delete the VM
+	err = servers.Delete(computeClient, uuid).ExtractErr()
+	if err != nil {
+		return errors.Wrap(err, "Failed to delete server")
+	}
+	return nil
+
+}
+
+func GetOpenstackComputeClient(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (*gophercloud.ServiceClient, error) {
+
+	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	// Authenticate with OpenStack
+	opts := gophercloud.AuthOptions{
+		IdentityEndpoint: creds.Spec.OsAuthURL,
+		Username:         creds.Spec.OsUsername,
+		Password:         creds.Spec.OsPassword,
+		DomainName:       creds.Spec.OsDomainName,
+		TenantName:       creds.Spec.OsTenantName,
+	}
+
+	provider, err := openstack.AuthenticatedClient(opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to authenticate")
+	}
+
+	// Get the compute client
+	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{
+		Region: creds.Spec.OsRegionName,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create compute client")
+	}
+
+	return computeClient, nil
+}
+
+func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
+	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get compute client")
+	}
+
+	listOpts := servers.ListOpts{Name: name}
+	allPages, err := servers.List(computeClient, listOpts).AllPages()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to list servers")
+	}
+
+	allServers, err := servers.ExtractServers(allPages)
+	if err != nil || len(allServers) == 0 {
+		return "", nil
+	}
+
+	vmID := allServers[0].ID
+	return vmID, nil
 }
