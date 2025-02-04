@@ -16,7 +16,7 @@ const (
 	MasterVjailbreakNodeName = "vjailbreak-master"
 	VjailbreakNodeFinalizer  = "vjailbreak.k8s.pf9.io/finalizer"
 
-	K3sTokenFileLocation = "/etc/pf9/k3s/token"
+	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 	ENVFileLocation      = "/etc/pf9/k3s.env"
 )
 

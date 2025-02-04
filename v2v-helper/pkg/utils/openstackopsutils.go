@@ -37,7 +37,7 @@ type OpenStackMetadata struct {
 
 func GetCurrentInstanceUUID() (string, error) {
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
+	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %s", err)
 	}
