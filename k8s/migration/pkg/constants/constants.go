@@ -23,7 +23,7 @@ const (
 var (
 	// Cloud-Init Script (User Data)
 	CloudInitScript = `#cloud-config
-password: platform9
+password: %s
 chpasswd: { expire: False }
 write_files:
 - path: %s
