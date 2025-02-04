@@ -156,7 +156,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		FlavorRef: vjNode.Spec.OpenstackFlavorId,
 		ImageRef:  vjNode.Spec.ImageID,
 		Networks:  networkIDs,
-		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, constants.ENVFileLocation, "false", GetNodeInternalIp(masterNode), token)),
+		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, token[:12], constants.ENVFileLocation, "false", GetNodeInternalIp(masterNode), token)),
 	}
 
 	// Create the VM
