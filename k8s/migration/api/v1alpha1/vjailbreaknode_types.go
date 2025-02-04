@@ -31,8 +31,8 @@ type VjailbreakNodeSpec struct {
 	// OpenstackCreds is the credentials for Openstack Environment
 	OpenstackCreds corev1.ObjectReference `json:"openstackcreds"`
 
-	// OpenstackFlavorId is the flavor of the VM
-	OpenstackFlavorId string `json:"openstackflavorid"`
+	// OpenstackFlavorID is the flavor of the VM
+	OpenstackFlavorID string `json:"openstackflavorid"`
 
 	// OpenstackImageID is the image of the VM
 	ImageID string `json:"imageid"`

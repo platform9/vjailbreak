@@ -82,7 +82,8 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // reconcileNormal handles regular VjailbreakNode reconcile
-func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
+func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode")
 	var vmip string
@@ -111,7 +112,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *s
 		log.Info("Skipping already created node", "name", vjNode.Name)
 		if vjNode.Status.OpenstackUUID == "" {
 			// This will error until the the IP is available
-			vmip, err := utils.GetOpenstackVMIP(uuid, ctx, r.Client, scope)
+			vmip, err = utils.GetOpenstackVMIP(uuid, ctx, r.Client, scope)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
@@ -150,7 +151,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context, scope *s
 }
 
 // reconcileDelete handles deleted VjailbreakNode
-func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context, scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
+func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode Delete")
 
@@ -168,6 +170,7 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context, scope *s
 	if uuid == "" {
 		log.Info("node already deleted", "name", scope.VjailbreakNode.Name)
 		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
+		return ctrl.Result{}, nil
 	}
 
 	err = utils.DeleteOpenstackVM(scope.VjailbreakNode.Status.OpenstackUUID, ctx, r.Client, scope)

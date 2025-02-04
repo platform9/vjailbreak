@@ -28,7 +28,7 @@ type Network struct {
 	ID        string `json:"id"`
 	Type      string `json:"type"`
 	Link      string `json:"link"`
-	NetworkId string `json:"network_id"`
+	NetworkID string `json:"network_id"`
 }
 
 type OpenStackMetadata struct {
@@ -76,7 +76,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 		return errors.Wrap(err, "failed to get vjailbreak node")
 	}
 
-	vjNode.Status.VMIP = GetNodeInternalIp(masterNode)
+	vjNode.Status.VMIP = GetNodeInternalIP(masterNode)
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeCreated
 	vjNode.Status.OpenstackUUID = openstackuuid
 
@@ -102,7 +102,7 @@ func GetAllk8sNodes(ctx context.Context, k3sclient client.Client) (corev1.NodeLi
 	return nodeList, nil
 }
 
-func GetNodeInternalIp(node *corev1.Node) string {
+func GetNodeInternalIP(node *corev1.Node) string {
 	return node.Annotations[constants.InternalIPAnnotation]
 }
 
@@ -114,9 +114,9 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 
 	var masterNode *corev1.Node
 
-	for _, node := range nodeList.Items {
-		if IsMasterNode(&node) {
-			masterNode = &node
+	for i := range nodeList.Items {
+		if IsMasterNode(&nodeList.Items[i]) {
+			masterNode = &nodeList.Items[i]
 			break
 		}
 	}
@@ -153,10 +153,13 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
 		Name:      vjNode.Name,
-		FlavorRef: vjNode.Spec.OpenstackFlavorId,
+		FlavorRef: vjNode.Spec.OpenstackFlavorID,
 		ImageRef:  vjNode.Spec.ImageID,
 		Networks:  networkIDs,
-		UserData:  []byte(fmt.Sprintf(constants.CloudInitScript, token[:12], constants.ENVFileLocation, "false", GetNodeInternalIp(masterNode), token)),
+		UserData: []byte(fmt.Sprintf(constants.CloudInitScript,
+			token[:12], constants.ENVFileLocation,
+			"false", GetNodeInternalIP(masterNode),
+			token)),
 	}
 
 	// Create the VM
@@ -166,11 +169,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	}
 
 	log.Info("Server created", "ID", server.ID)
-
 	return server.ID, nil
 }
 
-func GetOpenstackCreds(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (*vjailbreakv1alpha1.OpenstackCreds, error) {
+func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
+	scope *scope.VjailbreakNodeScope) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	vjNode := scope.VjailbreakNode
 
 	oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -182,13 +185,13 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client, scope *scop
 		return nil, err
 	}
 	return oscreds, nil
-
 }
 
 func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	client := &http.Client{}
 	networks := []servers.Network{}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/network_data.json", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET",
+		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create request")
 	}
@@ -211,7 +214,7 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 
 	for _, Network := range metadata.Networks {
 		networks = append(networks, servers.Network{
-			UUID: Network.NetworkId,
+			UUID: Network.NetworkID,
 		})
 	}
 	return networks, nil
@@ -231,8 +234,8 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client,
 
 	// Extract IP addresses
 	for _, addresses := range server.Addresses {
-		for _, addr := range addresses.([]interface{}) {
-			ipInfo := addr.(map[string]interface{})
+		for _, addr := range addresses.([]any) {
+			ipInfo := addr.(map[string]any)
 			return ipInfo["addr"].(string), nil
 		}
 	}
@@ -251,11 +254,11 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 		return errors.Wrap(err, "Failed to delete server")
 	}
 	return nil
-
 }
 
-func GetOpenstackComputeClient(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (*gophercloud.ServiceClient, error) {
-
+func GetOpenstackComputeClient(ctx context.Context,
+	k3sclient client.Client,
+	scope *scope.VjailbreakNodeScope) (*gophercloud.ServiceClient, error) {
 	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
 	if err != nil {
 		return nil, err
