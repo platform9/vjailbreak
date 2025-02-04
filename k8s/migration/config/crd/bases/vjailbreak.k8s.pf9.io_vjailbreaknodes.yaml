@@ -89,7 +89,7 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               openstackflavorid:
-                description: OpenstackFlavorId is the flavor of the VM
+                description: OpenstackFlavorID is the flavor of the VM
                 type: string
             required:
             - imageid
