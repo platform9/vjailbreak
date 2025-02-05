@@ -11,7 +11,7 @@ source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
   iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:224ed336b3d87ce2e3be7e0189bd956b974cc32254aad9ba1c2493264246de16"
+  iso_checksum         = "sha256:67d312441a401c75389b063e1331c5fa11f35813f531dcbcceba765a4895251f"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
@@ -19,20 +19,16 @@ source "qemu" "vjailbreak-image" {
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
-  ssh_password         = "password"
   ssh_username         = "ubuntu"
+  ssh_password         = "password"
   ssh_timeout          = "20m"
   cpus                 = 2
   memory               = 2048
   efi_boot             = false
   shutdown_command     = "echo 'password' | sudo -S shutdown -P now"
+  boot_wait            = "10s"
 
-  boot_wait = "10s"
-
-  # Location of Cloud-Init / Autoinstall Configuration files
-  # Will be served via an HTTP Server from Packer
   http_directory = "${path.root}/cloudinit/"
-
 
   qemuargs = [
     ["-smbios", "type=1,serial=ds=nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/"]
@@ -45,5 +41,27 @@ build {
   provisioner "file" {
     source      = "${path.root}/deploy"
     destination = "/tmp/yamls"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/scripts/install.sh"
+    destination = "/tmp/install.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/configs/k3s.env"
+    destination = "/tmp/k3s.env"
+  }
+
+  provisioner "shell" {
+    inline = [
+      "sudo mkdir -p /etc/pf9",
+      "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+      "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+      "sudo chmod +x /etc/pf9/install.sh",
+      "sudo chown root:root /etc/pf9/k3s.env",
+      "sudo chmod 644 /etc/pf9/k3s.env",
+      "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    ]
   }
 }
