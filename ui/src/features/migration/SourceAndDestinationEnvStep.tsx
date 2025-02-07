@@ -109,7 +109,7 @@ export default function SourceAndDestinationEnvStep({
               display: "grid",
             }}
           >
-            <Typography variant="body1">Source VMWare</Typography>
+            <Typography variant="body1">Source VMware</Typography>
             <Fields>
               <TextField
                 id="vcenterHost"
@@ -179,13 +179,13 @@ export default function SourceAndDestinationEnvStep({
             {validatingVmwareCreds && (
               <>
                 <CircularProgress size={24} />
-                <FormLabel sx={{ mb: 1 }}>Validating VMWare Creds...</FormLabel>
+                <FormLabel sx={{ mb: 1 }}>Validating VMware Creds...</FormLabel>
               </>
             )}
             {vmwareCredsValidated && (
               <>
                 <CheckIcon color="success" fontSize="small" />
-                <FormLabel sx={{ mb: 1 }}>VMWare Creds Validated</FormLabel>
+                <FormLabel sx={{ mb: 1 }}>VMware Creds Validated</FormLabel>
               </>
             )}
             {!!errors["vmwareCreds"] && (
