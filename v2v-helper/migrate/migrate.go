@@ -14,13 +14,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"vjailbreak/openstack"
 
-	"vjailbreak/nbd"
-	"vjailbreak/utils"
-	"vjailbreak/vcenter"
-	"vjailbreak/virtv2v"
-	"vjailbreak/vm"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
@@ -438,7 +439,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if vminfo.OSType == "linux" {
 				if strings.Contains(osRelease, "rhel") {
 					firstbootscriptname := "rhel_enable_dhcp"
-					firstbootscript := utils.RhelFirstBootScript
+					firstbootscript := constants.RhelFirstBootScript
 					firstbootscripts = append(firstbootscripts, firstbootscriptname)
 					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
 					if err != nil {

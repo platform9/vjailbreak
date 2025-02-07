@@ -6,7 +6,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"vjailbreak/vcenter"
+
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/vmware/govmomi/object"

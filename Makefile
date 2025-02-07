@@ -40,6 +40,10 @@ docker-build-image: generate-manifests
 	cp -r k8s/kube-prometheus image_builder/deploy/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
+.PHONY: lint-check
+lint-check:
+	golangci-lint run --path-prefix=k8s/migration
+
 .PHONY: build-image
 build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
