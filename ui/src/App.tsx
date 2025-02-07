@@ -11,19 +11,17 @@ import Onboarding from "./pages/onboarding/Onboarding"
 const AppFrame = styled("div")(() => ({
   position: "relative",
   display: "grid",
-  width: "100vw",
-  height: "100vh",
-  maxWidth: "100vw",
-  maxHeight: "100vh",
   gridTemplateRows: "auto 1fr",
+  height: "100vh",
+  overflow: "hidden"
 }))
 
 const AppContent = styled("div")(({ theme }) => ({
-  width: "100%",
-  height: "100%",
+  overflow: "auto",
   [theme.breakpoints.up("lg")]: {
     maxWidth: "1600px",
     margin: "0 auto",
+    width: "100%",
   },
 }))
 
