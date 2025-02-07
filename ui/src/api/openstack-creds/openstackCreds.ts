@@ -3,6 +3,7 @@ import {
   VJAILBREAK_API_BASE_PATH,
   VJAILBREAK_DEFAULT_NAMESPACE,
 } from "../constants"
+import { createOpenstackTokenRequestBody } from "./helpers"
 import { GetOpenstackCredsList, OpenstackCreds } from "./model"
 
 export const getOpenstackCredentialsList = async (
@@ -46,5 +47,18 @@ export const deleteOpenstackCredentials = async (
   const response = await axios.del<OpenstackCreds>({
     endpoint,
   })
+  return response
+}
+
+export const generateOpenstackToken = async (creds: OpenstackCreds) => {
+  const tokenEndpoint = creds?.spec?.OS_AUTH_URL + "/auth/tokens"
+  const requestBody = createOpenstackTokenRequestBody(creds)
+
+  const response = await axios.post({
+    endpoint: tokenEndpoint,
+    data: requestBody,
+  })
+
+  // Token is in the 'X-Subject-Token' header
   return response
 }

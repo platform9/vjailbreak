@@ -1,4 +1,4 @@
-import { Paper, styled, IconButton, Tooltip, Button, Box, Typography } from "@mui/material"
+import { Paper, styled, IconButton, Tooltip, Button, Box, Typography, Tab, Tabs } from "@mui/material"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } from "@mui/x-data-grid"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -13,13 +13,8 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteConfirmationDialog from "./DeleteConfirmationDialog"
 import { getMigrationPlan, patchMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { Migration } from "src/api/migrations/model"
-
-const STATUS_ORDER = {
-  'Running': 0,
-  'Failed': 1,
-  'Succeeded': 2,
-  'Pending': 3
-}
+import MigrationsTable from "./MigrationsTable"
+import NodesTable from "./NodesTable"
 
 const DashboardContainer = styled("div")({
   display: "flex",
@@ -37,114 +32,6 @@ const StyledPaper = styled(Paper)({
   }
 })
 
-const columns: GridColDef[] = [
-  {
-    field: "name",
-    headerName: "Name",
-    valueGetter: (_, row) => row.metadata?.name,
-    flex: 2,
-  },
-  {
-    field: "status",
-    headerName: "Status",
-    valueGetter: (_, row) => row?.status?.phase || "Pending",
-    flex: 1,
-    sortComparator: (v1, v2) => {
-      const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
-      const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
-      return order1 - order2;
-    }
-  },
-  {
-    field: "status.conditions",
-    headerName: "Progress",
-    valueGetter: (_, row) => row.status?.phase,
-    flex: 2,
-    renderCell: (params) => {
-      const phase = params.row?.status?.phase
-      const conditions = params.row?.status?.conditions
-      return conditions ? (
-        <MigrationProgressWithPopover
-          phase={phase}
-          conditions={params.row?.status?.conditions}
-        />
-      ) : null
-    },
-  },
-  {
-    field: "actions",
-    headerName: "Actions",
-    flex: 1,
-    renderCell: (params) => {
-      const phase = params.row?.status?.phase;
-      const isDisabled = !phase || phase === "Running" || phase === "Pending";
-
-      return (
-        <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
-          <span>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                params.row.onDelete(params.row.metadata?.name);
-              }}
-              disabled={isDisabled}
-              size="small"
-              sx={{
-                cursor: isDisabled ? 'not-allowed' : 'pointer',
-                position: 'relative'
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-      );
-    },
-  },
-]
-
-const paginationModel = { page: 0, pageSize: 25 }
-
-interface CustomToolbarProps {
-  numSelected: number;
-  onDeleteSelected: () => void;
-}
-
-const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
-    >
-      <div>
-        <Typography variant="h6" component="h2">
-          Migrations
-        </Typography>
-      </div>
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        {numSelected > 0 && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({numSelected})
-          </Button>
-        )}
-        <CustomSearchToolbar
-          placeholder="Search by Name, Status, or Progress"
-        />
-      </Box>
-    </GridToolbarContainer>
-  );
-};
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -155,6 +42,7 @@ export default function Dashboard() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+  const [activeTab, setActiveTab] = useState(0);
 
   const { data: migrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -270,45 +158,39 @@ export default function Dashboard() {
     }
   }, [migrations, navigate])
 
-  const migrationsWithActions = migrations?.map(migration => ({
-    ...migration,
-    onDelete: handleDeleteClick
-  })) || []
-
-  const isRowSelectable = (params) => {
-    const phase = params.row?.status?.phase;
-    return !(!phase || phase === "Running" || phase === "Pending");
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
   };
 
   return (
     <DashboardContainer>
       <StyledPaper>
-        <DataGrid
-          rows={migrationsWithActions}
-          columns={columns}
-          initialState={{
-            pagination: { paginationModel },
-            sorting: {
-              sortModel: [{ field: 'status', sort: 'asc' }],
-            },
-          }}
-          pageSizeOptions={[25, 50, 100]}
-          localeText={{ noRowsLabel: "No Migrations Available" }}
-          getRowId={(row) => row.metadata?.name}
-          checkboxSelection
-          isRowSelectable={isRowSelectable}
-          onRowSelectionModelChange={handleSelectionChange}
-          rowSelectionModel={selectedRows}
-          slots={{
-            toolbar: () => (
-              <CustomToolbar
-                numSelected={selectedRows.length}
-                onDeleteSelected={handleDeleteSelected}
-              />
-            ),
-          }}
-        />
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Migrations" />
+          <Tab label="Nodes" />
+        </Tabs>
+
+        {activeTab === 0 ? (
+          <MigrationsTable
+            migrations={migrations || []}
+            onDeleteMigration={handleDeleteClick}
+            onDeleteSelected={(selectedMigrations) => {
+              setDeleteDialog({
+                open: true,
+                migrationName: null,
+                selectedMigrations
+              });
+            }}
+          />
+        ) : (
+          <NodesTable />
+        )}
       </StyledPaper>
+
       <DeleteConfirmationDialog
         open={deleteDialog.open}
         migrationName={deleteDialog.migrationName}

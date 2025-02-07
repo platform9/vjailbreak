@@ -1,0 +1,3 @@
+Dont allow to delete the master node.
+Add Role (Master/Worker) columns to the node table. 
+    - Also add Active Migration and Completed Migrations count  to the node table.
