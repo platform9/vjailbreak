@@ -17,10 +17,10 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "noEmit": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "sourceMap": true,
-    "noEmit": true,
     "jsx": "react-jsx",
     "jsxImportSource": "@emotion/react",
     /* Linting */
@@ -28,6 +28,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
     "paths": {
       "app-config": [
         "config.js"
