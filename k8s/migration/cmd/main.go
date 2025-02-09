@@ -172,6 +172,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
 		os.Exit(1)
 	}
+	if err = (&controller.VjailbreakNodeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
