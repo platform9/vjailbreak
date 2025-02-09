@@ -71,4 +71,13 @@ resources:
   kind: MigrationTemplate
   path: github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8s.pf9.io
+  group: vjailbreak
+  kind: VjailbreakNode
+  path: github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1
+  version: v1alpha1
 version: "3"
