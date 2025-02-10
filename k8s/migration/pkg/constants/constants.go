@@ -6,6 +6,9 @@ import (
 )
 
 const (
+	TerminationPeriod = int64(120)
+	NameMaxLength     = 242
+
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
 	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/master"
 	NodeRoleMaster               = "master"
