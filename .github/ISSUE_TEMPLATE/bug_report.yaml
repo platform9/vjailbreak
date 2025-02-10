@@ -1,0 +1,41 @@
+name: 🐛 Bug Report
+description: Report a bug encountered while using Cluster API
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What steps did you take and what happened?
+      description: |
+        Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
+      placeholder: "A clear and concise description on how to REPRODUCE the bug."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: env_version
+    attributes:
+      label: Environment
+      placeholder: "The version of vJailbreak or controllers used in the environment."
+    validations:
+      required: true
+
+  - type: textarea
+    id: vcenter_version
+    attributes:
+      label: vCenter version
+      placeholder: "$vcenter_version"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else you would like to add?
+      placeholder: "Miscellaneous information that will assist in solving the issue."

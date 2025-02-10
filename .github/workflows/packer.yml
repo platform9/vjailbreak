@@ -9,20 +9,20 @@ on:
       - main
   release:
     types:
-      - created
       - published
-      - edited
-      - released
-      - updated
   workflow_dispatch:
-
+    inputs:
+        branch:
+          description: 'Branch to use'
+          required: true
+          default: 'main'
 
 env:
   PACKER_VERSION: "latest"
-  QCOW2_IMG: quay.io/platform9/vjailbreak
-  UI_IMG: quay.io/platform9/vjailbreak-ui
-  V2V_IMG: quay.io/platform9/vjailbreak-v2v-helper
-  CONTROLLER_IMG: quay.io/platform9/vjailbreak-controller
+  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
+  UI_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-ui
+  V2V_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-v2v-helper
+  CONTROLLER_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-controller
 
 jobs:
   build-containers:
@@ -41,9 +41,7 @@ jobs:
         patch-wording:  'patch,fixes'     # Providing patch-wording will override commits
                                           # defaulting to a patch bump.
         rc-wording:     'RELEASE,alpha'
-        skip-commit: 'true'
         skip-tag: 'true'
-        skip-push: 'true'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -51,20 +49,33 @@ jobs:
       run: |
         # Get the branch name, remove 'refs/heads/' from github.ref
         BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
-        # If the branch is 'main', don't append the branch name to the tag
-        if [ "$BRANCH_NAME" == "main" ]; then
+        GIT_SHA=$(echo "$(git rev-parse --short HEAD)")
+        GIT_BRANCH=$(echo "$(git rev-parse --abbrev-ref HEAD)")
+        # if its a release event bump the version and use that as tag
+        if [[ "${{ github.event_name }}" == "release" ]]; then
+          # In case of release event the tag will be the next version
+          # build version will be the same as tag
           TAG=${{ steps.bump_version.outputs.newTag }}
-        elif [[ "${{ github.event_name }}" == "release" ]]; then
-          TAG=${{ steps.bump_version.outputs.newTag }}
+          BUILD_VERSION=${TAG}
+          RELEASE_EVENT=true
         else
-          TAG=${{ steps.bump_version.outputs.newTag }}-$BRANCH_NAME
+          BUILD_VERSION=${{ github.run_number }}
+          # build release version as version-branch-sha
+          VERSION=${BUILD_VERSION}-${GIT_BRANCH}-${GIT_SHA}
+          # Since this is a merge or pull-request 
+          # use the TAG as the version
+          TAG=${VERSION}
         fi
-        echo "TAG=$TAG" >> $GITHUB_ENV
+
+        echo "BUILD_VERSION=$BUILD_VERSION" >> $GITHUB_ENV
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "TAG=${TAG}" >> $GITHUB_ENV
 
         echo "QCOW2_IMG=${{ env.QCOW2_IMG }}:$TAG" >> $GITHUB_ENV
         echo "UI_IMG=${{ env.UI_IMG }}:$TAG" >> $GITHUB_ENV
         echo "V2V_IMG=${{ env.V2V_IMG }}:$TAG" >> $GITHUB_ENV
         echo "CONTROLLER_IMG=${{ env.CONTROLLER_IMG }}:$TAG" >> $GITHUB_ENV
+
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -72,14 +83,14 @@ jobs:
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
-        registry: quay.io
+        registry: ${{ vars.REGISTRY }}
         username: ${{ secrets.QUAY_ROBOT_USERNAME }}
         password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
 
     - name: Build and push UI image
       run: make ui
 
-    - name: Build and push helper image
+    - name: Build and push v2v-helper image
       run: make v2v-helper
 
     - name: Build and push controller image
