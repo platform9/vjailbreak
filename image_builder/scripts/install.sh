@@ -13,8 +13,8 @@ check_command() {
   fi
 }
 
-# sleep for 40s for env variables to be reflected properly
-sleep 40
+# sleep for 1min for env variables to be reflected properly in the VM after startup. 
+sleep 60
 
 # Ensure the environment variables are set for cron
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -33,7 +33,7 @@ if [ -z "$IS_MASTER" ]; then
   exit 1
 fi
 
-log "IS_MASTER: $IS_MASTER"
+log "IS_MASTER: ${IS_MASTER}"
 log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
 
