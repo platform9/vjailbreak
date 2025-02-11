@@ -17,7 +17,8 @@ check_command() {
 sleep 60
 
 # Ensure the environment variables are set for cron
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -47,10 +48,13 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -
   check_command "Installing K3s master"
 
-  # Sleep for 10 seconds after master installation
+  # Sleep for 30 seconds after master installation
   sleep 30
 
-  # create a file values.yaml to set ip and class
+  # move kubeconfig to ~./kube/config so that helm can pick it up 
+  kubectl config view --raw > .kube/config
+
+
   # Create a configuration YAML file with the master IP populated
   cat <<EOF > values.yaml
 controller:
