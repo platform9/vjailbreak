@@ -58,6 +58,7 @@ build {
       "sudo mkdir -p /etc/pf9",
       "sudo mv /tmp/install.sh /etc/pf9/install.sh",
       "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+      "sudo mv /tmp/yamls /etc/pf9/yamls",
       "sudo chmod +x /etc/pf9/install.sh",
       "sudo chown root:root /etc/pf9/k3s.env",
       "sudo chmod 644 /etc/pf9/k3s.env",

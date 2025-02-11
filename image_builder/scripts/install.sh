@@ -52,16 +52,16 @@ if [ "$IS_MASTER" == "true" ]; then
 
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
-  sudo kubectl --request-timeout=300s apply --server-side -f /tmp/yamls/kube-prometheus/manifests/setup
+  sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
   log "Applied kube-prometheus setup manifests."
 
   sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring --timeout=300s
   log "CustomResourceDefinitions established."
 
-  sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/
+  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
   log "Applied kube-prometheus manifests."
 
-  sudo kubectl --request-timeout=300s apply -f /tmp/yamls/
+  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   log "Applied additional manifests."
 
   log "K3s master setup completed."
