@@ -10,6 +10,7 @@ export const createOpenstackCredsJson = (params) => {
     OS_PASSWORD,
     OS_REGION_NAME,
     OS_TENANT_NAME,
+    OS_INSECURE,
   } = params || {}
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
@@ -25,6 +26,8 @@ export const createOpenstackCredsJson = (params) => {
       OS_PASSWORD,
       OS_REGION_NAME,
       OS_TENANT_NAME,
+      OS_INSECURE
+      
     },
   }
 }
