@@ -121,7 +121,9 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 	return ctrl.Result{}, nil
 }
 
-func (r *MigrationPlanReconciler) reconcileDelete(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+func (r *MigrationPlanReconciler) reconcileDelete(
+	ctx context.Context,
+	scope *scope.MigrationPlanScope) (ctrl.Result, error) { //nolint:unparam // required
 	migrationplan := scope.MigrationPlan
 	log := scope.Logger
 
@@ -311,7 +313,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 			Spec: corev1.PodSpec{
 				RestartPolicy:                 corev1.RestartPolicyNever,
 				ServiceAccountName:            "migration-controller-manager",
-				TerminationGracePeriodSeconds: ptr.To(int64(constants.TerminationPeriod)),
+				TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 				DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 				HostNetwork:                   true,
 				Containers: []corev1.Container{

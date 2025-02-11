@@ -35,7 +35,10 @@ type MigrationUtils interface {
 	GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.PodConditionType, reasons ...string) int
 
 	// GeneratePodCondition generates a pod condition.
-	GeneratePodCondition(conditionType corev1.PodConditionType, status corev1.ConditionStatus, reason, message string, timestamp metav1.Time) *corev1.PodCondition
+	GeneratePodCondition(conditionType corev1.PodConditionType,
+		status corev1.ConditionStatus,
+		reason, message string,
+		timestamp metav1.Time) *corev1.PodCondition
 
 	// SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime.
 	SortConditionsByLastTransitionTime(conditions []corev1.PodCondition)
@@ -53,7 +56,11 @@ func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList
 		}
 
 		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeValidated, constants.MigrationReason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeValidated, corev1.ConditionTrue, constants.MigrationReason, "Migration validated successfully", eventList.Items[i].LastTimestamp)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeValidated,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			"Migration validated successfully",
+			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
 			existingConditions = append(existingConditions, *statuscondition)
@@ -73,7 +80,11 @@ func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList 
 		}
 		reason, message := SplitEventStringOnComma(eventList.Items[i].Message)
 		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeDataCopy, reason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeDataCopy, corev1.ConditionTrue, reason, message, eventList.Items[i].LastTimestamp)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeDataCopy,
+			corev1.ConditionTrue,
+			reason,
+			message,
+			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
 			existingConditions = append(existingConditions, *statuscondition)
@@ -93,7 +104,11 @@ func CreateMigratedCondition(migration *vjailbreakv1alpha1.Migration, eventList 
 		}
 
 		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrated, constants.MigrationReason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated, corev1.ConditionTrue, constants.MigrationReason, "Migrating VM from VMware to Openstack", eventList.Items[i].LastTimestamp)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			"Migrating VM from VMware to Openstack",
+			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
 			existingConditions = append(existingConditions, *statuscondition)
@@ -118,9 +133,12 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 }
 
 // SplitStringOnComma splits a string by comma and returns a slice of substrings.
-func SplitEventStringOnComma(input string) (string, string) {
-	s := strings.Split(input, ",")
-	return strings.TrimSpace(s[0]), strings.TrimSpace(s[1])
+func SplitEventStringOnComma(input string) (reason, message string) {
+	parts := strings.Split(input, ",")
+	if len(parts) > 1 {
+		return parts[0], parts[1]
+	}
+	return parts[0], ""
 }
 
 func GetSatusConditions(migration *vjailbreakv1alpha1.Migration) []corev1.PodCondition {
@@ -136,12 +154,16 @@ func GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.Pod
 	return -1
 }
 
-func GeneratePodCondition(conditionType corev1.PodConditionType, status corev1.ConditionStatus, reason, message string, timestamp metav1.Time) *corev1.PodCondition {
+func GeneratePodCondition(conditionType corev1.PodConditionType,
+	status corev1.ConditionStatus,
+	reason, message string,
+	timestamp metav1.Time) *corev1.PodCondition {
 	return &corev1.PodCondition{
-		Type:    conditionType,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: timestamp,
 	}
 }
 

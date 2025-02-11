@@ -147,6 +147,11 @@ issues:
       linters:
         - dupl
 
+    # The logic of creating a linter is similar between linters, it's not duplication.
+    - path: pkg/scope
+      linters:
+        - dupl
+
     # Deprecated configuration options.
     - path: pkg/commands/run.go
       linters: [staticcheck]
