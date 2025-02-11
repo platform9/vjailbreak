@@ -44,10 +44,30 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
 
   # Install K3s master with the specific version
-  sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION INSTALL_K3S_EXEC="--node-taint CriticalAddonsOnly=true:NoExecute" sh -
+  sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -
   check_command "Installing K3s master"
 
   # Sleep for 10 seconds after master installation
+  sleep 30
+
+  # create a file values.yaml to set ip and class
+  # Create a configuration YAML file with the master IP populated
+  cat <<EOF > values.yaml
+controller:
+  service:
+    loadBalancerIP: "$MASTER_IP"
+    ingressClass: nginx
+EOF
+
+  log "YAML file 'values.yaml' has been created with the master IP."
+
+  # Using helm to install nginx-ingress-controller.
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+  helm repo update
+  helm install nginx-ingress ingress-nginx/ingress-nginx --namespace nginx-ingress --create-namespace --values=values.yaml
+  check_command "Installing NGINX Ingress Controller"
+
+  # sleep for 10s for nginx controller to come up. 
   sleep 10
 
   # Apply monitoring manifests
