@@ -3,13 +3,13 @@ import { OpenstackCreds } from "../openstack-creds/model"
 export interface NodeList {
   apiVersion: string
   items: NodeItem[]
-  kind: string
+  kind: "VjailbreakNodeList"
   metadata: NodeListMetadata
 }
 
 export interface NodeItem {
   apiVersion: string
-  kind: string
+  kind: "VjailbreakNode"
   metadata: ItemMetadata
   spec: Spec
   status: Status
@@ -41,4 +41,16 @@ export interface Status {
 export interface NodeListMetadata {
   continue: string
   resourceVersion: string
+}
+
+export interface OpenstackFlavor {
+  id: string
+  name: string
+  vcpus: number
+  ram: number
+  disk: number
+}
+
+export interface OpenstackFlavorsResponse {
+  flavors: OpenstackFlavor[]
 }

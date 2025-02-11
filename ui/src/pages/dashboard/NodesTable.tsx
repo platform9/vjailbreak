@@ -10,28 +10,25 @@ import {
     Box,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    CircularProgress,
     Alert,
     Snackbar
 } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import { useState } from "react";
-import ScaleUpDrawer from "./ScaleUpDrawer";
 import WarningIcon from '@mui/icons-material/Warning';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HelpIcon from '@mui/icons-material/Help';
 import ErrorIcon from '@mui/icons-material/Error';
+import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
+import { useState } from "react";
+import ScaleUpDrawer from "./ScaleUpDrawer";
+import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 import { useNodesQuery } from "src/hooks/api/useNodesQuery"
 import { deleteNode } from "src/api/nodes/nodeMappings";
 import { useQueryClient } from "@tanstack/react-query";
 import { NODES_QUERY_KEY } from "src/hooks/api/useNodesQuery";
+import { NodeItem } from "src/api/nodes/model";
 
 const columns: GridColDef[] = [
     {
@@ -187,19 +184,19 @@ const NodesToolbar = ({
     );
 };
 
-
-
 export default function NodesTable() {
     const { data: nodes, isLoading } = useNodesQuery();
     const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
     const [scaleUpOpen, setScaleUpOpen] = useState(false);
     const [scaleDownDialogOpen, setScaleDownDialogOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const queryClient = useQueryClient();
+    const [scaleDownError, setScaleDownError] = useState<string | null>(null);
 
-    const transformedNodes: NodeSelector[] = nodes?.map(node => ({
+    const masterNode = nodes?.find(node => node.spec.noderole === 'master') || null;
+
+    const transformedNodes: NodeSelector[] = nodes?.map((node: NodeItem) => ({
         id: node.metadata.name,
         name: node.metadata.name,
         status: node.status?.status || 'Unknown',
@@ -211,6 +208,7 @@ export default function NodesTable() {
     const handleSelectionChange = (newSelection) => {
         setSelectedNodes(newSelection);
     };
+
 
     const handleScaleUp = () => {
         setScaleUpOpen(true);
@@ -229,7 +227,7 @@ export default function NodesTable() {
     const confirmScaleDown = async () => {
         try {
             setLoading(true);
-            setError(null);
+            setScaleDownError(null);
 
             // Delete nodes sequentially to handle errors better
             for (const nodeName of selectedNodes) {
@@ -245,10 +243,15 @@ export default function NodesTable() {
 
         } catch (error) {
             console.error('Error scaling down nodes:', error);
-            setError('Failed to scale down nodes. Please try again.');
+            setScaleDownError('Failed to scale down nodes. Please try again.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCloseScaleUp = () => {
+        setScaleUpOpen(false);
+        setSelectedNodes([]);
     };
 
     const remainingNodesAfterScaleDown = transformedNodes.length - selectedNodes.length;
@@ -260,18 +263,6 @@ export default function NodesTable() {
 
     const isRowSelectable = (params: GridRowParams) => {
         return params.row.role === 'worker';
-    };
-
-    const handleCloseScaleDown = () => {
-        setScaleDownDialogOpen(false);
-        setSelectedNodes([]);
-        setError(null);
-        // reset the selection
-    };
-
-    const handleCloseScaleUp = () => {
-        setScaleUpOpen(false);
-        setSelectedNodes([]);
     };
 
     return (
@@ -312,61 +303,41 @@ export default function NodesTable() {
                 }}
             />
 
-            {/* Scale Down Confirmation Dialog */}
-            <Dialog
+            <ConfirmationDialog
                 open={scaleDownDialogOpen}
-                onClose={handleCloseScaleDown}
-            >
-                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <WarningIcon color="warning" />
-                    Confirm Scale Down
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ display: 'grid', gap: 2 }}>
-                        <Typography>
-                            Are you sure you want to scale down the following {selectedNodes.length} node(s)?
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                            {selectedNodes.map((name) => (
-                                <Typography key={name} variant="body2">• {name}</Typography>
-                            ))}
-                        </Box>
-                        {error && (
-                            <Alert severity="error" sx={{ mt: 2 }}>
-                                {error}
-                            </Alert>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button
-                        onClick={handleCloseScaleDown}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={confirmScaleDown}
-                        color="error"
-                        disabled={loading}
-                        sx={{
-                            minWidth: 150, // Ensure consistent width during loading
-                            display: 'flex',
-                            gap: 1
-                        }}
-                    >
-                        {loading ? (
-                            <>
-                                Removing Node
-                                <CircularProgress size={20} sx={{ color: 'warning.main' }} />
-                            </>
-                        ) : (
-                            'Scale Down'
-                        )}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                onClose={() => {
+                    setScaleDownDialogOpen(false);
+                    setSelectedNodes([]);
+                    setScaleDownError(null);
+                }}
+                title="Confirm Scale Down"
+                icon={<WarningIcon color="warning" />}
+                message={
+                    selectedNodes.length > 1
+                        ? "Are you sure you want to scale down these nodes?"
+                        : "Are you sure you want to scale down this node?"
+                }
+                items={transformedNodes
+                    .filter(node => selectedNodes.includes(node.name))
+                    .map(node => ({
+                        id: node.name,
+                        name: node.name
+                    }))
+                }
+                actionLabel="Scale Down"
+                actionColor="error"
+                actionVariant="outlined"
+                onConfirm={confirmScaleDown}
+                errorMessage={scaleDownError}
+                onErrorChange={setScaleDownError}
+            />
 
-            {/* Success Notification */}
+            <ScaleUpDrawer
+                open={scaleUpOpen}
+                onClose={handleCloseScaleUp}
+                masterNode={masterNode}
+            />
+
             <Snackbar
                 open={!!successMessage}
                 autoHideDuration={6000}
@@ -379,12 +350,6 @@ export default function NodesTable() {
                     {successMessage}
                 </Alert>
             </Snackbar>
-
-            {/* Scale Up Drawer */}
-            <ScaleUpDrawer
-                open={scaleUpOpen}
-                onClose={handleCloseScaleUp}
-            />
         </>
     );
 } 

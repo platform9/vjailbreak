@@ -10,6 +10,7 @@ import {
     IconButton,
     Tooltip,
     CircularProgress,
+    InputAdornment,
 } from "@mui/material";
 import { useState, useCallback, useEffect } from "react";
 import Step from "src/components/forms/Step";
@@ -21,20 +22,18 @@ import InfoIcon from '@mui/icons-material/Info';
 import CheckIcon from '@mui/icons-material/Check';
 import { v4 as uuidv4 } from "uuid";
 import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
-import { postOpenstackCredentials, getOpenstackCredentials, deleteOpenstackCredentials, generateOpenstackToken } from "src/api/openstack-creds/openstackCreds";
+import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { debounce } from "src/utils";
-import { OpenstackCreds } from "src/api/openstack-creds/model";
+import { OpenstackCreds, OpenstackImage } from "src/api/openstack-creds/model";
+import { getOpenstackImages, createNodes, getOpenstackFlavors } from "src/api/nodes/nodeMappings";
+import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 
 // Mock data - replace with actual data from API
-const FLAVORS = [
-    { id: 'standard-2vcpu-4gb', name: 'Standard 2vCPU 4GB RAM' },
-    { id: 'performance-4vcpu-8gb', name: 'Performance 4vCPU 8GB RAM' },
-    { id: 'highcpu-8vcpu-16gb', name: 'High CPU 8vCPU 16GB RAM' },
-];
 
 interface ScaleUpDrawerProps {
     open: boolean;
     onClose: () => void;
+    masterNode: NodeItem | null;
 }
 
 const StepHeader = ({ number, label, tooltip }: { number: string, label: string, tooltip: string }) => (
@@ -48,9 +47,8 @@ const StepHeader = ({ number, label, tooltip }: { number: string, label: string,
     </Box>
 );
 
-export default function ScaleUpDrawer({ open, onClose }: ScaleUpDrawerProps) {
+export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDrawerProps) {
     const [openstackCreds, setOpenstackCreds] = useState<OpenstackCreds | null>(null);
-    const [flavor, setFlavor] = useState('');
     const [nodeCount, setNodeCount] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -58,120 +56,132 @@ export default function ScaleUpDrawer({ open, onClose }: ScaleUpDrawerProps) {
     const [openstackCredsValidated, setOpenstackCredsValidated] = useState(false);
     const [openstackError, setOpenstackError] = useState<string | null>(null);
     const [openstackCredsId, setOpenstackCredsId] = useState<string>("");
+    const [masterNodeImage, setMasterNodeImage] = useState<OpenstackImage | null>(null);
+    const [loadingImages, setLoadingImages] = useState(false);
+    const [imagesError, setImagesError] = useState<string | null>(null);
+    const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([]);
+    const [selectedFlavor, setSelectedFlavor] = useState('');
+    const [loadingFlavors, setLoadingFlavors] = useState(false);
+    const [flavorsError, setFlavorsError] = useState<string | null>(null);
 
     // Reset state when drawer closes
     const handleClose = () => {
+        clearStates();
+        onClose();
+    };
+
+    const clearStates = () => {
         setOpenstackCreds(null);
         setOpenstackCredsId("");
         setOpenstackCredsValidated(false);
         setOpenstackError(null);
         setValidatingOpenstackCreds(false);
-        setFlavor('');
         setNodeCount(1);
         setError(null);
-
-        // Delete credentials if they were created
-        if (openstackCredsId) {
-            deleteOpenstackCredentials(openstackCredsId).catch(console.error);
-        }
-
-        onClose();
-    };
+        setMasterNodeImage(null);
+        setSelectedFlavor('');
+        setFlavors([]);
+        setLoadingImages(false);
+        setLoadingFlavors(false);
+        setImagesError(null);
+        setFlavorsError(null);
+    }
 
     const validateOpenstackCreds = useCallback(async (creds: OpenstackCreds) => {
-        try {
-            setValidatingOpenstackCreds(true);
-            setOpenstackError(null);
+        setValidatingOpenstackCreds(true);
+        setOpenstackError(null);
 
-            // Show loader while creating credentials
-            const credsId = uuidv4();
-            const credsJson = createOpenstackCredsJson({
-                name: credsId,
-                ...creds
-            });
+        const credsId = uuidv4();
 
-            try {
-                await postOpenstackCredentials(credsJson);
-                setOpenstackCredsId(credsId);
-
-                // Generate OpenStack token after credentials are validated
-                const token = await generateOpenstackToken(creds);
-                console.log('OpenStack token generated:', token);
-
-            } catch (error) {
-                console.error("Error creating OpenStack credentials:", error);
-                setOpenstackError("Failed to create credentials");
-                setValidatingOpenstackCreds(false);
-                return;
-            }
-
-            // Poll for validation status
-            const pollValidation = async () => {
-                try {
-                    const response = await getOpenstackCredentials(credsId);
-                    const status = response?.status?.openstackValidationStatus;
-                    const message = response?.status?.openstackValidationMessage;
-
-                    if (status === "Succeeded") {
-                        setOpenstackCredsValidated(true);
-                        setValidatingOpenstackCreds(false);
-                    } else if (status === "Failed") {
-                        setOpenstackError(message || "Validation failed");
-                        setValidatingOpenstackCreds(false);
-                        // Clean up failed credentials
-                        deleteOpenstackCredentials(credsId).catch(console.error);
-                    } else {
-                        setTimeout(pollValidation, 3000);
-                    }
-                } catch (error) {
-                    console.error("Error polling validation status:", error);
-                    setOpenstackError("Failed to validate credentials");
-                    setValidatingOpenstackCreds(false);
-                    // Clean up on error
-                    deleteOpenstackCredentials(credsId).catch(console.error);
-                }
-            };
-
-            pollValidation();
-        } catch (error) {
-            console.error("Error in validation process:", error);
-            setOpenstackError("Failed to validate credentials");
+        const handleError = (error: Error, message: string) => {
+            console.error(message, error);
+            setOpenstackError(message);
             setValidatingOpenstackCreds(false);
+            if (credsId) {
+                deleteOpenstackCredentials(credsId).catch(console.error);
+            }
+        };
+
+        try {
+            const credsJson = createOpenstackCredsJson({ name: credsId, ...creds });
+            await postOpenstackCredentials(credsJson);
+            setOpenstackCredsId(credsId);
+
+
+            setOpenstackCredsValidated(true);
+            setValidatingOpenstackCreds(false);
+        } catch (error) {
+            handleError(error as Error, "Failed to validate credentials");
+            return;
         }
     }, []);
+
+    useEffect(() => {
+        const fetchImages = async () => {
+            if (openstackCredsId && openstackCreds) {
+                setLoadingImages(true);
+                try {
+                    const imagesResponse = await getOpenstackImages(openstackCreds);
+                    setMasterNodeImage(imagesResponse.images.find(img => img.id === masterNode?.spec.imageid) || null);
+                } catch (error) {
+                    console.error('Failed to fetch images:', error);
+                    setImagesError('Failed to fetch OpenStack images. Please try again.');
+                } finally {
+                    setLoadingImages(false);
+                }
+            }
+        };
+        const fetchFlavors = async () => {
+            if (openstackCreds) {
+                setLoadingFlavors(true);
+                try {
+                    const response = await getOpenstackFlavors(openstackCreds);
+                    setFlavors(response.flavors);
+                } catch (error) {
+                    console.error('Failed to fetch flavors:', error);
+                    setFlavorsError('Failed to fetch OpenStack flavors');
+                } finally {
+                    setLoadingFlavors(false);
+                }
+            }
+        };
+        fetchImages();
+        fetchFlavors();
+    }, [openstackCredsId, openstackCreds]);
 
     const debouncedValidation = useCallback(
         debounce((creds) => validateOpenstackCreds(creds), 3000),
         [validateOpenstackCreds]
     );
 
-    const handleOpenstackCredsChange = (values: any) => {
+    const handleOpenstackCredsChange = (values: OpenstackCreds) => {
+        clearStates();
         setOpenstackCreds(values);
-        setOpenstackCredsValidated(false);
+        debouncedValidation.cancel();
+
         debouncedValidation(values);
     };
 
+
     const handleSubmit = async () => {
-        if (!openstackCreds || !flavor || !nodeCount || !openstackCredsValidated) {
-            setError('Please fill in all required fields and ensure credentials are validated');
+        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount) {
+            setError('Please fill in all required fields');
             return;
         }
 
         try {
             setLoading(true);
-            // TODO: API call to scale up nodes using openstackCredsId
-            console.log('Scaling up nodes with:', {
-                openstackCredsId,
-                flavor,
-                nodeCount,
-                role: 'worker'
+            await createNodes({
+                imageId: masterNode.spec.imageid,
+                openstackCreds: openstackCreds,
+                count: nodeCount,
+                flavorId: selectedFlavor
             });
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            onClose();
+            handleClose();
         } catch (error) {
             console.error('Error scaling up nodes:', error);
-            setError('Failed to scale up nodes. Please try again.');
+            setError(error instanceof Error ? error.message : 'Failed to scale up nodes');
         } finally {
             setLoading(false);
         }
@@ -240,44 +250,49 @@ export default function ScaleUpDrawer({ open, onClose }: ScaleUpDrawerProps) {
                             tooltip="Configure the specification for the new nodes."
                         />
                         <Box sx={{ ml: 6, mt: 2, display: 'grid', gap: 3 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Instance Type</InputLabel>
-                                <Select
-                                    value={flavor}
-                                    label="Instance Type"
-                                    onChange={(e) => setFlavor(e.target.value)}
-                                    required
-                                >
-                                    {FLAVORS.map((flavor) => (
-                                        <MenuItem key={flavor.id} value={flavor.id}>
-                                            {flavor.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                            {/* 
-                            <FormControl fullWidth>
-                                <InputLabel>Image</InputLabel>
-                                <Select
-                                    value={image}
-                                    label="Image"
-                                    onChange={(e) => setImage(e.target.value)}
-                                    required
-                                >
-                                    {IMAGES.map((image) => (
-                                        <MenuItem key={image.id} value={image.id}>
-                                            {image.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-
                             <TextField
-                                label="Role"
-                                value="worker"
+                                label="Image"
+                                value={loadingImages ? "Loading Images..." : masterNodeImage?.name || ''}
                                 disabled
                                 fullWidth
-                            /> */}
+                                required
+                                helperText={imagesError ? imagesError : "Using master node image"}
+                                InputProps={{
+                                    endAdornment: loadingImages && (
+                                        <InputAdornment position="end">
+                                            <CircularProgress size={24} />
+                                        </InputAdornment>
+                                    ),
+                                }}
+                                error={!!imagesError}
+                            />
+
+                            <FormControl error={!!flavorsError} fullWidth>
+                                <InputLabel>{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
+                                <Select
+                                    value={selectedFlavor}
+                                    label="Flavor"
+                                    onChange={(e) => setSelectedFlavor(e.target.value)}
+                                    required
+                                    disabled={loadingFlavors}
+                                    IconComponent={
+                                        loadingFlavors
+                                            ? () => <CircularProgress size={24} sx={{ marginRight: 2, display: 'flex', alignItems: 'center' }} />
+                                            : ArrowDropDownIcon
+                                    }
+                                >
+                                    {flavors.map((flavor) => (
+                                        <MenuItem key={flavor.id} value={flavor.id}>
+                                            {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                {flavorsError && (
+                                    <FormLabel error sx={{ mt: 1, fontSize: '0.75rem' }}>
+                                        {flavorsError}
+                                    </FormLabel>
+                                )}
+                            </FormControl>
                         </Box>
                     </div>
 
@@ -317,7 +332,7 @@ export default function ScaleUpDrawer({ open, onClose }: ScaleUpDrawerProps) {
                 submitButtonLabel="Scale Up"
                 onClose={handleClose}
                 onSubmit={handleSubmit}
-                disableSubmit={!openstackCreds || !flavor || loading || !openstackCredsValidated}
+                disableSubmit={!masterNode || !selectedFlavor || loading || !openstackCredsValidated}
                 submitting={loading}
             />
         </StyledDrawer>

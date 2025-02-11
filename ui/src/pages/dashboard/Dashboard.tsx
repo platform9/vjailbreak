@@ -1,20 +1,17 @@
-import { Paper, styled, IconButton, Tooltip, Button, Box, Typography, Tab, Tabs } from "@mui/material"
-import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } from "@mui/x-data-grid"
+import { Paper, styled, Tab, Tabs } from "@mui/material"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
-import MigrationProgressWithPopover from "./MigrationProgressWithPopover"
 import { deleteMigration } from "src/api/migrations/migrations"
 import { useQueryClient } from "@tanstack/react-query"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
-import DeleteIcon from '@mui/icons-material/DeleteOutlined';
-import DeleteConfirmationDialog from "./DeleteConfirmationDialog"
+import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog"
 import { getMigrationPlan, patchMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
 import NodesTable from "./NodesTable"
+import WarningIcon from '@mui/icons-material/Warning';
 
 const DashboardContainer = styled("div")({
   display: "flex",
@@ -35,14 +32,10 @@ const StyledPaper = styled(Paper)({
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean, migrationName: string | null, selectedMigrations?: Migration[] }>({
-    open: false,
-    migrationName: null
-  });
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
-  const [activeTab, setActiveTab] = useState(0);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState(0)
 
   const { data: migrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -55,102 +48,73 @@ export default function Dashboard() {
   })
 
   const handleDeleteClick = (migrationName: string) => {
-    setDeleteError(null);
-    setDeleteDialog({
-      open: true,
-      migrationName
-    });
-  };
+    const migration = migrations?.find(m => m.metadata.name === migrationName)
+    if (migration) {
+      setSelectedMigrations([migration])
+      setDeleteDialogOpen(true)
+    }
+  }
 
   const handleDeleteClose = () => {
-    setDeleteError(null);
-    setDeleteDialog({
-      open: false,
-      migrationName: null
-    });
-  };
+    setDeleteDialogOpen(false)
+    setSelectedMigrations([])
+    setDeleteError(null)
+  }
 
-  const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
-    setSelectedRows(newSelection);
-  };
-
-  const handleDeleteSelected = () => {
-    const selectedMigrations = migrations?.filter(
-      m => selectedRows.includes(m.metadata?.name)
-    );
-    if (!selectedMigrations?.length) return;
-
-    setDeleteDialog({
-      open: true,
-      migrationName: null,
-      selectedMigrations
-    });
-  };
+  const handleDeleteSelected = (migrations: Migration[]) => {
+    setSelectedMigrations(migrations)
+    setDeleteDialogOpen(true)
+  }
 
   const handleDeleteMigration = async (migrations: Migration[]) => {
-    try {
-      // Group VMs by migration plan
-      const migrationPlanUpdates = migrations.reduce((acc, migration) => {
-        const planId = migration.spec.migrationPlan;
-        if (!acc[planId]) {
-          acc[planId] = {
-            vmsToRemove: new Set<string>(),
-            migrationsToDelete: new Set<string>()
-          };
+    // Group VMs by migration plan
+    const migrationPlanUpdates = migrations.reduce((acc, migration) => {
+      const planId = migration.spec.migrationPlan
+      if (!acc[planId]) {
+        acc[planId] = {
+          vmsToRemove: new Set<string>(),
+          migrationsToDelete: new Set<string>()
         }
-        acc[planId].vmsToRemove.add(migration.spec.vmName);
-        acc[planId].migrationsToDelete.add(migration.metadata.name);
-        return acc;
-      }, {} as Record<string, { vmsToRemove: Set<string>, migrationsToDelete: Set<string> }>);
+      }
+      acc[planId].vmsToRemove.add(migration.spec.vmName)
+      acc[planId].migrationsToDelete.add(migration.metadata.name)
+      return acc
+    }, {} as Record<string, { vmsToRemove: Set<string>, migrationsToDelete: Set<string> }>)
 
-      // Update each migration plan once
-      await Promise.all(
-        Object.entries(migrationPlanUpdates).map(async ([planId, { vmsToRemove, migrationsToDelete }]) => {
-          const migrationPlan = await getMigrationPlan(planId);
-          const updatedVirtualMachines = migrationPlan.spec.virtualmachines[0].filter(
-            vm => !vmsToRemove.has(vm)
-          );
+    // Update each migration plan once
+    await Promise.all(
+      Object.entries(migrationPlanUpdates).map(async ([planId, { vmsToRemove, migrationsToDelete }]) => {
+        const migrationPlan = await getMigrationPlan(planId)
+        const updatedVirtualMachines = migrationPlan.spec.virtualmachines?.[0]?.filter(
+          vm => !vmsToRemove.has(vm)
+        )
 
-          await patchMigrationPlan(planId, {
-            spec: {
-              virtualmachines: [updatedVirtualMachines]
-            }
-          });
-
-          // Delete all migrations for this plan
-          await Promise.all(
-            Array.from(migrationsToDelete).map(migrationName =>
-              deleteMigration(migrationName)
-            )
-          );
+        await patchMigrationPlan(planId, {
+          spec: {
+            virtualmachines: [updatedVirtualMachines]
+          }
         })
-      );
 
-    } catch (error) {
-      console.error("Error removing VMs from migration plan", error);
-      throw error;
+        // Delete all migrations for this plan
+        await Promise.all(
+          Array.from(migrationsToDelete).map(migrationName =>
+            deleteMigration(migrationName)
+          )
+        )
+      })
+    )
+
+    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+    handleDeleteClose()
+  }
+
+  const getCustomErrorMessage = (error: Error | string) => {
+    const baseMessage = "Failed to delete migrations"
+    if (error instanceof Error) {
+      return `${baseMessage}: ${error.message}`
     }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteDialog.selectedMigrations?.length) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-
-    try {
-      await handleDeleteMigration(deleteDialog.selectedMigrations);
-      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
-    } catch (error) {
-      setDeleteError(
-        error instanceof Error ? error.message : 'Failed to delete migrations'
-      );
-    } finally {
-      setIsDeleting(false);
-      handleDeleteClose();
-      setSelectedRows([]);
-    }
-  };
+    return baseMessage
+  }
 
   useEffect(() => {
     if (!!migrations && migrations.length === 0) {
@@ -159,8 +123,8 @@ export default function Dashboard() {
   }, [migrations, navigate])
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  };
+    setActiveTab(newValue)
+  }
 
   return (
     <DashboardContainer>
@@ -178,27 +142,33 @@ export default function Dashboard() {
           <MigrationsTable
             migrations={migrations || []}
             onDeleteMigration={handleDeleteClick}
-            onDeleteSelected={(selectedMigrations) => {
-              setDeleteDialog({
-                open: true,
-                migrationName: null,
-                selectedMigrations
-              });
-            }}
+            onDeleteSelected={handleDeleteSelected}
           />
         ) : (
           <NodesTable />
         )}
       </StyledPaper>
 
-      <DeleteConfirmationDialog
-        open={deleteDialog.open}
-        migrationName={deleteDialog.migrationName}
-        selectedMigrations={deleteDialog.selectedMigrations}
+      <ConfirmationDialog
+        open={deleteDialogOpen}
         onClose={handleDeleteClose}
-        onConfirm={handleDeleteConfirm}
-        isDeleting={isDeleting}
-        error={deleteError}
+        title="Confirm Delete"
+        icon={<WarningIcon color="warning" />}
+        message={selectedMigrations.length > 1
+          ? "Are you sure you want to delete these migrations?"
+          : `Are you sure you want to delete migration "${selectedMigrations[0]?.metadata.name}"?`
+        }
+        items={selectedMigrations.map(m => ({
+          id: m.metadata.name,
+          name: m.metadata.name
+        }))}
+        actionLabel="Delete"
+        actionColor="error"
+        actionVariant="outlined"
+        onConfirm={() => handleDeleteMigration(selectedMigrations)}
+        customErrorMessage={getCustomErrorMessage}
+        errorMessage={deleteError}
+        onErrorChange={setDeleteError}
       />
     </DashboardContainer>
   )
