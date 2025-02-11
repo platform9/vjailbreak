@@ -70,7 +70,6 @@ export interface OpenstackCredsSpec {
   OS_REGION_NAME: string
   OS_TENANT_NAME: string
   OS_USERNAME: string
-  OS_INSECURE?: string
 }
 
 export interface GetOpenstackCredsListMetadata {

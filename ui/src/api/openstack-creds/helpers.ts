@@ -1,5 +1,13 @@
 import { v4 as uuidv4 } from "uuid"
 
+
+// Helper function to parse OS_INSECURE from string to boolean
+const getBooleanValue = (value: string | undefined): boolean | undefined => {
+  if (value === undefined) return undefined;
+  return value.toLowerCase() === "true";
+};
+
+
 export const createOpenstackCredsJson = (params) => {
   const {
     name,
@@ -26,7 +34,7 @@ export const createOpenstackCredsJson = (params) => {
       OS_PASSWORD,
       OS_REGION_NAME,
       OS_TENANT_NAME,
-      OS_INSECURE
+      OS_INSECURE: getBooleanValue(OS_INSECURE), 
       
     },
   }
