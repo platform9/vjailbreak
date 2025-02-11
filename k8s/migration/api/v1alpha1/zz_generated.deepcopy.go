@@ -740,6 +740,11 @@ func (in *VMInfo) DeepCopyInto(out *VMInfo) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Disks != nil {
+		in, out := &in.Disks, &out.Disks
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Networks != nil {
 		in, out := &in.Networks, &out.Networks
 		*out = make([]string, len(*in))
