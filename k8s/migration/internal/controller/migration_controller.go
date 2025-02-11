@@ -84,13 +84,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
-	if err := r.Update(ctx, pod); err != nil {
+	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
 		return ctrl.Result{}, err
 	}
 
 	if pod.Status.Phase != corev1.PodRunning {
-		return ctrl.Result{}, fmt.Errorf("Pod is not Running for migration %s", migration.Name)
+		return ctrl.Result{}, fmt.Errorf("pod is not Running for migration %s", migration.Name)
 	}
 
 	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
@@ -157,34 +157,45 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 		return err
 	}
 
-	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{vjailbreakv1alpha1.MigrationPhaseValidated, vjailbreakv1alpha1.MigrationPhaseValidating, vjailbreakv1alpha1.MigrationPhasePending}
+	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
+		vjailbreakv1alpha1.MigrationPhaseValidated,
+		vjailbreakv1alpha1.MigrationPhaseValidating,
+		vjailbreakv1alpha1.MigrationPhasePending}
 
 loop:
-	for _, event := range events.Items {
+	for i := range events.Items {
 		switch {
-		// In reverse order, becasue the events are sorted by timestamp latest to oldest
-		case strings.Contains(event.Message, openstackconst.EventMessageMigrationFailed) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseFailed]:
+		// In reverse order, because the events are sorted by timestamp latest to oldest
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationFailed) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseFailed]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageMigrationSucessful) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageWaitingForAdminCutOver) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageWaitingForCutOverStart) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageConvertingDisk) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseConvertingDisk]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageConvertingDisk) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseConvertingDisk]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseConvertingDisk
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageCopyingChangedBlocksWithIteration) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingChangedBlocksWithIteration) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageCopyingDisk) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopying]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopying]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseCopying
 			break loop
-		case strings.Contains(event.Message, openstackconst.EventMessageWaitingForDataCopyStart) && constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart]:
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
+			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart
 			break loop
 			// If none of the above phases matched
