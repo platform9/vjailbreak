@@ -32,18 +32,20 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Bump version
-      id: bump_version
-      uses: phips28/gh-action-bump-version@master
-      with:
-        minor-wording:  'add,Adds,new'
-        major-wording:  'MAJOR,cut-major'
-        patch-wording:  'patch,fixes'     # Providing patch-wording will override commits
-                                          # defaulting to a patch bump.
-        rc-wording:     'RELEASE,alpha'
-        skip-tag: 'true'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # - name: Bump version
+    #   id: bump_version
+    #   uses: phips28/gh-action-bump-version@master
+    #   with:
+    #     minor-wording:  'add,Adds,new'
+    #     major-wording:  'MAJOR,cut-major'
+    #     patch-wording:  'patch,fixes'     # Providing patch-wording will override commits
+    #                                       # defaulting to a patch bump.
+    #     rc-wording:     'RELEASE,alpha'
+    #     skip-tag: 'true'
+    #     skip-commit: 'true'
+    #     skip-push: 'true'
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set environment variables for images
       run: |
@@ -55,9 +57,8 @@ jobs:
         if [[ "${{ github.event_name }}" == "release" ]]; then
           # In case of release event the tag will be the next version
           # build version will be the same as tag
-          TAG=${{ steps.bump_version.outputs.newTag }}
+          TAG=${{ github.event.release.tag_name }}
           BUILD_VERSION=${TAG}
-          RELEASE_EVENT=true
         else
           BUILD_VERSION=${{ github.run_number }}
           # build release version as version-branch-sha

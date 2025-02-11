@@ -19,7 +19,6 @@ VERSION = $(RELEASE_VER)-$(GIT_BRANCH)-$(GIT_SHA)
 
 export REPO ?= platform9
 export TAG ?= $(VERSION)
-export RELEASE_EVENT ?= false
 
 export UI_IMG ?= ${REPO}/vjailbreak-ui:${TAG}
 export V2V_IMG ?= ${REPO}/v2v-helper:${TAG}
