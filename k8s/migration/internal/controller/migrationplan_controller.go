@@ -276,7 +276,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 				Labels: map[string]string{
 					"migrationplan":              migrationplan.Name,
-					constants.NumberOfDisksLabel: string(len(vminfo.Disks)),
+					constants.NumberOfDisksLabel: strconv.Itoa(len(vminfo.Disks)),
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
