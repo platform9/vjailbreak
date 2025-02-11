@@ -101,6 +101,10 @@ spec:
                       items:
                         type: string
                       type: array
+                    disks:
+                      items:
+                        type: string
+                      type: array
                     ipAddress:
                       type: string
                     name:
