@@ -178,7 +178,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		for _, vm := range parallelvms {
-			migrationobj, err := r.CreateMigration(ctx, migrationplan, vm)
+			migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
 			}
@@ -253,11 +253,20 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vm string) (*vjailbreakv1alpha1.Migration, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
+	var vminfo *vjailbreakv1alpha1.VMInfo
+	for i := range migrationtemplate.Status.VMWare {
+		if migrationtemplate.Status.VMWare[i].Name == vm {
+			vminfo = &migrationtemplate.Status.VMWare[i]
+			break
+		}
+	}
+
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -266,7 +275,8 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				Name:      utils.MigrationNameFromVMName(vmname),
 				Namespace: migrationplan.Namespace,
 				Labels: map[string]string{
-					"migrationplan": migrationplan.Name,
+					"migrationplan":              migrationplan.Name,
+					constants.NumberOfDisksLabel: string(len(vminfo.Disks)),
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{

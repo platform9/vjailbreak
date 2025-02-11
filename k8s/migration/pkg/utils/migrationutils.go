@@ -136,9 +136,9 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 func SplitEventStringOnComma(input string) (reason, message string) {
 	parts := strings.Split(input, ",")
 	if len(parts) > 1 {
-		return parts[0], parts[1]
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	}
-	return parts[0], ""
+	return strings.TrimSpace(parts[0]), ""
 }
 
 func GetSatusConditions(migration *vjailbreakv1alpha1.Migration) []corev1.PodCondition {

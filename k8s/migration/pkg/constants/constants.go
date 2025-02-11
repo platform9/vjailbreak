@@ -13,6 +13,7 @@ const (
 	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/master"
 	NodeRoleMaster               = "master"
 	InternalIPAnnotation         = "k3s.io/internal-ip"
+	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
 
 	VjailbreakNodePhaseVMCreating  = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated   = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
