@@ -11,7 +11,7 @@ source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
   iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:67d312441a401c75389b063e1331c5fa11f35813f531dcbcceba765a4895251f"
+  iso_checksum         = "sha256:ddf938f5afe81f6377bc04482b70991d81d72957e8a8ad0018d5bc3e20c8a4de"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"

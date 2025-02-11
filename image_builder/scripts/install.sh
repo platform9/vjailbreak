@@ -45,7 +45,7 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
 
   # Install K3s master with the specific version
-  sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -
+  sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -s - --disable traefik
   check_command "Installing K3s master"
 
   # Sleep for 30 seconds after master installation
@@ -72,7 +72,7 @@ EOF
   check_command "Installing NGINX Ingress Controller"
 
   # sleep for 10s for nginx controller to come up. 
-  sleep 10
+  sleep 20
 
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
