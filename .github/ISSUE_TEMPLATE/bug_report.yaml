@@ -1,5 +1,5 @@
 name: 🐛 Bug Report
-description: Report a bug encountered while using Cluster API
+description: Report a bug encountered while using vJailbreak
 body:
   - type: textarea
     id: problem
