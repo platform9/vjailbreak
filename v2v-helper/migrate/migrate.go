@@ -238,6 +238,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 
 	for idx, vmdisk := range vminfo.VMDisks {
+		migobj.logMessage(fmt.Sprintf("Copying disk %d, Completed: 0%%", idx))
 		err := nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to start NBD server: %s", err)
@@ -252,14 +253,12 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx, vmdisk := range vminfo.VMDisks {
-				migobj.logMessage(fmt.Sprintf("Copying disk %d", idx))
-
 				vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to attach volume: %s", err)
 				}
 
-				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path)
+				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}

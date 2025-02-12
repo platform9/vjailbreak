@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+
 	"golang.org/x/sys/unix"
 
 	"github.com/vmware/govmomi/object"
@@ -27,7 +29,7 @@ import (
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
-	CopyDisk(ctx context.Context, dest string) error
+	CopyDisk(ctx context.Context, dest string, diskindex int) error
 	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
 }
 
@@ -149,7 +151,7 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string) error {
+func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -164,10 +166,20 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string) error {
 	log.Println(cmd.String())
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
+		lastProgress := 0
 		for scanner.Scan() {
-			prog := fmt.Sprintf("Progress: %s%%", scanner.Text())
-			log.Println(prog)
-			nbdserver.progresschan <- prog
+			progressInt, _, err := utils.ParseFraction(scanner.Text())
+			if err != nil {
+				log.Printf("Error converting progress percent to int: %v", err)
+				continue
+			}
+			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
+			log.Println(msg)
+
+			if lastProgress <= progressInt-10 {
+				nbdserver.progresschan <- msg
+				lastProgress = progressInt
+			}
 		}
 	}()
 	if nbdserver.Debug {

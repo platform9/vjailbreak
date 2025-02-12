@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -145,8 +146,12 @@ func main() {
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
+		msg := fmt.Sprintf("Failed to migrate VM: %s\n", err)
 		cancel()
-		log.Fatalf("Failed to migrate VM: %s\n", err)
+		if migrationobj.InPod {
+			migrationobj.EventReporter <- msg
+		}
+		log.Fatalf(msg)
 	}
 
 	cancel()
