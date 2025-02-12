@@ -14,13 +14,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"vjailbreak/openstack"
 
-	"vjailbreak/nbd"
-	"vjailbreak/utils"
-	"vjailbreak/vcenter"
-	"vjailbreak/virtv2v"
-	"vjailbreak/vm"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/utils"
+
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
