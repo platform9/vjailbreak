@@ -13,6 +13,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/version"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -50,6 +51,7 @@ func main() {
 	var healthcheckport = os.Getenv("HEALTH_CHECK_PORT")
 	var debug = os.Getenv("DEBUG")
 
+	log.Println(version.GetVersion())
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
 	log.Println("Insecure:", envInsecure)
