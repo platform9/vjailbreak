@@ -33,6 +33,7 @@ type MigrationSpec struct {
 type MigrationStatus struct {
 	Phase      string                `json:"phase"`
 	Conditions []corev1.PodCondition `json:"conditions"`
+	AgentName  string                `json:"AgentName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
