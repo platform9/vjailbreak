@@ -29,6 +29,27 @@ import { deleteNode } from "src/api/nodes/nodeMappings";
 import { useQueryClient } from "@tanstack/react-query";
 import { NODES_QUERY_KEY } from "src/hooks/api/useNodesQuery";
 import { NodeItem } from "src/api/nodes/model";
+import { intervalToDuration } from 'date-fns';
+
+// Update helper for formatting duration
+const formatAge = (date: Date) => {
+    const duration = intervalToDuration({
+        start: date,
+        end: new Date()
+    });
+
+    if (duration.days) {
+        return `${duration.days} day${duration.days > 1 ? 's' : ''}`;
+    }
+    if (duration.hours) {
+        return `${duration.hours} hour${duration.hours > 1 ? 's' : ''}`;
+    }
+    if (duration.minutes) {
+        return `${duration.minutes} minute${duration.minutes > 1 ? 's' : ''}`;
+    }
+
+    return 'just now';
+};
 
 const columns: GridColDef[] = [
     {
@@ -72,6 +93,25 @@ const columns: GridColDef[] = [
                 {params.value === 'master' ? 'Master' : params.value === 'worker' ? 'Worker' : 'Unknown'}
             </Box>
         ),
+        sortComparator: (v1, v2) => {
+            if (v1 === 'master') return -1;
+            if (v2 === 'master') return 1;
+            return v1.localeCompare(v2);
+        }
+    },
+    {
+        field: "age",
+        headerName: "Age",
+        flex: 1,
+        valueGetter: (_, params) => new Date(params?.creationTimestamp),
+        renderCell: (params) => (
+            <Tooltip title={`Created on ${params.value.toLocaleString()}`}>
+                <span>{formatAge(params.value)}</span>
+            </Tooltip>
+        ),
+        sortComparator: (v1, v2) => {
+            return new Date(v1).getTime() - new Date(v2).getTime();
+        }
     },
     {
         field: "ipAddress",
@@ -199,10 +239,12 @@ export default function NodesTable() {
     const transformedNodes: NodeSelector[] = nodes?.map((node: NodeItem) => ({
         id: node.metadata.name,
         name: node.metadata.name,
-        status: node.status?.status || 'Unknown',
+        // status: node.status?.status || 'Unknown',
+        status: 'Unknown',
         phase: node.status?.phase || 'Unknown',
         ipAddress: node.status?.vmip || '-',
         role: node.spec.noderole,
+        creationTimestamp: node.metadata.creationTimestamp
     })) || [];
 
     const handleSelectionChange = (newSelection) => {
@@ -252,6 +294,7 @@ export default function NodesTable() {
     const handleCloseScaleUp = () => {
         setScaleUpOpen(false);
         setSelectedNodes([]);
+        queryClient.invalidateQueries({ queryKey: NODES_QUERY_KEY });
     };
 
     const remainingNodesAfterScaleDown = transformedNodes.length - selectedNodes.length;
@@ -272,6 +315,11 @@ export default function NodesTable() {
                 columns={columns}
                 initialState={{
                     pagination: { paginationModel: { page: 0, pageSize: 25 } },
+                    sorting: {
+                        sortModel: [
+                            { field: 'age', sort: 'desc' },
+                        ],
+                    },
                 }}
                 pageSizeOptions={[25, 50, 100]}
                 checkboxSelection

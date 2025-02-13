@@ -54,3 +54,27 @@ export interface OpenstackFlavor {
 export interface OpenstackFlavorsResponse {
   flavors: OpenstackFlavor[]
 }
+
+export interface OpenstackProject {
+  id: string
+  name: string
+  domain_id: string
+  description: string
+  enabled: boolean
+  parent_id: string
+  is_domain: boolean
+  tags: string[]
+  options: Record<string, unknown>
+  links: {
+    self: string
+  }
+}
+
+export interface OpenstackProjectsResponse {
+  projects: OpenstackProject[]
+  links: {
+    next: string | null
+    self: string
+    previous: string | null
+  }
+}

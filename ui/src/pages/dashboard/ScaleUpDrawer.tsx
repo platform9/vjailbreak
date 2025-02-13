@@ -25,7 +25,7 @@ import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
 import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { debounce } from "src/utils";
 import { OpenstackCreds, OpenstackImage } from "src/api/openstack-creds/model";
-import { getOpenstackImages, createNodes, getOpenstackFlavors } from "src/api/nodes/nodeMappings";
+import { getOpenstackImages, createNodes, getOpenstackFlavors, getNodes } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 
 // Mock data - replace with actual data from API
@@ -177,6 +177,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 count: nodeCount,
                 flavorId: selectedFlavor
             });
+
 
             handleClose();
         } catch (error) {

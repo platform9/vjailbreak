@@ -151,12 +151,9 @@ export default function ConfirmationDialog({
             <DialogContent sx={{ px: 3, py: 2.5 }}>
                 <DialogContentText>
                     {message}
-                    {items.length > 0 && (
+                    {items.length > 1 && (
                         <Box sx={{ mt: 1 }}>
                             {displayedItems.map((item) => (
-                                // <Typography key={item.id} variant="body2">
-                                //     • <strong>{item.name}</strong>
-                                // </Typography>
                                 <div key={item.id}>
                                     • <strong>{item.name}</strong>
                                 </div>

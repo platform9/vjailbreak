@@ -16,6 +16,7 @@ import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
 import { OpenstackImagesResponse } from "../openstack-creds/model"
 import { v4 as uuidv4 } from "uuid"
 import { OpenstackCreds } from "../openstack-creds/model"
+import { nanoid } from "nanoid"
 
 // Private helper function for token generation
 const generateOpenstackToken = async (creds) => {
@@ -150,7 +151,7 @@ const createNodeObject = (params: {
   apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
   kind: "VjailbreakNode",
   metadata: {
-    name: params.name || `vjailbreak-${uuidv4()}`,
+    name: params.name || `vjailbreak-node-${nanoid(5).toLowerCase()}`,
     namespace: params.namespace || "migration-system",
   },
   spec: params.spec,
@@ -163,32 +164,38 @@ export const createNodes = async (params: {
   count: number
   namespace?: string
 }) => {
-  const nodes: NodeItem[] = Array(params.count)
-    .fill(null)
-    .map(() => {
+  const namespace = params.namespace || VJAILBREAK_DEFAULT_NAMESPACE
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vjailbreaknodes`
+
+  const results: NodeItem[] = []
+  const errors: Error[] = []
+
+  for (let i = 0; i < params.count; i++) {
+    try {
       const spec = createNodeSpec({
         imageId: params.imageId,
         openstackCreds: params.openstackCreds,
         flavorId: params.flavorId,
       })
-      return createNodeObject({ spec, namespace: params.namespace })
-    })
+      const node = createNodeObject({ spec, namespace })
 
-  const nodeList: NodeList = {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "VjailbreakNodeList",
-    items: nodes,
-    metadata: {
-      continue: "",
-      resourceVersion: "",
-    },
+      const result = await axios.post<NodeItem>({
+        endpoint,
+        data: node,
+      })
+
+      results.push(result)
+    } catch (error) {
+      errors.push(error as Error)
+      console.error(`Failed to create node ${i + 1}:`, error)
+    }
   }
 
-  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${
-    params.namespace || VJAILBREAK_DEFAULT_NAMESPACE
-  }/vjailbreaknodes`
-  return await axios.post<NodeList>({
-    endpoint,
-    data: nodeList,
-  })
+  if (errors.length > 0) {
+    throw new Error(
+      `Failed to create ${errors.length} out of ${params.count} nodes`
+    )
+  }
+
+  return results
 }
