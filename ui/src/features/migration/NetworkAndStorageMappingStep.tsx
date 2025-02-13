@@ -101,7 +101,7 @@ export default function NetworkAndStorageMappingStep({
             label="Map Storage"
             sourceItems={vmWareStorage}
             targetItems={openstackStorage}
-            sourceLabel="VMWare Datastore"
+            sourceLabel="VMware Datastore"
             targetLabel="OpenStack VolumeType"
             values={params.storageMappings || []}
             onChange={(value) => onChange("storageMappings")(value)}
