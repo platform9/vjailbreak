@@ -135,6 +135,10 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
+	// Get active migrations happening on the node
+	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client, scope)
+
+	vjNode.Status.ActiveMigrations = activeMigrations
 	vjNode.Status.OpenstackUUID = uuid
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 	vjNode.Status.VMIP = vmip
