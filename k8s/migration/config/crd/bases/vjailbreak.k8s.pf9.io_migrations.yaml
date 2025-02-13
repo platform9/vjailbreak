@@ -56,6 +56,8 @@ spec:
           status:
             description: MigrationStatus defines the observed state of Migration
             properties:
+              AgentName:
+                type: string
               conditions:
                 items:
                   description: PodCondition contains details for the current condition

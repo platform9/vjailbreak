@@ -17,9 +17,7 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - ""
-  resources:
+- resources:
   - events
   - nodes
   verbs:
