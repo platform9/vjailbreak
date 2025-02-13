@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -36,6 +37,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -195,4 +197,11 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+	// Check and create master node entry
+	err = utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "Problem creating master node entry")
+		os.Exit(1)
+	}
+
 }
