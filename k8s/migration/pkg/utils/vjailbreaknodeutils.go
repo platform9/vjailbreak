@@ -319,3 +319,19 @@ func ReadFileContent(filePath string) (string, error) {
 
 	return string(data), nil
 }
+
+func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (vjailbreakv1alpha1.MigrationList, error) {
+	migrationList := &vjailbreakv1alpha1.MigrationList{}
+	err := k3sclient.List(ctx, migrationList)
+	if err != nil {
+		return vjailbreakv1alpha1.MigrationList{}, errors.Wrap(err, "failed to list migrations")
+	}
+
+	activeMigrations := vjailbreakv1alpha1.MigrationList{}
+	for _, migration := range migrationList.Items {
+		if migration.Spec.PodRef == nodeName {
+			activeMigrations.Items = append(activeMigrations.Items, migration)
+		}
+	}
+	return activeMigrations, nil
+}
