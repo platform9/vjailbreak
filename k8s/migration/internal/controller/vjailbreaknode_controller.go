@@ -92,12 +92,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
-	// Check and create master node entry
-	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
-	}
-
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
@@ -137,6 +131,9 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 
 	// Get active migrations happening on the node
 	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
+	}
 
 	vjNode.Status.ActiveMigrations = activeMigrations
 	vjNode.Status.OpenstackUUID = uuid
