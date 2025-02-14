@@ -19,7 +19,6 @@ sleep 60
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
   source "/etc/pf9/k3s.env"
@@ -39,7 +38,31 @@ log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
 
 # Specify the desired K3s version here
-K3S_VERSION="v1.31.5+k3s1"  # Change this to your desired version
+K3S_VERSION="v1.31.5+k3s1" 
+
+# Function to wait for K3s to be ready
+wait_for_k3s() {
+  local timeout=300
+  local start_time=$(date +%s)
+
+  while true; do
+    if kubectl get nodes > /dev/null 2>&1; then
+      log "K3s is ready."
+      return 0
+    fi
+
+    local current_time=$(date +%s)
+    local elapsed_time=$((current_time - start_time))
+
+    if [ $elapsed_time -ge $timeout ]; then
+      log "ERROR: Timed out waiting for K3s to be ready."
+      exit 1
+    fi
+
+    log "Waiting for K3s to be ready..."
+    sleep 10
+  done
+}
 
 if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
@@ -48,12 +71,13 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -s - --disable traefik
   check_command "Installing K3s master"
 
-  # Sleep for 30 seconds after master installation
-  sleep 30
+  # Wait for K3s to be ready
+  wait_for_k3s
 
-  # move kubeconfig to ~./kube/config so that helm can pick it up 
-  kubectl config view --raw > .kube/config
-
+  # Move kubeconfig to ~/.kube/config so that helm can pick it up 
+  mkdir -p ~/.kube
+  sudo kubectl config view --raw > ~/.kube/config
+  check_command "Moving kubeconfig"
 
   # Create a configuration YAML file with the master IP populated
   cat <<EOF > values.yaml
@@ -71,22 +95,23 @@ EOF
   helm install nginx-ingress ingress-nginx/ingress-nginx --namespace nginx-ingress --create-namespace --values=values.yaml
   check_command "Installing NGINX Ingress Controller"
 
-  # sleep for 10s for nginx controller to come up. 
-  sleep 20
+  # Wait for NGINX Ingress Controller to be ready
+  kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
+  check_command "Waiting for NGINX Ingress Controller to be ready"
 
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
   sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
-  log "Applied kube-prometheus setup manifests."
+  check_command "Applying kube-prometheus setup manifests"
 
   sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring --timeout=300s
-  log "CustomResourceDefinitions established."
+  check_command "Waiting for CustomResourceDefinitions to be established"
 
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
-  log "Applied kube-prometheus manifests."
+  check_command "Applying kube-prometheus manifests"
 
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
-  log "Applied additional manifests."
+  check_command "Applying additional manifests"
 
   log "K3s master setup completed."
 else
@@ -104,7 +129,8 @@ else
 
   log "K3S_URL: $K3S_URL"
   log "K3S_TOKEN: $K3S_TOKEN"
-# Install K3s worker
+
+  # Install K3s worker
   curl -sfL https://get.k3s.io | K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_VERSION=$K3S_VERSION sh -
   check_command "Installing K3s worker"
 
