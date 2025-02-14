@@ -135,7 +135,7 @@ export default function Dashboard() {
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label="Migrations" />
-          <Tab label="Nodes" />
+          <Tab label="Agents" />
         </Tabs>
 
         {activeTab === 0 ? (

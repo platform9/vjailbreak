@@ -186,7 +186,7 @@ const NodesToolbar = ({
         >
             <div>
                 <Typography variant="h6" component="h2">
-                    Nodes
+                    Agents
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
@@ -345,7 +345,7 @@ export default function NodesTable() {
                             justifyContent: 'center',
                             height: '100%'
                         }}>
-                            <Typography>No Nodes</Typography>
+                            <Typography>No Agents</Typography>
                         </Box>
                     ),
                 }}

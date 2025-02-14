@@ -14,7 +14,6 @@ import {
 } from "./model"
 import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
 import { OpenstackImagesResponse } from "../openstack-creds/model"
-import { v4 as uuidv4 } from "uuid"
 import { OpenstackCreds } from "../openstack-creds/model"
 import { nanoid } from "nanoid"
 
@@ -29,7 +28,6 @@ const generateOpenstackToken = async (creds) => {
         "Content-Type": "application/json",
       },
     })
-
     return {
       token: response.headers["x-subject-token"],
       response: response.data,
@@ -94,7 +92,7 @@ const getProjectId = async (creds) => {
     })
 
     const data = response.data as OpenstackProjectsResponse
-    const projectId = data.projects[0]?.id
+    const projectId = data.projects?.[0]?.id
 
     if (!projectId) {
       throw new Error("No project found")

@@ -201,7 +201,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             open={open}
             onClose={handleClose}
         >
-            <Header title="Scale Up Nodes" />
+            <Header title="Scale Up Agents" />
             <DrawerContent>
                 <Box sx={{ display: "grid", gap: 4 }}>
                     {/* Step 1: OpenStack Credentials */}
@@ -243,11 +243,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         </Box>
                     </div>
 
-                    {/* Step 2: Node Template */}
+                    {/* Step 2: Agent Template */}
                     <div>
                         <StepHeader
                             number="2"
-                            label="Node Template"
+                            label="Agent Template"
                             tooltip="Configure the specification for the new nodes."
                         />
                         <Box sx={{ ml: 6, mt: 2, display: 'grid', gap: 3 }}>
@@ -297,17 +297,17 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         </Box>
                     </div>
 
-                    {/* Step 3: Node Count */}
+                    {/* Step 3: Agent Count */}
                     <div>
                         <StepHeader
                             number="3"
-                            label="Node Count"
+                            label="Agent Count"
                             tooltip="Specify how many new nodes to create based on the above node template."
                         />
                         <Box sx={{ ml: 6, mt: 2 }}>
                             <TextField
                                 type="number"
-                                label="Number of Nodes"
+                                label="Number of Agents"
                                 value={nodeCount}
                                 onChange={(e) => {
                                     const value = parseInt(e.target.value);
