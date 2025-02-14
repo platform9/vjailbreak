@@ -92,7 +92,6 @@ spec:
                 description: OpenstackFlavorID is the flavor of the VM
                 type: string
             required:
-            - imageid
             - noderole
             - openstackcreds
             - openstackflavorid
