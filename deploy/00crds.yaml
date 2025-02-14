@@ -673,7 +673,6 @@ spec:
                 description: OpenstackFlavorID is the flavor of the VM
                 type: string
             required:
-            - imageid
             - noderole
             - openstackcreds
             - openstackflavorid
@@ -1369,7 +1368,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:0.1.2
+        image: quay.io/platform9/vjailbreak-controller:v0.1.3
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
