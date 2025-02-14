@@ -123,7 +123,7 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
-	scope *scope.MigrationPlanScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
 	log := scope.Logger
 
