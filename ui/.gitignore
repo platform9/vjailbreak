@@ -13,6 +13,7 @@ dist-ssr
 # mock-json-server
 *.local
 config.js
+clones-vms.js
 
 # Editor directories and files
 mock-json-server/*

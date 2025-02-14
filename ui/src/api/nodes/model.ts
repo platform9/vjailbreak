@@ -12,17 +12,17 @@ export interface NodeItem {
   kind: "VjailbreakNode"
   metadata: ItemMetadata
   spec: Spec
-  status: Status
+  status?: Status
 }
 
 export interface ItemMetadata {
-  creationTimestamp: Date
-  finalizers: string[]
-  generation: number
+  creationTimestamp?: Date
+  finalizers?: string[]
+  generation?: number
   name: string
   namespace: string
-  resourceVersion: string
-  uid: string
+  resourceVersion?: string
+  uid?: string
 }
 
 export interface Spec {

@@ -25,8 +25,10 @@ import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
 import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { debounce } from "src/utils";
 import { OpenstackCreds, OpenstackImage } from "src/api/openstack-creds/model";
-import { getOpenstackImages, createNodes, getOpenstackFlavors, getNodes } from "src/api/nodes/nodeMappings";
+import { getOpenstackImages, createNodes, getOpenstackFlavors } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
+import { OpenstackFlavor } from "src/api/nodes/model";
+import { NodeItem } from "src/api/nodes/model";
 
 // Mock data - replace with actual data from API
 
@@ -154,9 +156,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         [validateOpenstackCreds]
     );
 
-    const handleOpenstackCredsChange = (values: OpenstackCreds) => {
+    const handleOpenstackCredsChange = (values: unknown) => {
         clearStates();
-        setOpenstackCreds(values);
+        setOpenstackCreds(values as OpenstackCreds);
         debouncedValidation.cancel();
 
         debouncedValidation(values);
@@ -164,7 +166,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
 
 
     const handleSubmit = async () => {
-        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount) {
+        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCreds) {
             setError('Please fill in all required fields');
             return;
         }
@@ -297,7 +299,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         </Box>
                     </div>
 
-                    {/* Step 3: Agent Count */}
+                    {/* Step 3: Node Count */}
                     <div>
                         <StepHeader
                             number="3"
