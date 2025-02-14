@@ -320,7 +320,7 @@ func ReadFileContent(filePath string) (string, error) {
 	return string(data), nil
 }
 
-func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (vjailbreakv1alpha1.MigrationList, error) {
+func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client) (vjailbreakv1alpha1.MigrationList, error) {
 	migrationList := &vjailbreakv1alpha1.MigrationList{}
 	err := k3sclient.List(ctx, migrationList)
 	if err != nil {
@@ -328,9 +328,10 @@ func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.
 	}
 
 	activeMigrations := vjailbreakv1alpha1.MigrationList{}
-	for _, migration := range migrationList.Items {
+	for i := range migrationList.Items {
+		migration := &migrationList.Items[i]
 		if migration.Status.AgentName == nodeName {
-			activeMigrations.Items = append(activeMigrations.Items, migration)
+			activeMigrations.Items = append(activeMigrations.Items, *migration)
 		}
 	}
 	return activeMigrations, nil

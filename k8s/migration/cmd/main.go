@@ -134,7 +134,7 @@ func main() {
 		(&controller.MigrationTemplateReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
 		(&controller.VjailbreakNodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
 	} {
-		if err := setup(mgr); err != nil {
+		if err = setup(mgr); err != nil {
 			setupLog.Error(err, "Unable to create controller")
 			os.Exit(1)
 		}
@@ -146,13 +146,13 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

@@ -130,7 +130,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	// Get active migrations happening on the node
-	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client, scope)
+	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
 	}
