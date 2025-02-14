@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -240,6 +241,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		}
 		var datastores []string
 		var networks []string
+		var disks []string
 		var ds mo.Datastore
 		var dsref types.ManagedObjectReference
 		for _, device := range vmProps.Config.Hardware.Device {
@@ -263,13 +265,15 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				if err != nil {
 					return nil, fmt.Errorf("failed to get datastore: %w", err)
 				}
-				datastores = append(datastores, ds.Name)
+				datastores = appendUnique(datastores, ds.Name)
+				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
+			Disks:      disks,
 			Networks:   networks,
 			IPAddress:  vmProps.Guest.IpAddress,
 			VMState:    vmProps.Guest.GuestState,
@@ -278,6 +282,15 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	}
 
 	return vminfo, nil
+}
+
+func appendUnique(slice []string, values ...string) []string {
+	for _, v := range values {
+		if !slices.Contains(slice, v) {
+			slice = append(slice, v)
+		}
+	}
+	return slice
 }
 
 // SetupWithManager sets up the controller with the Manager.

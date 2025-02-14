@@ -95,12 +95,12 @@ linters:
   disable-all: true
   enable:
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
     - errcheck
     - errorlint
-    - exportloopref
     - funlen
     - gocheckcompilerdirectives
     # - gochecknoinits
@@ -144,6 +144,11 @@ issues:
 
     # The logic of creating a linter is similar between linters, it's not duplication.
     - path: pkg/golinters
+      linters:
+        - dupl
+
+    # The logic of creating a linter is similar between linters, it's not duplication.
+    - path: pkg/scope
       linters:
         - dupl
 
