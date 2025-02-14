@@ -329,7 +329,7 @@ func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.
 
 	activeMigrations := vjailbreakv1alpha1.MigrationList{}
 	for _, migration := range migrationList.Items {
-		if migration.Spec.PodRef == nodeName {
+		if migration.Status.AgentName == nodeName {
 			activeMigrations.Items = append(activeMigrations.Items, migration)
 		}
 	}
