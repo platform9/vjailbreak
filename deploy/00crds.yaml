@@ -223,7 +223,6 @@ spec:
               phase:
                 type: string
             required:
-            - conditions
             - phase
             type: object
         type: object
@@ -331,6 +330,10 @@ spec:
                 items:
                   properties:
                     datastores:
+                      items:
+                        type: string
+                      type: array
+                    disks:
                       items:
                         type: string
                       type: array
@@ -1366,7 +1369,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: platform9/vjailbreak-controller:v0.1
+        image: quay.io/platform9/vjailbreak-controller:0.1.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
