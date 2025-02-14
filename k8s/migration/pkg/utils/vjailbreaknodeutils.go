@@ -77,7 +77,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client)
 	}
 
 	vjNode.Status.VMIP = GetNodeInternalIP(masterNode)
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeCreated
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
 	vjNode.Status.OpenstackUUID = openstackuuid
 
 	err = k3sclient.Status().Update(ctx, &vjNode)
@@ -380,4 +380,16 @@ func ReadFileContent(filePath string) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+// GetNodeByName returns the node object by name
+func GetNodeByName(ctx context.Context, k3sclient client.Client, nodeName string) (*corev1.Node, error) {
+	node := &corev1.Node{}
+	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name: nodeName,
+	}, node)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get node")
+	}
+	return node, nil
 }

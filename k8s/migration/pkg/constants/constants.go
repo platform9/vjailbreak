@@ -15,9 +15,9 @@ const (
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
 
-	VjailbreakNodePhaseVMCreating  = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
-	VjailbreakNodePhaseVMCreated   = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
-	VjailbreakNodePhaseNodeCreated = vjailbreakv1alpha1.VjailbreakNodePhase("NodeCreated")
+	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
+	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
+	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("NodeReady")
 
 	NamespaceMigrationSystem = "migration-system"
 	MasterVjailbreakNodeName = "vjailbreak-master"

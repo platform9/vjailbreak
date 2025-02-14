@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -37,7 +36,6 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -190,12 +188,6 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
-	}
-
-	// Check and create master node entry for vjailbreakNode
-	err = utils.CheckAndCreateMasterNodeEntry(context.Background(), mgr.GetClient())
-	if err != nil {
-		setupLog.Error(err, "unable to create master node entry, continue to start manager")
 	}
 
 	setupLog.Info("starting manager")
