@@ -51,7 +51,7 @@ export const deleteMigrationPlan = async (
 
 export const patchMigrationPlan = async (
   planName: string,
-  body: any,
+  body: unknown,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
