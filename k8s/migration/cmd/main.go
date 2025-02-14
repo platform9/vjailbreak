@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -36,6 +37,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -122,63 +124,22 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+	for _, setup := range []func(ctrl.Manager) error{
+		(&controller.MigrationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.OpenstackCredsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.VMwareCredsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.StorageMappingReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.NetworkMappingReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.MigrationPlanReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.MigrationTemplateReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+		(&controller.VjailbreakNodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
+	} {
+		if err := setup(mgr); err != nil {
+			setupLog.Error(err, "Unable to create controller")
+			os.Exit(1)
+		}
+	}
 
-	if err = (&controller.MigrationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Migration")
-		os.Exit(1)
-	}
-	if err = (&controller.OpenstackCredsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
-		os.Exit(1)
-	}
-	if err = (&controller.VMwareCredsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
-		os.Exit(1)
-	}
-	if err = (&controller.StorageMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
-		os.Exit(1)
-	}
-	if err = (&controller.NetworkMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
-		os.Exit(1)
-	}
-	if err = (&controller.MigrationPlanReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
-		os.Exit(1)
-	}
-	if err = (&controller.MigrationTemplateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
-		os.Exit(1)
-	}
-	if err = (&controller.VjailbreakNodeReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
-		os.Exit(1)
-	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -195,4 +156,11 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+	// Check and create master node entry
+	err = utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "Problem creating master node entry")
+		os.Exit(1)
+	}
+
 }
