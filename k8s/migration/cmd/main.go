@@ -54,11 +54,9 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var secureMetrics bool
-	var enableHTTP2 bool
+	var metricsAddr, probeAddr string
+	var enableLeaderElection, secureMetrics, enableHTTP2 bool
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
 		"Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -124,25 +122,66 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-	for _, setup := range []func(ctrl.Manager) error{
-		(&controller.MigrationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.OpenstackCredsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.VMwareCredsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.StorageMappingReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.NetworkMappingReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.MigrationPlanReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.MigrationTemplateReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-		(&controller.VjailbreakNodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager,
-	} {
-		if err = setup(mgr); err != nil {
-			setupLog.Error(err, "Unable to create controller")
-			os.Exit(1)
-		}
-	}
 
+	if err = (&controller.MigrationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Migration")
+		os.Exit(1)
+	}
+	if err = (&controller.OpenstackCredsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
+		os.Exit(1)
+	}
+	if err = (&controller.VMwareCredsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
+		os.Exit(1)
+	}
+	if err = (&controller.StorageMappingReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
+		os.Exit(1)
+	}
+	if err = (&controller.NetworkMappingReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
+		os.Exit(1)
+	}
+	if err = (&controller.MigrationPlanReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
+		os.Exit(1)
+	}
+	if err = (&controller.MigrationTemplateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
+		os.Exit(1)
+	}
+	if err = (&controller.VjailbreakNodeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
@@ -151,11 +190,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
 	// Check and create master node entry
 	err = utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
 	if err != nil {
@@ -163,4 +197,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
 }
