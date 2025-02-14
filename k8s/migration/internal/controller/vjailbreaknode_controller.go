@@ -94,6 +94,10 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
+		err := utils.UpdateMasterNodeImageId(ctx, r.Client, scope)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+		}
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
 	}
@@ -151,7 +155,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	log.Info("Successfully created openstack vm for worker node", "vmid", vmid)
-
 	return ctrl.Result{}, nil
 }
 
