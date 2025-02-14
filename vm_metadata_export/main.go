@@ -9,6 +9,8 @@ import (
 	"os"
 	"strconv"
 
+	"golang.org/x/term"
+
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
@@ -101,6 +103,28 @@ func main() {
 	host := flag.String("host", "", "vCenter host")
 
 	flag.Parse()
+
+    if *host == "" {
+            fmt.Println("A vCenter host must be specified.")
+            fmt.Println("Usage:")
+            flag.PrintDefaults()
+            return
+    }
+
+    if *username == "" {
+            fmt.Print("Enter vCenter username: ")
+            fmt.Scanln(username)
+    }
+
+    if *password == "" {
+            fmt.Print("Enter vCenter password: ")
+            bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+            fmt.Println()
+            if err != nil {
+                    fmt.Errorf("Error reading password: %w", err)
+            }
+            *password = string(bytePassword)
+    }
 
 	c, err := validateVCenter(*username, *password, *host, true)
 	if err != nil {
