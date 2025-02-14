@@ -93,6 +93,12 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
+	// Check and create master node entry
+	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
+	}
+
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
 		err := utils.UpdateMasterNodeImageId(ctx, r.Client, scope)
 		if err != nil {
@@ -115,8 +121,19 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
+
+			node, err := utils.GetNodeByName(ctx, r.Client, vjNode.Name)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
+			}
 			vjNode.Status.OpenstackUUID = uuid
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+			for _, condition := range node.Status.Conditions {
+				if condition.Type == "Ready" {
+					vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+			}
 			vjNode.Status.VMIP = vmip
 
 			var activeMigrations []string
