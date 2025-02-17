@@ -97,7 +97,6 @@ spec:
               phase:
                 type: string
             required:
-            - conditions
             - phase
             type: object
         type: object

@@ -1,6 +1,8 @@
 artifacts/*
 image_builder/deploy/*
 k8s/migration/dist/*
+k8s/migration/vendor/*
+v2v-helper/vendor/*
 .vite
 .env
 .env.local
