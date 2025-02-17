@@ -320,18 +320,19 @@ func ReadFileContent(filePath string) (string, error) {
 	return string(data), nil
 }
 
-func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client) (vjailbreakv1alpha1.MigrationList, error) {
+func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client) ([]string, error) {
 	migrationList := &vjailbreakv1alpha1.MigrationList{}
 	err := k3sclient.List(ctx, migrationList)
 	if err != nil {
-		return vjailbreakv1alpha1.MigrationList{}, errors.Wrap(err, "failed to list migrations")
+		return nil, errors.Wrap(err, "failed to list migrations")
 	}
 
-	activeMigrations := vjailbreakv1alpha1.MigrationList{}
+	var activeMigrations []string
 	for i := range migrationList.Items {
 		migration := &migrationList.Items[i]
-		if migration.Status.AgentName == nodeName {
-			activeMigrations.Items = append(activeMigrations.Items, *migration)
+		if migration.Status.AgentName == nodeName && migration.Status.Phase == "Running" {
+			activeMigrations = append(activeMigrations,
+				migration.Name)
 		}
 	}
 	return activeMigrations, nil

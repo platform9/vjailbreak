@@ -50,7 +50,7 @@ type VjailbreakNodeStatus struct {
 	Phase VjailbreakNodePhase `json:"phase,omitempty"`
 
 	// ActiveMigrations is the list of active migrations happening on the node
-	ActiveMigrations MigrationList `json:"activemigrations,omitempty"`
+	ActiveMigrations []string `json:"activemigrations,omitempty"`
 }
 
 // +kubebuilder:object:root=true
