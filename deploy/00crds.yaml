@@ -11,7 +11,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationplans.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -129,7 +129,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrations.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -223,7 +223,6 @@ spec:
               phase:
                 type: string
             required:
-            - conditions
             - phase
             type: object
         type: object
@@ -236,7 +235,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationtemplates.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -334,6 +333,10 @@ spec:
                       items:
                         type: string
                       type: array
+                    disks:
+                      items:
+                        type: string
+                      type: array
                     ipAddress:
                       type: string
                     name:
@@ -361,7 +364,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: networkmappings.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -431,7 +434,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: openstackcreds.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -512,7 +515,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: storagemappings.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -581,7 +584,126 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: vjailbreaknodes.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: VjailbreakNode
+    listKind: VjailbreakNodeList
+    plural: vjailbreaknodes
+    singular: vjailbreaknode
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: VjailbreakNode is the Schema for the vjailbreaknodes API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of VjailbreakNode
+            properties:
+              imageid:
+                description: OpenstackImageID is the image of the VM
+                type: string
+              noderole:
+                description: NodeRole is the role assigned to the node
+                type: string
+              openstackcreds:
+                description: OpenstackCreds is the credentials for Openstack Environment
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              openstackflavorid:
+                description: OpenstackFlavorID is the flavor of the VM
+                type: string
+            required:
+            - imageid
+            - noderole
+            - openstackcreds
+            - openstackflavorid
+            type: object
+          status:
+            description: Status defines the observed state of VjailbreakNode
+            properties:
+              openstackuuid:
+                description: OpenstackUUID is the UUID of the VM in OpenStack
+                type: string
+              phase:
+                description: Phase is the current phase of the node
+                type: string
+              vmip:
+                description: VMIP is the IP address of the VM
+                type: string
+            required:
+            - vmip
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: vmwarecreds.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -707,6 +829,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - pods
   verbs:
   - create
   - delete
@@ -719,21 +842,10 @@ rules:
   - ""
   resources:
   - events
+  - nodes
   verbs:
   - get
   - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - ""
@@ -747,155 +859,12 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - migrationplans
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrationplans/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrationplans/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - migrations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrations/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - migrationtemplates
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrationtemplates/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrationtemplates/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - networkmappings
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - networkmappings/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - networkmappings/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - openstackcreds
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - openstackcreds/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - openstackcreds/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
   - storagemappings
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - storagemappings/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - storagemappings/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
+  - vjailbreaknodes
   - vmwarecreds
   verbs:
   - create
@@ -908,12 +877,25 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - migrationplans/finalizers
+  - migrationtemplates/finalizers
+  - networkmappings/finalizers
+  - openstackcreds/finalizers
+  - storagemappings/finalizers
+  - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
   verbs:
   - update
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - migrationplans/status
+  - migrations/status
+  - migrationtemplates/status
+  - networkmappings/status
+  - openstackcreds/status
+  - storagemappings/status
+  - vjailbreaknodes/status
   - vmwarecreds/status
   verbs:
   - get
@@ -1226,6 +1208,56 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: migration
+  name: migration-vjailbreaknode-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-vjailbreaknode-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vjailbreaknodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
   name: migration-vmwarecreds-editor-role
 rules:
 - apiGroups:
@@ -1324,13 +1356,20 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
       containers:
       - args:
         - --leader-elect=false
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: platform9/vjailbreak-controller:v0.1
+        image: quay.io/platform9/vjailbreak-controller:0.1.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1354,9 +1393,18 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - mountPath: /etc/pf9/k3s
+          name: master-token
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
-        runAsNonRoot: true
+        runAsGroup: 0
+        runAsUser: 0
       serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 10
+      volumes:
+      - hostPath:
+          path: /var/lib/rancher/k3s/server
+          type: Directory
+        name: master-token

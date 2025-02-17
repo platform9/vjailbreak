@@ -10,8 +10,6 @@ linters-settings:
           # logging is allowed only by logutils.Log,
           - pkg: "github.com/sirupsen/logrus"
             desc: logging is allowed only by logutils.Log.
-          - pkg: "github.com/pkg/errors"
-            desc: Should be replaced by standard lib errors package.
           - pkg: "github.com/instana/testify"
             desc: It's a fork of github.com/stretchr/testify.
         files:
@@ -97,12 +95,12 @@ linters:
   disable-all: true
   enable:
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
     - errcheck
     - errorlint
-    - exportloopref
     - funlen
     - gocheckcompilerdirectives
     # - gochecknoinits
@@ -146,6 +144,11 @@ issues:
 
     # The logic of creating a linter is similar between linters, it's not duplication.
     - path: pkg/golinters
+      linters:
+        - dupl
+
+    # The logic of creating a linter is similar between linters, it's not duplication.
+    - path: pkg/scope
       linters:
         - dupl
 

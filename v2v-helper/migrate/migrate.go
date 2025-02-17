@@ -14,13 +14,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"vjailbreak/openstack"
 
-	"vjailbreak/nbd"
-	"vjailbreak/utils"
-	"vjailbreak/vcenter"
-	"vjailbreak/virtv2v"
-	"vjailbreak/vm"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
@@ -237,6 +238,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 
 	for idx, vmdisk := range vminfo.VMDisks {
+		migobj.logMessage(fmt.Sprintf("Copying disk %d, Completed: 0%%", idx))
 		err := nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to start NBD server: %s", err)
@@ -251,14 +253,12 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx, vmdisk := range vminfo.VMDisks {
-				migobj.logMessage(fmt.Sprintf("Copying disk %d", idx))
-
 				vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to attach volume: %s", err)
 				}
 
-				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path)
+				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
@@ -438,7 +438,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if vminfo.OSType == "linux" {
 				if strings.Contains(osRelease, "rhel") {
 					firstbootscriptname := "rhel_enable_dhcp"
-					firstbootscript := utils.RhelFirstBootScript
+					firstbootscript := constants.RhelFirstBootScript
 					firstbootscripts = append(firstbootscripts, firstbootscriptname)
 					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
 					if err != nil {
