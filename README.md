@@ -232,7 +232,7 @@ Deploy all the following resources in the same namespace where you installed the
   - advancedOptions: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
     - granularVolumeTypes: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can speccify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
     - granularNetworks: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use in for each NIC on the VM, in order.
-    - granularPorts: In case you wish to pre-create ports for a VM with certain configs and directly ptovide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in granularNetworks.
+    - granularPorts: In case you wish to pre-create ports for a VM with certain configs and directly provide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in granularNetworks.
   - migrationStrategy: This is an optional field
     - type: 
       - cold: Cold indicates to power off VMs in migrationplan at the start of the migration. Quicker than hot
