@@ -5,6 +5,7 @@ go 1.22.3
 require (
 	github.com/golang/mock v1.6.0
 	github.com/gophercloud/gophercloud v1.13.0
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.9.0
 	github.com/vmware/govmomi v0.39.0
