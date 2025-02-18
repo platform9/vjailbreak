@@ -57,23 +57,23 @@ const columns: GridColDef[] = [
         headerName: "Name",
         flex: 2,
     },
-    {
-        field: 'status',
-        headerName: 'Status',
-        flex: 1,
-        renderCell: (params) => (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {params.value === 'Online' ? (
-                    <CheckCircleIcon sx={{ color: 'success.main' }} />
-                ) : params.value === 'Offline' ? (
-                    <ErrorIcon sx={{ color: 'warning.main' }} />
-                ) : (
-                    <HelpIcon />
-                )}
-                {params.value}
-            </Box>
-        ),
-    },
+    // {
+    //     field: 'status',
+    //     headerName: 'Status',
+    //     flex: 1,
+    //     renderCell: (params) => (
+    //         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    //             {params.value === 'Online' ? (
+    //                 <CheckCircleIcon sx={{ color: 'success.main' }} />
+    //             ) : params.value === 'Offline' ? (
+    //                 <ErrorIcon sx={{ color: 'warning.main' }} />
+    //             ) : (
+    //                 <HelpIcon />
+    //             )}
+    //             {params.value}
+    //         </Box>
+    //     ),
+    // },
     {
         field: "phase",
         headerName: "Phase",
@@ -121,7 +121,7 @@ const columns: GridColDef[] = [
     {
         field: "activeMigrations",
         headerName: "Active Migrations",
-        flex: 1.5,
+        flex: 2,
         valueGetter: (_, params) => params?.activeMigrations || [],
         renderCell: (params) => {
             const migrations = params.value as string[];
