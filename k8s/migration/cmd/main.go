@@ -191,11 +191,19 @@ func main() {
 	}
 
 	// Check and create master node entry
-	err = utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
-	if err != nil {
-		setupLog.Error(err, "Problem creating master node entry")
-		os.Exit(1)
-	}
+	go func() {
+		// Wait for cache sync before proceeding
+		if !mgr.GetCache().WaitForCacheSync(context.TODO()) {
+			setupLog.Error(nil, "Cache sync failed")
+			os.Exit(1)
+		}
+
+		err := utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
+		if err != nil {
+			setupLog.Error(err, "Problem creating master node entry")
+			os.Exit(1)
+		}
+	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
