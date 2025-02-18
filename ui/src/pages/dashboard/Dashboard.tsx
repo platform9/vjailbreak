@@ -13,6 +13,7 @@ import MigrationsTable from "./MigrationsTable"
 import NodesTable from "./NodesTable"
 import WarningIcon from '@mui/icons-material/Warning';
 
+
 const DashboardContainer = styled("div")({
   display: "flex",
   justifyContent: "center",
@@ -28,6 +29,7 @@ const StyledPaper = styled(Paper)({
     overflowX: "hidden"
   }
 })
+
 
 export default function Dashboard() {
   const navigate = useNavigate()

@@ -3,8 +3,8 @@ import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import MigrationProgressWithPopover from "./MigrationProgressWithPopover";
-import { Migration } from "src/api/migrations/model";
+import { Condition, Migration, Phase } from "src/api/migrations/model";
+import MigrationProgress from "./MigrationProgress";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -13,13 +13,47 @@ const STATUS_ORDER = {
     'Succeeded': 2,
     'Pending': 3
 }
+const PHASE_STEPS = {
+    [Phase.Pending]: 1,
+    [Phase.Validating]: 2,
+    [Phase.AwaitingDataCopyStart]: 3,
+    [Phase.CopyingBlocks]: 4,
+    [Phase.CopyingChangedBlocks]: 5,
+    [Phase.ConvertingDisk]: 6,
+    [Phase.AwaitingCutOverStartTime]: 7,
+    [Phase.AwaitingAdminCutOver]: 8,
+    [Phase.Succeeded]: 9,
+    [Phase.Failed]: 9,
+}
+
+const getProgressText = (phase: Phase | undefined, conditions: Condition[] | undefined) => {
+    if (!phase || phase === Phase.Unknown) {
+        return "Unknown Status";
+    }
+
+    const stepNumber = PHASE_STEPS[phase] || 0;
+    const totalSteps = 9;
+
+    // Get the most recent condition's message
+    const latestCondition = conditions?.sort((a, b) =>
+        new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime()
+    )[0];
+
+    const message = latestCondition?.message || phase;
+
+    if (phase === Phase.Failed || phase === Phase.Succeeded) {
+        return `${phase} - ${message}`;
+    }
+
+    return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`;
+}
 
 const columns: GridColDef[] = [
     {
         field: "name",
         headerName: "Name",
         valueGetter: (_, row) => row.metadata?.name,
-        flex: 2,
+        flex: 1.5,
     },
     {
         field: "status",
@@ -35,15 +69,15 @@ const columns: GridColDef[] = [
     {
         field: "status.conditions",
         headerName: "Progress",
-        valueGetter: (_, row) => row.status?.phase,
-        flex: 2,
+        valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+        flex: 3,
         renderCell: (params) => {
             const phase = params.row?.status?.phase
             const conditions = params.row?.status?.conditions
             return conditions ? (
-                <MigrationProgressWithPopover
+                <MigrationProgress
                     phase={phase}
-                    conditions={params.row?.status?.conditions}
+                    progressText={getProgressText(phase, conditions)}
                 />
             ) : null
         },
@@ -78,12 +112,13 @@ const columns: GridColDef[] = [
             );
         },
     },
-];
+]
 
 interface CustomToolbarProps {
     numSelected: number;
     onDeleteSelected: () => void;
 }
+
 
 const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) => {
     return (
