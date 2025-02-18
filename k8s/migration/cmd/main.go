@@ -193,7 +193,7 @@ func main() {
 	}
 
 	// Check and create master node entry
-	err = utils.CheckAndCreateMasterNodeEntry(context.TODO(), mgr.GetClient())
+	err = utils.CheckAndCreateMasterNodeEntry(context.TODO())
 	if err != nil {
 		setupLog.Error(err, "Problem creating master node entry")
 		os.Exit(1)

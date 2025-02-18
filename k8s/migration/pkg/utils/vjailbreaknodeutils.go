@@ -40,8 +40,7 @@ type OpenStackMetadata struct {
 	Networks []Network `json:"networks"`
 }
 
-func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client) error {
-
+func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	k3sclient, err := GetInclusterClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get client")
@@ -367,5 +366,4 @@ func GetInclusterClient() (client.Client, error) {
 	}
 
 	return clientset, err
-
 }
