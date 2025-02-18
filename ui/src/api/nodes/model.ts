@@ -1,5 +1,3 @@
-import { OpenstackCreds } from "../openstack-creds/model"
-
 export interface NodeList {
   apiVersion: string
   items: NodeItem[]
@@ -25,10 +23,16 @@ export interface ItemMetadata {
   uid?: string
 }
 
+export interface OpenstackCredsRef {
+  kind: "openstackcreds"
+  name: string
+  namespace: string
+}
+
 export interface Spec {
   imageid: string
   noderole: string
-  openstackcreds: OpenstackCreds
+  openstackcreds: OpenstackCredsRef
   openstackflavorid: string
 }
 

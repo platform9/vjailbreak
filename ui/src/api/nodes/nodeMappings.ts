@@ -11,10 +11,10 @@ import {
   NodeItem,
   OpenstackFlavorsResponse,
   OpenstackProjectsResponse,
+  OpenstackCredsRef,
 } from "./model"
 import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
 import { OpenstackImagesResponse } from "../openstack-creds/model"
-import { OpenstackCreds } from "../openstack-creds/model"
 import { nanoid } from "nanoid"
 
 // Private helper function for token generation
@@ -130,7 +130,7 @@ export const getOpenstackFlavors = async (creds) => {
 // Helper to create node spec
 const createNodeSpec = (params: {
   imageId: string
-  openstackCreds: OpenstackCreds
+  openstackCreds: OpenstackCredsRef
   flavorId: string
   role?: string
 }): Spec => ({
@@ -149,7 +149,7 @@ const createNodeObject = (params: {
   apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
   kind: "VjailbreakNode",
   metadata: {
-    name: params.name || `vjailbreak-node-${nanoid(5).toLowerCase()}`,
+    name: params.name || `vjailbreak-agent-${nanoid(5).toLowerCase()}`,
     namespace: params.namespace || "migration-system",
   },
   spec: params.spec,
@@ -157,7 +157,7 @@ const createNodeObject = (params: {
 
 export const createNodes = async (params: {
   imageId: string
-  openstackCreds: OpenstackCreds
+  openstackCreds: OpenstackCredsRef
   flavorId: string
   count: number
   namespace?: string

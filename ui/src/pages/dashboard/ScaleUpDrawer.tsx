@@ -124,7 +124,21 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 setLoadingImages(true);
                 try {
                     const imagesResponse = await getOpenstackImages(openstackCreds);
-                    setMasterNodeImage(imagesResponse.images.find(img => img.id === masterNode?.spec.imageid) || null);
+
+                    // Check if master node id exists
+                    if (!masterNode?.spec.imageid) {
+                        setImagesError('Master Agent id is missing');
+                        return;
+                    }
+
+                    // Check if master node image exists in OpenStack images
+                    const foundImage = imagesResponse.images.find(img => img.id === masterNode.spec.imageid);
+                    if (!foundImage) {
+                        setImagesError('Master Agent image is not matching with the PCD images, please re-upload the image in PCD.');
+                        return;
+                    }
+
+                    setMasterNodeImage(foundImage);
                 } catch (error) {
                     console.error('Failed to fetch images:', error);
                     setImagesError('Failed to fetch OpenStack images. Please try again.');
@@ -133,12 +147,24 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 }
             }
         };
+        fetchImages();
+    }, [openstackCredsId, openstackCreds]);
+
+
+    useEffect(() => {
         const fetchFlavors = async () => {
-            if (openstackCreds) {
+            if (openstackCreds && masterNodeImage) {
                 setLoadingFlavors(true);
                 try {
                     const response = await getOpenstackFlavors(openstackCreds);
-                    setFlavors(response.flavors);
+                    const requiredDiskGiB = Math.ceil(masterNodeImage.virtual_size / (1024 * 1024 * 1024));
+                    const filteredFlavors = response.flavors.filter(flavor => flavor.disk >= requiredDiskGiB);
+
+                    if (filteredFlavors.length === 0) {
+                        setFlavorsError(`No flavors available with disk size >= ${requiredDiskGiB}GiB`);
+                    }
+
+                    setFlavors(filteredFlavors);
                 } catch (error) {
                     console.error('Failed to fetch flavors:', error);
                     setFlavorsError('Failed to fetch OpenStack flavors');
@@ -147,9 +173,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 }
             }
         };
-        fetchImages();
         fetchFlavors();
-    }, [openstackCredsId, openstackCreds]);
+    }, [masterNodeImage]);
 
     const debouncedValidation = useCallback(
         debounce((creds) => validateOpenstackCreds(creds), 3000),
@@ -166,7 +191,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
 
 
     const handleSubmit = async () => {
-        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCreds) {
+        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCredsId) {
             setError('Please fill in all required fields');
             return;
         }
@@ -175,11 +200,14 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             setLoading(true);
             await createNodes({
                 imageId: masterNode.spec.imageid,
-                openstackCreds: openstackCreds,
+                openstackCreds: {
+                    kind: "openstackcreds" as const,
+                    name: openstackCredsId,
+                    namespace: "migration-system"
+                },
                 count: nodeCount,
                 flavorId: selectedFlavor
             });
-
 
             handleClose();
         } catch (error) {

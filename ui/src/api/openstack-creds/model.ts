@@ -86,6 +86,7 @@ export interface OpenstackImage {
   name: string
   id: string
   status: string
+  virtual_size: number
 }
 
 export interface OpenstackImagesResponse {
