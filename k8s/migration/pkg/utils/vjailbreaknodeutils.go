@@ -215,9 +215,19 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
 		Name:      vjNode.Spec.OpenstackCreds.Name,
 		Namespace: vjNode.Spec.OpenstackCreds.Namespace,
 	}, oscreds)
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
+	oscredsList := &vjailbreakv1alpha1.OpenstackCredsList{}
+	err = k3sclient.List(ctx, oscredsList)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list openstack creds")
+	}
+
+	if len(oscredsList.Items) == 0 {
+		return nil, errors.New("no openstack creds found")
+	}
+	oscreds = &oscredsList.Items[0]
 	return oscreds, nil
 }
 
