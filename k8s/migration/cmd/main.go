@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -36,6 +37,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -181,12 +183,19 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	// Check and create master node entry
+	err = utils.CheckAndCreateMasterNodeEntry(context.TODO())
+	if err != nil {
+		setupLog.Error(err, "Problem creating master node entry")
 		os.Exit(1)
 	}
 

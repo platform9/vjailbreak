@@ -38,10 +38,17 @@ const (
 
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
-	MigrationPlan   string `json:"migrationPlan"`
-	PodRef          string `json:"podRef"`
-	VMName          string `json:"vmName"`
-	InitiateCutover bool   `json:"initiateCutover"`
+	// MigrationPlan is the name of the migration plan
+	MigrationPlan string `json:"migrationPlan"`
+
+	// PodRef is the name of the pod
+	PodRef string `json:"podRef"`
+
+	// VMName is the name of the VM getting migrated from VMWare to Openstack
+	VMName string `json:"vmName"`
+
+	// InitiateCutover is the flag to initiate cutover
+	InitiateCutover bool `json:"initiateCutover"`
 }
 
 type MigrationPhase string
@@ -49,8 +56,14 @@ type MigrationConditionType string
 
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
-	Phase      MigrationPhase        `json:"phase"`
+	// Phase is the current phase of the migration
+	Phase MigrationPhase `json:"phase"`
+
+	// Conditions is the list of conditions of the migration object pod
 	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
+
+	// AgentName is the name of the agent where migration is running
+	AgentName string `json:"AgentName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -61,7 +74,10 @@ type Migration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MigrationSpec   `json:"spec,omitempty"`
+	// Spec defines the desired state of Migration
+	Spec MigrationSpec `json:"spec,omitempty"`
+
+	// Status defines the observed state of Migration
 	Status MigrationStatus `json:"status,omitempty"`
 }
 
@@ -71,7 +87,9 @@ type Migration struct {
 type MigrationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Migration `json:"items"`
+
+	// Items is the list of Migration objects
+	Items []Migration `json:"items"`
 }
 
 func init() {

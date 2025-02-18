@@ -106,6 +106,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratedCondition(migration, filteredEvents)
 
+	migration.Status.AgentName = pod.Spec.NodeName
+
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
