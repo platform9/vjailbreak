@@ -15,9 +15,10 @@ const (
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
 
-	VjailbreakNodePhaseVMCreating  = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
-	VjailbreakNodePhaseVMCreated   = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
-	VjailbreakNodePhaseNodeCreated = vjailbreakv1alpha1.VjailbreakNodePhase("NodeCreated")
+	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
+	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
+	VjailbreakNodePhaseDeleting   = vjailbreakv1alpha1.VjailbreakNodePhase("Deleting")
+	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("NodeReady")
 
 	NamespaceMigrationSystem = "migration-system"
 	MasterVjailbreakNodeName = "vjailbreak-master"
@@ -52,16 +53,15 @@ runcmd:
 
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,
-		vjailbreakv1alpha1.MigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.MigrationPhaseValidated:                2,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.MigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.MigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.MigrationPhaseFailed:                   10,
-		vjailbreakv1alpha1.MigrationPhaseUnknown:                  11,
+		vjailbreakv1alpha1.MigrationPhaseValidated:                1,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    2,
+		vjailbreakv1alpha1.MigrationPhaseCopying:                  3,
+		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     4,
+		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           5,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 6,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     7,
+		vjailbreakv1alpha1.MigrationPhaseSucceeded:                8,
+		vjailbreakv1alpha1.MigrationPhaseFailed:                   9,
+		vjailbreakv1alpha1.MigrationPhaseUnknown:                  10,
 	}
 )

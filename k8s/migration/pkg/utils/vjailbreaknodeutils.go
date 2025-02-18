@@ -87,13 +87,32 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	}
 
 	vjNode.Status.VMIP = GetNodeInternalIP(masterNode)
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeCreated
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
 	vjNode.Status.OpenstackUUID = openstackuuid
 
 	err = k3sclient.Status().Update(ctx, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to update vjailbreak node status")
 	}
+
+	return nil
+}
+
+func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
+	vjNode := scope.VjailbreakNode
+
+	// Controller manager is always on the master node due to pod affinity
+	openstackuuid, err := openstackutils.GetCurrentInstanceUUID()
+	if err != nil {
+		return errors.Wrap(err, "failed to get current instance uuid")
+	}
+
+	imageID, err := GetImageIDFromVM(openstackuuid, ctx, k3sclient, scope)
+	if err != nil {
+		return errors.Wrap(err, "failed to get image id of master node")
+	}
+
+	vjNode.Spec.ImageID = imageID
 
 	return nil
 }
@@ -140,6 +159,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
 
+	imageID, err := GetImageID(ctx, k3sclient)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get image id")
+	}
+
 	token, err := os.ReadFile(constants.K3sTokenFileLocation)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read k3s token file")
@@ -164,7 +188,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	serverCreateOpts := servers.CreateOpts{
 		Name:      vjNode.Name,
 		FlavorRef: vjNode.Spec.OpenstackFlavorID,
-		ImageRef:  vjNode.Spec.ImageID,
+		ImageRef:  imageID,
 		Networks:  networkIDs,
 		UserData: []byte(fmt.Sprintf(constants.CloudInitScript,
 			token[:12], constants.ENVFileLocation,
@@ -175,7 +199,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	// Create the VM
 	server, err := servers.Create(computeClient, serverCreateOpts).Extract()
 	if err != nil {
-		log.Error(err, "Failed to create server")
+		return "", errors.Wrap(err, "Failed to create server")
 	}
 
 	log.Info("Server created", "ID", server.ID)
@@ -252,6 +276,31 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client,
 	return "", errors.New("failed to get vm ip")
 }
 
+func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
+	log := scope.Logger
+	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get compute client")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(computeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to get server details")
+	}
+
+	if server.Image["id"] != nil {
+		log.Info("Image ID found", "Image ID", server.Image["id"])
+	} else {
+		return "", fmt.Errorf("Instance was booted from a volume, no image ID available")
+	}
+
+	if imageID, ok := server.Image["id"].(string); ok {
+		return imageID, nil
+	}
+	return "", fmt.Errorf("failed to assert image ID as string")
+}
+
 func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
 	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
 	if err != nil {
@@ -297,6 +346,19 @@ func GetOpenstackComputeClient(ctx context.Context,
 	}
 
 	return computeClient, nil
+}
+
+func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
+	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	// Get the image ID from the vjailbreak master node
+	err := k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      constants.MasterVjailbreakNodeName,
+	}, &vjNode)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get vjailbreak node")
+	}
+	return vjNode.Spec.ImageID, nil
 }
 
 func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
@@ -366,4 +428,16 @@ func GetInclusterClient() (client.Client, error) {
 	}
 
 	return clientset, err
+}
+
+// GetNodeByName returns the node object by name
+func GetNodeByName(ctx context.Context, k3sclient client.Client, nodeName string) (*corev1.Node, error) {
+	node := &corev1.Node{}
+	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name: nodeName,
+	}, node)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get node")
+	}
+	return node, nil
 }
