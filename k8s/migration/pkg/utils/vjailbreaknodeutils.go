@@ -98,7 +98,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	return nil
 }
 
-func UpdateMasterNodeImageId(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
+func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
 	vjNode := scope.VjailbreakNode
 
 	// Controller manager is always on the master node due to pod affinity
@@ -292,7 +292,7 @@ func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client,
 	if server.Image["id"] != nil {
 		log.Info("Image ID found", "Image ID", server.Image["id"])
 	} else {
-		return "", fmt.Errorf("Instance was booted from a volume, no image ID available.")
+		return "", fmt.Errorf("Instance was booted from a volume, no image ID available")
 	}
 
 	if imageID, ok := server.Image["id"].(string); ok {

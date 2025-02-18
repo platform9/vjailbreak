@@ -20,6 +20,8 @@ import (
 	"context"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -84,10 +86,11 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // reconcileNormal handles regular VjailbreakNode reconcile
 func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
-	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode")
 	var vmip string
+	var node *corev1.Node
 
 	vjNode := scope.VjailbreakNode
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
@@ -100,7 +103,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
-		err := utils.UpdateMasterNodeImageId(ctx, r.Client, scope)
+		err = utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 		}
@@ -122,7 +125,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
 
-			node, err := utils.GetNodeByName(ctx, r.Client, vjNode.Name)
+			node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
 			}
@@ -177,7 +180,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 
 // reconcileDelete handles deleted VjailbreakNode
 func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
-	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode Delete")
 
