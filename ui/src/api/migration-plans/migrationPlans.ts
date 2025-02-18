@@ -66,3 +66,13 @@ export const patchMigrationPlan = async (
   })
   return response
 }
+
+export const getMigrationPlans = async (
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<MigrationPlan[]> => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans`
+  const response = await axios.get<{ items: MigrationPlan[] }>({
+    endpoint,
+  })
+  return response?.items || []
+}
