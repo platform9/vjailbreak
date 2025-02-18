@@ -1,6 +1,11 @@
 # Image URL to use all building/pushing image targets
-CONTROLLER_IMG ?= platform9/vjailbreak-controller:v0.1
-export V2V_IMG ?= platform9/vjailbreak-v2v:v0.1
+
+REPO ?= platform9
+REGISTRY ?= quay.io
+TAG ?= latest
+
+export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
+export V2V_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-v2v:${TAG}
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 
@@ -118,8 +123,10 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
+	TAG=$(shell cat ../../package.json | jq -r .version) && \
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${REGISTRY}/${REPO}/vjailbreak-controller:$$TAG
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+	cp dist/install.yaml ../../deploy/00crds.yaml
 
 ##@ Deployment
 
@@ -160,7 +167,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.1
-CONTROLLER_TOOLS_VERSION ?= v0.15.0
+CONTROLLER_TOOLS_VERSION ?= v0.17.1
 ENVTEST_VERSION ?= release-0.18
 GOLANGCI_LINT_VERSION ?= v1.57.2
 

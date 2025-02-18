@@ -4,17 +4,20 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"vjailbreak/migrate"
-	"vjailbreak/nbd"
-	"vjailbreak/openstack"
-	"vjailbreak/reporter"
-	"vjailbreak/vcenter"
-	"vjailbreak/vm"
+
+	"github.com/platform9/vjailbreak/v2v-helper/migrate"
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/version"
+	"github.com/platform9/vjailbreak/v2v-helper/reporter"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 func removeEmptyStrings(slice []string) []string {
@@ -49,6 +52,7 @@ func main() {
 	var healthcheckport = os.Getenv("HEALTH_CHECK_PORT")
 	var debug = os.Getenv("DEBUG")
 
+	log.Println(version.GetVersion())
 	log.Println("URL:", envURL)
 	log.Println("Username:", envUserName)
 	log.Println("Insecure:", envInsecure)
@@ -142,8 +146,12 @@ func main() {
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
+		msg := fmt.Sprintf("Failed to migrate VM: %s\n", err)
 		cancel()
-		log.Fatalf("Failed to migrate VM: %s\n", err)
+		if migrationobj.InPod {
+			migrationobj.EventReporter <- msg
+		}
+		log.Fatalf(msg)
 	}
 
 	cancel()

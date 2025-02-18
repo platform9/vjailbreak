@@ -48,6 +48,7 @@ type MigrationTemplateSpec struct {
 type VMInfo struct {
 	Name       string   `json:"name"`
 	Datastores []string `json:"datastores,omitempty"`
+	Disks      []string `json:"disks,omitempty"`
 	Networks   []string `json:"networks,omitempty"`
 	IPAddress  string   `json:"ipAddress,omitempty"`
 	VMState    string   `json:"vmState,omitempty"`
