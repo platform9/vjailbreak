@@ -113,7 +113,7 @@ EOF
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 
-  log "K3s master setup completed."
+  log "K3s master setup completed"
 else
   log "Setting up K3s Worker..."
 
