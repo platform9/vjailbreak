@@ -17,6 +17,7 @@ const (
 
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
+	VjailbreakNodePhaseDeleting   = vjailbreakv1alpha1.VjailbreakNodePhase("Deleting")
 	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("NodeReady")
 
 	NamespaceMigrationSystem = "migration-system"
