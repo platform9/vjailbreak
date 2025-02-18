@@ -96,14 +96,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
-	// Check and create master node entry
-	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
-	}
-
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
-		err = utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
+		err := utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 		}
