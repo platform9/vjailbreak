@@ -84,7 +84,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // reconcileNormal handles regular VjailbreakNode reconcile
 func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
-	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode")
 	var vmip string
@@ -115,8 +115,10 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 			vjNode.Status.VMIP = vmip
 
+			var activeMigrations []string
+
 			// Get active migrations happening on the node
-			activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+			activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
 			}
@@ -140,13 +142,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
-	// Get active migrations happening on the node
-	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
-	}
-
-	vjNode.Status.ActiveMigrations = activeMigrations
 	vjNode.Status.OpenstackUUID = uuid
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 	vjNode.Status.VMIP = vmip
