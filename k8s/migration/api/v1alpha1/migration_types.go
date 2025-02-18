@@ -21,6 +21,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	MigrationPhasePending                  MigrationPhase = "Pending"
+	MigrationPhaseValidating               MigrationPhase = "Validating"
+	MigrationPhaseValidated                MigrationPhase = "Validated"
+	MigrationPhaseAwaitingDataCopyStart    MigrationPhase = "AwaitingDataCopyStart"
+	MigrationPhaseCopying                  MigrationPhase = "CopyingBlocks"
+	MigrationPhaseCopyingChangedBlocks     MigrationPhase = "CopyingChangedBlocks"
+	MigrationPhaseConvertingDisk           MigrationPhase = "ConvertingDisk"
+	MigrationPhaseAwaitingCutOverStartTime MigrationPhase = "AwaitingCutOverStartTime"
+	MigrationPhaseAwaitingAdminCutOver     MigrationPhase = "AwaitingAdminCutOver"
+	MigrationPhaseSucceeded                MigrationPhase = "Succeeded"
+	MigrationPhaseFailed                   MigrationPhase = "Failed"
+	MigrationPhaseUnknown                  MigrationPhase = "Unknown"
+)
+
 // MigrationSpec defines the desired state of Migration
 type MigrationSpec struct {
 	// MigrationPlan is the name of the migration plan
@@ -35,6 +50,9 @@ type MigrationSpec struct {
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
 }
+
+type MigrationPhase string
+type MigrationConditionType string
 
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {

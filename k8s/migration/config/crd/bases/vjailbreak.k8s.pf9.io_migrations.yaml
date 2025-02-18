@@ -109,7 +109,6 @@ spec:
                 description: Phase is the current phase of the migration
                 type: string
             required:
-            - conditions
             - phase
             type: object
         type: object
