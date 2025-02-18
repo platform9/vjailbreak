@@ -15,7 +15,7 @@ import {
 } from "./model"
 import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
 import { OpenstackImagesResponse } from "../openstack-creds/model"
-import { nanoid } from "nanoid"
+import { customAlphabet } from "nanoid"
 
 // Private helper function for token generation
 const generateOpenstackToken = async (creds) => {
@@ -140,6 +140,13 @@ const createNodeSpec = (params: {
   openstackflavorid: params.flavorId,
 })
 
+const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6);
+
+function generateAgentName() {
+    return `vjailbreak-agent-${nanoid()}`;
+}
+
+
 // Create VjailbreakNode object
 const createNodeObject = (params: {
   name?: string
@@ -149,7 +156,7 @@ const createNodeObject = (params: {
   apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
   kind: "VjailbreakNode",
   metadata: {
-    name: params.name || `vjailbreak-agent-${nanoid(5).toLowerCase()}`,
+    name: params.name || generateAgentName(),
     namespace: params.namespace || "migration-system",
   },
   spec: params.spec,
