@@ -35,7 +35,7 @@ type VjailbreakNodeSpec struct {
 	OpenstackFlavorID string `json:"openstackflavorid"`
 
 	// OpenstackImageID is the image of the VM
-	ImageID string `json:"imageid"`
+	ImageID string `json:"imageid,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode
@@ -48,6 +48,9 @@ type VjailbreakNodeStatus struct {
 
 	// Phase is the current phase of the node
 	Phase VjailbreakNodePhase `json:"phase,omitempty"`
+
+	// ActiveMigrations is the list of active migrations happening on the node
+	ActiveMigrations []string `json:"activemigrations,omitempty"`
 }
 
 // +kubebuilder:object:root=true

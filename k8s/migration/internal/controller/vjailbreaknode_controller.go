@@ -18,6 +18,9 @@ package controller
 
 import (
 	"context"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -82,23 +85,24 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // reconcileNormal handles regular VjailbreakNode reconcile
+//
+//nolint:unparam //future use
 func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
-	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode")
 	var vmip string
+	var node *corev1.Node
 
 	vjNode := scope.VjailbreakNode
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
-	// Check and create master node entry
-	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
-	}
-
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
+		err := utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+		}
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
 	}
@@ -116,9 +120,30 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
+
+			node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
+			}
 			vjNode.Status.OpenstackUUID = uuid
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+			for _, condition := range node.Status.Conditions {
+				if condition.Type == "Ready" {
+					vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+			}
 			vjNode.Status.VMIP = vmip
+
+			var activeMigrations []string
+
+			// Get active migrations happening on the node
+			activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
+			}
+
+			vjNode.Status.ActiveMigrations = activeMigrations
 
 			// Update the VjailbreakNode status
 			err = r.Client.Status().Update(ctx, vjNode)
@@ -126,7 +151,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
 
 	// Create Openstack VM for worker node
@@ -146,13 +171,14 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	log.Info("Successfully created openstack vm for worker node", "vmid", vmid)
-
 	return ctrl.Result{}, nil
 }
 
 // reconcileDelete handles deleted VjailbreakNode
+//
+//nolint:unparam //future use
 func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
-	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) { //nolint:unparam // required
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode Delete")
 
@@ -160,6 +186,13 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 		log.Info("Skipping master node deletion")
 		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
 		return ctrl.Result{}, nil
+	}
+
+	scope.VjailbreakNode.Status.Phase = constants.VjailbreakNodePhaseDeleting
+	// Update the VjailbreakNode status
+	err := r.Client.Status().Update(ctx, scope.VjailbreakNode)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
 	uuid, err := utils.GetOpenstackVMByName(scope.VjailbreakNode.Name, ctx, r.Client, scope)

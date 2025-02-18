@@ -93,9 +93,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, fmt.Errorf("pod is not Running for migration %s", migration.Name)
 	}
 
-	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
-		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
-	}
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed getting pod events")
@@ -105,6 +102,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratedCondition(migration, filteredEvents)
+
+	migration.Status.AgentName = pod.Spec.NodeName
 
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
@@ -159,7 +158,6 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
 		vjailbreakv1alpha1.MigrationPhaseValidated,
-		vjailbreakv1alpha1.MigrationPhaseValidating,
 		vjailbreakv1alpha1.MigrationPhasePending}
 
 loop:
