@@ -60,7 +60,7 @@ type MigrationStatus struct {
 	Phase MigrationPhase `json:"phase"`
 
 	// Conditions is the list of conditions of the migration object pod
-	Conditions []corev1.PodCondition `json:"conditions,omitempty""`
+	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
 
 	// AgentName is the name of the agent where migration is running
 	AgentName string `json:"AgentName,omitempty"`
