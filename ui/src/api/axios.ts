@@ -1,7 +1,20 @@
 import axios from "axios"
 import { pathJoin } from "src/utils"
-
 import { AxiosRequestConfig } from "axios"
+
+interface ExtendedAxiosConfig extends AxiosRequestConfig {
+  mock?: boolean
+}
+
+interface BaseRequestParams {
+  endpoint: string
+  baseUrl?: string
+  config?: ExtendedAxiosConfig
+}
+
+interface RequestParamsWithData extends BaseRequestParams {
+  data: unknown
+}
 
 const getHeaders = () => {
   const authToken = import.meta.env.VITE_API_TOKEN
@@ -18,8 +31,11 @@ const axiosInstance = axios.create({
   headers: getHeaders(),
 })
 
-const getDefaultBaseUrl = () => {
+const getDefaultBaseUrl = (config?: ExtendedAxiosConfig) => {
   if (import.meta.env.VITE_USE_MOCK_API === "true") {
+    if (config?.mock === false) {
+      return import.meta.env.MODE === "development" ? "/dev-api" : ""
+    }
     return "http://localhost:3001/mock-server"
   }
 
@@ -29,36 +45,10 @@ const getDefaultBaseUrl = () => {
   return ""
 }
 
-interface AxiosGetRequestParams {
-  endpoint: string
-  baseUrl?: string
-  config?: AxiosRequestConfig
-}
-
-interface AxiosPostRequestParams {
-  endpoint: string
-  baseUrl?: string
-  data: unknown
-  config?: AxiosRequestConfig
-}
-
-interface AxiosPutRequestParams {
-  endpoint: string
-  baseUrl?: string
-  data: unknown
-  config?: AxiosRequestConfig
-}
-
 interface AxiosPatchRequestParams {
   endpoint: string
   baseUrl?: string
   data: unknown
-  config?: AxiosRequestConfig
-}
-
-interface AxiosDeleteRequestParams {
-  endpoint: string
-  baseUrl?: string
   config?: AxiosRequestConfig
 }
 
@@ -67,8 +57,8 @@ export const get = async <T>({
   endpoint,
   baseUrl,
   config,
-}: AxiosGetRequestParams) => {
-  const url = pathJoin(baseUrl || getDefaultBaseUrl(), endpoint)
+}: BaseRequestParams) => {
+  const url = pathJoin(baseUrl || getDefaultBaseUrl(config), endpoint)
   const response = await axiosInstance.get<T>(url, config)
   return response.data
 }
@@ -78,8 +68,8 @@ export const post = async <T>({
   baseUrl,
   data,
   config = {},
-}: AxiosPostRequestParams) => {
-  const url = pathJoin(baseUrl || getDefaultBaseUrl(), endpoint)
+}: RequestParamsWithData) => {
+  const url = pathJoin(baseUrl || getDefaultBaseUrl(config), endpoint)
   const response = await axiosInstance.post<T>(url, data, config)
   return response.data
 }
@@ -89,8 +79,8 @@ export const put = async <T>({
   baseUrl,
   data,
   config = {},
-}: AxiosPutRequestParams) => {
-  const url = pathJoin(baseUrl || getDefaultBaseUrl(), endpoint)
+}: RequestParamsWithData) => {
+  const url = pathJoin(baseUrl || getDefaultBaseUrl(config), endpoint)
   const response = await axiosInstance.put<T>(url, data, config)
   return response.data
 }
@@ -110,8 +100,8 @@ export const del = async <T>({
   endpoint,
   baseUrl,
   config = {},
-}: AxiosDeleteRequestParams) => {
-  const url = pathJoin(baseUrl || getDefaultBaseUrl(), endpoint)
+}: BaseRequestParams) => {
+  const url = pathJoin(baseUrl || getDefaultBaseUrl(config), endpoint)
   const response = await axiosInstance.delete<T>(url, config)
   return response.data
 }

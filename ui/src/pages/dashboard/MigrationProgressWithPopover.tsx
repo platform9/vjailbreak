@@ -13,18 +13,13 @@ import {
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom"
+import { Phase, Condition } from "src/api/migrations/model"
 
 // Interfaces
 enum Status {
   Pending = "Pending",
   Completed = "Completed",
   InProgress = "InProgress",
-  Failed = "Failed",
-}
-
-enum Phases {
-  Succeeded = "Succeeded",
-  Running = "Running",
   Failed = "Failed",
 }
 
@@ -37,12 +32,12 @@ enum StatusType {
 interface StatusStep {
   type: StatusType
   status: Status
-  message: String
-  reason?: String
-  lastTransitionTime?: String
+  message: string
+  reason?: string
+  lastTransitionTime?: string
 }
 
-const defaultSteps: Object = {
+const defaultSteps = {
   [StatusType.Validated]: {
     type: StatusType.Validated,
     status: Status.Pending,
@@ -66,7 +61,24 @@ const StepperContainer = styled("div")({
   margin: "12px",
 })
 
-export default function MigrationProgressWithPopover({ phase, conditions }) {
+const ProgressContainer = styled(Box)({
+  display: "flex",
+  alignItems: "center",
+  height: "100%",
+  cursor: "pointer"
+})
+
+interface MigrationProgressWithPopoverProps {
+  phase: Phase | undefined
+  conditions: Condition[]
+  progressText: string
+}
+
+export default function MigrationProgressWithPopover({
+  phase,
+  conditions,
+  progressText
+}: MigrationProgressWithPopoverProps) {
   const [steps, setSteps] = useState<StatusStep[]>(Object.values(defaultSteps))
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
@@ -96,14 +108,24 @@ export default function MigrationProgressWithPopover({ phase, conditions }) {
     setSteps(Object.values(updatedSteps))
   }, [defaultSteps, conditions])
 
-  // Status Icon
+  // Update the statusIcon logic to use the new Phase enum
   const statusIcon = useMemo(() => {
-    if (phase === Phases.Succeeded) {
+    if (phase === Phase.Succeeded) {
       return <CheckCircleOutlineIcon style={{ color: "green" }} />
-    } else if (phase === Phases.Running) {
+    } else if ([
+      Phase.Validating,
+      Phase.AwaitingDataCopyStart,
+      Phase.CopyingBlocks,
+      Phase.CopyingChangedBlocks,
+      Phase.ConvertingDisk,
+      Phase.AwaitingCutOverStartTime,
+      Phase.AwaitingAdminCutOver
+    ].includes(phase as Phase)) {
       return <CircularProgress size={20} style={{ marginRight: 3 }} />
-    } else if (phase === Phases.Failed) {
+    } else if (phase === Phase.Failed) {
       return <ErrorOutlineIcon style={{ color: "red" }} />
+    } else {
+      return <HourglassBottomIcon style={{ color: "grey" }} />
     }
   }, [phase])
 
@@ -130,20 +152,19 @@ export default function MigrationProgressWithPopover({ phase, conditions }) {
   }
 
   return (
-    <>
-      <Box
-        height={52}
-        display={"flex"}
-        alignItems={"center"}
-        onMouseEnter={handlePopoverOpen}
-        onMouseLeave={handlePopoverClose}
-        sx={{ cursor: "pointer" }}
-      >
-        {statusIcon}
-        <Typography variant="body2" style={{ marginLeft: 8 }}>
-          {activeStep ? `${phase}: ${activeStep?.message}` : phase}
-        </Typography>
-      </Box>
+    <ProgressContainer
+      onMouseEnter={handlePopoverOpen}
+      onMouseLeave={handlePopoverClose}
+    >
+      {/* Status icon and phase */}
+      {statusIcon}
+      <Typography variant="body2" sx={{ ml: 2 }}>
+        {progressText}
+      </Typography>
+
+
+
+
       <Popover
         id="mouse-over-popover"
         sx={{ pointerEvents: "none" }}
@@ -166,7 +187,7 @@ export default function MigrationProgressWithPopover({ phase, conditions }) {
           steps={steps}
         />
       </Popover>
-    </>
+    </ProgressContainer>
   )
 }
 
@@ -203,8 +224,8 @@ const StepperComponent = ({
 
   const lastUpdated = activeStep?.lastTransitionTime
     ? new Date(String(activeStep?.lastTransitionTime)).toLocaleTimeString(
-        "en-US"
-      )
+      "en-US"
+    )
     : null
 
   const diffInMinutes = useMemo(() => {
