@@ -199,7 +199,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	// Create the VM
 	server, err := servers.Create(computeClient, serverCreateOpts).Extract()
 	if err != nil {
-		log.Error(err, "Failed to create server")
+		return "", errors.Wrap(err, "Failed to create server")
 	}
 
 	log.Info("Server created", "ID", server.ID)
