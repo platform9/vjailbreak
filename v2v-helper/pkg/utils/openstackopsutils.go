@@ -134,7 +134,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
 		}).Extract()
-		if err == nil {
+		if err == nil || strings.Contains(err.Error(), "already attached") {
 			break
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
@@ -195,7 +195,7 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
 	return nil
