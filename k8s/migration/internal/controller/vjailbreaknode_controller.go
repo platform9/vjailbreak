@@ -187,6 +187,13 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	scope.VjailbreakNode.Status.Phase = constants.VjailbreakNodePhaseDeleting
+	// Update the VjailbreakNode status
+	err := r.Client.Status().Update(ctx, scope.VjailbreakNode)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
+	}
+
 	uuid, err := utils.GetOpenstackVMByName(scope.VjailbreakNode.Name, ctx, r.Client, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
