@@ -111,9 +111,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
 
-	// Update the status of the Migration object
-	migration.Status.Phase = string(pod.Status.Phase)
-	migration.Status.Conditions = statusconditions
 	migration.Status.AgentName = pod.Spec.NodeName
 
 	if err := r.Status().Update(ctx, migration); err != nil {

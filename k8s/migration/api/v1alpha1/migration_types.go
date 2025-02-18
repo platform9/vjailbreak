@@ -57,7 +57,7 @@ type MigrationConditionType string
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
 	// Phase is the current phase of the migration
-	Phase string `json:"phase"`
+	Phase MigrationPhase `json:"phase"`
 
 	// Conditions is the list of conditions of the migration object pod
 	Conditions []corev1.PodCondition `json:"conditions"`
