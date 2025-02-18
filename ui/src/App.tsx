@@ -7,6 +7,7 @@ import MigrationFormDrawer from "./features/migration/MigrationForm"
 import { useMigrationsQuery } from "./hooks/api/useMigrationsQuery"
 import Dashboard from "./pages/dashboard/Dashboard"
 import Onboarding from "./pages/onboarding/Onboarding"
+import { useNodesQuery } from "./hooks/api/useNodesQuery"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -31,16 +32,17 @@ function App() {
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
 
   const { data: migrations } = useMigrationsQuery()
+  const { data: nodes } = useNodesQuery()
 
   useEffect(() => {
-    if (!migrations) {
+    if (!migrations || !nodes) {
       return
     } else if (migrations.length === 0) {
       navigate("/onboarding")
     } else {
       navigate("/dashboard")
     }
-  }, [migrations, navigate])
+  }, [migrations, nodes, navigate])
 
   const hideAppbar =
     location.pathname === "/onboarding" || location.pathname === "/"
