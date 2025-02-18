@@ -244,6 +244,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var disks []string
 		var ds mo.Datastore
 		var dsref types.ManagedObjectReference
+
 		for _, device := range vmProps.Config.Hardware.Device {
 			switch dev := device.(type) {
 			case *types.VirtualE1000e:
