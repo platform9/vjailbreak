@@ -121,6 +121,7 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 	return ctrl.Result{}, nil
 }
 
+//nolint:unparam //future use
 func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {

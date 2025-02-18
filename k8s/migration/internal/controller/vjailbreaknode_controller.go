@@ -85,6 +85,8 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // reconcileNormal handles regular VjailbreakNode reconcile
+//
+//nolint:unparam //future use
 func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
@@ -173,6 +175,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 }
 
 // reconcileDelete handles deleted VjailbreakNode
+//
+//nolint:unparam //future use
 func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger

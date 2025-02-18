@@ -292,7 +292,7 @@ func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client,
 	if server.Image["id"] != nil {
 		log.Info("Image ID found", "Image ID", server.Image["id"])
 	} else {
-		return "", fmt.Errorf("Instance was booted from a volume, no image ID available")
+		return "", fmt.Errorf("instance was booted from a volume, no image ID available")
 	}
 
 	if imageID, ok := server.Image["id"].(string); ok {
