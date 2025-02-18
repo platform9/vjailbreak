@@ -18,7 +18,7 @@ const DashboardContainer = styled("div")({
   justifyContent: "center",
   width: "100%",
   height: "100%",
-  padding: "40px 20px",
+  padding: "60px 20px",
   boxSizing: "border-box"
 })
 
