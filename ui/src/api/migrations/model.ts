@@ -112,9 +112,17 @@ export enum Type {
 }
 
 export enum Phase {
-  Failed = "Failed",
-  Running = "Running",
+  Pending = "Pending",
+  Validating = "Validating",
+  AwaitingDataCopyStart = "AwaitingDataCopyStart",
+  CopyingBlocks = "CopyingBlocks",
+  CopyingChangedBlocks = "CopyingChangedBlocks",
+  ConvertingDisk = "ConvertingDisk",
+  AwaitingCutOverStartTime = "AwaitingCutOverStartTime",
+  AwaitingAdminCutOver = "AwaitingAdminCutOver",
   Succeeded = "Succeeded",
+  Failed = "Failed",
+  Unknown = "Unknown",
 }
 
 export interface GetMigrationsListMetadata {

@@ -5,12 +5,15 @@ import {
   Paper,
   styled,
   Tooltip,
+  Box,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
+import { useEffect, useState } from "react";
+import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -32,6 +35,19 @@ const columns: GridColDef[] = [
     field: "name",
     headerName: "VM Name",
     flex: 2,
+    renderCell: (params) => (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {params.value}
+        {params.row.isMigrated && (
+          <Chip
+            variant="outlined"
+            label="Migrated"
+            color="info"
+            size="small"
+          />
+        )}
+      </Box>
+    ),
   },
   {
     field: "vmState",
@@ -80,6 +96,7 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 5 };
 
+const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or  already has been migrated.";
 const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
 const NO_IP_TOOLTIP_MESSAGE = "VM has not been assigned an IP address yet. Please refresh again.";
 
@@ -89,6 +106,7 @@ interface VmsSelectionStepProps {
   error: string;
   loadingVms?: boolean;
   onRefresh?: () => void;
+  open?: boolean;
 }
 
 export default function VmsSelectionStep({
@@ -97,10 +115,50 @@ export default function VmsSelectionStep({
   error,
   loadingVms = false,
   onRefresh,
+  open = false,
 }: VmsSelectionStepProps) {
+  const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
+  const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
+
+  useEffect(() => {
+    const fetchMigratedVms = async () => {
+      if (!open) return;
+
+      setLoadingMigratedVms(true);
+      try {
+        const plans = await getMigrationPlans();
+        const migratedVmSet = new Set<string>();
+
+        plans.forEach(plan => {
+          plan.spec.virtualmachines.forEach(vmList => {
+            vmList.forEach(vm => migratedVmSet.add(vm));
+          });
+        });
+
+        setMigratedVms(migratedVmSet);
+      } catch (error) {
+        console.error("Error fetching migrated VMs:", error);
+      } finally {
+        setLoadingMigratedVms(false);
+      }
+    };
+
+    fetchMigratedVms();
+  }, [open]);
+
+  const vmsWithMigrationStatus = vms.map(vm => ({
+    ...vm,
+    isMigrated: migratedVms.has(vm.name)
+  }));
+
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
-    const selectedVms = vms.filter((vm) => selectedRowIds.includes(vm.name));
+    const selectedVms = vmsWithMigrationStatus.filter((vm) => selectedRowIds.includes(vm.name));
     onChange("vms")(selectedVms);
+  };
+
+  const isRowSelectable = (params) => {
+    if (params.row.isMigrated) return false;
+    return params.row.vmState === "running" && !!params.row.ipAddress;
   };
 
   return (
@@ -110,7 +168,7 @@ export default function VmsSelectionStep({
         <FormControl error={!!error} required>
           <Paper sx={{ width: "100%", height: 389 }}>
             <DataGrid
-              rows={vms}
+              rows={vmsWithMigrationStatus}
               columns={columns}
               initialState={{
                 pagination: { paginationModel },
@@ -123,15 +181,13 @@ export default function VmsSelectionStep({
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               getRowId={(row) => row.name}
-              isRowSelectable={(params) =>
-                params.row.vmState === "running" && !!params.row.ipAddress
-              }
+              isRowSelectable={isRowSelectable}
               slots={{
                 toolbar: (props) => (
                   <CustomSearchToolbar
                     {...props}
                     onRefresh={onRefresh}
-                    disableRefresh={loadingVms}
+                    disableRefresh={loadingVms || loadingMigratedVms}
                     placeholder="Search by  Name, Status, IP Address, or Network Interface(s)"
                   />
                 ),
@@ -141,12 +197,16 @@ export default function VmsSelectionStep({
                 row: (props) => {
                   const isVmStopped = props.row.vmState !== "running";
                   const runningButNoIp = props.row.vmState === "running" && !props.row.ipAddress;
+                  const isMigrated = props.row.isMigrated;
 
-                  const tooltipMessage = isVmStopped
-                    ? DISABLED_TOOLTIP_MESSAGE
-                    : runningButNoIp
-                      ? NO_IP_TOOLTIP_MESSAGE
-                      : "";
+                  let tooltipMessage = "";
+                  if (isMigrated) {
+                    tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
+                  } else if (isVmStopped) {
+                    tooltipMessage = DISABLED_TOOLTIP_MESSAGE;
+                  } else if (runningButNoIp) {
+                    tooltipMessage = NO_IP_TOOLTIP_MESSAGE;
+                  }
 
                   return (
                     <Tooltip
@@ -160,12 +220,14 @@ export default function VmsSelectionStep({
                   );
                 },
               }}
-              loading={loadingVms}
+              loading={loadingVms || loadingMigratedVms}
               checkboxSelection
               disableColumnMenu
               disableColumnResize
               getRowClassName={(params) =>
-                params.row.vmState !== "running" || !params.row.ipAddress ? "disabled-row" : ""
+                (params.row.vmState !== "running" || !params.row.ipAddress || params.row.isMigrated)
+                  ? "disabled-row"
+                  : ""
               }
             />
           </Paper>
