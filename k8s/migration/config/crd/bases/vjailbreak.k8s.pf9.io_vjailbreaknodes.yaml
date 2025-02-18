@@ -100,6 +100,12 @@ spec:
           status:
             description: Status defines the observed state of VjailbreakNode
             properties:
+              activemigrations:
+                description: ActiveMigrations is the list of active migrations happening
+                  on the node
+                items:
+                  type: string
+                type: array
               openstackuuid:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string

@@ -21,7 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type Network struct {
@@ -36,6 +41,12 @@ type OpenStackMetadata struct {
 }
 
 func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client) error {
+
+	k3sclient, err := GetInclusterClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to get client")
+	}
+
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
@@ -318,4 +329,43 @@ func ReadFileContent(filePath string) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client) ([]string, error) {
+	migrationList := &vjailbreakv1alpha1.MigrationList{}
+	err := k3sclient.List(ctx, migrationList)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list migrations")
+	}
+
+	var activeMigrations []string
+	for i := range migrationList.Items {
+		migration := &migrationList.Items[i]
+		if migration.Status.AgentName == nodeName && migration.Status.Phase == "Running" {
+			activeMigrations = append(activeMigrations,
+				migration.Name)
+		}
+	}
+	return activeMigrations, nil
+}
+
+func GetInclusterClient() (client.Client, error) {
+	// Create a direct Kubernetes client
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to get in-cluster config")
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
+	clientset, err := client.New(config, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to get in-cluster config")
+	}
+
+	return clientset, err
+
 }

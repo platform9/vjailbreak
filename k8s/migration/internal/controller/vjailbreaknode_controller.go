@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -92,12 +93,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
-	// Check and create master node entry
-	err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to check and create master node entry")
-	}
-
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
@@ -120,13 +115,23 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 			vjNode.Status.VMIP = vmip
 
+			var activeMigrations []string
+
+			// Get active migrations happening on the node
+			activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
+			}
+
+			vjNode.Status.ActiveMigrations = activeMigrations
+
 			// Update the VjailbreakNode status
 			err = r.Client.Status().Update(ctx, vjNode)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
 
 	// Create Openstack VM for worker node
