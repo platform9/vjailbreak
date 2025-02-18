@@ -39,3 +39,26 @@ export const createOpenstackCredsJson = (params) => {
     },
   }
 }
+
+export const createOpenstackTokenRequestBody = (creds: any) => {
+  return {
+    auth: {
+      identity: {
+        methods: ["password"],
+        password: {
+          user: {
+            name: creds.OS_USERNAME,
+            domain: { name: creds.OS_USER_DOMAIN_NAME || "default" },
+            password: creds.OS_PASSWORD,
+          },
+        },
+      },
+      scope: {
+        project: {
+          name: creds.OS_PROJECT_NAME || "service",
+          domain: { name: creds.OS_PROJECT_DOMAIN_NAME || "default" },
+        },
+      },
+    },
+  }
+}
