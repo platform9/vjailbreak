@@ -37,7 +37,6 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -48,7 +47,6 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
