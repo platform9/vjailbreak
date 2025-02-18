@@ -324,7 +324,6 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 				RestartPolicy:                 corev1.RestartPolicyNever,
 				ServiceAccountName:            "migration-controller-manager",
 				TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
-				DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 				HostNetwork:                   true,
 				Containers: []corev1.Container{
 					{
