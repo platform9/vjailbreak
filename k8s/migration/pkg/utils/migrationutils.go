@@ -51,10 +51,6 @@ func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList
 			continue
 		}
 
-		if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidated] {
-			migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidated
-		}
-
 		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeValidated, constants.MigrationReason)
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeValidated,
 			corev1.ConditionTrue,

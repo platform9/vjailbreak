@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -158,7 +159,12 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
-
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+	// Update the VjailbreakNode status
+	err := k3sclient.Status().Update(ctx, vjNode)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to update vjailbreak node status")
+	}
 	imageID, err := GetImageID(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get image id")
@@ -319,7 +325,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 
 	// delete the VM
 	err = servers.Delete(computeClient, uuid).ExtractErr()
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "Failed to delete server")
 	}
 	return nil
