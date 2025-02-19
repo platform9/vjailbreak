@@ -119,10 +119,10 @@ export default function Dashboard() {
     return baseMessage
   }
 
-   const { data: nodes } = useNodesQuery() 
+  const { data: nodes } = useNodesQuery()
 
   useEffect(() => {
-    if (!!migrations && migrations.length === 0 && nodes.length === 0) {
+    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
       navigate("/onboarding")
     }
   }, [migrations, navigate])
