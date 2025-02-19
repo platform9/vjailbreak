@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -309,7 +310,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 
 	// delete the VM
 	err = servers.Delete(computeClient, uuid).ExtractErr()
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "Failed to delete server")
 	}
 	return nil

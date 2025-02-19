@@ -23,7 +23,7 @@ import (
 
 const (
 	MigrationPhasePending                  MigrationPhase = "Pending"
-	MigrationPhaseValidated                MigrationPhase = "Validated"
+	MigrationPhaseValidating               MigrationPhase = "Validating"
 	MigrationPhaseAwaitingDataCopyStart    MigrationPhase = "AwaitingDataCopyStart"
 	MigrationPhaseCopying                  MigrationPhase = "CopyingBlocks"
 	MigrationPhaseCopyingChangedBlocks     MigrationPhase = "CopyingChangedBlocks"
