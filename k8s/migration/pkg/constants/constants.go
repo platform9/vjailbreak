@@ -18,7 +18,7 @@ const (
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
 	VjailbreakNodePhaseDeleting   = vjailbreakv1alpha1.VjailbreakNodePhase("Deleting")
-	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("NodeReady")
+	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
 
 	NamespaceMigrationSystem = "migration-system"
 	MasterVjailbreakNodeName = "vjailbreak-master"
@@ -53,7 +53,7 @@ runcmd:
 
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,
-		vjailbreakv1alpha1.MigrationPhaseValidated:                1,
+		vjailbreakv1alpha1.MigrationPhaseValidating:               1,
 		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    2,
 		vjailbreakv1alpha1.MigrationPhaseCopying:                  3,
 		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     4,

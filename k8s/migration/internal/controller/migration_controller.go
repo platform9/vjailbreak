@@ -89,6 +89,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
+		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
+	}
+
 	if pod.Status.Phase != corev1.PodRunning {
 		return ctrl.Result{}, fmt.Errorf("pod is not Running for migration %s", migration.Name)
 	}
@@ -157,7 +161,7 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	}
 
 	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
-		vjailbreakv1alpha1.MigrationPhaseValidated,
+		vjailbreakv1alpha1.MigrationPhaseValidating,
 		vjailbreakv1alpha1.MigrationPhasePending}
 
 loop:
