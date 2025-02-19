@@ -28,6 +28,13 @@ https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
 ![alt text](assets/migrationprogress1.png)
 ![alt text](assets/migrationprogress2.png)
 
+### Scale up Agents
+![alt text](assets/scaleup.png)
+![alt text](assets/scaleupagents.png)
+
+### Scale down Agents
+![all text](assets/scaledown.png)
+
 ## FAQ
 
 ### Are IPs and MAC addresses persisted?
