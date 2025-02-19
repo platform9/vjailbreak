@@ -153,7 +153,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// Create Openstack VM for worker node
@@ -243,5 +243,5 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 	}
 
 	// Always requeue after one minute
-	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
