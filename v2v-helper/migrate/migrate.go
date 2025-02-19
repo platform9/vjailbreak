@@ -744,7 +744,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 }
 
 func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
-	log.Println("Trying to perform cleanup")
+	migobj.logMessage("Trying to perform cleanup")
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
