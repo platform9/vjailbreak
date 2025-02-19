@@ -101,7 +101,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
 		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
