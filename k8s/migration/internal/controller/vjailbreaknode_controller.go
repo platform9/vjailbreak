@@ -121,35 +121,41 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
 
-			node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
-			}
 			vjNode.Status.OpenstackUUID = uuid
-			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-			for _, condition := range node.Status.Conditions {
-				if condition.Type == "Ready" {
-					vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-			}
 			vjNode.Status.VMIP = vmip
-
-			var activeMigrations []string
-
-			// Get active migrations happening on the node
-			activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
-			}
-
-			vjNode.Status.ActiveMigrations = activeMigrations
 
 			// Update the VjailbreakNode status
 			err = r.Client.Status().Update(ctx, vjNode)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
+		}
+		node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
+		}
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == "Ready" {
+				vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+				break
+			}
+		}
+
+		var activeMigrations []string
+
+		// Get active migrations happening on the node
+		activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
+		}
+
+		vjNode.Status.ActiveMigrations = activeMigrations
+
+		// Update the VjailbreakNode status
+		err = r.Client.Status().Update(ctx, vjNode)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
