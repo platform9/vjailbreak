@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -158,7 +159,12 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
-
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+	// Update the VjailbreakNode status
+	err := k3sclient.Status().Update(ctx, vjNode)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to update vjailbreak node status")
+	}
 	imageID, err := GetImageID(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get image id")
@@ -215,9 +221,19 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
 		Name:      vjNode.Spec.OpenstackCreds.Name,
 		Namespace: vjNode.Spec.OpenstackCreds.Namespace,
 	}, oscreds)
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
+	oscredsList := &vjailbreakv1alpha1.OpenstackCredsList{}
+	err = k3sclient.List(ctx, oscredsList)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list openstack creds")
+	}
+
+	if len(oscredsList.Items) == 0 {
+		return nil, errors.New("no openstack creds found")
+	}
+	oscreds = &oscredsList.Items[0]
 	return oscreds, nil
 }
 
@@ -309,7 +325,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 
 	// delete the VM
 	err = servers.Delete(computeClient, uuid).ExtractErr()
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "Failed to delete server")
 	}
 	return nil
