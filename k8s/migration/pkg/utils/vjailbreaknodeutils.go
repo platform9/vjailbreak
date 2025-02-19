@@ -159,7 +159,7 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+
 	// Update the VjailbreakNode status
 	err := k3sclient.Status().Update(ctx, vjNode)
 	if err != nil {

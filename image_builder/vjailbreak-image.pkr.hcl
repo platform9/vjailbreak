@@ -11,28 +11,24 @@ source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
   iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:67d312441a401c75389b063e1331c5fa11f35813f531dcbcceba765a4895251f"
+  iso_checksum         = "sha256:ddf938f5afe81f6377bc04482b70991d81d72957e8a8ad0018d5bc3e20c8a4de"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
-  disk_size            = "15G"
+  disk_size            = "16G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
-  ssh_password         = "password"
   ssh_username         = "ubuntu"
+  ssh_password         = "password"
   ssh_timeout          = "20m"
   cpus                 = 2
   memory               = 2048
   efi_boot             = false
   shutdown_command     = "echo 'password' | sudo -S shutdown -P now"
+  boot_wait            = "10s"
 
-  boot_wait = "10s"
-
-  # Location of Cloud-Init / Autoinstall Configuration files
-  # Will be served via an HTTP Server from Packer
   http_directory = "${path.root}/cloudinit/"
-
 
   qemuargs = [
     ["-smbios", "type=1,serial=ds=nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/"]
@@ -47,33 +43,26 @@ build {
     destination = "/tmp/yamls"
   }
 
-  provisioner "shell" {
-    inline = [
-      "while ! systemctl is-active --quiet k3s; do sleep 10; done",
-    ]
-  }
-
-  provisioner "shell" {
-    inline = [
-      "sudo kubectl --request-timeout=300s apply --server-side -f /tmp/yamls/kube-prometheus/manifests/setup",
-      "sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/kube-prometheus/manifests/",
-      "sudo kubectl --request-timeout=300s apply -f /tmp/yamls/"
-    ]
+  provisioner "file" {
+    source      = "${path.root}/scripts/install.sh"
+    destination = "/tmp/install.sh"
   }
 
   provisioner "file" {
-    source      = "${path.root}/restart_kube_resources.sh"
-    destination = "/tmp/restart_kube_resources.sh"
+    source      = "${path.root}/configs/k3s.env"
+    destination = "/tmp/k3s.env"
   }
 
   provisioner "shell" {
     inline = [
-      "sudo cp /tmp/restart_kube_resources.sh /usr/local/bin/restart_kube_resources.sh",
-      "sudo chmod +x /usr/local/bin/restart_kube_resources.sh",
-      "sudo systemctl restart restart-kube-resources",
-      "sudo k3s crictl rmi --prune",
-      "sudo rm -rf /home/ubuntu/vmware-vix-disklib-distrib"
+      "sudo mkdir -p /etc/pf9",
+      "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+      "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+      "sudo mv /tmp/yamls /etc/pf9/yamls",
+      "sudo chmod +x /etc/pf9/install.sh",
+      "sudo chown root:root /etc/pf9/k3s.env",
+      "sudo chmod 644 /etc/pf9/k3s.env",
+      "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
   }
 }
