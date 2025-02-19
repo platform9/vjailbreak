@@ -671,7 +671,7 @@ func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.Cancel
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
 	cancel()
-	migobj.cleanup(vminfo)
+	migobj.cleanup(vminfo, "Migration terminated")
 	os.Exit(0)
 }
 
@@ -709,7 +709,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
-		migobj.cleanup(vminfo)
+		migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
 		return fmt.Errorf("CBT Failure: %s", err)
 	}
 
@@ -722,20 +722,20 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo)
+		migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err))
 		return fmt.Errorf("failed to live replicate disks: %s", err)
 	}
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo)
+		migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err))
 		return fmt.Errorf("failed to convert disks: %s", err)
 	}
 
 	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo)
+		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
 		return fmt.Errorf("failed to create target instance: %s", err)
 	}
 
@@ -743,8 +743,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	return nil
 }
 
-func (migobj *Migrate) cleanup(vminfo vm.VMInfo) {
-	migobj.logMessage("Trying to perform cleanup")
+func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
+	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
