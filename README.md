@@ -246,3 +246,64 @@ Deploy all the following resources in the same namespace where you installed the
   - virtualmachines: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or parallelly within a plan.
 
 Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
+
+
+## vJailbreak at Scale: Managing Agents with VjailbreakNode
+
+vJailbreak can be scaled to perform multiple migrations in parallel by deploying additional `agents`, enabling greater efficiency and workload distribution. The VjailbreakNode Custom Resource Definition (CRD) streamlines the creation and management of these agents, ensuring seamless integration into the migration workflow. Each `VjailbreakNode` represents a VM that functions as an independent migration `agent`. These agents are dynamically added to the original `VjailbreakNode`, forming a cohesive cluster that enhances scalability, reliability, and overall migration performance.
+
+### VjailbreakNode CRD
+
+The `VjailbreakNode` CRD allows you to manage vJailbreak nodes within your Kubernetes cluster. Here's how to define a `VjailbreakNode` resource:
+
+```yaml
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VjailbreakNode
+metadata:
+  name: example-vjailbreak-node
+  namespace: migration-system
+spec:
+  imageid: "your-openstack-image-id"
+  noderole: "migration-worker"
+  openstackcreds:
+    name: "sapmo1" # Reference to your OpenstackCreds
+    namespace: "migration-system"
+  openstackflavorid: "your-openstack-flavor-id"
+ ```
+ 
+ ## Explanation of VjailbreakNode CRD Fields  
+
+This `VjailbreakNode` CRD defines a Kubernetes resource that provisions a VM in OpenStack to act as a migration agent. Below is a breakdown of each field:  
+
+
+### Metadata  
+- **`metadata:`**  
+  Metadata contains identifying details about the `VjailbreakNode`.  
+  - **`name: example-vjailbreak-node`**  
+    Specifies the name of this `VjailbreakNode` resource in Kubernetes.  
+  - **`namespace: migration-system`**  
+    Indicates the namespace where this resource is deployed within the Kubernetes cluster.  
+
+### Spec (Specification)  
+The `spec` section defines the desired state of the `VjailbreakNode`.  
+
+- **`imageid: "your-openstack-image-id"`**  
+  - This is the ID of the OpenStack image used to create the VM.  
+  - **It must match the image ID used to create the initial vJailbreak VM**, ensuring compatibility across all migration agents.  
+
+- **`noderole: "worker"`**  
+  - Defines the role of the node.  
+  - It should be set to `"worker"` as this node functions as a migration agent within the vJailbreak cluster.  
+
+- **`openstackcreds:`**  
+  - OpenstackCreds use the variables from the openstack.rc file.
+  - **`name: "sapmo1"`** → Refers to a `Secret` or `CustomResource` storing OpenStack authentication details.  
+  - **`namespace: "migration-system"`** → The namespace where OpenStack credentials are stored.  
+
+- **`openstackflavorid: "your-openstack-flavor-id"`**  
+  - Specifies the OpenStack flavor ID, which determines the VM's compute resources (CPU, RAM, disk size, etc.).  
+  - The chosen flavor should align with the resource requirements for migration workloads.  
+
+This configuration ensures vJailbreak can scale efficiently by adding worker nodes dynamically to handle multiple migrations in parallel. 🚀  
+
+
