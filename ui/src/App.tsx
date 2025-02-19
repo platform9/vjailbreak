@@ -37,7 +37,7 @@ function App() {
   useEffect(() => {
     if (!migrations || !nodes) {
       return
-    } else if (migrations.length === 0) {
+    } else if (migrations.length === 0 && nodes.length === 0) {
       navigate("/onboarding")
     } else {
       navigate("/dashboard")
