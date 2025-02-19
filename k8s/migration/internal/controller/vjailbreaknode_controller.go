@@ -95,7 +95,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	var node *corev1.Node
 
 	vjNode := scope.VjailbreakNode
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
