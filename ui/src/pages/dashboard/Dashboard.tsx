@@ -12,7 +12,7 @@ import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
 import NodesTable from "./NodesTable"
 import WarningIcon from '@mui/icons-material/Warning';
-import { useNodesQuery } from "./hooks/api/useNodesQuery" 
+import { useNodesQuery } from "../../hooks/api/useNodesQuery" 
 
 
 const DashboardContainer = styled("div")({
