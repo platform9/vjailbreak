@@ -313,4 +313,21 @@ The `spec` section defines the desired state of the `VjailbreakNode`.
 
 This configuration ensures vJailbreak can scale efficiently by adding worker nodes dynamically to handle multiple migrations in parallel. 🚀  
 
+**_NOTE:_** 
+After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vjailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
+
+**_NOTE:_** 
+In case you have to view the metrics of the agents.
+1. Create a security group with the following 
+
+### Egress Rules (Allow Outgoing Traffic)
+
+| Protocol | Port(s)  | Destination            | Purpose                         |
+|----------|---------|-----------------------|---------------------------------|
+| All      | All     | Worker Node SG         | Full worker node communication |
+| TCP      | 6443    | Master Node SG         | Kubernetes API server access   |
+| TCP      | 443     | Metrics Server SG      | Metrics collection             |
+| UDP      | 53      | CoreDNS Pod IP/Cluster CIDR | DNS resolution        |
+| All      | All     | 0.0.0.0/0 (Optional)   | External internet access       |
+
 
