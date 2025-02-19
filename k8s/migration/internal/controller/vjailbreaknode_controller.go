@@ -111,6 +111,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+
 	uuid, err := utils.GetOpenstackVMByName(vjNode.Name, ctx, r.Client, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
