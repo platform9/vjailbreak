@@ -633,7 +633,7 @@ spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
               availableflavours:
-                description: AvailableFlavours is the list of available flavors in
+                description: AvailableFlavors is the list of available flavors in
                   openstack
                 items:
                   description: |-
@@ -1447,7 +1447,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.3
+        image: quay.io/platform9/vjailbreak-controller:v0.1.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
