@@ -31,7 +31,9 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -92,6 +94,11 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				return ctrl.Result{}, err
 			}
 		} else {
+			err := utils.UpdateMasterNodeImageID(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			}
+
 			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
 			// Update the status of the OpenstackCreds object
 			openstackcreds.Status.OpenStackValidationStatus = "Succeeded"

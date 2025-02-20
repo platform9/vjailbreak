@@ -82,7 +82,10 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Quick path for just updating ActiveMigrations if node is ready
 	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
-		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
+		result, err := r.updateActiveMigrations(ctx, vjailbreakNodeScope)
+		if err != nil {
+			return result, errors.Wrap(err, "failed to update active migrations")
+		}
 	}
 
 	// Handle regular VjailbreakNode reconcile
@@ -102,8 +105,12 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode := scope.VjailbreakNode
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
+	creds, err := utils.GetOpenstackCreds(ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack creds")
+	}
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client, scope)
+		err = utils.UpdateMasterNodeImageID(ctx, r.Client, creds)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
