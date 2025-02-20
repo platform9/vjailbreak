@@ -34,7 +34,7 @@ export interface Spec {
   noderole: string
   openstackcreds: OpenstackCredsRef
   openstackflavorid: string
-  availableflavors?: OpenstackFlavor []
+  AvailableFlavors?: OpenstackFlavor []
 }
 
 export interface Status {
