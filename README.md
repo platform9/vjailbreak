@@ -320,7 +320,7 @@ After scaling up make sure that Copy over the [VDDK libraries](https://developer
 In case you have to view the metrics of the agents.
 1. Create a security group with the following 
 
-### Egress Rules (Allow Outgoing Traffic)
+### Ingress and Egress Rules (Allow Outgoing and incoming Traffic)
 
 | Protocol | Port(s)  | Destination            | Purpose                         |
 |----------|---------|-----------------------|---------------------------------|
