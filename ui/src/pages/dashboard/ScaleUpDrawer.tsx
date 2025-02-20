@@ -319,8 +319,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                             tooltip="Configure the specification for the new nodes."
                         />
                         <Box sx={{ ml: 6, mt: 2, display: 'grid', gap: 3 }}>
-                            // Add a TextField saying Picking the image based on the first vjailbreak node
-
                             <FormControl fullWidth>
                                 <TextField
                                     label="Master Agent Image"
@@ -329,7 +327,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                     fullWidth
                                 />
                             </FormControl>
-
                             <FormControl error={!!flavorsError} fullWidth>
                                 <InputLabel>{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
                                 <Select
