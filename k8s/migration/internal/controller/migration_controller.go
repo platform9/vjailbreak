@@ -127,7 +127,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}()
 
 	if string(pod.Status.Phase) != string(corev1.PodSucceeded) {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -168,8 +168,7 @@ loop:
 	for i := range events.Items {
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationFailed) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseFailed]:
+		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&

@@ -12,6 +12,7 @@ import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
 import NodesTable from "./NodesTable"
 import WarningIcon from '@mui/icons-material/Warning';
+import { useNodesQuery } from "../../hooks/api/useNodesQuery" 
 
 
 const DashboardContainer = styled("div")({
@@ -118,8 +119,10 @@ export default function Dashboard() {
     return baseMessage
   }
 
+  const { data: nodes } = useNodesQuery()
+
   useEffect(() => {
-    if (!!migrations && migrations.length === 0) {
+    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
       navigate("/onboarding")
     }
   }, [migrations, navigate])

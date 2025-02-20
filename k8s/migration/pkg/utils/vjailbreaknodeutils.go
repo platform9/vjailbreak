@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -159,7 +160,7 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+
 	// Update the VjailbreakNode status
 	err := k3sclient.Status().Update(ctx, vjNode)
 	if err != nil {
@@ -415,10 +416,16 @@ func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.
 		return nil, errors.Wrap(err, "failed to list migrations")
 	}
 
+	ignorePhases := []vjailbreakv1alpha1.MigrationPhase{vjailbreakv1alpha1.MigrationPhasePending,
+		vjailbreakv1alpha1.MigrationPhaseFailed,
+		vjailbreakv1alpha1.MigrationPhaseSucceeded,
+		vjailbreakv1alpha1.MigrationPhaseUnknown,
+	}
+
 	var activeMigrations []string
 	for i := range migrationList.Items {
 		migration := &migrationList.Items[i]
-		if migration.Status.AgentName == nodeName && migration.Status.Phase == "Running" {
+		if migration.Status.AgentName == nodeName && !slices.Contains(ignorePhases, migration.Status.Phase) {
 			activeMigrations = append(activeMigrations,
 				migration.Name)
 		}
@@ -456,4 +463,19 @@ func GetNodeByName(ctx context.Context, k3sclient client.Client, nodeName string
 		return nil, errors.Wrap(err, "failed to get node")
 	}
 	return node, nil
+}
+
+func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName string) error {
+	node := &corev1.Node{}
+	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name: nodeName,
+	}, node)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get node")
+	}
+	err = k3sclient.Delete(ctx, node)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete node")
+	}
+	return nil
 }

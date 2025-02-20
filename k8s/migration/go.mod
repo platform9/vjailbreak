@@ -10,7 +10,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250206150735-b6d07fa2bc2c
+	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250219180723-abba0e774f68
 	github.com/vmware/govmomi v0.39.0
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0

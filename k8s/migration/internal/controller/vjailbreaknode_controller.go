@@ -45,7 +45,7 @@ type VjailbreakNodeReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;delete
 
 func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
@@ -80,6 +80,11 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.reconcileDelete(ctx, vjailbreakNodeScope)
 	}
 
+	// Quick path for just updating ActiveMigrations if node is ready
+	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
+		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
+	}
+
 	// Handle regular VjailbreakNode reconcile
 	return r.reconcileNormal(ctx, vjailbreakNodeScope)
 }
@@ -105,6 +110,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		log.Info("Skipping master node")
 		return ctrl.Result{}, nil
 	}
+
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 
 	uuid, err := utils.GetOpenstackVMByName(vjNode.Name, ctx, r.Client, scope)
 	if err != nil {
@@ -141,22 +148,12 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			}
 		}
 
-		var activeMigrations []string
-
-		// Get active migrations happening on the node
-		activeMigrations, err = utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
-		}
-
-		vjNode.Status.ActiveMigrations = activeMigrations
-
 		// Update the VjailbreakNode status
 		err = r.Client.Status().Update(ctx, vjNode)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// Create Openstack VM for worker node
@@ -215,6 +212,11 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
 	}
+
+	err = utils.DeleteNodeByName(ctx, r.Client, scope.VjailbreakNode.Name)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete node by name")
+	}
 	controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
 	return ctrl.Result{}, nil
 }
@@ -224,4 +226,27 @@ func (r *VjailbreakNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VjailbreakNode{}).
 		Complete(r)
+}
+
+// updateActiveMigrations efficiently updates just the ActiveMigrations field
+func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
+	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
+	vjNode := scope.VjailbreakNode
+
+	// Get active migrations happening on the node
+	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
+	}
+	// Create a patch to update only the ActiveMigrations field
+	patch := client.MergeFrom(vjNode.DeepCopy())
+	vjNode.Status.ActiveMigrations = activeMigrations
+
+	err = r.Client.Status().Patch(ctx, vjNode, patch)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to patch vjailbreak node status")
+	}
+
+	// Always requeue after one minute
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
