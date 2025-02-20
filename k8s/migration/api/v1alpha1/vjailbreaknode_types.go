@@ -38,8 +38,8 @@ type VjailbreakNodeSpec struct {
 	// OpenstackImageID is the image of the VM
 	ImageID string `json:"imageid,omitempty"`
 
-	// AvailableFlavours is the list of available flavors in openstack
-	AvailableFlavours []flavors.Flavor `json:"availableflavours,omitempty"`
+	// AvailableFlavors is the list of available flavors in openstack
+	AvailableFlavors []flavors.Flavor `json:"AvailableFlavors,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode

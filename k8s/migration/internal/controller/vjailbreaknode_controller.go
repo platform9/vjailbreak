@@ -110,7 +110,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack creds")
 	}
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client, creds)
+		err = utils.UpdateMasterNodeImageID(ctx, r.Client, creds)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}

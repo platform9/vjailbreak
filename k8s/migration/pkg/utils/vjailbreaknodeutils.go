@@ -118,7 +118,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, opens
 		return errors.Wrap(err, "failed to get current instance uuid")
 	}
 
-	imageID, err := GetImageIDFromVM(openstackuuid, ctx, k3sclient, openstackcreds)
+	imageID, err := GetImageIDFromVM(openstackuuid, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get image id of master node")
 	}
@@ -130,12 +130,12 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, opens
 		Kind:      openstackcreds.Kind,
 	}
 
-	flavours, err := ListAllFlavours(ctx, k3sclient, openstackcreds)
+	flavors, err := ListAllFlavors(openstackcreds)
 	if err != nil {
-		return errors.Wrap(err, "failed to get flavours")
+		return errors.Wrap(err, "failed to get flavors")
 	}
 
-	vjNode.Spec.AvailableFlavours = flavours
+	vjNode.Spec.AvailableFlavors = flavors
 
 	err = k3sclient.Update(ctx, &vjNode)
 	if err != nil {
@@ -210,7 +210,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, creds)
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -305,7 +305,7 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, creds)
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -326,8 +326,9 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client,
 	return "", errors.New("failed to get vm ip")
 }
 
-func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, openstackcreds)
+func GetImageIDFromVM(uuid string,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	computeClient, err := GetOpenstackComputeClient(openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -350,8 +351,8 @@ func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client,
 	return "", fmt.Errorf("failed to assert image ID as string")
 }
 
-func ListAllFlavours(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, openstackcreds)
+func ListAllFlavors(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
+	computeClient, err := GetOpenstackComputeClient(openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get compute client")
 	}
@@ -370,7 +371,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack creds")
 	}
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, creds)
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get compute client")
 	}
@@ -383,10 +384,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	return nil
 }
 
-func GetOpenstackComputeClient(ctx context.Context,
-	k3sclient client.Client,
-	creds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ServiceClient, error) {
-
+func GetOpenstackComputeClient(creds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ServiceClient, error) {
 	// Authenticate with OpenStack
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: creds.Spec.OsAuthURL,
@@ -430,7 +428,7 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, creds)
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}

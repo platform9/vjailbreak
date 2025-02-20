@@ -915,8 +915,8 @@ func (in *VjailbreakNodeList) DeepCopyObject() runtime.Object {
 func (in *VjailbreakNodeSpec) DeepCopyInto(out *VjailbreakNodeSpec) {
 	*out = *in
 	out.OpenstackCreds = in.OpenstackCreds
-	if in.AvailableFlavours != nil {
-		in, out := &in.AvailableFlavours, &out.AvailableFlavours
+	if in.AvailableFlavors != nil {
+		in, out := &in.AvailableFlavors, &out.AvailableFlavors
 		*out = make([]flavors.Flavor, len(*in))
 		copy(*out, *in)
 	}
