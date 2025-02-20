@@ -10,7 +10,6 @@ import {
     IconButton,
     Tooltip,
     CircularProgress,
-    InputAdornment,
 } from "@mui/material";
 import { useState, useCallback, useEffect } from "react";
 import Step from "src/components/forms/Step";
@@ -24,8 +23,8 @@ import { v4 as uuidv4 } from "uuid";
 import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
 import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { debounce } from "src/utils";
-import { OpenstackCreds, OpenstackImage } from "src/api/openstack-creds/model";
-import { getOpenstackImages, createNodes, getOpenstackFlavors, getMasterNode } from "src/api/nodes/nodeMappings";
+import { OpenstackCreds } from "src/api/openstack-creds/model";
+import { createNodes, getMasterNode } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/nodes/model";
 import { NodeItem } from "src/api/nodes/model";
@@ -59,8 +58,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const [openstackError, setOpenstackError] = useState<string | null>(null);
     const [openstackCredsId, setOpenstackCredsId] = useState<string>("");
 //    const [masterNodeImage, setMasterNodeImage] = useState<OpenstackImage | null>(null);
-    const [loadingImages, setLoadingImages] = useState(false);
-    const [imagesError, setImagesError] = useState<string | null>(null);
+    // const [loadingImages, setLoadingImages] = useState(false);
+    // const [imagesError, setImagesError] = useState<string | null>(null);
     const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([]);
     const [selectedFlavor, setSelectedFlavor] = useState('');
     const [loadingFlavors, setLoadingFlavors] = useState(false);
@@ -83,9 +82,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     //    setMasterNodeImage(null);
         setSelectedFlavor('');
         setFlavors([]);
-        setLoadingImages(false);
+        // setLoadingImages(false);
         setLoadingFlavors(false);
-        setImagesError(null);
+        // setImagesError(null);
         setFlavorsError(null);
     }
 
