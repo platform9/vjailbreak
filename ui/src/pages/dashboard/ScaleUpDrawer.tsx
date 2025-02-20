@@ -328,15 +328,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                 />
                             </FormControl>
                             <FormControl fullWidth>
-                                <TextField
-                                    label="Flavor Selection Notice"
-                                    value="Please select a flavor with a disk size greater than 16GB."
-                                    disabled
-                                    fullWidth
-                                    InputProps={{
-                                        style: { color: 'red' }, // Make text red for visibility
-                                    }}
-                                />
+                                <Typography variant="body1" style={{ color: 'red' }}>
+                                    ⚠️ Please select a flavor with a disk size greater than 16GB.
+                                </Typography>
                             </FormControl>
                             <FormControl error={!!flavorsError} fullWidth>
                                 <InputLabel>{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
