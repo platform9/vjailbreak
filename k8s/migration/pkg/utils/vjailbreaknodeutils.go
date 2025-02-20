@@ -134,9 +134,8 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, opens
 	if err != nil {
 		return errors.Wrap(err, "failed to get flavours")
 	}
-	for _, flavour := range flavours {
-		vjNode.Spec.AvailableFlavours = append(vjNode.Spec.AvailableFlavours, flavour)
-	}
+
+	vjNode.Spec.AvailableFlavours = flavours
 
 	err = k3sclient.Update(ctx, &vjNode)
 	if err != nil {
