@@ -212,6 +212,11 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
 	}
+
+	err = utils.DeleteNodeByName(ctx, r.Client, scope.VjailbreakNode.Name)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete node by name")
+	}
 	controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
 	return ctrl.Result{}, nil
 }
