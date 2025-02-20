@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -100,8 +102,15 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	return nil
 }
 
-func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
-	vjNode := scope.VjailbreakNode
+func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	err := k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      constants.MasterVjailbreakNodeName,
+	}, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak node")
+	}
 
 	// Controller manager is always on the master node due to pod affinity
 	openstackuuid, err := openstackutils.GetCurrentInstanceUUID()
@@ -109,13 +118,29 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, scope
 		return errors.Wrap(err, "failed to get current instance uuid")
 	}
 
-	imageID, err := GetImageIDFromVM(openstackuuid, ctx, k3sclient, scope)
+	imageID, err := GetImageIDFromVM(openstackuuid, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get image id of master node")
 	}
 
 	vjNode.Spec.ImageID = imageID
+	vjNode.Spec.OpenstackCreds = corev1.ObjectReference{
+		Name:      openstackcreds.Name,
+		Namespace: openstackcreds.Namespace,
+		Kind:      openstackcreds.Kind,
+	}
 
+	flavors, err := ListAllFlavors(openstackcreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to get flavors")
+	}
+
+	vjNode.Spec.AvailableFlavors = flavors
+
+	err = k3sclient.Update(ctx, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to update vjailbreak node")
+	}
 	return nil
 }
 
@@ -181,7 +206,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master node")
 	}
 
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack creds")
+	}
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -272,7 +301,11 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 }
 
 func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack creds")
+	}
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -293,9 +326,9 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client,
 	return "", errors.New("failed to get vm ip")
 }
 
-func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
-	log := scope.Logger
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+func GetImageIDFromVM(uuid string,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	computeClient, err := GetOpenstackComputeClient(openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
@@ -307,7 +340,7 @@ func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client,
 	}
 
 	if server.Image["id"] != nil {
-		log.Info("Image ID found", "Image ID", server.Image["id"])
+		fmt.Println("Image ID found", "Image ID", server.Image["id"])
 	} else {
 		return "", fmt.Errorf("instance was booted from a volume, no image ID available")
 	}
@@ -318,8 +351,27 @@ func GetImageIDFromVM(uuid string, ctx context.Context, k3sclient client.Client,
 	return "", fmt.Errorf("failed to assert image ID as string")
 }
 
+func ListAllFlavors(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
+	computeClient, err := GetOpenstackComputeClient(openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get compute client")
+	}
+
+	// List flavors
+	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
+	if err != nil {
+		log.Fatalf("Failed to list flavors: %v", err)
+	}
+
+	return flavors.ExtractFlavors(allPages)
+}
+
 func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack creds")
+	}
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get compute client")
 	}
@@ -332,14 +384,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	return nil
 }
 
-func GetOpenstackComputeClient(ctx context.Context,
-	k3sclient client.Client,
-	scope *scope.VjailbreakNodeScope) (*gophercloud.ServiceClient, error) {
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
-	if err != nil {
-		return nil, err
-	}
-
+func GetOpenstackComputeClient(creds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ServiceClient, error) {
 	// Authenticate with OpenStack
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: creds.Spec.OsAuthURL,
@@ -379,7 +424,11 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 }
 
 func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
-	computeClient, err := GetOpenstackComputeClient(ctx, k3sclient, scope)
+	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack creds")
+	}
+	computeClient, err := GetOpenstackComputeClient(creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get compute client")
 	}
