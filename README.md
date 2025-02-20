@@ -35,6 +35,10 @@ https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
 ### Scale down Agents
 ![all text](assets/scaledown.png)
 
+
+🚨 ** Important note ** 🚨
+Do not delete the QCOW2 image used for vjailbreakvm creation—it’s needed for scaling up.
+
 ## FAQ
 
 ### Are IPs and MAC addresses persisted?
@@ -270,7 +274,7 @@ metadata:
   name: example-vjailbreak-node
   namespace: migration-system
 spec:
-  imageid: "your-openstack-image-id"
+  imageid: "your-openstack-image-id" # This ID is for the first vjailbreak VMimage. It auto-populates in the UI—do not delete it. 
   noderole: "migration-worker"
   openstackcreds:
     name: "sapmo1" # Reference to your OpenstackCreds
@@ -314,20 +318,21 @@ The `spec` section defines the desired state of the `VjailbreakNode`.
 This configuration ensures vJailbreak can scale efficiently by adding worker nodes dynamically to handle multiple migrations in parallel. 🚀  
 
 🚨 ** Important note ** 🚨
-After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the scaled up agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
+After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the new agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
 
 **_NOTE:_** 
 In case you have to view the metrics of the agents.
 1. Create a security group with the following 
 
-### Ingress and Egress Rules (Allow Outgoing and incoming Traffic)
+### 🚀 Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
 
-| Protocol | Port(s)  | Destination            | Purpose                         |
-|----------|---------|-----------------------|---------------------------------|
-| All      | All     | Worker Node SG         | Full worker node communication |
-| TCP      | 6443    | Master Node SG         | Kubernetes API server access   |
-| TCP      | 443     | Metrics Server SG      | Metrics collection             |
-| UDP      | 53      | CoreDNS Pod IP/Cluster CIDR | DNS resolution        |
-| All      | All     | 0.0.0.0/0 (Optional)   | External internet access       |
+| **Component**      | **Port**  | **Protocol** | **Source** | **Purpose** |
+|--------------------|----------|-------------|------------|-------------|
+| **Kubelet API**    | `10250`   | TCP         | Control Plane / Prometheus | Health checks, logs, metrics |
+| **Kubelet Read-Only (Optional)** | `10255` | TCP | Internal Only | Deprecated but might be used in some cases |
+| **Metrics Server** | `4443`    | TCP         | Internal Cluster | K8s resource metrics (`kubectl top`) |
+| **Prometheus**     | `9090`    | TCP         | Internal Cluster / Monitoring Server | Prometheus UI and API |
+| **Node Exporter** (if used) | `9100` | TCP | Prometheus | Node-level metrics |
+| **Cadvisor (Optional)** | `4194` | TCP | Internal Cluster / Prometheus | Container metrics collection |
 
 
