@@ -176,6 +176,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
+	nodeList := &corev1.NodeList{}
+	err := r.Client.List(ctx, nodeList, &client.ListOptions{})
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to list nodes")
+	}
+	counter := len(nodeList.Items)
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		for _, vm := range parallelvms {
@@ -195,6 +201,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
+			}
+			counter--
+
+			if counter == 0 {
+				// Control the number of VMs in parallel
+				counter = len(nodeList.Items)
+				time.Sleep(5 * time.Second)
 			}
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
@@ -233,7 +246,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
 	migrationplan.Status.MigrationStatus = string(corev1.PodSucceeded)
-	err := r.Status().Update(ctx, migrationplan)
+	err = r.Status().Update(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 	}
