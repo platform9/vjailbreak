@@ -184,7 +184,22 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     const flavours = response?.spec.availableflavours;
 
                     if (!flavours) {
-                        setFlavorsError('No flavors available');
+                        // retry for 3 times in a interval of 5 seconds
+                        let retries = 0;
+                        const interval = setInterval(async () => {
+                            const response = await getMasterNode();
+                            const flavours = response?.spec.availableflavours;
+                            if (flavours) {
+                                clearInterval(interval);
+                                setFlavors(flavours || []);
+                            } else {
+                                retries++;
+                                if (retries >= 3) {
+                                    clearInterval(interval);
+                                    setFlavorsError('Failed to fetch OpenStack flavors');
+                                }
+                            }
+                        }, 5000);
                     }
                     setFlavors(flavours || []);
                     
