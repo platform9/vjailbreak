@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -415,10 +416,16 @@ func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.
 		return nil, errors.Wrap(err, "failed to list migrations")
 	}
 
+	ignorePhases := []vjailbreakv1alpha1.MigrationPhase{vjailbreakv1alpha1.MigrationPhasePending,
+		vjailbreakv1alpha1.MigrationPhaseFailed,
+		vjailbreakv1alpha1.MigrationPhaseSucceeded,
+		vjailbreakv1alpha1.MigrationPhaseUnknown,
+	}
+
 	var activeMigrations []string
 	for i := range migrationList.Items {
 		migration := &migrationList.Items[i]
-		if migration.Status.AgentName == nodeName && migration.Status.Phase == "Running" {
+		if migration.Status.AgentName == nodeName && !slices.Contains(ignorePhases, migration.Status.Phase) {
 			activeMigrations = append(activeMigrations,
 				migration.Name)
 		}
