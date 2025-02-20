@@ -178,24 +178,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		for _, vm := range parallelvms {
-			migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
-			}
-			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
-			cm, err := r.CreateConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create ConfigMap for VM %s: %w", vm, err)
-			}
-			fbcm, err := r.CreateFirstbootConfigMap(ctx, migrationplan, vm)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
-			}
-			err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
-			}
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
 			switch migrationobjs.Items[i].Status.Phase {
@@ -673,6 +658,54 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 		}
 	}
 	return openstackvolumetypes, nil
+}
+
+func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationobjs *vjailbreakv1alpha1.MigrationList,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+
+	parallelvms []string) error {
+	var (
+		fbcm *corev1.ConfigMap
+	)
+
+	nodeList := &corev1.NodeList{}
+	err := r.Client.List(ctx, nodeList, &client.ListOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed to list nodes")
+	}
+	counter := len(nodeList.Items)
+
+	for _, vm := range parallelvms {
+		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm)
+		if err != nil {
+			return fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
+		}
+		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
+		cm, err := r.CreateConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm)
+		if err != nil {
+			return fmt.Errorf("failed to create ConfigMap for VM %s: %w", vm, err)
+		}
+		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, vm)
+		if err != nil {
+			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
+		}
+		err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name)
+		if err != nil {
+			return fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
+		}
+		counter--
+
+		if counter == 0 {
+			// Control the number of VMs in parallel
+			counter = len(nodeList.Items)
+			time.Sleep(constants.MigrationTriggerDelay)
+		}
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
