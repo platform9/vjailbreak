@@ -464,3 +464,18 @@ func GetNodeByName(ctx context.Context, k3sclient client.Client, nodeName string
 	}
 	return node, nil
 }
+
+func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName string) error {
+	node := &corev1.Node{}
+	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name: nodeName,
+	}, node)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get node")
+	}
+	err = k3sclient.Delete(ctx, node)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete node")
+	}
+	return nil
+}
