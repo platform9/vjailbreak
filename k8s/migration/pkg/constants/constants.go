@@ -1,6 +1,8 @@
 package constants
 
 import (
+	"time"
+
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -26,6 +28,8 @@ const (
 
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 	ENVFileLocation      = "/etc/pf9/k3s.env"
+
+	MigrationTriggerDelay = 5 * time.Second
 
 	MigrationReason = "Migration"
 	StartCutOverYes = "yes"
