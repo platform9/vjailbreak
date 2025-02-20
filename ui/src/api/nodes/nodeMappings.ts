@@ -162,6 +162,15 @@ const createNodeObject = (params: {
   spec: params.spec,
 })
 
+// Get master VjailbreakNode
+export const getMasterNode = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
+
+  const nodes = await getNodes(namespace)
+  const masterNode = nodes.find((node) => node.spec.noderole === "master")
+
+  return masterNode
+}
+
 export const createNodes = async (params: {
   imageId: string
   openstackCreds: OpenstackCredsRef
