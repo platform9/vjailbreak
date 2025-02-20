@@ -313,8 +313,8 @@ The `spec` section defines the desired state of the `VjailbreakNode`.
 
 This configuration ensures vJailbreak can scale efficiently by adding worker nodes dynamically to handle multiple migrations in parallel. 🚀  
 
-**_NOTE:_** 
-After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vjailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
+🚨 ** Important note ** 🚨
+After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the scaled up agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
 
 **_NOTE:_** 
 In case you have to view the metrics of the agents.
