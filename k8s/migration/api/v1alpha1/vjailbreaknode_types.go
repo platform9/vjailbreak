@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,6 +37,9 @@ type VjailbreakNodeSpec struct {
 
 	// OpenstackImageID is the image of the VM
 	ImageID string `json:"imageid,omitempty"`
+
+	// AvailableFlavours is the list of available flavors in openstack
+	AvailableFlavours []flavors.Flavor `json:"availableflavours,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode
