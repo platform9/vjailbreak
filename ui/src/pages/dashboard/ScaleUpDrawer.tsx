@@ -25,7 +25,7 @@ import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
 import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { debounce } from "src/utils";
 import { OpenstackCreds, OpenstackImage } from "src/api/openstack-creds/model";
-import { getOpenstackImages, createNodes, getOpenstackFlavors } from "src/api/nodes/nodeMappings";
+import { getOpenstackImages, createNodes, getOpenstackFlavors, getMasterNode } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/nodes/model";
 import { NodeItem } from "src/api/nodes/model";
@@ -58,7 +58,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const [openstackCredsValidated, setOpenstackCredsValidated] = useState(false);
     const [openstackError, setOpenstackError] = useState<string | null>(null);
     const [openstackCredsId, setOpenstackCredsId] = useState<string>("");
-    const [masterNodeImage, setMasterNodeImage] = useState<OpenstackImage | null>(null);
+//    const [masterNodeImage, setMasterNodeImage] = useState<OpenstackImage | null>(null);
     const [loadingImages, setLoadingImages] = useState(false);
     const [imagesError, setImagesError] = useState<string | null>(null);
     const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([]);
@@ -80,7 +80,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setValidatingOpenstackCreds(false);
         setNodeCount(1);
         setError(null);
-        setMasterNodeImage(null);
+    //    setMasterNodeImage(null);
         setSelectedFlavor('');
         setFlavors([]);
         setLoadingImages(false);
@@ -118,7 +118,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         }
     }, []);
 
-    useEffect(() => {
+ /*   useEffect(() => {
         const fetchImages = async () => {
             if (openstackCredsId && openstackCreds) {
                 setLoadingImages(true);
@@ -148,10 +148,10 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             }
         };
         fetchImages();
-    }, [openstackCredsId, openstackCreds]);
+    }, [openstackCredsId, openstackCreds]); */
 
 
-    useEffect(() => {
+   /* useEffect(() => {
         const fetchFlavors = async () => {
             if (openstackCreds && masterNodeImage) {
                 setLoadingFlavors(true);
@@ -174,7 +174,31 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             }
         };
         fetchFlavors();
-    }, [masterNodeImage]);
+    }, [masterNodeImage]);  */
+
+    useEffect(() => {
+        const fetchFlavours = async () => {
+            if (openstackCredsId && openstackCreds) {
+                setLoadingFlavors(true);
+                try {
+                    const response  = await getMasterNode();
+                    const flavours = response?.spec.availableflavours;
+
+                    if (!flavours) {
+                        setFlavorsError('No flavors available');
+                    }
+                    setFlavors(flavours || []);
+                    
+                } catch (error) {
+                    console.error('Failed to fetch flavors:', error);
+                    setFlavorsError('Failed to fetch OpenStack flavors');
+                } finally {
+                    setLoadingFlavors(false);
+                }
+            }
+        };
+        fetchFlavours();
+    }, [openstackCredsId, openstackCreds]);
 
     const debouncedValidation = useCallback(
         debounce((creds) => validateOpenstackCreds(creds), 3000),
@@ -281,22 +305,16 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                             tooltip="Configure the specification for the new nodes."
                         />
                         <Box sx={{ ml: 6, mt: 2, display: 'grid', gap: 3 }}>
-                            <TextField
-                                label="Image"
-                                value={loadingImages ? "Loading Images..." : masterNodeImage?.name || ''}
-                                disabled
-                                fullWidth
-                                required
-                                helperText={imagesError ? imagesError : "Using master node image"}
-                                InputProps={{
-                                    endAdornment: loadingImages && (
-                                        <InputAdornment position="end">
-                                            <CircularProgress size={24} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                error={!!imagesError}
-                            />
+                            // Add a TextField saying Picking the image based on the first vjailbreak node
+
+                            <FormControl fullWidth>
+                                <TextField
+                                    label="Master Agent Image"
+                                    value={'Image selected from the first vjailbreak node'}
+                                    disabled
+                                    fullWidth
+                                />
+                            </FormControl>
 
                             <FormControl error={!!flavorsError} fullWidth>
                                 <InputLabel>{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
