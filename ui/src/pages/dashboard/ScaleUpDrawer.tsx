@@ -181,19 +181,14 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 setLoadingFlavors(true);
                 try {
                     const response  = await getMasterNode();
-                    console.log(response)
                     const flavours = response?.spec.AvailableFlavors;
-                    console.log(flavours);
 
                     if (!flavours) {
                         // retry for 3 times in a interval of 5 seconds
                         let retries = 0;
-                        console.log("retrying");
                         const interval = setInterval(async () => {
                             const response = await getMasterNode();
-                            console.log("Inside useeffect",response);
                             const flavours = response?.spec.AvailableFlavors
-                            console.log("Inside useeffect",flavours);
                             if (flavours) {
                                 clearInterval(interval);
                                 setFlavors(flavours || []);
