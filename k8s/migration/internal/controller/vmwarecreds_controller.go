@@ -246,6 +246,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var dsref types.ManagedObjectReference
 		if vmProps.Config == nil {
 			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
 			continue
 		}
 		for _, device := range vmProps.Config.Hardware.Device {
