@@ -84,7 +84,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
 		result, err := r.updateActiveMigrations(ctx, vjailbreakNodeScope)
 		if err != nil {
-			return result, err
+			return result, errors.Wrap(err, "failed to update active migrations")
 		}
 	}
 

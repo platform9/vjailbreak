@@ -94,7 +94,6 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				return ctrl.Result{}, err
 			}
 		} else {
-			// TODO: add image to master node
 			err := utils.UpdateMasterNodeImageID(ctx, r.Client, openstackcreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
