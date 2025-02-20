@@ -89,13 +89,14 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
+		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
+	}
+
 	if pod.Status.Phase != corev1.PodRunning {
 		return ctrl.Result{}, fmt.Errorf("pod is not Running for migration %s", migration.Name)
 	}
 
-	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
-		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
-	}
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed getting pod events")
@@ -105,6 +106,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratedCondition(migration, filteredEvents)
+
+	migration.Status.AgentName = pod.Spec.NodeName
 
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
@@ -124,7 +127,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}()
 
 	if string(pod.Status.Phase) != string(corev1.PodSucceeded) {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -158,7 +161,6 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	}
 
 	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
-		vjailbreakv1alpha1.MigrationPhaseValidated,
 		vjailbreakv1alpha1.MigrationPhaseValidating,
 		vjailbreakv1alpha1.MigrationPhasePending}
 
@@ -166,8 +168,7 @@ loop:
 	for i := range events.Items {
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationFailed) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseFailed]:
+		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&

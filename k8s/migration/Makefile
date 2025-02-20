@@ -2,7 +2,7 @@
 
 REPO ?= platform9
 REGISTRY ?= quay.io
-TAG ?= latest
+TAG ?= 1.0.4
 
 export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-v2v:${TAG}
@@ -123,7 +123,6 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	TAG=$(shell cat ../../package.json | jq -r .version) && \
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${REGISTRY}/${REPO}/vjailbreak-controller:$$TAG
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	cp dist/install.yaml ../../deploy/00crds.yaml

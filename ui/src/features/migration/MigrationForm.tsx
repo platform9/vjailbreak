@@ -297,7 +297,6 @@ export default function MigrationFormDrawer({
               )
             }
           }
-          setValidatingOpenstackCreds(false)
         } catch (err) {
           console.error("Error validating Openstack credentials", err)
           getFieldErrorsUpdater("openstackCreds")(
@@ -320,7 +319,10 @@ export default function MigrationFormDrawer({
         migrationTemplate?.metadata?.name
       )
       setMigrationTemplate(updatedMigrationTemplate)
-      setLoadingVms(false)
+
+      if (updatedMigrationTemplate?.status?.vmware) {
+        setLoadingVms(false)
+      }
     } catch (err) {
       console.error("Error retrieving migration templates", err)
       getFieldErrorsUpdater("migrationTemplate")(
@@ -663,6 +665,7 @@ export default function MigrationFormDrawer({
             error={fieldErrors["vms"]}
             loadingVms={loadingVms}
             onRefresh={refreshMigrationTemplate}
+            open={open}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep

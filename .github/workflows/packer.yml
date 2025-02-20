@@ -175,7 +175,7 @@ jobs:
     - name: Download base image
       if: env.release_found == 'true'
       run: |
-          oras pull quay.io/platform9/vjailbreak:base
+          oras pull quay.io/platform9/vjailbreak:base-v0.1.4
 
     - name: Run `packer build`
       if: env.release_found == 'true'
