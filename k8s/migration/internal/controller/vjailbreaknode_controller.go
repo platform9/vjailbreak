@@ -126,7 +126,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	if uuid != "" {
-		log.Info("Skipping already created node", "name", vjNode.Name)
+		log.Info("Skipping creation of already created node, updating status", "name", vjNode.Name)
 		if vjNode.Status.OpenstackUUID == "" {
 			// This will error until the the IP is available
 			vmip, err = utils.GetOpenstackVMIP(uuid, ctx, r.Client, scope)
@@ -154,13 +154,13 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				break
 			}
 		}
-
 		// Update the VjailbreakNode status
 		err = r.Client.Status().Update(ctx, vjNode)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	// Create Openstack VM for worker node
