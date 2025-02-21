@@ -320,6 +320,13 @@ This configuration ensures vJailbreak can scale efficiently by adding worker nod
 🚨 ** Important note ** 🚨
 After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the new agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
 
+**_NOTE:_**
+To retrieve the password for logging into a worker node, follow these steps:
+1. SSH into the master node and run:
+   ```bash
+   cat /var/lib/rancher/k3s/server/token
+2. The first 12 characters of this token is your password. 
+
 **_NOTE:_** 
 In case you have to view the metrics of the agents.
 1. Create a security group with the following 
