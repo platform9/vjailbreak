@@ -1,22 +1,27 @@
 # vJailbreak
-Helping VMware users migrate to OpenStack
+A free and open-source tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
+* Connect to vCenter
+* Select virtual machines to migrate
+  * VM disks are converted from `vmdk` to `qcow2`
+  * VMware Tools are uninstalled
+  * Virtual devices & drivers are installed
+* Post-migration health checks are performed
 
-## v2v-helper
-The main application that runs the migration. It is expected to run as a pod in a VM running in the target OpenStack Environment.
+----
 
-## UI
-This is the UI for vJailbreak.
+# Contents <!-- omit in TOC -->
+- [Demonstration](#Demonstration)
+- [Installation & usage](#Usage)
+- [Frequently asked questions](#FAQ)
+- [Scaling vJailbreak](#vjailbreak-at-scale-managing-agents-with-vjailbreaknode)
+- [Monitoring vJailbreak](#monitoring-vjailbreak-)
+- [Building from source](#building-from-source)
+- [vJailbreak components](#vJailbreak-Components)
 
-## migration-controller
-This is the k8s controller that schedules migrations. 
-
-## v2v-cli
-A CLI tool that starts the migration. It is not needed in the current version of vJailbreak.
-
+# Demonstration
 ## Video Demo
 
 https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
-
 
 ## Sample Screenshots
 
@@ -33,13 +38,9 @@ https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
 ![alt text](assets/scaleupagents.png)
 
 ### Scale down Agents
-![all text](assets/scaledown.png)
+![alt text](assets/scaledown.png)
 
-
-🚨 ** Important note ** 🚨
-Do not delete the QCOW2 image used for vjailbreakvm creation—it’s needed for scaling up.
-
-## FAQ
+# FAQ
 
 ### Are IPs and MAC addresses persisted?
 Yes, if your OpenStack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
@@ -91,7 +92,7 @@ Please refer to the following table for the required privileges:
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
 
-## What ports do I need to open for vJailbreak to work?
+### What ports do I need to open for vJailbreak to work?
 Please refer the following table for the required ports:
 
 | Port | Protocol | Source | Destination | Purpose |
@@ -101,34 +102,23 @@ Please refer the following table for the required ports:
 | 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy |
 | 5480 | TCP | PCD nodes | VMware vCenter API endpoint | VMware Site Recovery Manager Appliance Management Interface |
 
-## Building
-vJailbreak is intended to be run in a kubernetes environment (k3s) on the appliance VM. In order to build and deploy the kubernetes components, follow the instructions in `k8s/migration` to build and deploy the custom resources in the cluster.
-
-In order to build v2v-helper,
-
-    make v2v-helper
-
-In order to build migration-controller,
-
-    make vjail-controller
-
-In order to build the UI,
-
-    make ui
-
-Change the image names in the makefile to push to another repository
-
 ## Usage
 
-Download and install [ORAS](https://oras.land/docs/installation). Download the latest version of the vjailbreak image with the following command. 
+Download and install [ORAS](https://oras.land/docs/installation). Download the latest version of the vJailbreak image with the following command. 
 
     oras pull quay.io/platform9/vjailbreak:v0.1.4
 
-This will download the vjailbreak qcow2 image locally. Upload it to your OpenStack enviroment and create your appliance VM with it.
+This will download the vJailbreak qcow2 image locally. Upload it to your OpenStack enviroment and create your appliance VM with it.
 
-Then, ensure that your appliance can talk to your OpenStack and VMware environments. This includes any setup required for VPNs, etc. If you do not have an OpenStack environment, you can download the community edition of [Private Cloud Director](https://platform9.com/private-cloud-director/#experience) to get started.
+> [!IMPORTANT]
+> Do not delete the QCOW2 image used for vjailbreakvm creation, as it’s needed for scaling up.
 
-Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vjailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory.
+Ensure that your appliance can talk to your OpenStack and VMware environments. This includes any setup required for VPNs, etc. 
+
+> [!NOTE]
+> Coming soon: Platform9 Private Cloud Director Community Edition, which will deploy an OpenStack-compliant cloud on a VM for dev/test & evaluation purposes.
+
+Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vJailbreak VM. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory.
 
 Deploy all the following resources in the same namespace where you installed the Migration Controller. By default, it is `migration-system`.
 1. Create the Creds objects. Ensure that after you create these objects, their status reflects that the credentials have been validated. If it is not validated, the migration will not proceed.
@@ -136,30 +126,30 @@ Deploy all the following resources in the same namespace where you installed the
        apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
        kind: OpenstackCreds
        metadata:
-         name: sapmo1
+         name:
          namespace: migration-system
        spec:
-         OS_AUTH_URL: 
-         OS_DOMAIN_NAME: 
-         OS_USERNAME: 
+         OS_AUTH_URL:
+         OS_DOMAIN_NAME:
+         OS_USERNAME:
          OS_PASSWORD:
-         OS_REGION_NAME:  
-         OS_TENANT_NAME:  
+         OS_REGION_NAME:
+         OS_TENANT_NAME:
          OS_INSECURE: true/false <optional>
        ---
        apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
        kind: VMwareCreds
        metadata:
-         name: pnapbmc1
+         name:
          namespace: migration-system
        spec:
-         VCENTER_HOST: vcenter.phx.pnap.platform9.horse
+         VCENTER_HOST:
          VCENTER_INSECURE:  true/false
          VCENTER_PASSWORD:
-         VCENTER_USERNAME: 
+         VCENTER_USERNAME:
   
-  - OpenstackCreds use the variables from the openstack.rc file. All these fields are compulsory except OS_INSECURE
-  - All the fields in VMwareCreds are compulsory
+ - OpenstackCreds use the variables from the openstack.rc file. All fields are required except `OS_INSECURE`
+  - All fields in VMwareCreds are required
 
 2. Create the mapping between networks in VMware and networks in OpenStack
 
@@ -204,7 +194,7 @@ Deploy all the following resources in the same namespace where you installed the
          destination:
            openstackRef: name_of_OpenstackCreds
 
-  - osType is optional. If not provided, the osType is retrieved from vcenter. If it could be automatically determined, migration will not proceed.
+  - osType is optional. If not provided, the osType is retrieved from vcenter. If it can't be automatically determined, migration will not proceed.
 
 5. Finally, create the MigrationPlan
 
@@ -239,22 +229,22 @@ Deploy all the following resources in the same namespace where you installed the
            - - winserver2k19
              - winserver2k22
 
-  - retry: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
-  - advancedOptions: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
-    - granularVolumeTypes: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can speccify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
-    - granularNetworks: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use in for each NIC on the VM, in order.
-    - granularPorts: In case you wish to pre-create ports for a VM with certain configs and directly provide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in granularNetworks.
-  - migrationStrategy: This is an optional field
-    - type: 
-      - cold: Cold indicates to power off VMs in migrationplan at the start of the migration. Quicker than hot
-      - hot: Powers VM off just before cutover starts. Data copy occurs with the source VM powered on. May take longer
-    - dataCopyStart: Optional.  ISO 8601 timestamp indicating when to start data copy
-    - vmCutoverStart: Optional. ISO 8601 timestamp indicating when to start VM cutover
-    - vmCutoverEnd: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
-    - adminInitiatedCutOver: Set to true if you wish to manually trigger the cutover process. Default false
-    - performHealthChecks: Set to false if you want to disable Ping and HTTP GET health check. Failing these checks does not clean up the targeted VM. Default false
-    - healthCheckPort: Port to run the HTTP GET health check against. Default "443"
-  - virtualmachines: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or parallelly within a plan.
+  - `retry`: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
+  - `advancedOptions`: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
+    - `granularVolumeTypes`: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can specify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
+    - `granularNetworks`: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use in for each NIC on the VM, in order.
+    - `granularPorts`: In case you wish to pre-create ports for a VM with certain configs and directly provide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in `granularNetworks`.
+  - `migrationStrategy`: This is an optional field
+    - `type`: 
+      - `cold`: Cold indicates to power off VMs in migrationplan at the start of the migration. Quicker than hot.
+      - `hot`: Powers VM off just before cutover starts. Data copy occurs with the source VM powered on. May take longer.
+    - `dataCopyStart`: Optional. ISO 8601 timestamp indicating when to start data copy
+    - `vmCutoverStart`: Optional. ISO 8601 timestamp indicating when to start VM cutover
+    - `vmCutoverEnd`: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
+    - `adminInitiatedCutOver`: Set to true if you wish to manually trigger the cutover process. Default: `false`
+    - `performHealthChecks`: Set to false if you want to disable Ping and HTTP GET health check. Failing these checks does not clean up the targeted VM. Default: `false`
+    - `healthCheckPort`: Port to run the HTTP GET health check against. Default "443"
+  - `virtualmachines`: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or in parallel within a plan.
 
 Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
@@ -282,10 +272,9 @@ spec:
   openstackflavorid: "your-openstack-flavor-id"
  ```
  
- ## Explanation of VjailbreakNode CRD Fields  
+ ### Explanation of VjailbreakNode CRD Fields  
 
-This `VjailbreakNode` CRD defines a Kubernetes resource that provisions a VM in OpenStack to act as a migration agent. Below is a breakdown of each field:  
-
+This `VjailbreakNode` CRD defines a Kubernetes resource that provisions a VM in OpenStack to act as a migration agent. Below is a breakdown of each field:
 
 ### Metadata  
 - **`metadata:`**  
@@ -317,21 +306,21 @@ The `spec` section defines the desired state of the `VjailbreakNode`.
 
 This configuration ensures vJailbreak can scale efficiently by adding worker nodes dynamically to handle multiple migrations in parallel. 🚀  
 
-🚨 ** Important note ** 🚨
-After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the new agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
+> [!IMPORTANT]
+> After scaling up make sure that Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the new agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory. 
 
-**_NOTE:_**
-To retrieve the password for logging into a worker node, follow these steps:
-1. SSH into the master node and run:
-   ```bash
-   cat /var/lib/rancher/k3s/server/token
-2. The first 12 characters of this token is your password. 
+> [!NOTE]
+> To retrieve the password for logging into a worker node, follow these steps:
+> 1. SSH into the master node and run:
+>   ```bash
+>   cat /var/lib/rancher/k3s/server/token
+> 2. The first 12 characters of this token is your password. 
 
-**_NOTE:_** 
-In case you have to view the metrics of the agents.
-1. Create a security group with the following 
+# Monitoring vJailbreak 🚀
+This is useful if you need to view the metrics of the agents.
+###  Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
 
-### 🚀 Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
+Create a security group with the following:
 
 | **Component**      | **Port**  | **Protocol** | **Source** | **Purpose** |
 |--------------------|----------|-------------|------------|-------------|
@@ -342,4 +331,32 @@ In case you have to view the metrics of the agents.
 | **Node Exporter** (if used) | `9100` | TCP | Prometheus | Node-level metrics |
 | **Cadvisor (Optional)** | `4194` | TCP | Internal Cluster / Prometheus | Container metrics collection |
 
+# Building from source
+vJailbreak is intended to be run in a Kubernetes environment (k3s) on the appliance VM. In order to build and deploy the Kubernetes components, follow the instructions in `k8s/migration` to build and deploy the custom resources in the cluster.
 
+In order to build v2v-helper,
+
+    make v2v-helper
+
+In order to build migration-controller,
+
+    make vjail-controller
+
+In order to build the UI,
+
+    make ui
+
+Change the image names in the makefile to push to another repository.
+
+# vJailbreak Components
+### v2v-helper
+The main application that runs the migration. It is expected to run as a pod in a VM running in the target OpenStack Environment.
+
+### UI
+This is the UI for vJailbreak.
+
+### migration-controller
+This is the k8s controller that schedules migrations. 
+
+### v2v-cli
+A CLI tool that starts the migration. It is not needed in the current version of vJailbreak.
