@@ -39,8 +39,8 @@ spec:
           spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
-              availableflavours:
-                description: AvailableFlavours is the list of available flavors in
+              availableflavors:
+                description: AvailableFlavors is the list of available flavors in
                   openstack
                 items:
                   description: |-
