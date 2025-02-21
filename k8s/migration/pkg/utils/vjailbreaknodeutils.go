@@ -254,16 +254,6 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
-	oscredsList := &vjailbreakv1alpha1.OpenstackCredsList{}
-	err = k3sclient.List(ctx, oscredsList)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to list openstack creds")
-	}
-
-	if len(oscredsList.Items) == 0 {
-		return nil, errors.New("no openstack creds found")
-	}
-	oscreds = &oscredsList.Items[0]
 	return oscreds, nil
 }
 
@@ -441,7 +431,7 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 
 	allServers, err := servers.ExtractServers(allPages)
 	if err != nil || len(allServers) == 0 {
-		return "", nil
+		return "", errors.Wrap(err, "failed to extract servers")
 	}
 
 	vmID := allServers[0].ID

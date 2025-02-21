@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud"
@@ -96,7 +97,11 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		} else {
 			err := utils.UpdateMasterNodeImageID(ctx, r.Client, openstackcreds)
 			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+				if strings.Contains(err.Error(), "404") {
+					ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconciliation")
+				} else {
+					return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+				}
 			}
 
 			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackcreds.Spec.OsAuthURL))
