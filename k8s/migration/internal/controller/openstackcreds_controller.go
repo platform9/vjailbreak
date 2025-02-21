@@ -98,7 +98,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			err := utils.UpdateMasterNodeImageID(ctx, r.Client, openstackcreds)
 			if err != nil {
 				if strings.Contains(err.Error(), "404") {
-					ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconcilation")
+					ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconciliation")
 				} else {
 					return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 				}
