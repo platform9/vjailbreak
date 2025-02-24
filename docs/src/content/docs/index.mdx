@@ -1,0 +1,42 @@
+---
+title: vJailbreak
+description: A free and open-source tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
+template: splash
+hero:
+  tagline: Migrate your VM's!
+  image:
+    file: ../../assets/logo.jpg
+  actions:
+    - text: Getting Started
+      link: introduction/getting_started/
+      icon: right-arrow
+    - text: Clone the Repo
+      link: https://github.com/platform9/vjailbreak
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import AboutVJB from '../../components/about.astro';
+
+## Next steps
+
+<CardGrid stagger>
+	<Card title="Deploy vJailbreak" icon="rocket">
+		Deploy vJailbreak to your OpenStack cloud.
+	</Card>
+	<Card title="Contribute to vJailbreak" icon="add-document">
+		Help improve vJailbreak by contributing code or documentation.
+	</Card>
+	<Card title="Read the docs" icon="open-book">
+		Learn more in [the vJailbreak Docs](introduction/getting_started/).
+	</Card>
+</CardGrid>
+
+<AboutVJB title="Brought to you by">
+vJailbreak is for VM migration. It's built on top of the [OpenStack SDK](https://docs.openstack.org/python-openstacksdk/latest/).
+Migrate your VM's without affecting your workloads.
+
+[Learn more about Platform9](https://platform9.com/)
+
+</AboutVJB>
