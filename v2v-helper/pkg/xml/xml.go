@@ -72,15 +72,3 @@ func GenerateXML(diskFiles []string, outputFile, vmname string) error {
 	_, err = file.Write([]byte(xml.Header + string(output)))
 	return err
 }
-
-func main() {
-	diskFiles := []string{"/dev/vdd", "/dev/vde"} // Add more devices as needed
-	outputFile := "vm_config.xml"
-	vmname := "my-vm"
-
-	if err := GenerateXML(diskFiles, outputFile, vmname); err != nil {
-		fmt.Println("Error generating XML:", err)
-	} else {
-		fmt.Println("XML file created successfully:", outputFile)
-	}
-}

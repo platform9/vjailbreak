@@ -450,7 +450,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	if vminfo.OSType == "linux" {
-		osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", "/etc/os-release")
+		osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
 		if err != nil {
 			return fmt.Errorf("failed to get os release: %s", err)
 		}

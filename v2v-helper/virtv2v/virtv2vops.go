@@ -191,7 +191,7 @@ DHCP=yes`
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	command := "upload"
-	ans, err := RunCommandInGuestAllVolumes(disks, command, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+	ans, err := RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v\n", ans, err)
 		return err
@@ -235,14 +235,14 @@ func CheckForLVM(disks []vm.VMDisk) (string, error) {
 
 	// Get the installed os info
 	command := "inspect-os"
-	osPath, err := RunCommandInGuestAllVolumes(disks, command)
+	osPath, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
 	}
 
 	// Get the lvs list
 	command = "lvs"
-	lvsStr, err := RunCommandInGuestAllVolumes(disks, command)
+	lvsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
 	}
@@ -255,10 +255,14 @@ func CheckForLVM(disks []vm.VMDisk) (string, error) {
 	return "", fmt.Errorf("LVM not found: %v, %d", lvs, len(lvs))
 }
 
-func prepareGuestfishCommand(disks []vm.VMDisk, command string, args ...string) *exec.Cmd {
+func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args ...string) *exec.Cmd {
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
 	cmd := exec.Command(
 		"guestfish",
-		"--ro")
+		option)
 
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
@@ -268,9 +272,9 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, args ...string) 
 	return cmd
 }
 
-func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, args ...string) (string, error) {
+func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := prepareGuestfishCommand(disks, command, args...)
+	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -281,7 +285,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, args ...stri
 
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
-	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command)
+	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
 		return -1, fmt.Errorf("failed to run command (%s): %v", command, err)
 	}
@@ -289,21 +293,21 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	partitions := strings.Split(string(partitionsStr), "\n")
 	for _, partition := range partitions {
 		command := "part-to-dev"
-		device, err := RunCommandInGuestAllVolumes(disks, command, strings.TrimSpace(partition))
+		device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v\n", device, err)
 			return -1, err
 		}
 
 		command = "part-to-partnum"
-		num, err := RunCommandInGuestAllVolumes(disks, command, strings.TrimSpace(partition))
+		num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v\n", num, err)
 			return -1, err
 		}
 
 		command = "part-get-bootable"
-		bootable, err := RunCommandInGuestAllVolumes(disks, command, strings.TrimSpace(device), strings.TrimSpace(num))
+		bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v\n", bootable, err)
 			return -1, err
@@ -312,7 +316,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		fmt.Printf("Bootable: %s\n", bootable)
 		if strings.TrimSpace(bootable) == "true" {
 			command = "device-index"
-			index, err := RunCommandInGuestAllVolumes(disks, command, strings.TrimSpace(device))
+			index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
 			if err != nil {
 				fmt.Printf("failed to run command (%s): %v\n", index, err)
 				return -1, err
