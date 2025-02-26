@@ -8,6 +8,9 @@ on:
 
 jobs:
   update-release-notes:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     if: startsWith(github.head_ref, 'release-v')  # Only run if the PR is from a release branch
 
