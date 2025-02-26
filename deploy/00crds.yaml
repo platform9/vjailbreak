@@ -482,29 +482,18 @@ spec:
           spec:
             description: OpenstackCredsSpec defines the desired state of OpenstackCreds
             properties:
-              OS_AUTH_URL:
-                description: OsAuthURL is the OpenStack authentication URL
-                type: string
-              OS_DOMAIN_NAME:
-                description: OsDomainName is the OpenStack domain name
-                type: string
-              OS_INSECURE:
-                default: false
-                description: OsInsecure is the flag to skip verification of the OpenStack
-                  TLS Certificate
-                type: boolean
-              OS_PASSWORD:
-                description: OsPassword is the OpenStack password
-                type: string
-              OS_REGION_NAME:
-                description: OsRegionName is the OpenStack region name
-                type: string
-              OS_TENANT_NAME:
-                description: OsTenantName is the OpenStack tenant name
-                type: string
-              OS_USERNAME:
-                description: OsUsername is the OpenStack username
-                type: string
+              secretRef:
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  OpenStack credentials
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
             type: object
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
@@ -512,9 +501,6 @@ spec:
               openstackValidationMessage:
                 type: string
               openstackValidationStatus:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
                 type: string
             type: object
         type: object
@@ -809,19 +795,23 @@ spec:
           spec:
             description: VMwareCredsSpec defines the desired state of VMwareCreds
             properties:
-              VCENTER_HOST:
+              name:
+                description: |-
+                  INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
                 type: string
-              VCENTER_INSECURE:
-                type: boolean
-              VCENTER_PASSWORD:
-                type: string
-              VCENTER_USERNAME:
-                type: string
+              secretRef:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
             required:
-            - VCENTER_HOST
-            - VCENTER_INSECURE
-            - VCENTER_PASSWORD
-            - VCENTER_USERNAME
+            - name
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
@@ -1447,7 +1437,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.4
+        image: quay.io/platform9/vjailbreak-controller:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

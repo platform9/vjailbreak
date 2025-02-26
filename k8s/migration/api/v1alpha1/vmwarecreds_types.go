@@ -27,11 +27,14 @@ import (
 type VMwareCredsSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Name string `json:"name"`
 
-	VcenterHost     string `json:"VCENTER_HOST"`
-	VcenterInsecure bool   `json:"VCENTER_INSECURE"`
-	VcenterPassword string `json:"VCENTER_PASSWORD"`
-	VcenterUsername string `json:"VCENTER_USERNAME"`
+	SecretRef SecretReferenece `json:"secretRef,omitempty"`
+}
+
+type SecretReferenece struct {
+	Name      string `json:"name"`
+	NameSpace string `json:"namespace"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds
