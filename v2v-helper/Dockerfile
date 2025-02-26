@@ -30,7 +30,7 @@ COPY pkg/ pkg/
 COPY Makefile Makefile
 
 # Test
-# RUN make test
+RUN make test
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command

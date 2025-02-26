@@ -6,7 +6,6 @@ package openstack
 
 import (
 	reflect "reflect"
-	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	gomock "github.com/golang/mock/gomock"
 	volumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -14,6 +13,7 @@ import (
 	servers "github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	networks "github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // MockOpenstackOperations is a mock of OpenstackOperations interface.
