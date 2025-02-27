@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,7 +16,7 @@ type VMwareCredsFromSecret struct {
 	Insecure bool
 }
 
-// OpenStackCredentials holds the actual credentials after decoding
+// OpenStackCredentialsFromSecret holds the actual credentials after decoding
 type OpenStackCredentialsFromSecret struct {
 	AuthURL    string
 	DomainName string
@@ -46,44 +45,34 @@ func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCre
 		return VMwareCredsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
-	host, err := decodeSecretData(secret.Data["VCENTER_HOST"])
-	if err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterHost: %w", err)
+	host, ok := secret.Data["VCENTER_HOST"]
+	if !ok {
+		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_HOST in secret '%s'", secretName)
 	}
-	username, err := decodeSecretData(secret.Data["VCENTER_USERNAME"])
-	if err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterUsername: %w", err)
+	username, ok := secret.Data["VCENTER_USERNAME"]
+	if !ok {
+		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_USERNAME in secret '%s'", secretName)
 	}
-	password, err := decodeSecretData(secret.Data["VCENTER_PASSWORD"])
-	if err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterPassword: %w", err)
+	password, ok := secret.Data["VCENTER_PASSWORD"]
+	if !ok {
+		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_PASSWORD in secret '%s'", secretName)
 	}
-	insecure, err := decodeSecretData(secret.Data["VCENTER_INSECURE"])
-	if err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode VcenterInsecure: %w", err)
-	}
-
-	Insecure := false
-	if insecure == "true" {
-		Insecure = true
-	} else {
-		Insecure = false
+	insecureStr, ok := secret.Data["VCENTER_INSECURE"]
+	if !ok {
+		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_INSECURE in secret '%s'", secretName)
 	}
 
-	if host == "" || username == "" || password == "" {
-		return VMwareCredsFromSecret{}, fmt.Errorf("incomplete vCenter credentials in secret '%s'", secretName)
-	}
+	insecure := string(insecureStr) == "true"
 
 	return VMwareCredsFromSecret{
-		Host:     host,
-		Username: username,
-		Password: password,
-		Insecure: Insecure,
+		Host:     string(host),
+		Username: string(username),
+		Password: string(password),
+		Insecure: insecure,
 	}, nil
-
 }
 
-// getOpenStackCreds retrieves and decodes the secret
+// getOpenStackCredsFromSecret retrieves and decodes the secret
 func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenStackCredentialsFromSecret, error) {
 	secret := &corev1.Secret{}
 	// Get In cluster client
@@ -95,65 +84,37 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	// Decode each field
-	authURL, err := decodeSecretData(secret.Data["OS_AUTH_URL"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_AUTH_URL: %w", err)
+	if secret.Data == nil {
+		return OpenStackCredentialsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
-	domainName, err := decodeSecretData(secret.Data["OS_DOMAIN_NAME"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_DOMAIN_NAME: %w", err)
+	fields := map[string]*string{
+		"OS_AUTH_URL":    new(string),
+		"OS_DOMAIN_NAME": new(string),
+		"OS_USERNAME":    new(string),
+		"OS_PASSWORD":    new(string),
+		"OS_REGION_NAME": new(string),
+		"OS_TENANT_NAME": new(string),
+		"OS_INSECURE":    new(string),
 	}
 
-	username, err := decodeSecretData(secret.Data["OS_USERNAME"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_USERNAME: %w", err)
+	for key, ptr := range fields {
+		value, ok := secret.Data[key]
+		if !ok {
+			return OpenStackCredentialsFromSecret{}, fmt.Errorf("missing %s in secret '%s'", key, secretName)
+		}
+		*ptr = string(value)
 	}
 
-	password, err := decodeSecretData(secret.Data["OS_PASSWORD"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_PASSWORD: %w", err)
-	}
-
-	regionName, err := decodeSecretData(secret.Data["OS_REGION_NAME"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_REGION_NAME: %w", err)
-	}
-
-	tenantName, err := decodeSecretData(secret.Data["OS_TENANT_NAME"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_TENANT_NAME: %w", err)
-	}
-
-	insecureStr, err := decodeSecretData(secret.Data["OS_INSECURE"])
-	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to decode OS_INSECURE: %w", err)
-	}
-
-	insecure := insecureStr == "true"
+	insecure := *fields["OS_INSECURE"] == "true"
 
 	return OpenStackCredentialsFromSecret{
-		AuthURL:    authURL,
-		DomainName: domainName,
-		Username:   username,
-		Password:   password,
-		RegionName: regionName,
-		TenantName: tenantName,
+		AuthURL:    *fields["OS_AUTH_URL"],
+		DomainName: *fields["OS_DOMAIN_NAME"],
+		Username:   *fields["OS_USERNAME"],
+		Password:   *fields["OS_PASSWORD"],
+		RegionName: *fields["OS_REGION_NAME"],
+		TenantName: *fields["OS_TENANT_NAME"],
 		Insecure:   insecure,
 	}, nil
-}
-
-// decodeSecretData decodes a base64-encoded secret
-func decodeSecretData(data []byte) (string, error) {
-	if data == nil {
-		return "", fmt.Errorf("secret data is missing")
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		return "", fmt.Errorf("failed to decode secret: %w", err)
-	}
-
-	return string(decoded), nil
 }
