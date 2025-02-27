@@ -28,6 +28,7 @@ type OpenStackCredentialsFromSecret struct {
 	ProjectName       string
 	UserDomainName    string
 	ProjectDomainName string
+	AuthType          string
 }
 
 // getVMwareCredsFromSecret retrieves vCenter credentials from a secret
@@ -96,6 +97,7 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 		"ProjectName":       string(secret.Data["OS_PROJECT_NAME"]),
 		"UserDomainName":    string(secret.Data["OS_USER_DOMAIN_NAME"]),
 		"ProjectDomainName": string(secret.Data["OS_PROJECT_DOMAIN_NAME"]),
+		"AuthType":          string(secret.Data["OS_AUTH_TYPE"]),
 	}
 
 	for key, value := range fields {
@@ -118,5 +120,6 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 		UserDomainName:    fields["UserDomainName"],
 		ProjectDomainName: fields["ProjectDomainName"],
 		Insecure:          insecure,
+		AuthType:          fields["AuthType"],
 	}, nil
 }
