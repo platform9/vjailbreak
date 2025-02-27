@@ -18,17 +18,13 @@ type VMwareCredsFromSecret struct {
 
 // OpenStackCredentials holds the actual credentials after decoding
 type OpenStackCredentialsFromSecret struct {
-	AuthURL           string
-	DomainName        string
-	Username          string
-	Password          string
-	RegionName        string
-	TenantName        string
-	Insecure          bool
-	ProjectName       string
-	UserDomainName    string
-	ProjectDomainName string
-	AuthType          string
+	AuthURL    string
+	Username   string
+	Password   string
+	RegionName string
+	TenantName string
+	Insecure   bool
+	DomainName string
 }
 
 // getVMwareCredsFromSecret retrieves vCenter credentials from a secret
@@ -88,16 +84,12 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 
 	// Extract and validate each field
 	fields := map[string]string{
-		"AuthURL":           string(secret.Data["OS_AUTH_URL"]),
-		"DomainName":        string(secret.Data["OS_DOMAIN_NAME"]),
-		"Username":          string(secret.Data["OS_USERNAME"]),
-		"Password":          string(secret.Data["OS_PASSWORD"]),
-		"RegionName":        string(secret.Data["OS_REGION_NAME"]),
-		"TenantName":        string(secret.Data["OS_TENANT_NAME"]),
-		"ProjectName":       string(secret.Data["OS_PROJECT_NAME"]),
-		"UserDomainName":    string(secret.Data["OS_USER_DOMAIN_NAME"]),
-		"ProjectDomainName": string(secret.Data["OS_PROJECT_DOMAIN_NAME"]),
-		"AuthType":          string(secret.Data["OS_AUTH_TYPE"]),
+		"AuthURL":    string(secret.Data["OS_AUTH_URL"]),
+		"DomainName": string(secret.Data["OS_DOMAIN_NAME"]),
+		"Username":   string(secret.Data["OS_USERNAME"]),
+		"Password":   string(secret.Data["OS_PASSWORD"]),
+		"RegionName": string(secret.Data["OS_REGION_NAME"]),
+		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
 	}
 
 	for key, value := range fields {
@@ -110,16 +102,12 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 	insecure := insecureStr == "true"
 
 	return OpenStackCredentialsFromSecret{
-		AuthURL:           fields["AuthURL"],
-		DomainName:        fields["DomainName"],
-		Username:          fields["Username"],
-		Password:          fields["Password"],
-		RegionName:        fields["RegionName"],
-		TenantName:        fields["TenantName"],
-		ProjectName:       fields["ProjectName"],
-		UserDomainName:    fields["UserDomainName"],
-		ProjectDomainName: fields["ProjectDomainName"],
-		Insecure:          insecure,
-		AuthType:          fields["AuthType"],
+		AuthURL:    fields["AuthURL"],
+		DomainName: fields["DomainName"],
+		Username:   fields["Username"],
+		Password:   fields["Password"],
+		RegionName: fields["RegionName"],
+		TenantName: fields["TenantName"],
+		Insecure:   insecure,
 	}, nil
 }

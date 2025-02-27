@@ -146,7 +146,7 @@ func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alph
 
 	openstackCredsFromSecret, err := utils.GetOpenstackCredsFromSecret(context.TODO(), openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
+		return nil, fmt.Errorf("failed to get openstack credentials from secret: %w", err)
 	}
 
 	providerClient, err := openstack.NewClient(openstackCredsFromSecret.AuthURL)
