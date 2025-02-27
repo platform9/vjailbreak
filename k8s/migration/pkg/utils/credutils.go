@@ -16,15 +16,18 @@ type VMwareCredsFromSecret struct {
 	Insecure bool
 }
 
-// OpenStackCredentialsFromSecret holds the actual credentials after decoding
+// OpenStackCredentials holds the actual credentials after decoding
 type OpenStackCredentialsFromSecret struct {
-	AuthURL    string
-	DomainName string
-	Username   string
-	Password   string
-	RegionName string
-	TenantName string
-	Insecure   bool
+	AuthURL           string
+	DomainName        string
+	Username          string
+	Password          string
+	RegionName        string
+	TenantName        string
+	Insecure          bool
+	ProjectName       string
+	UserDomainName    string
+	ProjectDomainName string
 }
 
 // getVMwareCredsFromSecret retrieves vCenter credentials from a secret
@@ -45,34 +48,32 @@ func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCre
 		return VMwareCredsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
-	host, ok := secret.Data["VCENTER_HOST"]
-	if !ok {
-		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_HOST in secret '%s'", secretName)
+	host := string(secret.Data["VCENTER_HOST"])
+	username := string(secret.Data["VCENTER_USERNAME"])
+	password := string(secret.Data["VCENTER_PASSWORD"])
+	insecureStr := string(secret.Data["VCENTER_INSECURE"])
+
+	if host == "" {
+		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
-	username, ok := secret.Data["VCENTER_USERNAME"]
-	if !ok {
-		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_USERNAME in secret '%s'", secretName)
+	if username == "" {
+		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
 	}
-	password, ok := secret.Data["VCENTER_PASSWORD"]
-	if !ok {
-		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_PASSWORD in secret '%s'", secretName)
-	}
-	insecureStr, ok := secret.Data["VCENTER_INSECURE"]
-	if !ok {
-		return VMwareCredsFromSecret{}, fmt.Errorf("missing VCENTER_INSECURE in secret '%s'", secretName)
+	if password == "" {
+		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 
-	insecure := string(insecureStr) == "true"
+	insecure := insecureStr == "true"
 
 	return VMwareCredsFromSecret{
-		Host:     string(host),
-		Username: string(username),
-		Password: string(password),
+		Host:     host,
+		Username: username,
+		Password: password,
 		Insecure: insecure,
 	}, nil
 }
 
-// getOpenStackCredsFromSecret retrieves and decodes the secret
+// getOpenStackCreds retrieves and checks the secret
 func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenStackCredentialsFromSecret, error) {
 	secret := &corev1.Secret{}
 	// Get In cluster client
@@ -84,37 +85,38 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	if secret.Data == nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
+	// Extract and validate each field
+	fields := map[string]string{
+		"AuthURL":           string(secret.Data["OS_AUTH_URL"]),
+		"DomainName":        string(secret.Data["OS_DOMAIN_NAME"]),
+		"Username":          string(secret.Data["OS_USERNAME"]),
+		"Password":          string(secret.Data["OS_PASSWORD"]),
+		"RegionName":        string(secret.Data["OS_REGION_NAME"]),
+		"TenantName":        string(secret.Data["OS_TENANT_NAME"]),
+		"ProjectName":       string(secret.Data["OS_PROJECT_NAME"]),
+		"UserDomainName":    string(secret.Data["OS_USER_DOMAIN_NAME"]),
+		"ProjectDomainName": string(secret.Data["OS_PROJECT_DOMAIN_NAME"]),
 	}
 
-	fields := map[string]*string{
-		"OS_AUTH_URL":    new(string),
-		"OS_DOMAIN_NAME": new(string),
-		"OS_USERNAME":    new(string),
-		"OS_PASSWORD":    new(string),
-		"OS_REGION_NAME": new(string),
-		"OS_TENANT_NAME": new(string),
-		"OS_INSECURE":    new(string),
-	}
-
-	for key, ptr := range fields {
-		value, ok := secret.Data[key]
-		if !ok {
-			return OpenStackCredentialsFromSecret{}, fmt.Errorf("missing %s in secret '%s'", key, secretName)
+	for key, value := range fields {
+		if value == "" {
+			return OpenStackCredentialsFromSecret{}, fmt.Errorf("%s is missing in secret '%s'", key, secretName)
 		}
-		*ptr = string(value)
 	}
 
-	insecure := *fields["OS_INSECURE"] == "true"
+	insecureStr := string(secret.Data["OS_INSECURE"])
+	insecure := insecureStr == "true"
 
 	return OpenStackCredentialsFromSecret{
-		AuthURL:    *fields["OS_AUTH_URL"],
-		DomainName: *fields["OS_DOMAIN_NAME"],
-		Username:   *fields["OS_USERNAME"],
-		Password:   *fields["OS_PASSWORD"],
-		RegionName: *fields["OS_REGION_NAME"],
-		TenantName: *fields["OS_TENANT_NAME"],
-		Insecure:   insecure,
+		AuthURL:           fields["AuthURL"],
+		DomainName:        fields["DomainName"],
+		Username:          fields["Username"],
+		Password:          fields["Password"],
+		RegionName:        fields["RegionName"],
+		TenantName:        fields["TenantName"],
+		ProjectName:       fields["ProjectName"],
+		UserDomainName:    fields["UserDomainName"],
+		ProjectDomainName: fields["ProjectDomainName"],
+		Insecure:          insecure,
 	}, nil
 }
