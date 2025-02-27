@@ -88,7 +88,6 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 		"DomainName": string(secret.Data["OS_DOMAIN_NAME"]),
 		"Username":   string(secret.Data["OS_USERNAME"]),
 		"Password":   string(secret.Data["OS_PASSWORD"]),
-		"RegionName": string(secret.Data["OS_REGION_NAME"]),
 		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
 	}
 
