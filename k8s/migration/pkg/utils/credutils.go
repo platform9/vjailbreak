@@ -46,19 +46,19 @@ func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCre
 		return VMwareCredsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
-	host, err := decodeSecretData(secret.Data["vcenterHost"])
+	host, err := decodeSecretData(secret.Data["VCENTER_HOST"])
 	if err != nil {
 		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterHost: %w", err)
 	}
-	username, err := decodeSecretData(secret.Data["vcenterUsername"])
+	username, err := decodeSecretData(secret.Data["VCENTER_USERNAME"])
 	if err != nil {
 		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterUsername: %w", err)
 	}
-	password, err := decodeSecretData(secret.Data["vcenterPassword"])
+	password, err := decodeSecretData(secret.Data["VCENTER_PASSWORD"])
 	if err != nil {
 		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode vcenterPassword: %w", err)
 	}
-	insecure, err := decodeSecretData(secret.Data["VcenterInsecure"])
+	insecure, err := decodeSecretData(secret.Data["VCENTER_INSECURE"])
 	if err != nil {
 		return VMwareCredsFromSecret{}, fmt.Errorf("failed to decode VcenterInsecure: %w", err)
 	}
