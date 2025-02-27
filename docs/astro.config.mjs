@@ -27,9 +27,9 @@ export default defineConfig({
 						// Each item here is one entry in the navigation menu.
 						// manually done so to we can keep the order
 						{ label: 'What is vJailbreak', slug: 'introduction/what_is_vjailbreak' },
-						{ label: 'components', slug: 'introduction/components' },
+						{ label: 'Components', slug: 'introduction/components' },
+						{ label: 'Pre-requisites', slug: 'introduction/prerequisites' },
 						{ label: 'Getting Started', slug: 'introduction/getting_started' },
-						{ label: 'prerequisites', slug: 'introduction/prerequisites' },
 					],
 				},
 				{
