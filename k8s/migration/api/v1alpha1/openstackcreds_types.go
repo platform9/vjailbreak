@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,7 +27,7 @@ import (
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
-	SecretRef SecretReferenece `json:"secretRef,omitempty"`
+	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

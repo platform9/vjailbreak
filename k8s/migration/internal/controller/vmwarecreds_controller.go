@@ -98,15 +98,15 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	vmWareCredsFromSecret, err := utils.GetVMwareCredsFromSecret(context.TODO(), vmwcreds.Spec.SecretRef.Name)
+	VMwareCredentials, err := utils.GetVMwareCredsFromSecret(context.TODO(), vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
 
-	host := vmWareCredsFromSecret.Host
-	username := vmWareCredsFromSecret.Username
-	password := vmWareCredsFromSecret.Password
-	disableSSLVerification := vmWareCredsFromSecret.Insecure
+	host := VMwareCredentials.Host
+	username := VMwareCredentials.Username
+	password := VMwareCredentials.Password
+	disableSSLVerification := VMwareCredentials.Insecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}

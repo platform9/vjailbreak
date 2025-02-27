@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// VMwareCredsFromSecret holds the actual credentials after decoding
-type VMwareCredsFromSecret struct {
+// VMwareCredentials holds the actual credentials after decoding
+type VMwareCredentials struct {
 	Host     string
 	Username string
 	Password string
@@ -28,21 +30,21 @@ type OpenStackCredentialsFromSecret struct {
 }
 
 // getVMwareCredsFromSecret retrieves vCenter credentials from a secret
-func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCredsFromSecret, error) {
+func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCredentials, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
 	c, err := GetInclusterClient()
 	if err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to get in cluster client: %w", err)
+		return VMwareCredentials{}, fmt.Errorf("failed to get in cluster client: %w", err)
 	}
 
-	if err := c.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: secretName}, secret); err != nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
+	if err := c.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+		return VMwareCredentials{}, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
 	}
 
 	if secret.Data == nil {
-		return VMwareCredsFromSecret{}, fmt.Errorf("no data in secret '%s'", secretName)
+		return VMwareCredentials{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
 	host := string(secret.Data["VCENTER_HOST"])
@@ -51,18 +53,18 @@ func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCre
 	insecureStr := string(secret.Data["VCENTER_INSECURE"])
 
 	if host == "" {
-		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
+		return VMwareCredentials{}, fmt.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
 	if username == "" {
-		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
+		return VMwareCredentials{}, fmt.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
 	}
 	if password == "" {
-		return VMwareCredsFromSecret{}, fmt.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
+		return VMwareCredentials{}, fmt.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 
 	insecure := insecureStr == "true"
 
-	return VMwareCredsFromSecret{
+	return VMwareCredentials{
 		Host:     host,
 		Username: username,
 		Password: password,
@@ -78,7 +80,7 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 	if err != nil {
 		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get in cluster client: %w", err)
 	}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: secretName}, secret); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
 		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get secret: %w", err)
 	}
 

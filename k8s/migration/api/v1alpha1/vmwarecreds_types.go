@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,12 +30,7 @@ type VMwareCredsSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	Name string `json:"name"`
 
-	SecretRef SecretReferenece `json:"secretRef,omitempty"`
-}
-
-type SecretReferenece struct {
-	Name      string `json:"name"`
-	NameSpace string `json:"namespace"`
+	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds
