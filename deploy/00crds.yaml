@@ -900,6 +900,7 @@ rules:
   resources:
   - configmaps
   - pods
+  - secrets
   verbs:
   - create
   - delete
@@ -1447,7 +1448,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.4
+        image: quay.io/platform9/vjailbreak-controller:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
