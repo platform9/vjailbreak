@@ -28,8 +28,6 @@ import (
 type VMwareCredsSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Name string `json:"name"`
-
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
