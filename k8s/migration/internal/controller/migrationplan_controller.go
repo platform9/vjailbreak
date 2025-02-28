@@ -282,7 +282,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName, firstbootconfigMapName string, vmwareSecretRef string, openstackSecretRef string) error {
+	migrationobj *vjailbreakv1alpha1.Migration,
+	vm string, configMapName,
+	firstbootconfigMapName string,
+	vmwareSecretRef string,
+	openstackSecretRef string) error {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
@@ -696,7 +700,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
-		err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name, vmwcreds.Spec.SecretRef.Name, openstackcreds.Spec.SecretRef.Name)
+		err = r.CreatePod(ctx,
+			migrationplan,
+			migrationobj,
+			vm, cm.Name,
+			fbcm.Name,
+			vmwcreds.Spec.SecretRef.Name,
+			openstackcreds.Spec.SecretRef.Name)
 		if err != nil {
 			return fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
 		}
