@@ -163,8 +163,8 @@ func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alph
 		// Get the certificate for the Openstack endpoint
 		caCert, certerr := getCert(openstackCredential.AuthURL)
 		if certerr != nil {
-			ctxlog.Error(err, fmt.Sprintf("Error getting certificate for '%s'", openstackCredential.AuthURL))
-			return nil, err
+			ctxlog.Error(certerr, fmt.Sprintf("Error getting certificate for '%s'", openstackCredential.AuthURL))
+			return nil, certerr
 		}
 		// Logging the certificate
 		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
