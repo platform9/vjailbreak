@@ -15,6 +15,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -258,9 +259,10 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
 }
 
 func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
-	client := &http.Client{}
+	client := retryablehttp.NewClient()
+	client.RetryMax = 5
 	networks := []servers.Network{}
-	req, err := http.NewRequestWithContext(context.Background(), "GET",
+	req, err := retryablehttp.NewRequestWithContext(context.Background(), "GET",
 		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create request")

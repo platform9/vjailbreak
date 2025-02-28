@@ -63,12 +63,12 @@ func GenerateXML(diskFiles []string, outputFile, vmname string) error {
 		return err
 	}
 
-	file, err := os.Create(outputFile)
+	outputFileHandle, err := os.Create(outputFile)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer outputFileHandle.Close()
 
-	_, err = file.Write([]byte(xml.Header + string(output)))
+	_, err = outputFileHandle.Write([]byte(xml.Header + string(output)))
 	return err
 }
