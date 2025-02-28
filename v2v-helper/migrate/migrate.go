@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -416,6 +417,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if err != nil {
 			return errors.Wrap(err, "Failed to get bootable volume index")
 		}
+	}
+
+	// create XML for conversion
+	err = utils.GenerateXMLConfig(vminfo)
+	if err != nil {
+		return fmt.Errorf("failed to generate XML: %s", err)
 	}
 
 	// at this point we have the bootVolumeIndex for sure
