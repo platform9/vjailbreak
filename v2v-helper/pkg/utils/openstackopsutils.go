@@ -39,6 +39,7 @@ type OpenStackMetadata struct {
 func GetCurrentInstanceUUID() (string, error) {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 5
+	client.Logger = nil
 	req, err := retryablehttp.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %s", err)
