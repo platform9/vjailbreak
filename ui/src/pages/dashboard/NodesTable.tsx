@@ -211,6 +211,7 @@ const NodesToolbar = ({
                             startIcon={<AddIcon />}
                             onClick={onScaleUp}
                             disabled={loading}
+                            sx={{ height: 40 }}
                         >
                             Scale Up
                         </Button>
@@ -224,6 +225,7 @@ const NodesToolbar = ({
                             startIcon={<RemoveIcon />}
                             onClick={onScaleDown}
                             disabled={disableScaleDown || loading}
+                            sx={{ height: 40 }}
                         >
                             Scale Down {selectedCount > 0 && `(${selectedCount})`}
                         </Button>
@@ -239,7 +241,7 @@ const NodesToolbar = ({
 };
 
 export default function NodesTable() {
-    const { data: nodes, isLoading, refetch: refreshNodes } = useNodesQuery();
+    const { data: nodes, isLoading: fetchingNodes, refetch: refreshNodes } = useNodesQuery();
     const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
     const [scaleUpOpen, setScaleUpOpen] = useState(false);
     const [scaleDownDialogOpen, setScaleDownDialogOpen] = useState(false);
@@ -343,14 +345,14 @@ export default function NodesTable() {
                 isRowSelectable={isRowSelectable}
                 onRowSelectionModelChange={handleSelectionChange}
                 rowSelectionModel={selectedNodes}
-                loading={isLoading}
+                loading={fetchingNodes}
                 slots={{
                     toolbar: () => (
                         <NodesToolbar
                             onScaleUp={handleScaleUp}
                             onScaleDown={handleScaleDown}
                             disableScaleDown={selectedNodes.length === 0 || remainingNodesAfterScaleDown < 1}
-                            loading={loading}
+                            loading={loading || fetchingNodes}
                             selectedCount={selectedNodes.length}
                             totalNodes={transformedNodes.length}
                             onRefresh={handleRefresh}
@@ -366,17 +368,6 @@ export default function NodesTable() {
                             <Typography>No Agents</Typography>
                         </Box>
                     ),
-                }}
-                slotProps={{
-                    toolbar: {
-                        onScaleUp: handleScaleUp,
-                        onScaleDown: handleScaleDown,
-                        disableScaleDown: selectedNodes.length === 0 || selectedNodes.length === transformedNodes.length,
-                        loading: loading || isLoading,
-                        selectedCount: selectedNodes.length,
-                        totalNodes: transformedNodes.length,
-                        onRefresh: handleRefresh
-                    },
                 }}
             />
 

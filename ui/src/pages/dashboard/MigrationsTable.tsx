@@ -94,22 +94,20 @@ const columns: GridColDef[] = [
 
             return (
                 <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
-                    <span>
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                params.row.onDelete(params.row.metadata?.name);
-                            }}
-                            disabled={isDisabled}
-                            size="small"
-                            sx={{
-                                cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                position: 'relative'
-                            }}
-                        >
-                            <DeleteIcon />
-                        </IconButton>
-                    </span>
+                    <IconButton
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            params.row.onDelete(params.row.metadata?.name);
+                        }}
+                        disabled={isDisabled}
+                        size="small"
+                        sx={{
+                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            position: 'relative'
+                        }}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
                 </Tooltip>
             );
         },

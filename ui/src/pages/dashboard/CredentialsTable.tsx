@@ -3,7 +3,6 @@ import {
     GridColDef,
     GridToolbarContainer,
     GridRowSelectionModel,
-    GridToolbarProps,
 } from "@mui/x-data-grid";
 import {
     Button,
@@ -13,7 +12,7 @@ import {
     Tooltip,
     Chip
 } from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import WarningIcon from '@mui/icons-material/Warning';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { useState, useCallback, useEffect } from "react";
@@ -82,8 +81,6 @@ const columns: GridColDef[] = [
                             params.row.onDelete(params.row.id, params.row.type);
                         }
                     }}
-                    size="small"
-                    color="error"
                     aria-label="delete credential"
                 >
                     <DeleteIcon />
@@ -93,20 +90,15 @@ const columns: GridColDef[] = [
     },
 ];
 
-// Define a type that extends GridToolbarProps with our custom props
 interface CustomToolbarProps {
-    selectedCount?: number;
-    onDeleteSelected?: () => void;
-    loading?: boolean;
-    onRefresh?: () => void;
+    numSelected: number;
+    onDeleteSelected: () => void;
+    loading: boolean;
+    onRefresh: () => void;
 }
 
 // Custom toolbar component
-const CustomToolbar = (props: GridToolbarProps) => {
-    // Access our custom props from the component's context
-    const { selectedCount = 0, onDeleteSelected, loading = false, onRefresh } =
-        props.getSlotsParameters?.() as CustomToolbarProps || {};
-
+const CustomToolbar = ({ numSelected, onDeleteSelected, loading, onRefresh }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -122,15 +114,16 @@ const CustomToolbar = (props: GridToolbarProps) => {
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
-                {selectedCount > 0 && (
+                {numSelected > 0 && (
                     <Button
                         variant="outlined"
                         color="error"
                         startIcon={<DeleteIcon />}
                         onClick={onDeleteSelected}
                         disabled={loading}
+                        sx={{ height: 40 }}
                     >
-                        Delete Selected ({selectedCount})
+                        Delete Selected ({numSelected})
                     </Button>
                 )}
                 <CustomSearchToolbar
@@ -219,25 +212,20 @@ export default function CredentialsTable() {
     const handleConfirmDelete = async () => {
         setDeleting(true);
         try {
-            // Group credentials by type for batch deletion
             const vmwareCreds = selectedForDeletion.filter(cred => cred.type === 'VMware');
             const openstackCreds = selectedForDeletion.filter(cred => cred.type === 'OpenStack');
 
-            // Delete VMware credentials with their secrets
             await Promise.all(
                 vmwareCreds.map(cred => deleteVMwareCredsWithSecretFlow(cred.id))
             );
 
-            // Delete OpenStack credentials with their secrets
             await Promise.all(
                 openstackCreds.map(cred => deleteOpenStackCredsWithSecretFlow(cred.id))
             );
 
-            // Refresh data
             queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY });
             queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY });
 
-            // Clear selections
             setSelectedIds([]);
             handleDeleteClose();
         } catch (error) {
@@ -256,7 +244,6 @@ export default function CredentialsTable() {
         return `${baseMessage}: ${error}`;
     }, []);
 
-    // Transform VMware credentials to the common format
     const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VmwareCredential) => ({
         id: cred.metadata.name,
         name: cred.metadata.name,
@@ -265,7 +252,6 @@ export default function CredentialsTable() {
         credObject: cred,
     })) || [];
 
-    // Transform OpenStack credentials to the common format
     const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
         id: cred.metadata.name,
         name: cred.metadata.name,
@@ -304,15 +290,14 @@ export default function CredentialsTable() {
                     },
                 }}
                 slots={{
-                    toolbar: CustomToolbar,
-                }}
-                slotProps={{
-                    toolbar: {
-                        selectedCount: selectedIds.length,
-                        onDeleteSelected: handleDeleteSelected,
-                        loading: isLoading,
-                        onRefresh: handleRefresh,
-                    },
+                    toolbar: () => (
+                        <CustomToolbar
+                            numSelected={selectedIds.length}
+                            onDeleteSelected={handleDeleteSelected}
+                            loading={isLoading}
+                            onRefresh={handleRefresh}
+                        />
+                    ),
                 }}
                 pageSizeOptions={[10, 25, 50, 100]}
                 sx={{
@@ -338,7 +323,7 @@ export default function CredentialsTable() {
                 }
                 items={selectedForDeletion.map(cred => ({
                     id: cred.id,
-                    name: cred.name
+                    name: `${cred.name} (${cred.type})`
                 }))}
                 actionLabel="Delete"
                 actionColor="error"
