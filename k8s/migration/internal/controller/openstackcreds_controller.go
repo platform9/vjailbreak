@@ -105,12 +105,12 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				}
 			}
 
-			openstackCredsSecret, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
+			openstackCredential, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 			}
 
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredsSecret.AuthURL))
+			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredential.AuthURL))
 			// Update the status of the OpenstackCreds object
 			openstackcreds.Status.OpenStackValidationStatus = "Succeeded"
 			openstackcreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
@@ -143,31 +143,31 @@ func getCert(endpoint string) (*x509.Certificate, error) {
 }
 
 func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
-	openstackCredsSecret, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get openstack credentials from secret: %w", err)
 	}
 
-	providerClient, err := openstack.NewClient(openstackCredsSecret.AuthURL)
+	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Error creating Openstack Client'%s'", openstackCredsSecret.AuthURL))
+		ctxlog.Error(err, fmt.Sprintf("Error creating Openstack Client'%s'", openstackCredential.AuthURL))
 		return nil, err
 	}
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
-	if openstackCredsSecret.Insecure {
+	if openstackCredential.Insecure {
 		ctxlog.Info("Insecure flag is set, skipping certificate verification")
 		tlsConfig.InsecureSkipVerify = true
 	} else {
 		// Get the certificate for the Openstack endpoint
-		caCert, certerr := getCert(openstackCredsSecret.AuthURL)
+		caCert, certerr := getCert(openstackCredential.AuthURL)
 		if certerr != nil {
-			ctxlog.Error(err, fmt.Sprintf("Error getting certificate for '%s'", openstackCredsSecret.AuthURL))
+			ctxlog.Error(err, fmt.Sprintf("Error getting certificate for '%s'", openstackCredential.AuthURL))
 			return nil, err
 		}
 		// Logging the certificate
-		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredsSecret.AuthURL))
+		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
 		ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: caCert.Raw,
@@ -187,35 +187,35 @@ func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alph
 		Transport: transport,
 	}
 	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
-		IdentityEndpoint: openstackCredsSecret.AuthURL,
-		Username:         openstackCredsSecret.Username,
-		Password:         openstackCredsSecret.Password,
-		DomainName:       openstackCredsSecret.DomainName,
-		TenantName:       openstackCredsSecret.TenantName,
+		IdentityEndpoint: openstackCredential.AuthURL,
+		Username:         openstackCredential.Username,
+		Password:         openstackCredential.Password,
+		DomainName:       openstackCredential.DomainName,
+		TenantName:       openstackCredential.TenantName,
 	})
 	if err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Error authenticating to Openstack '%s'", openstackCredsSecret.AuthURL))
+		ctxlog.Error(err, fmt.Sprintf("Error authenticating to Openstack '%s'", openstackCredential.AuthURL))
 		return nil, err
 	}
 	endpoint := gophercloud.EndpointOpts{
-		Region: openstackCredsSecret.RegionName,
+		Region: openstackCredential.RegionName,
 	}
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
-			openstackCredsSecret.RegionName, openstackCredsSecret.AuthURL))
+			openstackCredential.RegionName, openstackCredential.AuthURL))
 		return nil, err
 	}
 	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
 	if err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
-			openstackCredsSecret.RegionName, openstackCredsSecret.AuthURL))
+			openstackCredential.RegionName, openstackCredential.AuthURL))
 		return nil, err
 	}
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Error validating region '%s' for '%s'",
-			openstackCredsSecret.RegionName, openstackCredsSecret.AuthURL))
+			openstackCredential.RegionName, openstackCredential.AuthURL))
 		return nil, err
 	}
 	return &OpenStackClients{
