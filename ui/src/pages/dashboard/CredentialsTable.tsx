@@ -3,7 +3,6 @@ import {
     GridColDef,
     GridToolbarContainer,
     GridRowSelectionModel,
-    GridToolbarProps
 } from "@mui/x-data-grid";
 import {
     Button,
@@ -91,20 +90,13 @@ const columns: GridColDef[] = [
     },
 ];
 
-// Define a type that extends GridToolbarProps with our custom props
 interface CustomToolbarProps {
-    selectedCount: number;
+    numSelected: number;
     onDeleteSelected: () => void;
     loading: boolean;
     onRefresh: () => void;
 }
-
-type ExtendedToolbarProps = GridToolbarProps & CustomToolbarProps;
-
-// Custom toolbar component
-const CustomToolbar = (props: ExtendedToolbarProps) => {
-    const { selectedCount, onDeleteSelected, loading, onRefresh } = props;
-
+const CustomToolbar = ({ numSelected, onDeleteSelected, loading, onRefresh }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -120,15 +112,16 @@ const CustomToolbar = (props: ExtendedToolbarProps) => {
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
-                {selectedCount > 0 && (
+                {numSelected > 0 && (
                     <Button
                         variant="outlined"
                         color="error"
                         startIcon={<DeleteIcon />}
                         onClick={onDeleteSelected}
                         disabled={loading}
+                        sx={{ height: 40 }}
                     >
-                        Delete Selected ({selectedCount})
+                        Delete Selected ({numSelected})
                     </Button>
                 )}
                 <CustomSearchToolbar
@@ -295,16 +288,14 @@ export default function CredentialsTable() {
                     },
                 }}
                 slots={{
-                    // @ts-expect-error - CustomToolbar requires additional props that are not in GridToolbarProps
-                    toolbar: CustomToolbar,
-                }}
-                slotProps={{
-                    toolbar: {
-                        selectedCount: selectedIds.length,
-                        onDeleteSelected: handleDeleteSelected,
-                        loading: isLoading,
-                        onRefresh: handleRefresh,
-                    } as CustomToolbarProps,
+                    toolbar: () => (
+                        <CustomToolbar
+                            numSelected={selectedIds.length}
+                            onDeleteSelected={handleDeleteSelected}
+                            loading={isLoading}
+                            onRefresh={handleRefresh}
+                        />
+                    ),
                 }}
                 pageSizeOptions={[10, 25, 50, 100]}
                 sx={{
