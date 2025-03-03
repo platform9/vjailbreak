@@ -162,6 +162,7 @@ interface NodesToolbarProps {
     loading: boolean;
     selectedCount: number;
     totalNodes: number;
+    onRefresh?: () => void;
 }
 interface NodeSelector {
     id: string
@@ -177,7 +178,8 @@ const NodesToolbar = ({
     disableScaleDown,
     loading,
     selectedCount,
-    totalNodes
+    totalNodes,
+    onRefresh
 }: NodesToolbarProps) => {
     const getScaleDownTooltip = () => {
         if (loading) return "Operation in progress";
@@ -229,6 +231,7 @@ const NodesToolbar = ({
                 </Tooltip>
                 <CustomSearchToolbar
                     placeholder="Search by Name, Status, or IP"
+                    onRefresh={onRefresh}
                 />
             </Box>
         </GridToolbarContainer>
@@ -236,7 +239,7 @@ const NodesToolbar = ({
 };
 
 export default function NodesTable() {
-    const { data: nodes, isLoading } = useNodesQuery();
+    const { data: nodes, isLoading, refetch: refreshNodes } = useNodesQuery();
     const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
     const [scaleUpOpen, setScaleUpOpen] = useState(false);
     const [scaleDownDialogOpen, setScaleDownDialogOpen] = useState(false);
@@ -263,6 +266,9 @@ export default function NodesTable() {
         setSelectedNodes(newSelection);
     };
 
+    const handleRefresh = () => {
+        refreshNodes()
+    };
 
     const handleScaleUp = () => {
         setScaleUpOpen(true);
@@ -276,7 +282,6 @@ export default function NodesTable() {
         setSelectedNodes([node.name]);
         setScaleDownDialogOpen(true);
     };
-
 
     const confirmScaleDown = async () => {
         try {
@@ -348,6 +353,7 @@ export default function NodesTable() {
                             loading={loading}
                             selectedCount={selectedNodes.length}
                             totalNodes={transformedNodes.length}
+                            onRefresh={handleRefresh}
                         />
                     ),
                     noRowsOverlay: () => (
@@ -360,6 +366,17 @@ export default function NodesTable() {
                             <Typography>No Agents</Typography>
                         </Box>
                     ),
+                }}
+                slotProps={{
+                    toolbar: {
+                        onScaleUp: handleScaleUp,
+                        onScaleDown: handleScaleDown,
+                        disableScaleDown: selectedNodes.length === 0 || selectedNodes.length === transformedNodes.length,
+                        loading: loading || isLoading,
+                        selectedCount: selectedNodes.length,
+                        totalNodes: transformedNodes.length,
+                        onRefresh: handleRefresh
+                    },
                 }}
             />
 
