@@ -94,11 +94,11 @@ jobs:
         
         echo "release_found=${RELEASE_FOUND}" >> $GITHUB_ENV
 
-    # Run parallel steps using a different approach
+    # Prepare build directories
     - name: Prepare build directories
       run: mkdir -p image_builder/deploy
 
-    # Run parallel jobs using GitHub Actions native concurrency
+    # Run all builds and preparations in parallel
     - name: Start parallel tasks
       run: |
         # Script to build UI image
@@ -113,13 +113,12 @@ jobs:
         echo 'v2v-helper build completed'
         " > build_v2v.sh
         
-        # Script to prepare deploy manifests
+        # Script to build controller image
         echo "#!/bin/bash
-        if ! command -v go &> /dev/null; then
-          wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz
-          sudo tar -C /usr/local -xzf go1.22.5.linux-amd64.tar.gz
-          export PATH=\$PATH:/usr/local/go/bin
-        fi
+        make -o v2v-helper vjail-controller
+        echo 'Controller build completed'
+        " > build_controller.sh
+        
         
         make -C ./k8s/migration/ build-installer
         cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
@@ -155,18 +154,15 @@ jobs:
         fi
         
         # Make scripts executable and run them in parallel
-        chmod +x build_ui.sh build_v2v.sh prep_deploy.sh
+        chmod +x build_ui.sh build_v2v.sh build_controller.sh prep_deploy.sh
         ./build_ui.sh &
         ./build_v2v.sh &
+        ./build_controller.sh &
         ./prep_deploy.sh &
         
         # Wait for all background processes to complete
         wait
         echo "All parallel tasks completed"
-
-    # Build controller image after v2v-helper is built
-    - name: Build and push controller image
-      run: make -o v2v-helper vjail-controller
 
     # Substitute tags in manifests after builds are done
     - name: Substitute image tags in manifests
