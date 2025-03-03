@@ -27,7 +27,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -120,7 +120,7 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
 	// Convert the disk
 	if ostype == "windows" {
 		filePath := "/home/fedora/virtio-win.iso"
@@ -138,7 +138,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
-	args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	if useSingleDisk {
+		args = append(args, "-i", "disk", diskPath)
+	} else {
+		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	}
 	cmd := exec.CommandContext(ctx,
 		"virt-v2v-in-place",
 		args...,
@@ -173,8 +177,9 @@ func GetOsRelease(path string) (string, error) {
 	return strings.ToLower(string(out)), nil
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
 	// Add wildcard to netplan
+	var ans string
 	netplan := `[Match]
 Name=en*
 
@@ -190,8 +195,13 @@ DHCP=yes`
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	command := "upload"
-	ans, err := RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+	if useSingleDisk {
+		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+	}
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v\n", ans, err)
 		return err
@@ -211,12 +221,15 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 }
 
 // Runs command inside temporary qemu-kvm that virt-v2v creates
-func RunCommandInGuest(path string, command string) (string, error) {
-	// Get the os-release file
+func RunCommandInGuest(path string, command string, write bool) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
 	cmd := exec.Command(
 		"guestfish",
-		"--ro",
+		option,
 		"-a",
 		path,
 		"-i")
@@ -249,7 +262,7 @@ func CheckForLVM(disks []vm.VMDisk) (string, error) {
 
 	lvs := strings.Split(string(lvsStr), "\n")
 	if slices.Contains(lvs, strings.TrimSpace(string(osPath))) {
-		return string(osPath), nil
+		return string(strings.TrimSpace(string(osPath))), nil
 	}
 
 	return "", fmt.Errorf("LVM not found: %v, %d", lvs, len(lvs))
@@ -313,7 +326,6 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 			return -1, err
 		}
 
-		fmt.Printf("Bootable: %s\n", bootable)
 		if strings.TrimSpace(bootable) == "true" {
 			command = "device-index"
 			index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))

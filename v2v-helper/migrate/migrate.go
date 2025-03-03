@@ -329,7 +329,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 		}
 
-		//Update old change id to the new base change id value
+		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
 		vminfo, err = vmops.UpdateDiskInfo(vminfo)
@@ -374,11 +374,20 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	migobj.logMessage("Converting disk")
 
 	var (
-		osRelease       = ""
-		bootVolumeIndex = -1
-		err             error
-		lvm, osPath     string
+		osRelease                   = ""
+		bootVolumeIndex             = -1
+		err                         error
+		lvm, osPath, getBootCommand string
+		useSingleDisk               bool
 	)
+
+	if vminfo.OSType == "windows" {
+		getBootCommand = "ls /Windows"
+	} else if vminfo.OSType == "linux" {
+		getBootCommand = "ls /boot"
+	} else {
+		getBootCommand = "inspect-os"
+	}
 
 	// attach all volumes at once
 	for idx, vmdisk := range vminfo.VMDisks {
@@ -388,54 +397,60 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 	}
 
-	for idx := range vminfo.VMDisks {
-		// check if individual disks are bootable
-		ans, err := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, constants.InspectOSCommand)
-		if err != nil {
-			log.Printf("Error running '%s'. Error: '%s', Output: %s\n", constants.InspectOSCommand, err, strings.TrimSpace(ans))
-			continue
-		}
-
-		log.Printf("Output from '%s' - '%s'\n", constants.InspectOSCommand, strings.TrimSpace(ans))
-
-		bootVolumeIndex = idx
-		osPath = vminfo.VMDisks[idx].Path
-		break
-	}
-
-	// If its Windows, or non-LVM  we have bootVolumeIndex already set
-	if bootVolumeIndex == -1 {
-		// check for LVM (this block will be skipped for Windows automatically)
-		lvm, err = virtv2v.CheckForLVM(vminfo.VMDisks)
-		if err != nil || lvm == "" {
-			return errors.Wrap(err, "OS install location not found, Failed to check for LVM")
-		}
-		osPath = strings.TrimSpace(lvm)
-
-		// check for bootable volume in case of LVM
-		bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
-		if err != nil {
-			return errors.Wrap(err, "Failed to get bootable volume index")
-		}
-	}
-
 	// create XML for conversion
 	err = utils.GenerateXMLConfig(vminfo)
 	if err != nil {
 		return fmt.Errorf("failed to generate XML: %s", err)
 	}
 
-	// at this point we have the bootVolumeIndex for sure
-	if vminfo.OSType == "linux" {
-		osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
+	for idx := range vminfo.VMDisks {
+		// check if individual disks are bootable
+		ans, err := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
 		if err != nil {
-			return fmt.Errorf("failed to get os release: %s", err)
+			log.Printf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, strings.TrimSpace(ans))
+			continue
+		}
+
+		if ans == "" {
+			// OS is not installed on this disk
+			continue
+		}
+		log.Printf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans))
+
+		osPath = strings.TrimSpace(ans)
+		bootVolumeIndex = idx
+		useSingleDisk = true
+		break
+	}
+
+	if vminfo.OSType == "linux" {
+		if useSingleDisk {
+			// skip checking LVM, because its a single disk
+			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
+			if err != nil {
+				return fmt.Errorf("failed to get os release: %s", err)
+			}
+		} else {
+			// check for LVM
+			lvm, err = virtv2v.CheckForLVM(vminfo.VMDisks)
+			if err != nil || lvm == "" {
+				return errors.Wrap(err, "OS install location not found, Failed to check for LVM")
+			}
+			osPath = strings.TrimSpace(lvm)
+			// check for bootable volume in case of LVM
+			bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+			if err != nil {
+				return errors.Wrap(err, "Failed to get bootable volume index")
+			}
+			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
+			if err != nil {
+				return fmt.Errorf("failed to get os release: %s", err)
+			}
 		}
 	}
 
 	// save the index of bootVolume
 	log.Printf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name)
-
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 	if migobj.Convert {
 		firstbootscripts := []string{}
@@ -459,7 +474,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 		}
 
-		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts)
+		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 		if err != nil {
 			return fmt.Errorf("failed to run virt-v2v: %s", err)
 		}
@@ -476,7 +491,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			log.Println("Adding wildcard netplan")
-			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks)
+			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to add wildcard netplan: %s", err)
 			}
