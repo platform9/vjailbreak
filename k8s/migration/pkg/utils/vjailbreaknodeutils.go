@@ -255,6 +255,10 @@ func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
 	if err != nil && !apierrors.IsNotFound(err) {
 		fmt.Printf("failed to get openstack creds associated with the vjailbreakNode. Using latest available creds : %v", err)
 	}
+
+	if err == nil {
+		return oscreds, nil
+	}
 	// fetch the latest openstackcreds
 	oscredsList := &vjailbreakv1alpha1.OpenstackCredsList{}
 	err = k3sclient.List(ctx, oscredsList)
