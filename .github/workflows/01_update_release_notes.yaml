@@ -9,16 +9,17 @@ on:
 jobs:
   update-release-notes:
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     runs-on: ubuntu-latest
     if: startsWith(github.head_ref, 'release-v')  # Only run if the PR is from a release branch
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 # Required for git log and identifying changes
+        uses: actions/checkout@v4
+        # with:
+        #   ref: ${{ github.head_ref }}
+
 
       - name: Get release branch name
         id: get_release_branch
@@ -41,6 +42,9 @@ jobs:
           # Fetch changes from origin and prune stale remote tracking branches
           git fetch origin --prune
 
+          GIT_SHA=${{ github.sha }}
+          echo "Using SHA as ${{ github.head_ref }}.${{ github.sha }}"
+
           # Get the commits specific to this release branch since the last release (tag)
           # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
           LAST_TAG=$(git describe --tags --abbrev=0 --match "v*"  $(git rev-list --tags --max-count=1))
@@ -48,12 +52,14 @@ jobs:
           if [[ -z "$LAST_TAG" ]]; then
             echo "No previous release tag found!  Using the initial commit."
             #If you are working on a repo with no initial release, you need to add a commit message.
-            COMMIT_RANGE=$(git rev-list --all | tail -n 1)..${GITHUB_SHA}
+            COMMIT_RANGE=$(git rev-list --all | tail -n 1)..$GIT_SHA
 
           else
             echo "Last tag found: $LAST_TAG"
-            COMMIT_RANGE="$LAST_TAG..${GITHUB_SHA}"
+            COMMIT_RANGE="$LAST_TAG..$GIT_SHA"
           fi
+          
+          echo "Commit Range: $COMMIT_RANGE"
 
           # Generate markdown from commit messages
           # Important:  Adapt this to your commit message conventions!  This is a *very* basic example.
@@ -68,8 +74,10 @@ jobs:
             exit 0  # Exit gracefully without failing the action
           fi
 
-          # Ensure the directory exists
-          mkdir -p src/content/docs
+          YOUTUBE_LINK=${{ vars.HERO_VIDEO }}  
+          sed -i "s|YOUTUBE_LINK|$YOUTUBE_LINK|g" docs/src/content/docs/index.mdx
+
+          sed -i "s|ORAS_IMAGE_VER|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.md
 
           # Add a header to the file
           echo "---" > "$FILE_NAME"
@@ -84,14 +92,33 @@ jobs:
           echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
           echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
 
-      - name: Commit and push changes
-        if: steps.generate_notes.outputs.SKIP_UPDATE != 'true' # Conditionally skip if no changes
+      - name: Install GitHub CLI
         run: |
+          sudo apt-get update
+          sudo apt-get install gh
+          echo "gh cli installed"
+
+      - name: Create PR with changes
+        if: steps.generate_notes.outputs.SKIP_UPDATE != 'true'
+        run: |
+          # Configure Git
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions Bot"
 
-          git add docs/src/content/docs/release_docs/*
+          # Create a new branch
+          NEW_BRANCH="update-release-notes-${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
+          git checkout -b $NEW_BRANCH
+
+          # Add and commit changes
+          git add docs/src/content/docs/*
           git commit -m "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
-          git push origin ${{ github.head_ref }}  # Push to the release branch
+
+          # Push the new branch
+          git push origin $NEW_BRANCH
+
+          # Create a pull request
+          gh pr create --base ${{ github.head_ref }} --head $NEW_BRANCH --title "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}" --body "Automatically generated PR to update release notes"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
