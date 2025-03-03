@@ -109,13 +109,10 @@ export const createOpenstackCredsWithSecretFlow = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
-  // Use the credName as part of the secret name instead of random UUID
   const secretName = `${credName}-openstack-secret`
 
-  // Create the secret
   await createOpenstackCredsSecret(secretName, credentials, namespace)
 
-  // Create the OpenStack credentials resource that references the secret
   return createOpenstackCredsWithSecret(credName, secretName, namespace)
 }
 
@@ -130,27 +127,22 @@ export const createVMwareCredsWithSecretFlow = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
-  // Use the credName as part of the secret name instead of random UUID
   const secretName = `${credName}-vmware-secret`
 
-  // Add VCENTER_INSECURE:true to the credentials
   const vmwareCredentialsWithInsecure = {
     ...credentials,
     VCENTER_INSECURE: true,
   }
 
-  // Create the secret with the added VCENTER_INSECURE flag
   await createVMwareCredsSecret(
     secretName,
     vmwareCredentialsWithInsecure,
     namespace
   )
 
-  // Create the VMware credentials resource that references the secret
   return createVMwareCredsWithSecret(credName, secretName, namespace)
 }
 
-// Delete VMware credentials and associated secret
 export const deleteVMwareCredsWithSecretFlow = async (
   credName: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
@@ -160,17 +152,13 @@ export const deleteVMwareCredsWithSecretFlow = async (
 
     await deleteVmwareCredentials(credName, namespace)
 
-    // Check if the credential has a secretRef
     if (credential?.spec?.secretRef?.name) {
-      // Delete the associated secret
       await deleteSecret(credential.spec.secretRef.name, namespace)
     } else {
-      // For backward compatibility, try to delete using the new naming convention
       const secretName = `${credName}-vmware-secret`
       try {
         await deleteSecret(secretName, namespace)
       } catch (error) {
-        // Ignore error if secret doesn't exist with this name
         console.log(`No secret found with name ${secretName} : ${error}`)
       }
     }
@@ -188,23 +176,17 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    // First get the credential to retrieve the secret reference
     const credential = await getOpenstackCredentials(credName, namespace)
 
-    // Delete the credential
     await deleteOpenstackCredentials(credName, namespace)
 
-    // Check if the credential has a secretRef
     if (credential?.spec?.secretRef?.name) {
-      // Delete the associated secret
       await deleteSecret(credential.spec.secretRef.name, namespace)
     } else {
-      // For backward compatibility, try to delete using the new naming convention
       const secretName = `${credName}-openstack-secret`
       try {
         await deleteSecret(secretName, namespace)
       } catch (error) {
-        // Ignore error if secret doesn't exist with this name
         console.log(`No secret found with name ${secretName} : ${error}`)
       }
     }
