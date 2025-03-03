@@ -94,76 +94,88 @@ jobs:
         
         echo "release_found=${RELEASE_FOUND}" >> $GITHUB_ENV
 
-    # Parallel steps to build images and create deploy folder
+    # Run parallel steps using a different approach
     - name: Prepare build directories
       run: mkdir -p image_builder/deploy
 
-    # Start parallel build and setup steps
-    - name: Prepare for QCOW2 build
-      if: env.release_found == 'true'
+    # Run parallel jobs using GitHub Actions native concurrency
+    - name: Start parallel tasks
       run: |
-        # Enable KVM group perms
-        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger --name-match=kvm
+        # Script to build UI image
+        echo "#!/bin/bash
+        make ui
+        echo 'UI build completed'
+        " > build_ui.sh
         
-        # Set up QEMU
-        sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+        # Script to build v2v-helper image
+        echo "#!/bin/bash
+        make v2v-helper
+        echo 'v2v-helper build completed'
+        " > build_v2v.sh
         
-        # Setup oras
-        curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.0_linux_amd64.tar.gz
-        mkdir -p oras-install/
-        tar -zxf oras_1.1.0_linux_amd64.tar.gz -C oras-install/
-        sudo mv oras-install/oras /usr/local/bin/
-        rm -rf oras_1.1.0_linux_amd64.tar.gz oras-install/
-        
-        # Download base image
-        oras pull quay.io/platform9/vjailbreak:base-v0.1.4
-      &
-
-    # Run UI build in background
-    - name: Build and push UI image
-      run: make ui &
-
-    # Run v2v-helper build in background
-    - name: Build and push v2v-helper image
-      run: make v2v-helper &
-
-    # Create deploy folder in background
-    - name: Prepare deploy manifests
-      run: |
-        # Substitue image tags in manifests
-        mkdir -p image_builder/deploy
-        
-        # Setup Go for controller manifests
+        # Script to prepare deploy manifests
+        echo "#!/bin/bash
         if ! command -v go &> /dev/null; then
           wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz
           sudo tar -C /usr/local -xzf go1.22.5.linux-amd64.tar.gz
-          export PATH=$PATH:/usr/local/go/bin
+          export PATH=\$PATH:/usr/local/go/bin
         fi
         
-        # Generate controller manifests
         make -C ./k8s/migration/ build-installer
         cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
         cp -r ./k8s/kube-prometheus image_builder/deploy/
-      &
+        echo 'Deploy prep completed'
+        " > prep_deploy.sh
+        
+        # Script for QCOW2 preparation (only for release)
+        if [[ "${{ env.release_found }}" == "true" ]]; then
+          echo "#!/bin/bash
+          # Enable KVM group perms
+          echo 'KERNEL==\"kvm\", GROUP=\"kvm\", MODE=\"0666\", OPTIONS+=\"static_node=kvm\"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          
+          # Set up QEMU
+          sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+          
+          # Setup oras
+          curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.0_linux_amd64.tar.gz
+          mkdir -p oras-install/
+          tar -zxf oras_1.1.0_linux_amd64.tar.gz -C oras-install/
+          sudo mv oras-install/oras /usr/local/bin/
+          rm -rf oras_1.1.0_linux_amd64.tar.gz oras-install/
+          
+          # Download base image
+          oras pull quay.io/platform9/vjailbreak:base-v0.1.4
+          echo 'QCOW2 prep completed'
+          " > prep_qcow2.sh
+          
+          chmod +x prep_qcow2.sh
+          ./prep_qcow2.sh &
+        fi
+        
+        # Make scripts executable and run them in parallel
+        chmod +x build_ui.sh build_v2v.sh prep_deploy.sh
+        ./build_ui.sh &
+        ./build_v2v.sh &
+        ./prep_deploy.sh &
+        
+        # Wait for all background processes to complete
+        wait
+        echo "All parallel tasks completed"
 
-    # Wait for parallel processes to complete
-    - name: Wait for parallel processes
-      run: wait
-
-    # Once v2v-helper is built, start controller build
+    # Build controller image after v2v-helper is built
     - name: Build and push controller image
       run: make -o v2v-helper vjail-controller
 
-    # Complete the deploy manifests substitution after builds are done
+    # Substitute tags in manifests after builds are done
     - name: Substitute image tags in manifests
       uses: danielr1996/envsubst-action@1.0.0
       with:
         input: ./ui/deploy/ui.yaml
         output: ./image_builder/deploy/01ui.yaml
 
-    # Setup Packer and build QCOW2 if this is a release
+    # Build QCOW2 if this is a release
     - name: Setup Packer
       if: env.release_found == 'true'
       uses: hashicorp/setup-packer@main
