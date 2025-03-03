@@ -96,8 +96,6 @@ interface CustomToolbarProps {
     loading: boolean;
     onRefresh: () => void;
 }
-
-// Custom toolbar component
 const CustomToolbar = ({ numSelected, onDeleteSelected, loading, onRefresh }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
