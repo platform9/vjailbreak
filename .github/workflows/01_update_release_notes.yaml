@@ -1,0 +1,94 @@
+name: Update Release Notes on PR to Main
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]  # Trigger on new PR, reopen, or code changes
+
+jobs:
+  update-release-notes:
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'release-v')  # Only run if the PR is from a release branch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Required for git log and identifying changes
+
+      - name: Get release branch name
+        id: get_release_branch
+        run: echo "RELEASE_BRANCH=${GITHUB_HEAD_REF}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+
+      - name: Get release tag from branch name
+        id: get_release_tag
+        run: echo "RELEASE_TAG=${RELEASE_BRANCH#release-}" >> $GITHUB_OUTPUT
+        env:
+          RELEASE_BRANCH: ${{ steps.get_release_branch.outputs.RELEASE_BRANCH }}
+
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          RELEASE_TAG="${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
+          FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"  # Important
+
+          # Fetch changes from origin and prune stale remote tracking branches
+          git fetch origin --prune
+
+          # Get the commits specific to this release branch since the last release (tag)
+          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*"  $(git rev-list --tags --max-count=1))
+
+          if [[ -z "$LAST_TAG" ]]; then
+            echo "No previous release tag found!  Using the initial commit."
+            #If you are working on a repo with no initial release, you need to add a commit message.
+            COMMIT_RANGE=$(git rev-list --all | tail -n 1)..${GITHUB_SHA}
+
+          else
+            echo "Last tag found: $LAST_TAG"
+            COMMIT_RANGE="$LAST_TAG..${GITHUB_SHA}"
+          fi
+
+          # Generate markdown from commit messages
+          # Important:  Adapt this to your commit message conventions!  This is a *very* basic example.
+          RELEASE_NOTES=$(git log --pretty=format:"- %s" $COMMIT_RANGE)
+
+          echo "Release Notes:\n$RELEASE_NOTES"
+
+          # Check if RELEASE_NOTES is empty
+          if [ -z "$RELEASE_NOTES" ]; then
+            echo "No commits found since the last release. Skipping file update."
+            echo "SKIP_UPDATE=true" >> $GITHUB_OUTPUT
+            exit 0  # Exit gracefully without failing the action
+          fi
+
+          # Ensure the directory exists
+          mkdir -p src/content/docs
+
+          # Add a header to the file
+          echo "---" > "$FILE_NAME"
+          echo "title: Release $RELEASE_TAG" >> "$FILE_NAME"
+          echo "---" >> "$FILE_NAME"
+          echo "" >> "$FILE_NAME"
+
+          # Append the new release notes to the file
+          echo "$RELEASE_NOTES" >> "$FILE_NAME"
+
+          echo "File updated: $FILE_NAME"
+          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
+          echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        if: steps.generate_notes.outputs.SKIP_UPDATE != 'true' # Conditionally skip if no changes
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions Bot"
+
+          git add docs/src/content/docs/release_docs/*
+          git commit -m "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
+          git push origin ${{ github.head_ref }}  # Push to the release branch
+
+
