@@ -1,7 +1,6 @@
-import { Alert, AlertTitle, Box, Drawer, styled } from "@mui/material"
+import { Box, Drawer, styled } from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
-import { flatten, uniq } from "ramda"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
@@ -19,20 +18,16 @@ import { getMigrations } from "src/api/migrations/migrations"
 import { Migration } from "src/api/migrations/model"
 import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
 import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
-import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers"
 import { OpenstackCreds } from "src/api/openstack-creds/model"
 import {
   getOpenstackCredentials,
-  postOpenstackCredentials,
   deleteOpenstackCredentials,
 } from "src/api/openstack-creds/openstackCreds"
 import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
 import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
-import { createVmwareCredsJson } from "src/api/vmware-creds/helpers"
 import { VMwareCreds } from "src/api/vmware-creds/model"
 import {
   getVmwareCredentials,
-  postVmwareCredentials,
   deleteVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
 import { THREE_SECONDS, TWENTY_SECONDS } from "src/constants"
@@ -47,6 +42,9 @@ import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
+import { createOpenstackCredsWithSecretFlow, createVMwareCredsWithSecretFlow } from "src/api/helpers"
+import { uniq } from "ramda"
+import { flatten } from "ramda"
 
 const stringsCompareFn = (a, b) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
@@ -70,8 +68,19 @@ export interface FormValues extends Record<string, unknown> {
     datacenter: string
     username: string
     password: string
+    existingCredName?: string
+    credentialName?: string
   }
-  openstackCreds?: OpenstackCreds
+  openstackCreds?: {
+    OS_AUTH_URL: string
+    OS_DOMAIN_NAME: string
+    OS_USERNAME: string
+    OS_PASSWORD: string
+    OS_REGION_NAME: string
+    OS_TENANT_NAME: string
+    existingCredName?: string
+    credentialName?: string
+  }
   vms?: VmData[]
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
@@ -187,20 +196,55 @@ export default function MigrationFormDrawer({
 
   useEffect(() => {
     const postCreds = async () => {
+      if (!params.vmwareCreds) return;
+
+      if (params.vmwareCreds.existingCredName) {
+        try {
+          const existingCredName = params.vmwareCreds.existingCredName;
+          const response = await getVmwareCredentials(existingCredName);
+          setVmwareCredentials(response);
+        } catch (error) {
+          console.error("Error fetching existing VMware credentials:", error);
+          getFieldErrorsUpdater("vmwareCreds")(
+            "Error fetching VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+          )
+        }
+        return;
+      }
+      setValidatingVmwareCreds(true);
+
       try {
-        setValidatingVmwareCreds(true)
-        const body = createVmwareCredsJson(params.vmwareCreds)
-        const response = await postVmwareCredentials(body)
-        setVmwareCredentials(response)
-      } catch {
+        const vmwareCreds = params.vmwareCreds as {
+          vcenterHost: string;
+          datacenter: string;
+          username: string;
+          password: string;
+          credentialName: string;
+        };
+
+        // Use the new secret-based flow
+        const response = await createVMwareCredsWithSecretFlow(
+          vmwareCreds.credentialName,
+          {
+            VCENTER_HOST: vmwareCreds.vcenterHost,
+            VCENTER_DATACENTER: vmwareCreds.datacenter,
+            VCENTER_USERNAME: vmwareCreds.username,
+            VCENTER_PASSWORD: vmwareCreds.password,
+          }
+        );
+
+        setVmwareCredentials(response);
+        setValidatingVmwareCreds(false);
+      } catch (error) {
+        console.error("Error creating VMware credentials:", error);
+        setValidatingVmwareCreds(false);
         getFieldErrorsUpdater("vmwareCreds")(
-          "Error validating VMware credentials"
+          "Error creating VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
         )
-        setValidatingVmwareCreds(false)
+
       }
     }
     if (isNilOrEmpty(params.vmwareCreds)) return
-    // Reset the VMwareCreds object if the user changes the credentials
     setVmwareCredentials(undefined)
     getFieldErrorsUpdater("vmwareCreds")("")
     postCreds()
@@ -208,17 +252,57 @@ export default function MigrationFormDrawer({
 
   useEffect(() => {
     const postCreds = async () => {
-      setValidatingOpenstackCreds(true)
+      if (!params.openstackCreds) return;
+
+      // If using an existing credential, fetch it instead of creating new one
+      if (params.openstackCreds.existingCredName) {
+        try {
+          const existingCredName = params.openstackCreds.existingCredName;
+          const response = await getOpenstackCredentials(existingCredName);
+          setOpenstackCredentials(response);
+        } catch (error) {
+          console.error("Error fetching existing OpenStack credentials:", error);
+          getFieldErrorsUpdater("openstackCreds")(
+            "Error fetching OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+          )
+        }
+        return;
+      }
+
+      setValidatingOpenstackCreds(true);
+
       try {
-        const body = createOpenstackCredsJson(params.openstackCreds)
-        const response = await postOpenstackCredentials(body)
-        setOpenstackCredentials(response)
-      } catch (err) {
-        console.error("Error validating Openstack credentials", err)
+        const openstackCreds = params.openstackCreds as {
+          OS_AUTH_URL: string;
+          OS_DOMAIN_NAME: string;
+          OS_USERNAME: string;
+          OS_PASSWORD: string;
+          OS_REGION_NAME: string;
+          OS_TENANT_NAME: string;
+          credentialName: string;
+        };
+
+        // Use the new secret-based flow
+        const response = await createOpenstackCredsWithSecretFlow(
+          openstackCreds.credentialName,
+          {
+            OS_AUTH_URL: openstackCreds.OS_AUTH_URL,
+            OS_DOMAIN_NAME: openstackCreds.OS_DOMAIN_NAME,
+            OS_USERNAME: openstackCreds.OS_USERNAME,
+            OS_PASSWORD: openstackCreds.OS_PASSWORD,
+            OS_REGION_NAME: openstackCreds.OS_REGION_NAME,
+            OS_TENANT_NAME: openstackCreds.OS_TENANT_NAME,
+          }
+        );
+
+        setOpenstackCredentials(response);
+        setValidatingOpenstackCreds(false);
+      } catch (error) {
+        console.error("Error creating OpenStack credentials:", error);
+        setValidatingOpenstackCreds(false);
         getFieldErrorsUpdater("openstackCreds")(
-          "Error validating Openstack credentials"
+          "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
         )
-        setValidatingOpenstackCreds(false)
       }
     }
 
@@ -239,7 +323,6 @@ export default function MigrationFormDrawer({
       const response = await postMigrationTemplate(body)
       setMigrationTemplate(response)
     }
-    // Once the Openstack and VMware creds are validated, create the migration template
 
     if (!vmwareCredsValidated || !openstackCredsValidated) return
     createMigrationTemplate()
@@ -411,6 +494,9 @@ export default function MigrationFormDrawer({
         title: "Error creating network mapping",
         message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
       })
+      getFieldErrorsUpdater("networksMapping")(
+        "Error creating network mapping : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      )
     }
   }
 
@@ -427,6 +513,9 @@ export default function MigrationFormDrawer({
         title: "Error creating storage mapping",
         message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
       })
+      getFieldErrorsUpdater("storageMapping")(
+        "Error creating storage mapping : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      )
     }
   }
 
@@ -493,12 +582,17 @@ export default function MigrationFormDrawer({
         title: "Error creating migration plan",
         message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
       })
+      getFieldErrorsUpdater("migrationPlan")(
+        "Error creating migration plan : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      )
+
     }
   }
 
   const handleSubmit = async () => {
     setSubmitting(true)
     setError(null)
+
 
     // Create NetworkMapping
     const networkMappings = await createNetworkMapping(params.networkMappings)
@@ -598,12 +692,10 @@ export default function MigrationFormDrawer({
 
   const handleClose = async () => {
     try {
-
       setMigrationTemplate(undefined)
       setVmwareCredentials(undefined)
       setOpenstackCredentials(undefined)
       setError(null)
-
 
       onClose()
       // Delete migration template if it exists
@@ -611,13 +703,11 @@ export default function MigrationFormDrawer({
         await deleteMigrationTemplate(migrationTemplate.metadata.name)
       }
 
-      // Delete VMware credentials if they exist
-      if (vmwareCredentials?.metadata?.name) {
+      if (vmwareCredentials?.metadata?.name && !params.vmwareCreds?.existingCredName) {
         await deleteVmwareCredentials(vmwareCredentials.metadata.name)
       }
 
-      // Delete OpenStack credentials if they exist
-      if (openstackCredentials?.metadata?.name) {
+      if (openstackCredentials?.metadata?.name && !params.openstackCreds?.existingCredName) {
         await deleteOpenstackCredentials(openstackCredentials.metadata.name)
       }
 
@@ -637,15 +727,8 @@ export default function MigrationFormDrawer({
       <Header title="Migration Form" />
       <DrawerContent>
         <Box sx={{ display: "grid", gap: 4 }}>
-          {error && (
-            <Alert severity="error">
-              <AlertTitle>{error.title}</AlertTitle>
-              {error.message}
-            </Alert>
-          )}
           {/* Step 1 */}
           <SourceAndDestinationEnvStep
-            params={params}
             onChange={getParamsUpdater}
             errors={fieldErrors}
             validatingVmwareCreds={validatingVmwareCreds}

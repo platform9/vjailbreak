@@ -11,8 +11,9 @@ import { getMigrationPlan, patchMigrationPlan } from "src/api/migration-plans/mi
 import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
 import NodesTable from "./NodesTable"
+import CredentialsTable from "./CredentialsTable"
 import WarningIcon from '@mui/icons-material/Warning';
-import { useNodesQuery } from "../../hooks/api/useNodesQuery" 
+import { useNodesQuery } from "../../hooks/api/useNodesQuery"
 
 
 const DashboardContainer = styled("div")({
@@ -40,7 +41,7 @@ export default function Dashboard() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
 
-  const { data: migrations } = useMigrationsQuery(undefined, {
+  const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
       const migrations = query?.state?.data || []
       const hasPendingMigration = !!migrations.find(
@@ -48,6 +49,8 @@ export default function Dashboard() {
       )
       return hasPendingMigration ? FIVE_SECONDS : THIRTY_SECONDS
     },
+    staleTime: 0,
+    refetchOnMount: true
   })
 
   const handleDeleteClick = (migrationName: string) => {
@@ -141,16 +144,20 @@ export default function Dashboard() {
         >
           <Tab label="Migrations" />
           <Tab label="Agents" />
+          <Tab label="Credentials" />
         </Tabs>
 
         {activeTab === 0 ? (
           <MigrationsTable
+            refetchMigrations={refetchMigrations}
             migrations={migrations || []}
             onDeleteMigration={handleDeleteClick}
             onDeleteSelected={handleDeleteSelected}
           />
-        ) : (
+        ) : activeTab === 1 ? (
           <NodesTable />
+        ) : (
+          <CredentialsTable />
         )}
       </StyledPaper>
 

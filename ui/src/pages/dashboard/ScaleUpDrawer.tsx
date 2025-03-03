@@ -11,23 +11,24 @@ import {
     Tooltip,
     CircularProgress,
 } from "@mui/material";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Step from "src/components/forms/Step";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
 import Footer from "src/components/forms/Footer";
-import OpenstackRCFileUpload from "src/components/forms/OpenstackRCFileUpload";
+import OpenstackCredentialsForm from "src/components/forms/OpenstackCredentialsForm";
 import InfoIcon from '@mui/icons-material/Info';
-import CheckIcon from '@mui/icons-material/Check';
-import { v4 as uuidv4 } from "uuid";
-import { createOpenstackCredsJson } from "src/api/openstack-creds/helpers";
-import { postOpenstackCredentials, deleteOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
-import { debounce } from "src/utils";
+import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { OpenstackCreds } from "src/api/openstack-creds/model";
 import { createNodes, getMasterNode } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/nodes/model";
 import { NodeItem } from "src/api/nodes/model";
+import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
+import { createOpenstackCredsWithSecretFlow } from "src/api/helpers";
+import { useInterval } from "src/hooks/useInterval";
+import { THREE_SECONDS } from "src/constants";
+import axios from "axios";
 
 // Mock data - replace with actual data from API
 
@@ -49,21 +50,29 @@ const StepHeader = ({ number, label, tooltip }: { number: string, label: string,
 );
 
 export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDrawerProps) {
-    const [openstackCreds, setOpenstackCreds] = useState<OpenstackCreds | null>(null);
+    const [openstackCredentials, setOpenstackCredentials] = useState<OpenstackCreds | null>(null);
     const [nodeCount, setNodeCount] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [validatingOpenstackCreds, setValidatingOpenstackCreds] = useState(false);
-    const [openstackCredsValidated, setOpenstackCredsValidated] = useState(false);
+    const [selectedOpenstackCred, setSelectedOpenstackCred] = useState<string | null>(null);
     const [openstackError, setOpenstackError] = useState<string | null>(null);
-    const [openstackCredsId, setOpenstackCredsId] = useState<string>("");
-//    const [masterNodeImage, setMasterNodeImage] = useState<OpenstackImage | null>(null);
-    // const [loadingImages, setLoadingImages] = useState(false);
-    // const [imagesError, setImagesError] = useState<string | null>(null);
+
     const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([]);
     const [selectedFlavor, setSelectedFlavor] = useState('');
     const [loadingFlavors, setLoadingFlavors] = useState(false);
     const [flavorsError, setFlavorsError] = useState<string | null>(null);
+
+    // Fetch credentials list
+    const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds, refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery();
+
+
+    const openstackCredsValidated = openstackCredentials?.status?.openstackValidationStatus === "Succeeded";
+
+    // Polling condition for OpenStack credentials
+    const shouldPollOpenstackCreds =
+        !!openstackCredentials?.metadata?.name &&
+        openstackCredentials?.status === undefined;
 
     // Reset state when drawer closes
     const handleClose = () => {
@@ -72,115 +81,83 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     };
 
     const clearStates = () => {
-        setOpenstackCreds(null);
-        setOpenstackCredsId("");
-        setOpenstackCredsValidated(false);
-        setOpenstackError(null);
+        setOpenstackCredentials(null);
+        setSelectedOpenstackCred(null);
         setValidatingOpenstackCreds(false);
+        setOpenstackError(null);
         setNodeCount(1);
         setError(null);
-    //    setMasterNodeImage(null);
         setSelectedFlavor('');
         setFlavors([]);
-        // setLoadingImages(false);
         setLoadingFlavors(false);
-        // setImagesError(null);
         setFlavorsError(null);
     }
 
-    const validateOpenstackCreds = useCallback(async (creds: OpenstackCreds) => {
-        setValidatingOpenstackCreds(true);
+    const handleOpenstackCredChange = (values: Record<string, string | number | boolean>) => {
         setOpenstackError(null);
 
-        const credsId = uuidv4();
-
-        const handleError = (error: Error, message: string) => {
-            console.error(message, error);
-            setOpenstackError(message);
-            setValidatingOpenstackCreds(false);
-            if (credsId) {
-                deleteOpenstackCredentials(credsId).catch(console.error);
-            }
-        };
-
-        try {
-            const credsJson = createOpenstackCredsJson({ name: credsId, ...creds });
-            await postOpenstackCredentials(credsJson);
-            setOpenstackCredsId(credsId);
-
-
-            setOpenstackCredsValidated(true);
-            setValidatingOpenstackCreds(false);
-        } catch (error) {
-            handleError(error as Error, "Failed to validate credentials");
-            return;
+        // If this is a new credential being created
+        if ('credentialName' in values) {
+            handleCreateOpenstackCred(values);
         }
-    }, []);
+    };
 
- /*   useEffect(() => {
-        const fetchImages = async () => {
-            if (openstackCredsId && openstackCreds) {
-                setLoadingImages(true);
-                try {
-                    const imagesResponse = await getOpenstackImages(openstackCreds);
-
-                    // Check if master node id exists
-                    if (!masterNode?.spec.imageid) {
-                        setImagesError('Master Agent id is missing');
-                        return;
-                    }
-
-                    // Check if master node image exists in OpenStack images
-                    const foundImage = imagesResponse.images.find(img => img.id === masterNode.spec.imageid);
-                    if (!foundImage) {
-                        setImagesError('Master Agent image is not matching with the PCD images, please re-upload the image in PCD.');
-                        return;
-                    }
-
-                    setMasterNodeImage(foundImage);
-                } catch (error) {
-                    console.error('Failed to fetch images:', error);
-                    setImagesError('Failed to fetch OpenStack images. Please try again.');
-                } finally {
-                    setLoadingImages(false);
+    const handleCreateOpenstackCred = async (values: Record<string, string | number | boolean>) => {
+        setValidatingOpenstackCreds(true);
+        try {
+            // Format the values for the secret-based flow
+            const response = await createOpenstackCredsWithSecretFlow(
+                values.credentialName as string,
+                {
+                    OS_AUTH_URL: values.OS_AUTH_URL as string,
+                    OS_DOMAIN_NAME: values.OS_DOMAIN_NAME as string,
+                    OS_USERNAME: values.OS_USERNAME as string,
+                    OS_PASSWORD: values.OS_PASSWORD as string,
+                    OS_REGION_NAME: values.OS_REGION_NAME as string,
+                    OS_TENANT_NAME: values.OS_TENANT_NAME as string,
+                }
+            );
+            setOpenstackCredentials(response);
+            // Only set validatingOpenstackCreds to false if status is already defined
+            if (response?.status) {
+                setValidatingOpenstackCreds(false);
+                if (response?.status?.openstackValidationStatus !== "Succeeded") {
+                    setOpenstackError("Error Validating OpenStack credentials");
                 }
             }
-        };
-        fetchImages();
-    }, [openstackCredsId, openstackCreds]); */
+        } catch (error) {
+            console.error("Error creating OpenStack credentials:", error);
+            setValidatingOpenstackCreds(false);
+            setOpenstackError(
+                "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error)
+            );
+        }
+    };
 
+    const handleOpenstackCredSelect = async (credId: string | null) => {
+        setSelectedOpenstackCred(credId);
 
-   /* useEffect(() => {
-        const fetchFlavors = async () => {
-            if (openstackCreds && masterNodeImage) {
-                setLoadingFlavors(true);
-                try {
-                    const response = await getOpenstackFlavors(openstackCreds);
-                    const requiredDiskGiB = Math.ceil(masterNodeImage.virtual_size / (1024 * 1024 * 1024));
-                    const filteredFlavors = response.flavors.filter(flavor => flavor.disk >= requiredDiskGiB);
-
-                    if (filteredFlavors.length === 0) {
-                        setFlavorsError(`No flavors available with disk size >= ${requiredDiskGiB}GiB`);
-                    }
-
-                    setFlavors(filteredFlavors);
-                } catch (error) {
-                    console.error('Failed to fetch flavors:', error);
-                    setFlavorsError('Failed to fetch OpenStack flavors');
-                } finally {
-                    setLoadingFlavors(false);
-                }
+        if (credId) {
+            try {
+                const response = await getOpenstackCredentials(credId);
+                setOpenstackCredentials(response);
+            } catch (error) {
+                console.error("Error fetching OpenStack credentials:", error);
+                setOpenstackError(
+                    "Error fetching OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error)
+                );
             }
-        };
-        fetchFlavors();
-    }, [masterNodeImage]);  */
+        } else {
+            setOpenstackCredentials(null);
+        }
+    };
 
     useEffect(() => {
         const fetchFlavours = async () => {
-            if (openstackCredsId && openstackCreds) {
+            if (openstackCredsValidated || openstackCredentials) {
                 setLoadingFlavors(true);
                 try {
-                    const response  = await getMasterNode();
+                    const response = await getMasterNode();
                     console.log(response);
                     const flavours = response?.spec.availableflavors;
                     console.log(flavours);
@@ -206,7 +183,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         }, 5000);
                     }
                     setFlavors(flavours || []);
-                    
+
                 } catch (error) {
                     console.error('Failed to fetch flavors:', error);
                     setFlavorsError('Failed to fetch OpenStack flavors');
@@ -216,24 +193,41 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             }
         };
         fetchFlavours();
-    }, [openstackCredsId, openstackCreds]);
+    }, [openstackCredsValidated, openstackCredentials]);
 
-    const debouncedValidation = useCallback(
-        debounce((creds) => validateOpenstackCreds(creds), 3000),
-        [validateOpenstackCreds]
+    // Add polling for OpenStack credentials status
+    useInterval(
+        async () => {
+            if (shouldPollOpenstackCreds) {
+                try {
+                    const response = await getOpenstackCredentials(
+                        openstackCredentials?.metadata?.name
+                    );
+                    setOpenstackCredentials(response);
+                    const validationStatus = response?.status?.openstackValidationStatus;
+                    if (validationStatus) {
+                        setValidatingOpenstackCreds(false);
+                        if (validationStatus !== "Succeeded") {
+                            setOpenstackError(
+                                response?.status?.openstackValidationMessage || "Error validating OpenStack credentials"
+                            );
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error validating OpenStack credentials", err);
+                    setOpenstackError(
+                        "Error validating OpenStack credentials"
+                    );
+                    setValidatingOpenstackCreds(false);
+                }
+            }
+        },
+        THREE_SECONDS,
+        shouldPollOpenstackCreds
     );
 
-    const handleOpenstackCredsChange = (values: unknown) => {
-        clearStates();
-        setOpenstackCreds(values as OpenstackCreds);
-        debouncedValidation.cancel();
-
-        debouncedValidation(values);
-    };
-
-
     const handleSubmit = async () => {
-        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCredsId) {
+        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCredentials?.metadata?.name) {
             setError('Please fill in all required fields');
             return;
         }
@@ -244,7 +238,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 imageId: masterNode.spec.imageid,
                 openstackCreds: {
                     kind: "openstackcreds" as const,
-                    name: openstackCredsId,
+                    name: openstackCredentials.metadata.name,
                     namespace: "migration-system"
                 },
                 count: nodeCount,
@@ -260,13 +254,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         }
     };
 
-    // Cleanup debounce on unmount
-    useEffect(() => {
-        return () => {
-            debouncedValidation.cancel();
-        };
-    }, [debouncedValidation]);
-
     return (
         <StyledDrawer
             anchor="right"
@@ -281,36 +268,25 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         <StepHeader
                             number="1"
                             label="OpenStack Credentials"
-                            tooltip="Upload your OpenStack RC file to authenticate with the OpenStack platform where new nodes will be created."
+                            tooltip="Select existing OpenStack credentials or create new ones to authenticate with the OpenStack platform where new nodes will be created."
                         />
                         <Box sx={{ ml: 6, mt: 2 }}>
                             <FormControl fullWidth error={!!openstackError} required>
-                                <OpenstackRCFileUpload
-                                    onChange={handleOpenstackCredsChange}
+                                <OpenstackCredentialsForm
+                                    fullWidth={true}
+                                    size="medium"
+                                    credentialsList={openstackCredsList}
+                                    loadingCredentials={loadingOpenstackCreds}
+                                    refetchCredentials={refetchOpenstackCreds}
+                                    validatingCredentials={validatingOpenstackCreds}
+                                    credentialsValidated={openstackCredsValidated}
+                                    error={openstackError || ""}
+                                    onChange={handleOpenstackCredChange}
+                                    onCredentialSelect={handleOpenstackCredSelect}
+                                    selectedCredential={selectedOpenstackCred}
+                                    showCredentialNameField={true}
+                                    showCredentialSelector={true}
                                 />
-                                <Box sx={{ display: "flex", gap: 2, mt: 1 }}>
-                                    {validatingOpenstackCreds && (
-                                        <>
-                                            <CircularProgress size={24} />
-                                            <FormLabel sx={{ mb: 1 }}>
-                                                Validating OpenStack Credentials...
-                                            </FormLabel>
-                                        </>
-                                    )}
-                                    {openstackCredsValidated && (
-                                        <>
-                                            <CheckIcon color="success" fontSize="small" />
-                                            <FormLabel sx={{ mb: 1 }}>
-                                                OpenStack Credentials Validated
-                                            </FormLabel>
-                                        </>
-                                    )}
-                                    {openstackError && (
-                                        <FormLabel error sx={{ mb: 1 }}>
-                                            {openstackError}
-                                        </FormLabel>
-                                    )}
-                                </Box>
                             </FormControl>
                         </Box>
                     </div>
@@ -343,7 +319,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                     label="Flavor"
                                     onChange={(e) => setSelectedFlavor(e.target.value)}
                                     required
-                                    disabled={loadingFlavors}
+                                    disabled={loadingFlavors || !openstackCredsValidated || !openstackCredentials}
                                     IconComponent={
                                         loadingFlavors
                                             ? () => <CircularProgress size={24} sx={{ marginRight: 2, display: 'flex', alignItems: 'center' }} />

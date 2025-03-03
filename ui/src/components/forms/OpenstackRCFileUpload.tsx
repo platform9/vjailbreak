@@ -7,7 +7,7 @@ import {
   TextField,
 } from "@mui/material"
 import { parse } from "dotenv"
-import React, { useState } from "react"
+import React, { useState, useImperativeHandle, forwardRef } from "react"
 
 const requiredFields = [
   "OS_AUTH_URL",
@@ -28,13 +28,30 @@ const FileUploadFieldContainer = styled("div")(({ theme }) => ({
 
 interface OpenstackRCFileUploaderProps {
   onChange: (values: unknown) => void
+  openstackCredsError?: string
+  size?: "small" | "medium"
 }
 
-export default function OpenstackRCFileUploader({
+export interface OpenstackRCFileUploaderRef {
+  reset: () => void
+}
+
+const OpenstackRCFileUploader = forwardRef<OpenstackRCFileUploaderRef, OpenstackRCFileUploaderProps>(({
   onChange,
-}: OpenstackRCFileUploaderProps) {
+  openstackCredsError,
+  size = "medium",
+}, ref) => {
   const [fileName, setFileName] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
+  const [fileInputKey, setFileInputKey] = useState<number>(0)
+
+  useImperativeHandle(ref, () => ({
+    reset: () => {
+      setFileName("")
+      setError(null)
+      setFileInputKey(prev => prev + 1)
+    }
+  }))
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -42,6 +59,9 @@ export default function OpenstackRCFileUploader({
       setFileName(file.name)
       parseRCFile(file)
     }
+
+    // Reset the file input so the same file can be selected again if needed
+    event.target.value = ""
   }
 
   const parseRCFile = (file: File) => {
@@ -110,16 +130,24 @@ export default function OpenstackRCFileUploader({
             component="label"
             color="primary"
             aria-readonly
-            size="small"
+            size={size}
             required
+            error={!!openstackCredsError}
           />
           <Button variant="contained" component="label" color="primary">
             Choose File
-            <input type="file" hidden onChange={handleFileChange} />
+            <input
+              type="file"
+              hidden
+              onChange={handleFileChange}
+              key={fileInputKey}
+            />
           </Button>
         </Box>
         <FormHelperText error={!!error}>{error}</FormHelperText>
       </FormControl>
     </FileUploadFieldContainer>
   )
-}
+})
+
+export default OpenstackRCFileUploader
