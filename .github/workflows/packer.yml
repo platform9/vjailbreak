@@ -75,7 +75,7 @@ jobs:
     - name: Check Release Condition
       id: check_release
       run: |
-        RELEASE_FOUND="false"
+        RELEASE_FOUND="true"
         
         # Check if it's a release event
         if [[ "${{ github.event_name }}" == "release" ]]; then
@@ -126,30 +126,30 @@ jobs:
         cp -r ./k8s/kube-prometheus image_builder/deploy/
         echo 'Deploy prep completed'
         " > prep_deploy.sh
-        
+
+        echo "#!/bin/bash 
+        # Enable KVM group perms
+        echo 'KERNEL==\"kvm\", GROUP=\"kvm\", MODE=\"0666\", OPTIONS+=\"static_node=kvm\"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+          
+        # Set up QEMU
+        sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+          
+        # Setup oras
+        curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.0_linux_amd64.tar.gz
+        mkdir -p oras-install/
+        tar -zxf oras_1.1.0_linux_amd64.tar.gz -C oras-install/
+        sudo mv oras-install/oras /usr/local/bin/
+        rm -rf oras_1.1.0_linux_amd64.tar.gz oras-install/
+          
+        # Download base image
+        oras pull quay.io/platform9/vjailbreak:base-v0.1.4
+        echo 'QCOW2 prep completed'
+        " > prep_qcow2.sh
+
         # Script for QCOW2 preparation (only for release)
         if [[ "${{ env.release_found }}" == "true" ]]; then
-          echo "#!/bin/bash
-          # Enable KVM group perms
-          echo 'KERNEL==\"kvm\", GROUP=\"kvm\", MODE=\"0666\", OPTIONS+=\"static_node=kvm\"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          
-          # Set up QEMU
-          sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
-          
-          # Setup oras
-          curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.0_linux_amd64.tar.gz
-          mkdir -p oras-install/
-          tar -zxf oras_1.1.0_linux_amd64.tar.gz -C oras-install/
-          sudo mv oras-install/oras /usr/local/bin/
-          rm -rf oras_1.1.0_linux_amd64.tar.gz oras-install/
-          
-          # Download base image
-          oras pull quay.io/platform9/vjailbreak:base-v0.1.4
-          echo 'QCOW2 prep completed'
-          " > prep_qcow2.sh
-          
           chmod +x prep_qcow2.sh
           ./prep_qcow2.sh &
         fi
