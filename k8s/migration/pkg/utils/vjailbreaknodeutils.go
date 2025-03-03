@@ -376,12 +376,18 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 
 func GetOpenstackComputeClient(creds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ServiceClient, error) {
 	// Authenticate with OpenStack
+
+	openstackCredential, err := GetOpenstackCredentials(context.TODO(), creds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
+	}
+
 	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: creds.Spec.OsAuthURL,
-		Username:         creds.Spec.OsUsername,
-		Password:         creds.Spec.OsPassword,
-		DomainName:       creds.Spec.OsDomainName,
-		TenantName:       creds.Spec.OsTenantName,
+		IdentityEndpoint: openstackCredential.AuthURL,
+		Username:         openstackCredential.Username,
+		Password:         openstackCredential.Password,
+		DomainName:       openstackCredential.DomainName,
+		TenantName:       openstackCredential.TenantName,
 	}
 
 	provider, err := openstack.AuthenticatedClient(opts)
@@ -391,7 +397,7 @@ func GetOpenstackComputeClient(creds *vjailbreakv1alpha1.OpenstackCreds) (*gophe
 
 	// Get the compute client
 	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{
-		Region: creds.Spec.OsRegionName,
+		Region: openstackCredential.RegionName,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create compute client")

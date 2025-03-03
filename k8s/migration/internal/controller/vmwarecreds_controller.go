@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
@@ -73,6 +74,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		ctxlog.Info(fmt.Sprintf("VMwareCreds '%s' CR is being created or updated", vmwcreds.Name))
 		ctxlog.Info(fmt.Sprintf("Validating VMwareCreds '%s' object", vmwcreds.Name))
+
 		if _, err := validateVMwareCreds(vmwcreds); err != nil {
 			// Update the status of the VMwareCreds object
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
@@ -82,7 +84,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			}
 		} else {
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Spec.VcenterHost))
+			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Name))
 			// Update the status of the VMwareCreds object
 			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
@@ -96,10 +98,15 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	host := vmwcreds.Spec.VcenterHost
-	username := vmwcreds.Spec.VcenterUsername
-	password := vmwcreds.Spec.VcenterPassword
-	disableSSLVerification := vmwcreds.Spec.VcenterInsecure
+	VMwareCredentials, err := utils.GetVMwareCredentials(context.TODO(), vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
+	}
+
+	host := VMwareCredentials.Host
+	username := VMwareCredentials.Username
+	password := VMwareCredentials.Password
+	disableSSLVerification := VMwareCredentials.Insecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
