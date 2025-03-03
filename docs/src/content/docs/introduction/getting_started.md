@@ -9,7 +9,7 @@ description: Usage
 
    Download and install [ORAS](https://oras.land/docs/installation). Then, download the latest version of the vjailbreak image with the following command:
    ```bash
-   oras pull quay.io/platform9/vjailbreak:v0.1.4
+   oras pull quay.io/platform9/vjailbreak:ORAS_IMAGE_VER
    ```
    This will download the vjailbreak qcow2 image locally. Upload it to your OpenStack environment and create your vjailbreak VM with it.
 
