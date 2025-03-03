@@ -377,7 +377,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 func GetOpenstackComputeClient(creds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ServiceClient, error) {
 	// Authenticate with OpenStack
 
-	openstackCredsSecret, err := GetOpenstackCredsFromSecret(context.TODO(), creds.Spec.SecretRef.Name)
+	openstackCredsSecret, err := GetOpenstackCredentials(context.TODO(), creds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}

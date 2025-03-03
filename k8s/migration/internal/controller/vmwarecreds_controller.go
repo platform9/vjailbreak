@@ -98,7 +98,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := utils.GetVMwareCredsFromSecret(context.TODO(), vmwcreds.Spec.SecretRef.Name)
+	VMwareCredentials, err := utils.GetVMwareCredentials(context.TODO(), vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}

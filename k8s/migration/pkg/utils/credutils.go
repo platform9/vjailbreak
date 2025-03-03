@@ -19,7 +19,7 @@ type VMwareCredentials struct {
 }
 
 // OpenStackCredentials holds the actual credentials after decoding
-type OpenStackCredentialsFromSecret struct {
+type OpenStackCredentials struct {
 	AuthURL    string
 	Username   string
 	Password   string
@@ -29,8 +29,8 @@ type OpenStackCredentialsFromSecret struct {
 	DomainName string
 }
 
-// getVMwareCredsFromSecret retrieves vCenter credentials from a secret
-func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCredentials, error) {
+// GetVMwareCredentials retrieves vCenter credentials from a secret
+func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredentials, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
@@ -73,15 +73,15 @@ func GetVMwareCredsFromSecret(ctx context.Context, secretName string) (VMwareCre
 }
 
 // getOpenStackCreds retrieves and checks the secret
-func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenStackCredentialsFromSecret, error) {
+func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackCredentials, error) {
 	secret := &corev1.Secret{}
 	// Get In cluster client
 	c, err := GetInclusterClient()
 	if err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get in cluster client: %w", err)
+		return OpenStackCredentials{}, fmt.Errorf("failed to get in cluster client: %w", err)
 	}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return OpenStackCredentialsFromSecret{}, fmt.Errorf("failed to get secret: %w", err)
+		return OpenStackCredentials{}, fmt.Errorf("failed to get secret: %w", err)
 	}
 
 	// Extract and validate each field
@@ -95,14 +95,14 @@ func GetOpenstackCredsFromSecret(ctx context.Context, secretName string) (OpenSt
 
 	for key, value := range fields {
 		if value == "" {
-			return OpenStackCredentialsFromSecret{}, fmt.Errorf("%s is missing in secret '%s'", key, secretName)
+			return OpenStackCredentials{}, fmt.Errorf("%s is missing in secret '%s'", key, secretName)
 		}
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
 	insecure := insecureStr == "true"
 
-	return OpenStackCredentialsFromSecret{
+	return OpenStackCredentials{
 		AuthURL:    fields["AuthURL"],
 		DomainName: fields["DomainName"],
 		Username:   fields["Username"],

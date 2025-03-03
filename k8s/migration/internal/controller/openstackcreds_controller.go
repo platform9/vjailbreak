@@ -105,7 +105,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				}
 			}
 
-			openstackCredsSecret, err := utils.GetOpenstackCredsFromSecret(context.TODO(), openstackcreds.Spec.SecretRef.Name)
+			openstackCredsSecret, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 			}
@@ -143,7 +143,7 @@ func getCert(endpoint string) (*x509.Certificate, error) {
 }
 
 func validateOpenstackCreds(ctxlog logr.Logger, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
-	openstackCredsSecret, err := utils.GetOpenstackCredsFromSecret(context.TODO(), openstackcreds.Spec.SecretRef.Name)
+	openstackCredsSecret, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get openstack credentials from secret: %w", err)
 	}
