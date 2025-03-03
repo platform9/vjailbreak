@@ -119,7 +119,8 @@ jobs:
         echo 'Controller build completed'
         " > build_controller.sh
         
-        
+        # Script to prepare deployment files
+        echo "#!/bin/bash
         make -C ./k8s/migration/ build-installer
         cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
         cp -r ./k8s/kube-prometheus image_builder/deploy/
