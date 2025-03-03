@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Required for git log and identifying changes
 
@@ -89,6 +89,18 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions Bot"
+          #checkout the head_ref branch from origin
+          #this should be the release-v* branch
+          # git checkout origin/${{ github.head_ref }}
+
+          # # Check if the branch exists remotely
+          # if git show-ref --quiet origin/${{ github.head_ref }}; then
+          #   echo "Remote branch exists, pushing changes."
+          #   git push origin ${{ github.head_ref }}
+          # else
+          #   echo "Remote branch does not exist, creating and pushing."
+          #   git push --set-upstream origin ${{ github.head_ref }}
+          # fi
 
           git add docs/src/content/docs/release_docs/*
           git commit -m "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
