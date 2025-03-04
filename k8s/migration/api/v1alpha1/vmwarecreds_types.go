@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,11 +28,7 @@ import (
 type VMwareCredsSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	VcenterHost     string `json:"VCENTER_HOST"`
-	VcenterInsecure bool   `json:"VCENTER_INSECURE"`
-	VcenterPassword string `json:"VCENTER_PASSWORD"`
-	VcenterUsername string `json:"VCENTER_USERNAME"`
+	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds
