@@ -45,6 +45,9 @@ jobs:
           echo "DRAFT_RELEASE_ID=${DRAFT_RELEASE_ID}" >> $GITHUB_OUTPUT
         env:
           DRAFT_RELEASE_ID: ${{ steps.get_release_tag.outputs.RELEASE_TAG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Generate release notes
         id: generate_notes
@@ -107,6 +110,9 @@ jobs:
       - name: Delete draft release
         id: delete_draft_release
         run: |
-          gh release delete ${{ steps.draft_release.outputs.DRAFT_RELEASE_ID }} --force -y 
+          gh release delete ${{ steps.draft_release.outputs.DRAFT_RELEASE_ID }} -y 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
