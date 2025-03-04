@@ -5,6 +5,8 @@ import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
 import MigrationProgress from "./MigrationProgress";
+import { QueryObserverResult } from "@tanstack/react-query";
+import { RefetchOptions } from "@tanstack/react-query";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -92,22 +94,20 @@ const columns: GridColDef[] = [
 
             return (
                 <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
-                    <span>
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                params.row.onDelete(params.row.metadata?.name);
-                            }}
-                            disabled={isDisabled}
-                            size="small"
-                            sx={{
-                                cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                position: 'relative'
-                            }}
-                        >
-                            <DeleteIcon />
-                        </IconButton>
-                    </span>
+                    <IconButton
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            params.row.onDelete(params.row.metadata?.name);
+                        }}
+                        disabled={isDisabled}
+                        size="small"
+                        sx={{
+                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            position: 'relative'
+                        }}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
                 </Tooltip>
             );
         },
@@ -117,10 +117,11 @@ const columns: GridColDef[] = [
 interface CustomToolbarProps {
     numSelected: number;
     onDeleteSelected: () => void;
+    refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 
-const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) => {
+const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -149,6 +150,7 @@ const CustomToolbar = ({ numSelected, onDeleteSelected }: CustomToolbarProps) =>
                 )}
                 <CustomSearchToolbar
                     placeholder="Search by Name, Status, or Progress"
+                    onRefresh={refetchMigrations}
                 />
             </Box>
         </GridToolbarContainer>
@@ -159,12 +161,14 @@ interface MigrationsTableProps {
     migrations: Migration[];
     onDeleteMigration: (name: string) => void;
     onDeleteSelected: (migrations: Migration[]) => void;
+    refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 export default function MigrationsTable({
     migrations,
     onDeleteMigration,
-    onDeleteSelected
+    onDeleteSelected,
+    refetchMigrations
 }: MigrationsTableProps) {
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
 
@@ -209,6 +213,7 @@ export default function MigrationsTable({
                             );
                             onDeleteSelected(selectedMigrations || []);
                         }}
+                        refetchMigrations={refetchMigrations}
                     />
                 ),
             }}

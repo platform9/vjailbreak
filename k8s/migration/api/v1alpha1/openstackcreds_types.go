@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,36 +26,12 @@ import (
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
 type OpenstackCredsSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// OsAuthURL is the OpenStack authentication URL
-	OsAuthURL string `json:"OS_AUTH_URL,omitempty"`
-
-	// OsDomainName is the OpenStack domain name
-	OsDomainName string `json:"OS_DOMAIN_NAME,omitempty"`
-
-	// OsUsername is the OpenStack username
-	OsUsername string `json:"OS_USERNAME,omitempty"`
-
-	// OsPassword is the OpenStack password
-	OsPassword string `json:"OS_PASSWORD,omitempty"`
-
-	// OsRegionName is the OpenStack region name
-	OsRegionName string `json:"OS_REGION_NAME,omitempty"`
-
-	// OsTenantName is the OpenStack tenant name
-	OsTenantName string `json:"OS_TENANT_NAME,omitempty"`
-
-	// OsInsecure is the flag to skip verification of the OpenStack TLS Certificate
-	// +kubebuilder:default:=false
-	OsInsecure bool `json:"OS_INSECURE,omitempty"`
+	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
+	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	OpenStackValidationStatus  string `json:"openstackValidationStatus,omitempty"`
 	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
