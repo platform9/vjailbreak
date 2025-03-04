@@ -1,12 +1,10 @@
 import { v4 as uuidv4 } from "uuid"
 
-
 // Helper function to parse OS_INSECURE from string to boolean
 const getBooleanValue = (value: string | undefined): boolean | undefined => {
-  if (value === undefined) return undefined;
-  return value.toLowerCase() === "true";
-};
-
+  if (value === undefined) return undefined
+  return value.toLowerCase() === "true"
+}
 
 export const createOpenstackCredsJson = (params) => {
   const {
@@ -19,7 +17,15 @@ export const createOpenstackCredsJson = (params) => {
     OS_REGION_NAME,
     OS_TENANT_NAME,
     OS_INSECURE,
+    existingCredName,
   } = params || {}
+
+  // If existingCredName is provided, we're using an existing credential
+  // and don't need to create a new one
+  if (existingCredName) {
+    return null
+  }
+
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
     kind: "OpenstackCreds",
@@ -34,8 +40,7 @@ export const createOpenstackCredsJson = (params) => {
       OS_PASSWORD,
       OS_REGION_NAME,
       OS_TENANT_NAME,
-      OS_INSECURE: getBooleanValue(OS_INSECURE), 
-      
+      OS_INSECURE: getBooleanValue(OS_INSECURE),
     },
   }
 }

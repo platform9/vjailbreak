@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
@@ -36,8 +37,10 @@ type OpenStackMetadata struct {
 }
 
 func GetCurrentInstanceUUID() (string, error) {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
+	client := retryablehttp.NewClient()
+	client.RetryMax = 5
+	client.Logger = nil
+	req, err := retryablehttp.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %s", err)
 	}
@@ -134,7 +137,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
 		}).Extract()
-		if err == nil {
+		if err == nil || strings.Contains(err.Error(), "already attached") {
 			break
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
@@ -195,7 +198,7 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
 	return nil

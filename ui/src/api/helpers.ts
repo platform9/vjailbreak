@@ -12,6 +12,7 @@ import {
 } from "./network-mapping/networkMappings"
 import {
   deleteOpenstackCredentials,
+  getOpenstackCredentials,
   getOpenstackCredentialsList,
 } from "./openstack-creds/openstackCreds"
 import {
@@ -20,8 +21,17 @@ import {
 } from "./storage-mappings/storageMappings"
 import {
   deleteVmwareCredentials,
+  getVmwareCredentials,
   getVmwareCredentialsList,
 } from "./vmware-creds/vmwareCreds"
+import {
+  createOpenstackCredsSecret,
+  createVMwareCredsSecret,
+  deleteSecret,
+} from "./secrets/secrets"
+import { createOpenstackCredsWithSecret } from "./openstack-creds/openstackCreds"
+import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
+import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
 
 export const cleanupAllResources = async () => {
   // Clean up vmware creds
@@ -82,5 +92,108 @@ export const cleanupAllResources = async () => {
     }
   } catch (e) {
     console.error("Error cleaning up migration plans", e)
+  }
+}
+
+// Create OpenStack credentials with secret
+export const createOpenstackCredsWithSecretFlow = async (
+  credName: string,
+  credentials: {
+    OS_USERNAME: string
+    OS_PASSWORD: string
+    OS_AUTH_URL: string
+    OS_PROJECT_NAME?: string
+    OS_TENANT_NAME?: string
+    OS_DOMAIN_NAME: string
+    OS_REGION_NAME?: string
+  },
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretName = `${credName}-openstack-secret`
+
+  await createOpenstackCredsSecret(secretName, credentials, namespace)
+
+  return createOpenstackCredsWithSecret(credName, secretName, namespace)
+}
+
+// Create VMware credentials with secret
+export const createVMwareCredsWithSecretFlow = async (
+  credName: string,
+  credentials: {
+    VCENTER_HOST: string
+    VCENTER_USERNAME: string
+    VCENTER_DATACENTER: string
+    VCENTER_PASSWORD: string
+  },
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretName = `${credName}-vmware-secret`
+
+  const vmwareCredentialsWithInsecure = {
+    ...credentials,
+    VCENTER_INSECURE: true,
+  }
+
+  await createVMwareCredsSecret(
+    secretName,
+    vmwareCredentialsWithInsecure,
+    namespace
+  )
+
+  return createVMwareCredsWithSecret(credName, secretName, namespace)
+}
+
+export const deleteVMwareCredsWithSecretFlow = async (
+  credName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  try {
+    const credential = await getVmwareCredentials(credName, namespace)
+
+    await deleteVmwareCredentials(credName, namespace)
+
+    if (credential?.spec?.secretRef?.name) {
+      await deleteSecret(credential.spec.secretRef.name, namespace)
+    } else {
+      const secretName = `${credName}-vmware-secret`
+      try {
+        await deleteSecret(secretName, namespace)
+      } catch (error) {
+        console.log(`No secret found with name ${secretName} : ${error}`)
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error(`Error deleting VMware credential ${credName}:`, error)
+    throw error
+  }
+}
+
+// Delete OpenStack credentials and associated secret
+export const deleteOpenStackCredsWithSecretFlow = async (
+  credName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  try {
+    const credential = await getOpenstackCredentials(credName, namespace)
+
+    await deleteOpenstackCredentials(credName, namespace)
+
+    if (credential?.spec?.secretRef?.name) {
+      await deleteSecret(credential.spec.secretRef.name, namespace)
+    } else {
+      const secretName = `${credName}-openstack-secret`
+      try {
+        await deleteSecret(secretName, namespace)
+      } catch (error) {
+        console.log(`No secret found with name ${secretName} : ${error}`)
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error(`Error deleting OpenStack credential ${credName}:`, error)
+    throw error
   }
 }
