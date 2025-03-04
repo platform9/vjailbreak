@@ -282,7 +282,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 
 func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationobj *vjailbreakv1alpha1.Migration, vm string, configMapName, firstbootconfigMapName string) error {
+	migrationobj *vjailbreakv1alpha1.Migration,
+	vm string, configMapName,
+	firstbootconfigMapName string,
+	vmwareSecretRef string,
+	openstackSecretRef string) error {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
@@ -335,6 +339,20 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 								ConfigMapRef: &corev1.ConfigMapEnvSource{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: configMapName,
+									},
+								},
+							},
+							{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: vmwareSecretRef,
+									},
+								},
+							},
+							{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: openstackSecretRef,
 									},
 								},
 							},
@@ -500,19 +518,8 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
 				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
 				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
-				"OS_AUTH_URL":           openstackcreds.Spec.OsAuthURL,
-				"OS_DOMAIN_NAME":        openstackcreds.Spec.OsDomainName,
-				"OS_PASSWORD":           openstackcreds.Spec.OsPassword,
-				"OS_REGION_NAME":        openstackcreds.Spec.OsRegionName,
-				"OS_TENANT_NAME":        openstackcreds.Spec.OsTenantName,
 				"OS_TYPE":               migrationtemplate.Spec.OSType,
-				"OS_USERNAME":           openstackcreds.Spec.OsUsername,
-				"OS_INSECURE":           strconv.FormatBool(openstackcreds.Spec.OsInsecure),
 				"SOURCE_VM_NAME":        vm,
-				"VCENTER_HOST":          vmwcreds.Spec.VcenterHost,
-				"VCENTER_INSECURE":      strconv.FormatBool(vmwcreds.Spec.VcenterInsecure),
-				"VCENTER_PASSWORD":      vmwcreds.Spec.VcenterPassword,
-				"VCENTER_USERNAME":      vmwcreds.Spec.VcenterUsername,
 				"VIRTIO_WIN_DRIVER":     virtiodrivers,
 				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
@@ -693,7 +700,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
-		err = r.CreatePod(ctx, migrationplan, migrationobj, vm, cm.Name, fbcm.Name)
+		err = r.CreatePod(ctx,
+			migrationplan,
+			migrationobj,
+			vm, cm.Name,
+			fbcm.Name,
+			vmwcreds.Spec.SecretRef.Name,
+			openstackcreds.Spec.SecretRef.Name)
 		if err != nil {
 			return fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
 		}
