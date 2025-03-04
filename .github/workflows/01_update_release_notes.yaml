@@ -11,15 +11,19 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
     runs-on: ubuntu-latest
     if: startsWith(github.head_ref, 'release-v')  # Only run if the PR is from a release branch
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # with:
-        #   ref: ${{ github.head_ref }}
 
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install gh
+          echo "gh cli installed"
 
       - name: Get release branch name
         id: get_release_branch
@@ -33,37 +37,22 @@ jobs:
         env:
           RELEASE_BRANCH: ${{ steps.get_release_branch.outputs.RELEASE_BRANCH }}
 
+      - name: Creating a draft release
+        id: draft_release
+        run: |
+          DRAFT_RELEASE_ID="${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
+          gh release create --draft $DRAFT_RELEASE_ID --generate-notes --target ${{ steps.get_release_branch.outputs.RELEASE_BRANCH }}
+          echo "DRAFT_RELEASE_ID=${DRAFT_RELEASE_ID}" >> $GITHUB_OUTPUT
+        env:
+          DRAFT_RELEASE_ID: ${{ steps.get_release_tag.outputs.RELEASE_TAG }}
+
       - name: Generate release notes
         id: generate_notes
         run: |
-          RELEASE_TAG="${{ steps.get_release_tag.outputs.RELEASE_TAG }}"
+          RELEASE_TAG="${{  steps.draft_release.outputs.DRAFT_RELEASE_ID }}"
           FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"  # Important
 
-          # Fetch changes from origin and prune stale remote tracking branches
-          git fetch origin --prune
-
-          GIT_SHA=${{ github.sha }}
-          echo "Using SHA as ${{ github.head_ref }}.${{ github.sha }}"
-
-          # Get the commits specific to this release branch since the last release (tag)
-          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
-          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*"  $(git rev-list --tags --max-count=1))
-
-          if [[ -z "$LAST_TAG" ]]; then
-            echo "No previous release tag found!  Using the initial commit."
-            #If you are working on a repo with no initial release, you need to add a commit message.
-            COMMIT_RANGE=$(git rev-list --all | tail -n 1)..$GIT_SHA
-
-          else
-            echo "Last tag found: $LAST_TAG"
-            COMMIT_RANGE="$LAST_TAG..$GIT_SHA"
-          fi
-          
-          echo "Commit Range: $COMMIT_RANGE"
-
-          # Generate markdown from commit messages
-          # Important:  Adapt this to your commit message conventions!  This is a *very* basic example.
-          RELEASE_NOTES=$(git log --pretty=format:"- %s" $COMMIT_RANGE)
+          RELEASE_NOTES=$(gh release view $RELEASE_TAG --json body --template {{.body}})
 
           echo "Release Notes:\n$RELEASE_NOTES"
 
@@ -81,22 +70,16 @@ jobs:
 
           # Add a header to the file
           echo "---" > "$FILE_NAME"
-          echo "title: Release $RELEASE_TAG" >> "$FILE_NAME"
+          echo "title:  $RELEASE_TAG" >> "$FILE_NAME"
+          echo "description: Release Notes for $RELEASE_TAG for vJailbreak"
           echo "---" >> "$FILE_NAME"
           echo "" >> "$FILE_NAME"
-
           # Append the new release notes to the file
           echo "$RELEASE_NOTES" >> "$FILE_NAME"
 
           echo "File updated: $FILE_NAME"
           echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
           echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
-
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install gh
-          echo "gh cli installed"
 
       - name: Create PR with changes
         if: steps.generate_notes.outputs.SKIP_UPDATE != 'true'
@@ -120,5 +103,10 @@ jobs:
           gh pr create --base ${{ github.head_ref }} --head $NEW_BRANCH --title "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}" --body "Automatically generated PR to update release notes"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+      - name: Delete draft release
+        id: delete_draft_release
+        run: |
+          gh release delete ${{ steps.draft_release.outputs.DRAFT_RELEASE_ID }} --force -y 
 
 
