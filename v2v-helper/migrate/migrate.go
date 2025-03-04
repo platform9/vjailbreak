@@ -9,14 +9,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -91,9 +92,8 @@ func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Attaching volumes to VM")
 
-	err := openstackops.AttachVolumeToVM(disk.OpenstackVol.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to attach volume to VM: %s", err)
+	if err := openstackops.AttachVolumeToVM(disk.OpenstackVol.ID); err != nil {
+		return "", errors.Wrap(err, "failed to attach volume to VM")
 	}
 
 	// Get the Path of the attached volume
@@ -106,11 +106,12 @@ func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 
 func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
 	openstackops := migobj.Openstackclients
-	err := openstackops.DetachVolumeFromVM(disk.OpenstackVol.ID)
-	if err != nil {
-		return fmt.Errorf("failed to detach volume from VM: %s", err)
+
+	if err := openstackops.DetachVolumeFromVM(disk.OpenstackVol.ID); err != nil {
+		return errors.Wrap(err, "failed to detach volume from VM")
 	}
-	err = openstackops.WaitForVolume(disk.OpenstackVol.ID)
+
+	err := openstackops.WaitForVolume(disk.OpenstackVol.ID)
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume to become available: %s", err)
 	}
@@ -120,14 +121,12 @@ func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
-		err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID)
-		if err != nil {
-			if strings.Contains(err.Error(), "is not attached to volume") {
-				return nil
-			}
-			return fmt.Errorf("failed to detach volume from VM: %s", err)
+
+		if err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
+			return errors.Wrap(err, "failed to detach volume from VM")
 		}
-		err = openstackops.WaitForVolume(vmdisk.OpenstackVol.ID)
+
+		err := openstackops.WaitForVolume(vmdisk.OpenstackVol.ID)
 		if err != nil {
 			return fmt.Errorf("failed to wait for volume to become available: %s", err)
 		}
@@ -227,7 +226,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 
 	log.Println("Starting NBD server")
-	err := vmops.TakeSnapshot("migration-snap")
+	err := vmops.TakeSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
@@ -248,28 +247,26 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	time.Sleep(2 * time.Second)
 	final := false
 
+	for idx, vmdisk := range vminfo.VMDisks {
+		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
+		if err != nil {
+			return vminfo, fmt.Errorf("failed to attach volume: %s", err)
+		}
+	}
+
 	incrementalCopyCount := 0
 	for {
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
-			for idx, vmdisk := range vminfo.VMDisks {
-				vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
-				if err != nil {
-					return vminfo, fmt.Errorf("failed to attach volume: %s", err)
-				}
-
+			for idx := range vminfo.VMDisks {
 				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
-				err = migobj.DetachVolume(vmdisk)
-				if err != nil {
-					return vminfo, fmt.Errorf("failed to detach volume: %s", err)
-				}
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
 		} else {
-			migration_snapshot, err := vmops.GetSnapshot("migration-snap")
+			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 			if err != nil {
 				return vminfo, fmt.Errorf("failed to get snapshot: %s", err)
 			}
@@ -277,7 +274,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			var changedAreas types.DiskChangeInfo
 			done := true
 
-			for idx, vmdisk := range vminfo.VMDisks {
+			for idx := range vminfo.VMDisks {
 				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to get changed disk areas: %s", err)
@@ -304,17 +301,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					// 11. Copy Changed Blocks over
 					done = false
 					migobj.logMessage("Copying changed blocks")
-					vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
-					if err != nil {
-						return vminfo, fmt.Errorf("failed to attach volume: %s", err)
-					}
+
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
-					}
-					err = migobj.DetachVolume(vmdisk)
-					if err != nil {
-						return vminfo, fmt.Errorf("failed to detach volume: %s", err)
 					}
 					migobj.logMessage("Finished copying changed blocks")
 				}
@@ -339,18 +329,18 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 		}
 
-		//Update old change id to the new base change id value
+		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
 		vminfo, err = vmops.UpdateDiskInfo(vminfo)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 		}
-		err = vmops.DeleteSnapshot("migration-snap")
+		err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
 		}
-		err = vmops.TakeSnapshot("migration-snap")
+		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 		}
@@ -358,6 +348,12 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		incrementalCopyCount += 1
 
 	}
+
+	err = migobj.DetachAllVolumes(vminfo)
+	if err != nil {
+		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
+	}
+
 	log.Println("Stopping NBD server")
 	for _, nbdserver := range nbdops {
 		err = nbdserver.StopNBDServer()
@@ -367,7 +363,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 
 	log.Println("Deleting migration snapshot")
-	err = vmops.DeleteSnapshot("migration-snap")
+	err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
 	}
@@ -376,9 +372,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
-	osRelease := ""
-	bootVolumeIndex := 0
-	getBootCommand := ""
+
+	var (
+		osRelease                   = ""
+		bootVolumeIndex             = -1
+		err                         error
+		lvm, osPath, getBootCommand string
+		useSingleDisk               bool
+	)
 
 	if vminfo.OSType == "windows" {
 		getBootCommand = "ls /Windows"
@@ -388,90 +389,118 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		getBootCommand = "inspect-os"
 	}
 
-	for idx, _ := range vminfo.VMDisks {
-		path, err := migobj.AttachVolume(vminfo.VMDisks[idx])
+	// attach all volumes at once
+	for idx, vmdisk := range vminfo.VMDisks {
+		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
 		if err != nil {
 			return fmt.Errorf("failed to attach volume: %s", err)
 		}
-		ans, err := RunCommandInGuest(path, getBootCommand)
+	}
+
+	// create XML for conversion
+	err = utils.GenerateXMLConfig(vminfo)
+	if err != nil {
+		return fmt.Errorf("failed to generate XML: %s", err)
+	}
+
+	for idx := range vminfo.VMDisks {
+		// check if individual disks are bootable
+		ans, err := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
 		if err != nil {
-			fmt.Printf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, ans)
-			detachError := migobj.DetachVolume(vminfo.VMDisks[idx])
-			if detachError != nil {
-				return fmt.Errorf("failed to detach volume: %s", detachError)
-			}
+			log.Printf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, strings.TrimSpace(ans))
 			continue
 		}
-
-		fmt.Printf("Output from '%s' - '%s'\n", getBootCommand, ans)
 
 		if ans == "" {
-			err := migobj.DetachVolume(vminfo.VMDisks[idx])
-			if err != nil {
-				return fmt.Errorf("failed to detach volume: %s", err)
-			}
+			// OS is not installed on this disk
 			continue
 		}
+		log.Printf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans))
 
-		if vminfo.OSType == "linux" {
-			osRelease, err = virtv2v.GetOsRelease(path)
+		osPath = strings.TrimSpace(ans)
+		bootVolumeIndex = idx
+		useSingleDisk = true
+		break
+	}
+
+	if vminfo.OSType == "linux" {
+		if useSingleDisk {
+			// skip checking LVM, because its a single disk
+			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
+			if err != nil {
+				return fmt.Errorf("failed to get os release: %s", err)
+			}
+		} else {
+			// check for LVM
+			lvm, err = virtv2v.CheckForLVM(vminfo.VMDisks)
+			if err != nil || lvm == "" {
+				return errors.Wrap(err, "OS install location not found, Failed to check for LVM")
+			}
+			osPath = strings.TrimSpace(lvm)
+			// check for bootable volume in case of LVM
+			bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+			if err != nil {
+				return errors.Wrap(err, "Failed to get bootable volume index")
+			}
+			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
 			if err != nil {
 				return fmt.Errorf("failed to get os release: %s", err)
 			}
 		}
+	}
 
-		// save the index of bootVolume
-		bootVolumeIndex = idx
-		log.Printf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name)
-
-		vminfo.VMDisks[bootVolumeIndex].Boot = true
-		if migobj.Convert {
-			firstbootscripts := []string{}
-			// Fix NTFS
-			if vminfo.OSType == "windows" {
-				err = virtv2v.NTFSFix(path)
-				if err != nil {
-					return fmt.Errorf("failed to run ntfsfix: %s", err)
-				}
-			}
-			// Turn on DHCP for interfaces in rhel VMs
-			if vminfo.OSType == "linux" {
-				if strings.Contains(osRelease, "rhel") {
-					firstbootscriptname := "rhel_enable_dhcp"
-					firstbootscript := constants.RhelFirstBootScript
-					firstbootscripts = append(firstbootscripts, firstbootscriptname)
-					err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
-					if err != nil {
-						return fmt.Errorf("failed to add first boot script: %s", err)
-					}
-				}
-			}
-			err := virtv2v.ConvertDisk(ctx, path, vminfo.OSType, migobj.Virtiowin, firstbootscripts)
+	// save the index of bootVolume
+	log.Printf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name)
+	vminfo.VMDisks[bootVolumeIndex].Boot = true
+	if migobj.Convert {
+		firstbootscripts := []string{}
+		// Fix NTFS
+		if vminfo.OSType == "windows" {
+			err = virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
-				return fmt.Errorf("failed to run virt-v2v: %s", err)
-			}
-			openstackops := migobj.Openstackclients
-			err = openstackops.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol)
-			if err != nil {
-				return fmt.Errorf("failed to set volume as bootable: %s", err)
+				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
+		// Turn on DHCP for interfaces in rhel VMs
+		if vminfo.OSType == "linux" {
+			if strings.Contains(osRelease, "rhel") {
+				firstbootscriptname := "rhel_enable_dhcp"
+				firstbootscript := constants.RhelFirstBootScript
+				firstbootscripts = append(firstbootscripts, firstbootscriptname)
+				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
+				if err != nil {
+					return fmt.Errorf("failed to add first boot script: %s", err)
+				}
+			}
+		}
+
+		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
+		if err != nil {
+			return fmt.Errorf("failed to run virt-v2v: %s", err)
+		}
+
+		openstackops := migobj.Openstackclients
+		err = openstackops.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol)
+		if err != nil {
+			return fmt.Errorf("failed to set volume as bootable: %s", err)
+		}
 	}
+
 	//TODO(omkar): can disable DHCP here
 	if vminfo.OSType == "linux" {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			log.Println("Adding wildcard netplan")
-			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks[bootVolumeIndex].Path)
+			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to add wildcard netplan: %s", err)
 			}
 			log.Println("Wildcard netplan added successfully")
 		}
 	}
-	err := migobj.DetachVolume(vminfo.VMDisks[bootVolumeIndex])
+	err = migobj.DetachAllVolumes(vminfo)
 	if err != nil {
-		return fmt.Errorf("failed to detach volume: %s", err)
+		return errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 	migobj.logMessage("Successfully converted disk")
 	return nil
@@ -751,27 +780,8 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
 	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
 	}
-	err = migobj.VMops.DeleteSnapshot("migration-snap")
+	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
 	}
-}
-
-// Runs command inside temporary qemu-kvm that virt-v2v creates
-func RunCommandInGuest(path string, command string) (string, error) {
-	// Get the os-release file
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.Command(
-		"guestfish",
-		"--ro",
-		"-a",
-		path,
-		"-i")
-	cmd.Stdin = strings.NewReader(command)
-	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
-	}
-	return strings.ToLower(string(out)), nil
 }

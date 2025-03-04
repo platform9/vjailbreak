@@ -19,8 +19,8 @@ type MigrationUtils interface {
 	// CreateDataCopyCondition creates a data copy condition for the migration.
 	CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
 
-	// CreateMigratedCondition creates a migrated condition for the migration.
-	CreateMigratedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
+	// CreateMigratingCondition creates a migrated condition for the migration.
+	CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition
 
 	// SetCutoverLabel sets the cutover label based on the initiateCutover flag.
 	SetCutoverLabel(initiateCutover bool, currentLabel string) string
@@ -92,15 +92,15 @@ func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList 
 	return existingConditions
 }
 
-func CreateMigratedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
 		if !(eventList.Items[i].Reason == constants.MigrationReason && eventList.Items[i].Message == "Converting disk") {
 			continue
 		}
 
-		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrated, constants.MigrationReason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated,
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrating, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrating,
 			corev1.ConditionTrue,
 			constants.MigrationReason,
 			"Migrating VM from VMware to Openstack",

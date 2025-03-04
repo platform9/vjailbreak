@@ -6,14 +6,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 //go:generate mockgen -source=../virtv2v/virtv2vops.go -destination=../virtv2v/virtv2vops_mock.go -package=virtv2v
@@ -22,7 +27,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -115,9 +120,8 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
-func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
 	// Convert the disk
-
 	if ostype == "windows" {
 		filePath := "/home/fedora/virtio-win.iso"
 		log.Println("Downloading virtio windrivers")
@@ -134,7 +138,11 @@ func ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firs
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
-	args = append(args, "-i", "disk", path)
+	if useSingleDisk {
+		args = append(args, "-i", "disk", diskPath)
+	} else {
+		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	}
 	cmd := exec.CommandContext(ctx,
 		"virt-v2v-in-place",
 		args...,
@@ -169,8 +177,9 @@ func GetOsRelease(path string) (string, error) {
 	return strings.ToLower(string(out)), nil
 }
 
-func AddWildcardNetplan(path string) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
 	// Add wildcard to netplan
+	var ans string
 	netplan := `[Match]
 Name=en*
 
@@ -186,18 +195,16 @@ DHCP=yes`
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.Command(
-		"guestfish",
-		"--rw",
-		"-a",
-		path,
-		"-i")
-	input := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
-	cmd.Stdin = strings.NewReader(input)
-	log.Printf("Executing %s", cmd.String()+" "+input)
-	ans, err := cmd.Output()
+	if useSingleDisk {
+		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+	}
 	if err != nil {
-		return fmt.Errorf("failed to upload netplan file: %s, Output: %s", err, ans)
+		fmt.Printf("failed to run command (%s): %v\n", ans, err)
+		return err
 	}
 	return nil
 }
@@ -211,4 +218,123 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 	}
 	log.Printf("Created firstboot script %s", firstbootscriptname)
 	return nil
+}
+
+// Runs command inside temporary qemu-kvm that virt-v2v creates
+func RunCommandInGuest(path string, command string, write bool) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
+	cmd := exec.Command(
+		"guestfish",
+		option,
+		"-a",
+		path,
+		"-i")
+	cmd.Stdin = strings.NewReader(command)
+	log.Printf("Executing %s", cmd.String()+" "+command)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+	return strings.ToLower(strings.TrimSpace(string(out))), nil
+}
+
+// Runs command inside temporary qemu-kvm that virt-v2v creates
+func CheckForLVM(disks []vm.VMDisk) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Get the installed os info
+	command := "inspect-os"
+	osPath, err := RunCommandInGuestAllVolumes(disks, command, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+
+	// Get the lvs list
+	command = "lvs"
+	lvsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+
+	lvs := strings.Split(string(lvsStr), "\n")
+	if slices.Contains(lvs, strings.TrimSpace(string(osPath))) {
+		return string(strings.TrimSpace(string(osPath))), nil
+	}
+
+	return "", fmt.Errorf("LVM not found: %v, %d", lvs, len(lvs))
+}
+
+func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args ...string) *exec.Cmd {
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
+	cmd := exec.Command(
+		"guestfish",
+		option)
+
+	for _, disk := range disks {
+		cmd.Args = append(cmd.Args, "-a", disk.Path)
+	}
+	cmd.Args = append(cmd.Args, "-i", command)
+	cmd.Args = append(cmd.Args, args...)
+	return cmd
+}
+
+func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	cmd := prepareGuestfishCommand(disks, command, write, args...)
+	log.Printf("Executing %s", cmd.String())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+	return strings.ToLower(string(out)), nil
+}
+
+func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
+	command := "list-partitions"
+	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
+	if err != nil {
+		return -1, fmt.Errorf("failed to run command (%s): %v", command, err)
+	}
+
+	partitions := strings.Split(string(partitionsStr), "\n")
+	for _, partition := range partitions {
+		command := "part-to-dev"
+		device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v\n", device, err)
+			return -1, err
+		}
+
+		command = "part-to-partnum"
+		num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v\n", num, err)
+			return -1, err
+		}
+
+		command = "part-get-bootable"
+		bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v\n", bootable, err)
+			return -1, err
+		}
+
+		if strings.TrimSpace(bootable) == "true" {
+			command = "device-index"
+			index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
+			if err != nil {
+				fmt.Printf("failed to run command (%s): %v\n", index, err)
+				return -1, err
+			}
+			return strconv.Atoi(strings.TrimSpace(index))
+		}
+	}
+	return -1, errors.New("bootable volume not found")
 }

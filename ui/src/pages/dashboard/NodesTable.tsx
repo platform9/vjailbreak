@@ -162,6 +162,7 @@ interface NodesToolbarProps {
     loading: boolean;
     selectedCount: number;
     totalNodes: number;
+    onRefresh?: () => void;
 }
 interface NodeSelector {
     id: string
@@ -177,7 +178,8 @@ const NodesToolbar = ({
     disableScaleDown,
     loading,
     selectedCount,
-    totalNodes
+    totalNodes,
+    onRefresh
 }: NodesToolbarProps) => {
     const getScaleDownTooltip = () => {
         if (loading) return "Operation in progress";
@@ -209,6 +211,7 @@ const NodesToolbar = ({
                             startIcon={<AddIcon />}
                             onClick={onScaleUp}
                             disabled={loading}
+                            sx={{ height: 40 }}
                         >
                             Scale Up
                         </Button>
@@ -222,6 +225,7 @@ const NodesToolbar = ({
                             startIcon={<RemoveIcon />}
                             onClick={onScaleDown}
                             disabled={disableScaleDown || loading}
+                            sx={{ height: 40 }}
                         >
                             Scale Down {selectedCount > 0 && `(${selectedCount})`}
                         </Button>
@@ -229,6 +233,7 @@ const NodesToolbar = ({
                 </Tooltip>
                 <CustomSearchToolbar
                     placeholder="Search by Name, Status, or IP"
+                    onRefresh={onRefresh}
                 />
             </Box>
         </GridToolbarContainer>
@@ -236,7 +241,7 @@ const NodesToolbar = ({
 };
 
 export default function NodesTable() {
-    const { data: nodes, isLoading } = useNodesQuery();
+    const { data: nodes, isLoading: fetchingNodes, refetch: refreshNodes } = useNodesQuery();
     const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
     const [scaleUpOpen, setScaleUpOpen] = useState(false);
     const [scaleDownDialogOpen, setScaleDownDialogOpen] = useState(false);
@@ -263,6 +268,9 @@ export default function NodesTable() {
         setSelectedNodes(newSelection);
     };
 
+    const handleRefresh = () => {
+        refreshNodes()
+    };
 
     const handleScaleUp = () => {
         setScaleUpOpen(true);
@@ -276,7 +284,6 @@ export default function NodesTable() {
         setSelectedNodes([node.name]);
         setScaleDownDialogOpen(true);
     };
-
 
     const confirmScaleDown = async () => {
         try {
@@ -338,16 +345,17 @@ export default function NodesTable() {
                 isRowSelectable={isRowSelectable}
                 onRowSelectionModelChange={handleSelectionChange}
                 rowSelectionModel={selectedNodes}
-                loading={isLoading}
+                loading={fetchingNodes}
                 slots={{
                     toolbar: () => (
                         <NodesToolbar
                             onScaleUp={handleScaleUp}
                             onScaleDown={handleScaleDown}
                             disableScaleDown={selectedNodes.length === 0 || remainingNodesAfterScaleDown < 1}
-                            loading={loading}
+                            loading={loading || fetchingNodes}
                             selectedCount={selectedNodes.length}
                             totalNodes={transformedNodes.length}
+                            onRefresh={handleRefresh}
                         />
                     ),
                     noRowsOverlay: () => (
