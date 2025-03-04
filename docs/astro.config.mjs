@@ -41,6 +41,9 @@ export default defineConfig({
 					autogenerate: { directory: 'release_docs' },
 				},
 			],
+			customCss: [
+				'./src/styles/custom.css'
+				],
 		}),
 	],
 });

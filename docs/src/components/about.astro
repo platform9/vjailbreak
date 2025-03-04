@@ -1,39 +1,85 @@
 ---
 interface Props {
-	title: string;
+    title?: string;
 }
 
-const { title } = Astro.props;
+const { title = "Powered by Platform9" } = Astro.props;
 ---
 
-<article class="sl-flex" aria-labelledby="about-vjb-heading">
-	<small id="about-vjb-heading">
-		{title}
-		<span class="sr-only">Platform9</span>
-	</small>
-
-Platform9
-	<slot />
-</article>
+<footer class="site-footer">
+    <div class="footer-content">
+        <slot />
+        <div class="footer-info">
+        <p>Built and maintained with ❤️ at <a href="https://platform9.com" class="footer-link">Platform9</a></p>            
+        </div>
+		<div align=center class="footer-brand">
+            <a href="https://platform9.com" class="footer-logo">
+                <img 
+                    src="/src/assets/platform9-logo.svg" 
+                    alt="Platform9 Logo" 
+                    height="30"
+                />
+            </a>
+            <p class="copyright">© 2025 Platform9 Systems, Inc. All Rights Reserved</p>
+        </div>
+    </div>
+</footer>
 
 <style>
-	article {
-		max-width: 40rem;
-		margin-inline: auto;
-		padding-block: 5rem;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-		gap: 0.5rem;
-	}
-	article > :global(*) {
-		max-width: 50ch;
-		margin-top: 0 !important;
-	}
-	small {
-		color: var(--sl-color-gray-3);
-	}
-	svg {
-		width: 15rem;
-	}
+    .site-footer {
+        margin-top: 4rem;
+        padding: 3rem 1rem;
+        border-top: 1px solid var(--sl-color-border);
+    }
+
+    .footer-content {
+        max-width: var(--sl-content-width);
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .footer-brand {
+        margin-bottom: 1.5rem;
+    }
+
+    .footer-logo {
+    display: inline-block;
+    padding: 12px 24px;
+    background: white;
+    border-radius: 8px;
+}
+
+    .footer-logo img {
+        height: 50px; 
+        display: block;
+    }
+
+    [data-theme="dark"] .footer-logo {
+        background: rgba(255, 255, 255, 0.9);
+    }
+
+    .footer-info {
+        color: var(--sl-color-gray-3);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .copyright {
+        margin-top: 0.5rem;
+    }
+
+    :global(.footer-content p) {
+        margin: 0.5rem 0;
+    }
+
+    .footer-link {
+        color: var(--sl-color-gray-3);
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+
+    .footer-link:hover {
+        color: var(--sl-color-accent);
+    }
+
 </style>

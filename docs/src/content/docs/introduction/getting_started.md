@@ -2,6 +2,17 @@
 title: Getting Started
 description: Usage
 ---
+## How vJailbreak Works
+
+vJailbreak's intuitive interface leverages the OpenStack SDK to interact directly with both your VMware vSphere environment and your target OpenStack cloud. The UI guides you through these key steps:
+
+1.  **Connection Setup:** Easily configure connections to your source VMware vSphere environment and your target OpenStack cloud.
+2.  **VM Selection:** Select the VMs you wish to migrate from your vSphere environment.
+3.  **Migration Planning:** Configure migration settings, such as target storage and network configurations, through interactive forms.
+4.  **Migration Execution:** Initiate and monitor the migration process with real-time progress updates.
+5.  **Post-Migration Validation:** Verify the successful migration and launch of your VMs in OpenStack.
+
+## Get Started
 
 ## Usage
 
