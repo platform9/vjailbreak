@@ -122,7 +122,7 @@ Change the image names in the makefile to push to another repository
 
 Download and install [ORAS](https://oras.land/docs/installation). Download the latest version of the vjailbreak image with the following command. 
 
-    oras pull quay.io/platform9/vjailbreak:v0.1.4
+    oras pull quay.io/platform9/vjailbreak:v0.1.5
 
 This will download the vjailbreak qcow2 image locally. Upload it to your OpenStack enviroment and create your appliance VM with it.
 

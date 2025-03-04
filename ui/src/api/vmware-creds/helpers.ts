@@ -1,13 +1,32 @@
 import { v4 as uuidv4 } from "uuid"
 
-export const createVmwareCredsJson = (params) => {
+interface VmwareCredsParams {
+  name?: string
+  vcenterHost?: string
+  username?: string
+  password?: string
+  namespace?: string
+  existingCredName?: string
+}
+
+export const createVmwareCredsJson = (
+  params: VmwareCredsParams | null | undefined
+) => {
   const {
     name,
     vcenterHost,
     username,
     password,
     namespace = "migration-system",
+    existingCredName,
   } = params || {}
+
+  // If existingCredName is provided, we're using an existing credential
+  // and don't need to create a new one
+  if (existingCredName) {
+    return null
+  }
+
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
     kind: "VMwareCreds",

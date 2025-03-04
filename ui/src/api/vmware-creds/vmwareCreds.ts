@@ -48,3 +48,33 @@ export const deleteVmwareCredentials = async (
   })
   return response
 }
+
+// Create VMware credentials with secret reference
+export const createVMwareCredsWithSecret = async (
+  name: string,
+  secretName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds`
+
+  const credBody = {
+    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+    kind: "VMwareCreds",
+    metadata: {
+      name,
+      namespace,
+    },
+    spec: {
+      secretRef: {
+        name: secretName,
+      },
+    },
+  }
+
+  const response = await axios.post<VMwareCreds>({
+    endpoint,
+    data: credBody,
+  })
+
+  return response
+}

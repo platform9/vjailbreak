@@ -34,6 +34,20 @@ func (m *MockVirtV2VOperations) EXPECT() *MockVirtV2VOperationsMockRecorder {
 	return m.recorder
 }
 
+// AddFirstBootScript mocks base method.
+func (m *MockVirtV2VOperations) AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddFirstBootScript", firstbootscript, firstbootscriptname)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddFirstBootScript indicates an expected call of AddFirstBootScript.
+func (mr *MockVirtV2VOperationsMockRecorder) AddFirstBootScript(firstbootscript, firstbootscriptname interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstBootScript", reflect.TypeOf((*MockVirtV2VOperations)(nil).AddFirstBootScript), firstbootscript, firstbootscriptname)
+}
+
 // AddWildcardNetplan mocks base method.
 func (m *MockVirtV2VOperations) AddWildcardNetplan(path string) error {
 	m.ctrl.T.Helper()
@@ -49,17 +63,17 @@ func (mr *MockVirtV2VOperationsMockRecorder) AddWildcardNetplan(path interface{}
 }
 
 // ConvertDisk mocks base method.
-func (m *MockVirtV2VOperations) ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string) error {
+func (m *MockVirtV2VOperations) ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertDisk", ctx, path, ostype, virtiowindriver)
+	ret := m.ctrl.Call(m, "ConvertDisk", ctx, path, ostype, virtiowindriver, firstbootscripts)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ConvertDisk indicates an expected call of ConvertDisk.
-func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(ctx, path, ostype, virtiowindriver interface{}) *gomock.Call {
+func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(ctx, path, ostype, virtiowindriver, firstbootscripts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), ctx, path, ostype, virtiowindriver)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), ctx, path, ostype, virtiowindriver, firstbootscripts)
 }
 
 // GetOsRelease mocks base method.
