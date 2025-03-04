@@ -82,8 +82,8 @@ jobs:
             exit 0  # Exit gracefully without failing the action
           fi
 
-          YOUTUBE_LINK=${{ vars.HERO_VIDEO }}  
-          sed -i "s|YOUTUBE_LINK|$YOUTUBE_LINK|g" docs/src/content/docs/index.mdx
+          YOUTUBE_LINK_VAL=${{ vars.HERO_VIDEO }}  
+          sed -i -E 's|src="https://www.youtube.com/embed/[a-zA-Z0-9_-]+"|src="$YOUTUBE_LINK_VAL"|g' docs/src/content/docs/index.mdx
           
           # Fetch changes from origin and prune stale remote tracking branches
           git fetch origin --prune
