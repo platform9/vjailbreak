@@ -64,12 +64,18 @@ export interface FSpec {
 }
 
 export interface OpenstackCredsSpec {
-  OS_AUTH_URL: string
-  OS_DOMAIN_NAME: string
-  OS_PASSWORD: string
-  OS_REGION_NAME: string
-  OS_TENANT_NAME: string
-  OS_USERNAME: string
+  // For credentials using secretRef (new approach)
+  secretRef?: {
+    name: string
+  }
+  // For legacy direct credential storage (deprecated)
+  OS_AUTH_URL?: string
+  OS_DOMAIN_NAME?: string
+  OS_USERNAME?: string
+  OS_PASSWORD?: string
+  OS_REGION_NAME?: string
+  OS_TENANT_NAME?: string
+  OS_INSECURE?: boolean
 }
 
 export interface GetOpenstackCredsListMetadata {

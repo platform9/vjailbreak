@@ -1,3 +1,9 @@
+![Build](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml/badge.svg)
+![Latest](https://badgen.net/github/release/platform9/vjailbreak/latest)
+![Releases](https://badgen.net/github/releases/platform9/vjailbreak)
+![GitHub stars](https://img.shields.io/github/stars/platform9/vjailbreak)
+![GitHub forks](https://img.shields.io/github/forks/platform9/vjailbreak)
+[![Go Report Card V2V Helper](https://goreportcard.com/badge/github.com/platform9/vjailbreak/v2v-helper)](https://goreportcard.com/report/github.com/platform9/vjailbreak/v2v-helper)
 # vJailbreak
 A free and open-source tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
 * Connect to vCenter
@@ -106,7 +112,7 @@ Please refer the following table for the required ports:
 
 Download and install [ORAS](https://oras.land/docs/installation). Download the latest version of the vJailbreak image with the following command. 
 
-    oras pull quay.io/platform9/vjailbreak:v0.1.4
+    oras pull quay.io/platform9/vjailbreak:v0.1.5
 
 This will download the vJailbreak qcow2 image locally. Upload it to your OpenStack enviroment and create your appliance VM with it.
 

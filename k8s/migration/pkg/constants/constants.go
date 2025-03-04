@@ -12,7 +12,7 @@ const (
 	NameMaxLength     = 242
 
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
-	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/master"
+	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/control-plane"
 	NodeRoleMaster               = "master"
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
@@ -52,8 +52,8 @@ runcmd:
 `
 
 	MigrationConditionTypeDataCopy  corev1.PodConditionType = "DataCopy"
-	MigrationConditionTypeMigrated  corev1.PodConditionType = "Migrated"
-	MigrationConditionTypeValidated corev1.PodConditionType = "validated"
+	MigrationConditionTypeMigrating corev1.PodConditionType = "Migrating"
+	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,

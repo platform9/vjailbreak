@@ -17,7 +17,6 @@ export interface ItemMetadata {
   annotations: Annotations
   creationTimestamp: Date
   generation: number
-  managedFields: ManagedField[]
   name: string
   namespace: string
   resourceVersion: string
@@ -28,44 +27,13 @@ export interface Annotations {
   "kubectl.kubernetes.io/last-applied-configuration": string
 }
 
-export interface ManagedField {
-  apiVersion: string
-  fieldsType: string
-  fieldsV1: FieldsV1
-  manager: string
-  operation: string
-  time: Date
-}
-
-export interface FieldsV1 {
-  "f:metadata": FMetadata
-  "f:spec": FSpec
-}
-
-export interface FMetadata {
-  "f:annotations": FAnnotations
-}
-
-export interface FAnnotations {
-  ".": Empty
-  "f:kubectl.kubernetes.io/last-applied-configuration": Empty
-}
-
 export type Empty = object
 
-export interface FSpec {
-  ".": Empty
-  "f:VCENTER_HOST": Empty
-  "f:VCENTER_INSECURE": Empty
-  "f:VCENTER_PASSWORD": Empty
-  "f:VCENTER_USERNAME": Empty
-}
-
 export interface VMwareCredsSpec {
-  VCENTER_HOST: string
-  VCENTER_INSECURE: boolean
-  VCENTER_PASSWORD: string
-  VCENTER_USERNAME: string
+  // For credentials using secretRef (new approach)
+  secretRef?: {
+    name: string
+  }
 }
 
 export interface GetVmwareCredsListMetadata {

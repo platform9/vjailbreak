@@ -10,6 +10,9 @@ build:
 	@echo "Building v2v-helper..."
 	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build $(BUILD_OPTIONS) -a -o manager *.go
 
+gen-mock:
+	go generate ./...
+
 test:
 	@echo "Running tests for v2v-helper"
 	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v
