@@ -1,3 +1,9 @@
+![Build](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml/badge.svg)
+![Latest](https://badgen.net/github/release/platform9/vjailbreak/latest)
+![Releases](https://badgen.net/github/releases/platform9/vjailbreak)
+![GitHub stars](https://img.shields.io/github/stars/platform9/vjailbreak)
+![GitHub forks](https://img.shields.io/github/forks/platform9/vjailbreak)
+[![Go Report Card V2V Helper](https://goreportcard.com/badge/github.com/platform9/vjailbreak/v2v-helper)](https://goreportcard.com/report/github.com/platform9/vjailbreak/v2v-helper)
 # vJailbreak
 Helping VMware users migrate to OpenStack
 
