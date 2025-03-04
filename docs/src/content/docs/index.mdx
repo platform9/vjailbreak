@@ -5,71 +5,101 @@ template: splash
 hero:
   tagline: Effortless Open-Source VMware to OpenStack Migration
   image:
-    file: ../../assets/logo.png
+    html: |
+      <div class="video-container">
+        <div class="video-wrapper">
+          <iframe
+            src="https://www.youtube.com/embed/W11qtpc74dU"
+            title="vJailbreak Demo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+      </div>
   actions:
     - text: Getting Started
       link: introduction/getting_started/
       icon: right-arrow
     - text: Clone the Repo
       link: https://github.com/platform9/vjailbreak
-      icon: external
+      icon: github
       variant: minimal
+  align: center
 ---
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import AboutVJB from '../../components/about.astro';
 
-<div style="display: grid; grid-template-columns: 40% 60%; align-items: start; gap: 20px;">
-  <div>
-    ## vJailbreak: Effortless and intuitive VMware to OpenStack Migration
-
-    vJailbreak is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) from VMware vSphere environments to any OpenStack-compliant cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
-  </div>
-  <div style="text-align: center;">
-    <iframe width="100%" src="https://www.youtube.com/embed/your-demo-video-id" frameborder="0" allowfullscreen style="aspect-ratio: 16/9;"></iframe>
+<div class="download-section">
+  <div class="download-content">
+    <h3>Download Latest Version</h3>
+    <div class="command-box">
+      <pre><code>oras pull quay.io/platform9/vjailbreak:v0.1.4</code></pre>
+      <button class="copy-button" onclick="navigator.clipboard.writeText('oras pull quay.io/platform9/vjailbreak:v0.1.4')">
+        Copy
+      </button>
+    </div>
+    <a href="https://oras.land/docs/installation/" target="_blank" class="oras-link">
+      <span>Need ORAS?</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/>
+      </svg>
+    </a>
   </div>
 </div>
 
-### Key Benefits
+<div style="text-align: center; width: 100%; padding: 2rem 1rem;">
+  <h2 class="gradient-heading" style="font-size: 2.4rem; margin-bottom: 1.5rem;">
+    Enterprise VM Migration: VMware to OpenStack, Simplified
+  </h2>
+  <p style="font-size: 1.2rem; line-height: 1.6; color: var(--sl-color-gray-2); max-width: 1200px; margin: 0 auto;">
+    vJailbreak is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) from VMware vSphere environments to any OpenStack-compliant cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
+  </p>
+</div>
 
-*   **Intuitive User Interface:** Manage the entire migration process through a clear, easy-to-use graphical interface – no command-line expertise required.
-*   **Reduced Migration Time:** Automate migration tasks and visualize progress, significantly reducing the time and effort compared to manual methods.
-*   **Minimized Downtime:** vJailbreak's efficient migration process helps minimize downtime for your critical workloads.
-*   **Simplified Workflow:** A visual workflow guides you through each step of the migration, eliminating the need for complex scripting or manual configuration.
-*   **Cost-Effective Solution:** As an open-source tool, vJailbreak eliminates licensing costs.
-*   **Broad Compatibility:** Migrate VMs to any OpenStack cloud that adheres to standard OpenStack APIs.
-*   **Non-Disruptive Migration:** Perform migrations without impacting the operation of your source VMware environment.
-*   **Visual Progress Tracking:** Monitor the status of your migrations in real-time through the user interface.
 
-## How vJailbreak Works
+<h2 class="section-title">Key Benefits</h2>
 
-vJailbreak's intuitive interface leverages the OpenStack SDK to interact directly with both your VMware vSphere environment and your target OpenStack cloud. The UI guides you through these key steps:
+<CardGrid stagger>
+  <Card title="Visual Interface" icon="laptop">
+    Intuitive UI with no command-line requirements for seamless VM migration
+  </Card>
+  
+  <Card title="Fast & Efficient" icon="rocket">
+    Automated tasks with real-time progress tracking reduce migration time
+  </Card>
+  
+  <Card title="Zero Disruption" icon="warning">
+    Maintain source environment operations with minimal downtime
+  </Card>
+  
+  <Card title="Cost Effective" icon="seti:todo">
+    Open-source solution eliminating expensive licensing costs
+  </Card>
+  
+  <Card title="OpenStack Ready" icon="puzzle">
+    Compatible with any standard OpenStack-compliant cloud platform
+  </Card>
+  
+  <Card title="Step-by-Step Guide" icon="list-format">
+    Guided workflow with automated health checks and validation
+  </Card>
+</CardGrid>
 
-1.  **Connection Setup:** Easily configure connections to your source VMware vSphere environment and your target OpenStack cloud.
-2.  **VM Selection:** Select the VMs you wish to migrate from your vSphere environment.
-3.  **Migration Planning:** Configure migration settings, such as target storage and network configurations, through interactive forms.
-4.  **Migration Execution:** Initiate and monitor the migration process with real-time progress updates.
-5.  **Post-Migration Validation:** Verify the successful migration and launch of your VMs in OpenStack.
+<h2 class="section-title">Get Started</h2>
 
-## Get Started
+<p style="text-align: center; color: var(--sl-color-gray-2); font-size: 1.2rem; margin-bottom: 2rem;">
+  Ready to experience simplified, UI-driven VM migration?
+</p>
 
-Ready to experience simplified, UI-driven VM migration?
 
 <CardGrid stagger>
     <Card title="Deploy vJailbreak" icon="rocket">
-        Deploy vJailbreak and connect it to your vSphere and OpenStack environments.
+        Deploy vJailbreak and connect it to your vSphere and OpenStack environments. Learn more about installation, configuration, and usage in the [vJailbreak Documentation](introduction/getting_started/).
     </Card>
     <Card title="Contribute to vJailbreak" icon="add-document">
-        Help improve vJailbreak by contributing code, documentation, or bug reports.
-    </Card>
-    <Card title="Explore the Documentation" icon="open-book">
-        Learn more about installation, configuration, and usage in the [vJailbreak Documentation](introduction/getting_started/).
+        Help improve vJailbreak by contributing code, documentation, or bug reports. View our [contribution guidelines](https://github.com/platform9/vjailbreak/blob/main/CONTRIBUTING.md) to get started.
     </Card>
 </CardGrid>
 
-<AboutVJB title="Powered by Platform9">
-
-vJailbreak is built and maintained by Platform9, a leader in open-source cloud management solutions
-
-[Learn more about Platform9](https://platform9.com/)
-
+<AboutVJB>
 </AboutVJB>
