@@ -83,6 +83,9 @@ jobs:
           echo "File updated: $FILE_NAME"
           echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
           echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create PR with changes
         if: steps.generate_notes.outputs.SKIP_UPDATE != 'true'
@@ -105,6 +108,7 @@ jobs:
           # Create a pull request
           gh pr create --base ${{ github.head_ref }} --head $NEW_BRANCH --title "Update release notes for ${{ steps.get_release_tag.outputs.RELEASE_TAG }}" --body "Automatically generated PR to update release notes"
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Delete draft release
