@@ -102,6 +102,7 @@ jobs:
             LAST_TAG=$RELEASE_TAG
           fi
           sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.md
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
 
           # Add a header to the file
           echo "---" > "$FILE_NAME"
