@@ -12,7 +12,7 @@ import OpenstackRCFileUpload, {
   OpenstackRCFileUploaderRef,
 } from "./OpenstackRCFileUpload";
 import CredentialSelector from "./CredentialSelector";
-import { debounce } from "src/utils";
+import { debounce, isValidName } from "src/utils";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 
@@ -181,6 +181,8 @@ export default function OpenstackCredentialsForm({
     setShowForm(!showForm);
   };
 
+  const isValidCredentialName = isValidName(openstackCreds?.credentialName);
+
   return (
     <div>
       {showCredentialSelector && (
@@ -210,20 +212,11 @@ export default function OpenstackCredentialsForm({
                   credentialName: e.target.value,
                 });
               }}
-              error={
-                !!error ||
-                !/^[a-z0-9]([-a-z0-9]*[a-z0-9])$/.test(
-                  openstackCreds.credentialName
-                ) ||
-                openstackCreds.credentialName.length > 253
-              }
+              error={!!error || !isValidCredentialName}
               helperText={
-                error ||
-                (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])$/.test(
-                  openstackCreds.credentialName
-                )
+                !isValidCredentialName
                   ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
-                  : "")
+                  : ""
               }
               required
               sx={{ mt: 2, width: fullWidth ? "100%" : "440px" }}

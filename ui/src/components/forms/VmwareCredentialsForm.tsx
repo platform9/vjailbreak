@@ -12,7 +12,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
 import { useState, useCallback, useEffect } from "react";
 import CredentialSelector from "./CredentialSelector";
-import { debounce } from "src/utils";
+import { debounce, isValidName } from "src/utils";
 import { RefetchOptions } from "@tanstack/react-query";
 import { QueryObserverResult } from "@tanstack/react-query";
 
@@ -169,6 +169,8 @@ export default function VmwareCredentialsForm({
     setShowForm(!showForm);
   };
 
+  const isValidCredentialName = isValidName(vmwareCreds?.credentialName);
+
   return (
     <div>
       <CredentialSelector
@@ -192,21 +194,13 @@ export default function VmwareCredentialsForm({
               onChange={(e) =>
                 handleVmwareCredsChange({ credentialName: e.target.value })
               }
-              error={
-                !!error ||
-                !!credNameError ||
-                !/^[a-z0-9]([-a-z0-9]*[a-z0-9])$/.test(
-                  vmwareCreds.credentialName
-                ) ||
-                vmwareCreds.credentialName.length > 253
-              }
+              error={!!error || !!credNameError || !isValidCredentialName}
               helperText={
-                credNameError ||
-                (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])$/.test(
-                  vmwareCreds.credentialName
-                )
+                credNameError
+                  ? credNameError
+                  : !isValidCredentialName
                   ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
-                  : "")
+                  : ""
               }
               required
               size="small"
