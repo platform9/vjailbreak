@@ -14,7 +14,14 @@ spec:
     singular: vjailbreaknode
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.vmIP
+      name: VMIP
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: VjailbreakNode is the Schema for the vjailbreaknodes API

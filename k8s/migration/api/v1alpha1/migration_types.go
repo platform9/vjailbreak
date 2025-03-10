@@ -62,11 +62,13 @@ type MigrationStatus struct {
 	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
 
 	// AgentName is the name of the agent where migration is running
-	AgentName string `json:"AgentName,omitempty"`
+	AgentName string `json:"agentName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.agentName`,name=AgentName,type=string
 
 // Migration is the Schema for the migrations API
 type Migration struct {

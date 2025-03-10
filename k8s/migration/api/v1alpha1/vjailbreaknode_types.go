@@ -59,6 +59,8 @@ type VjailbreakNodeStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.vmIP`,name=VMIP,type=string
 
 // VjailbreakNode is the Schema for the vjailbreaknodes API
 type VjailbreakNode struct {

@@ -68,6 +68,7 @@ type MigrationPlanStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.migrationStatus`,name=Status,type=string
 
 // MigrationPlan is the Schema for the migrationplans API
 type MigrationPlan struct {
