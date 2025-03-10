@@ -94,8 +94,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
 	}
 
-	if pod.Status.Phase != corev1.PodRunning {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running for migration %s", migration.Name)
+	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
+		return ctrl.Result{}, fmt.Errorf("pod is not Running nor Succeeded for migration %s", migration.Name)
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
