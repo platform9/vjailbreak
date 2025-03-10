@@ -68,7 +68,7 @@ spec:
           status:
             description: Status defines the observed state of Migration
             properties:
-              AgentName:
+              agentName:
                 description: AgentName is the name of the agent where migration is
                   running
                 type: string

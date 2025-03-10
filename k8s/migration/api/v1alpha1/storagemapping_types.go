@@ -22,9 +22,7 @@ import (
 
 // StorageMappingSpec defines the desired state of StorageMapping
 type StorageMappingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
+	// Storages is a list of storage mappings
 	Storages []Storage `json:"storages"`
 }
 
@@ -35,9 +33,6 @@ type Storage struct {
 
 // StorageMappingStatus defines the observed state of StorageMapping
 type StorageMappingStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	StoragemappingValidationStatus  string `json:"storageMappingValidationStatus,omitempty"`
 	StoragemappingValidationMessage string `json:"storageMappingValidationMessage,omitempty"`
 }

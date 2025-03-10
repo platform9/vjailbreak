@@ -46,7 +46,7 @@ spec:
           spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
-              availableflavors:
+              availableFlavors:
                 description: AvailableFlavors is the list of available flavors in
                   openstack
                 items:
@@ -99,13 +99,10 @@ spec:
                   - vcpus
                   type: object
                 type: array
-              imageid:
-                description: OpenstackImageID is the image of the VM
-                type: string
-              noderole:
+              nodeRole:
                 description: NodeRole is the role assigned to the node
                 type: string
-              openstackcreds:
+              openstackCreds:
                 description: OpenstackCreds is the credentials for Openstack Environment
                 properties:
                   apiVersion:
@@ -148,34 +145,38 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              openstackflavorid:
+              openstackFlavorID:
                 description: OpenstackFlavorID is the flavor of the VM
                 type: string
+              openstackImageID:
+                description: OpenstackImageID is the image of the VM
+                type: string
             required:
-            - noderole
-            - openstackcreds
-            - openstackflavorid
+            - nodeRole
+            - openstackCreds
+            - openstackFlavorID
+            - openstackImageID
             type: object
           status:
             description: Status defines the observed state of VjailbreakNode
             properties:
-              activemigrations:
+              activeMigrations:
                 description: ActiveMigrations is the list of active migrations happening
                   on the node
                 items:
                   type: string
                 type: array
-              openstackuuid:
+              openstackUUID:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
               phase:
                 description: Phase is the current phase of the node
                 type: string
-              vmip:
+              vmIP:
                 description: VMIP is the IP address of the VM
                 type: string
             required:
-            - vmip
+            - vmIP
             type: object
         type: object
     served: true

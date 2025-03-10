@@ -27,34 +27,34 @@ type VjailbreakNodePhase string
 // VjailbreakNodeSpec defines the desired state of VjailbreakNode
 type VjailbreakNodeSpec struct {
 	// NodeRole is the role assigned to the node
-	NodeRole string `json:"noderole"`
+	NodeRole string `json:"nodeRole"`
 
 	// OpenstackCreds is the credentials for Openstack Environment
-	OpenstackCreds corev1.ObjectReference `json:"openstackcreds"`
+	OpenstackCreds corev1.ObjectReference `json:"openstackCreds"`
 
 	// OpenstackFlavorID is the flavor of the VM
-	OpenstackFlavorID string `json:"openstackflavorid"`
+	OpenstackFlavorID string `json:"openstackFlavorID"`
 
 	// OpenstackImageID is the image of the VM
-	ImageID string `json:"imageid,omitempty"`
+	OpenstackImageID string `json:"openstackImageID"`
 
 	// AvailableFlavors is the list of available flavors in openstack
-	AvailableFlavors []flavors.Flavor `json:"availableflavors,omitempty"`
+	AvailableFlavors []flavors.Flavor `json:"availableFlavors,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode
 type VjailbreakNodeStatus struct {
 	// OpenstackUUID is the UUID of the VM in OpenStack
-	OpenstackUUID string `json:"openstackuuid,omitempty"`
+	OpenstackUUID string `json:"openstackUUID,omitempty"`
 
 	// VMIP is the IP address of the VM
-	VMIP string `json:"vmip"`
+	VMIP string `json:"vmIP"`
 
 	// Phase is the current phase of the node
 	Phase VjailbreakNodePhase `json:"phase,omitempty"`
 
 	// ActiveMigrations is the list of active migrations happening on the node
-	ActiveMigrations []string `json:"activemigrations,omitempty"`
+	ActiveMigrations []string `json:"activeMigrations,omitempty"`
 }
 
 // +kubebuilder:object:root=true

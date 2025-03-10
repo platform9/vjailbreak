@@ -44,6 +44,7 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
+                description: Storages is a list of storage mappings
                 items:
                   properties:
                     source:
