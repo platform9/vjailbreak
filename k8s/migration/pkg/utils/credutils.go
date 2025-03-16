@@ -315,11 +315,13 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 	}
 	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack block storage client for region '%s'", openstackCredential.RegionName))
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack block storage client for region '%s'",
+			openstackCredential.RegionName))
 	}
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack networking client for region '%s'", openstackCredential.RegionName))
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack networking client for region '%s'",
+			openstackCredential.RegionName))
 	}
 	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
@@ -329,7 +331,8 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 }
 
 // ValidateAndGetProviderClient is a function to get provider client
-func ValidateAndGetProviderClient(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
+func ValidateAndGetProviderClient(ctx context.Context,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
 	ctxlog := log.FromContext(ctx)
 	openstackCredential, err := GetOpenstackCredentials(ctx, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
