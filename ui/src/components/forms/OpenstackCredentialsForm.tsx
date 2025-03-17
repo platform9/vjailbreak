@@ -154,7 +154,6 @@ export default function OpenstackCredentialsForm({
   }, [
     credentialsValidated,
     credentialsList,
-    showForm,
     openstackCreds.credentialName,
     onCredentialSelect,
     refetchCredentials,
@@ -190,7 +189,7 @@ export default function OpenstackCredentialsForm({
           placeholder="Select OpenStack credentials"
           options={credentialOptions}
           value={selectedCredential}
-          onChange={onCredentialSelect || (() => {})}
+          onChange={onCredentialSelect || (() => { })}
           onAddNew={toggleForm}
           size={size}
           loading={loadingCredentials}
@@ -245,7 +244,7 @@ export default function OpenstackCredentialsForm({
                 </FormLabel>
               </>
             )}
-            {credentialsValidated === true && (
+            {credentialsValidated === true && openstackCreds.credentialName && (
               <>
                 <CheckIcon color="success" fontSize="small" />
                 <FormLabel>OpenStack credentials created</FormLabel>
