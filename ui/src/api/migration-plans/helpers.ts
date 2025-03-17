@@ -9,7 +9,7 @@ export const createMigrationPlanJson = (params) => {
     dataCopyStart,
     vmCutoverStart,
     vmCutoverEnd,
-    virtualmachines,
+    virtualMachines,
   } = params || {}
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
@@ -26,7 +26,7 @@ export const createMigrationPlanJson = (params) => {
         vmCutoverStart,
         vmCutoverEnd,
       },
-      virtualmachines: [virtualmachines],
+      virtualMachines: [virtualMachines],
     },
   }
 }
