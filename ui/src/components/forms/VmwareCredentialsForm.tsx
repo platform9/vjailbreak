@@ -149,7 +149,6 @@ export default function VmwareCredentialsForm({
   }, [
     credentialsValidated,
     credentialsList,
-    showForm,
     vmwareCreds.credentialName,
     onCredentialSelect,
     refetchCredentials,
@@ -177,7 +176,7 @@ export default function VmwareCredentialsForm({
         placeholder="Select VMware credentials"
         options={credentialOptions}
         value={selectedCredential}
-        onChange={onCredentialSelect || (() => {})}
+        onChange={onCredentialSelect || (() => { })}
         onAddNew={toggleForm}
         loading={loadingCredentials}
         emptyMessage="No VMware credentials found. Please create new ones."
@@ -199,8 +198,8 @@ export default function VmwareCredentialsForm({
                 credNameError
                   ? credNameError
                   : !isValidCredentialName
-                  ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
-                  : ""
+                    ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
+                    : ""
               }
               required
               size="small"
@@ -293,7 +292,7 @@ export default function VmwareCredentialsForm({
                   </FormLabel>
                 </>
               )}
-              {credentialsValidated === true && (
+              {credentialsValidated === true && vmwareCreds.credentialName && (
                 <>
                   <CheckIcon color="success" fontSize="small" />
                   <FormLabel>VMware credentials created</FormLabel>
