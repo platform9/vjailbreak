@@ -42,7 +42,7 @@ import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
-import { createOpenstackCredsWithSecretFlow, createVMwareCredsWithSecretFlow } from "src/api/helpers"
+import { createOpenstackCredsWithSecretFlow, createVMwareCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
 
@@ -80,6 +80,7 @@ export interface FormValues extends Record<string, unknown> {
     OS_TENANT_NAME: string
     existingCredName?: string
     credentialName?: string
+    OS_INSECURE?: boolean
   }
   vms?: VmData[]
   networkMappings?: { source: string; target: string }[]
@@ -234,7 +235,6 @@ export default function MigrationFormDrawer({
         );
 
         setVmwareCredentials(response);
-        setValidatingVmwareCreds(false);
       } catch (error) {
         console.error("Error creating VMware credentials:", error);
         setValidatingVmwareCreds(false);
@@ -279,6 +279,7 @@ export default function MigrationFormDrawer({
           OS_PASSWORD: string;
           OS_REGION_NAME: string;
           OS_TENANT_NAME: string;
+          OS_INSECURE?: boolean;
           credentialName: string;
         };
 
@@ -292,11 +293,11 @@ export default function MigrationFormDrawer({
             OS_PASSWORD: openstackCreds.OS_PASSWORD,
             OS_REGION_NAME: openstackCreds.OS_REGION_NAME,
             OS_TENANT_NAME: openstackCreds.OS_TENANT_NAME,
+            OS_INSECURE: openstackCreds.OS_INSECURE || false
           }
         );
 
         setOpenstackCredentials(response);
-        setValidatingOpenstackCreds(false);
       } catch (error) {
         console.error("Error creating OpenStack credentials:", error);
         setValidatingOpenstackCreds(false);
@@ -378,6 +379,16 @@ export default function MigrationFormDrawer({
               getFieldErrorsUpdater("openstackCreds")(
                 response?.status?.openstackValidationMessage
               )
+
+              // Delete the failed OpenStack credential and its secret
+              try {
+                await deleteOpenStackCredsWithSecretFlow(
+                  response.metadata.name
+                )
+                console.log(`Deleted failed OpenStack credential: ${response.metadata.name}`)
+              } catch (deleteErr) {
+                console.error(`Error deleting failed OpenStack credential: ${response.metadata.name}`, deleteErr)
+              }
             }
           }
         } catch (err) {

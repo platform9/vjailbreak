@@ -25,7 +25,7 @@ import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/nodes/model";
 import { NodeItem } from "src/api/nodes/model";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
-import { createOpenstackCredsWithSecretFlow } from "src/api/helpers";
+import { createOpenstackCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers";
 import { useInterval } from "src/hooks/useInterval";
 import { THREE_SECONDS } from "src/constants";
 import axios from "axios";
@@ -115,6 +115,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     OS_PASSWORD: values.OS_PASSWORD as string,
                     OS_REGION_NAME: values.OS_REGION_NAME as string,
                     OS_TENANT_NAME: values.OS_TENANT_NAME as string,
+                    OS_INSECURE: values.OS_INSECURE as boolean || false
                 }
             );
             setOpenstackCredentials(response);
@@ -195,7 +196,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         fetchFlavours();
     }, [openstackCredsValidated, openstackCredentials]);
 
-    // Add polling for OpenStack credentials status
     useInterval(
         async () => {
             if (shouldPollOpenstackCreds) {
@@ -211,6 +211,16 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                             setOpenstackError(
                                 response?.status?.openstackValidationMessage || "Error validating OpenStack credentials"
                             );
+
+                            // Delete the failed OpenStack credential and its secret
+                            try {
+                                await deleteOpenStackCredsWithSecretFlow(
+                                    response.metadata.name
+                                );
+                                console.log(`Deleted failed OpenStack credential: ${response.metadata.name}`);
+                            } catch (deleteErr) {
+                                console.error(`Error deleting failed OpenStack credential: ${response.metadata.name}`, deleteErr);
+                            }
                         }
                     }
                 } catch (err) {
