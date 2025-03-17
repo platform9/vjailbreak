@@ -480,19 +480,19 @@ func (r *MigrationPlanReconciler) CreateConfigMap(ctx context.Context,
 	// If advanced options are set, replace the networks and/or volume types with the ones in the advanced options
 	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
 		if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
-			if err = VerifyNetworks(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
+			if err = utils.VerifyNetworks(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
 				return nil, fmt.Errorf("failed to verify networks in advanced mapping: %w", err)
 			}
 			openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
 		}
 		if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
-			if err = VerifyStorage(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
+			if err = utils.VerifyStorage(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
 				return nil, fmt.Errorf("failed to verify volume types in advanced mapping: %w", err)
 			}
 			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
 		}
 		if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
-			if err = VerifyPorts(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
+			if err = utils.VerifyPorts(ctx, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
 				return nil, fmt.Errorf("failed to verify ports in advanced mapping: %w", err)
 			}
 			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
@@ -610,7 +610,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	}
 
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
-		err = VerifyNetworks(ctx, openstackcreds, openstacknws)
+		err = utils.VerifyNetworks(ctx, openstackcreds, openstacknws)
 		if err != nil {
 			return nil, fmt.Errorf("failed to verify networks: %w", err)
 		}
@@ -653,7 +653,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping")
 	}
 	if storagemap.Status.StoragemappingValidationStatus != string(corev1.PodSucceeded) {
-		err = VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
+		err = utils.VerifyStorage(ctx, openstackcreds, openstackvolumetypes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to verify datastores: %w", err)
 		}
