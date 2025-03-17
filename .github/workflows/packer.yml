@@ -62,7 +62,7 @@ jobs:
         else
           BUILD_VERSION=${{ github.run_number }}
           # build release version as version-branch-sha
-          VERSION=${BUILD_VERSION}-${GIT_BRANCH}-${GIT_SHA}
+          VERSION=${BUILD_VERSION}-${GIT_SHA}
           # Since this is a merge or pull-request 
           # use the TAG as the version
           TAG=${VERSION}
