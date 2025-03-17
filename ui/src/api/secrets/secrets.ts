@@ -52,6 +52,7 @@ export const createOpenstackCredsSecret = async (
     OS_TENANT_NAME?: string
     OS_DOMAIN_NAME: string
     OS_REGION_NAME?: string
+    OS_INSECURE?: string
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -74,6 +75,12 @@ export const createOpenstackCredsSecret = async (
 
   if (credentials.OS_REGION_NAME) {
     secretData.OS_REGION_NAME = credentials.OS_REGION_NAME
+  }
+
+  if (credentials.OS_INSECURE){
+    secretData.OS_INSECURE = "true"
+  }else{
+    secretData.OS_INSECURE = "false"
   }
 
   return createSecret(name, secretData, namespace)

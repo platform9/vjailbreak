@@ -106,6 +106,7 @@ export const createOpenstackCredsWithSecretFlow = async (
     OS_TENANT_NAME?: string
     OS_DOMAIN_NAME: string
     OS_REGION_NAME?: string
+    OS_INSECURE?: string
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
