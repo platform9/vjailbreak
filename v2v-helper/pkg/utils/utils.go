@@ -75,7 +75,7 @@ func ConvertToK8sName(name string) (string, error) {
 
 func IsDebug(ctx context.Context, client client.Client) (bool, error) {
 	// get the secret
-	secretName, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
+	secretName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
 	if err != nil {
 		return false, err
 	}
