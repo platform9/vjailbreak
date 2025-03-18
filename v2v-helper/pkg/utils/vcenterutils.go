@@ -42,23 +42,31 @@ type MigrationParams struct {
 // }
 
 // GetMigrationSecretName is function that returns the name of the secret
-func GetMigrationSecretName(vmname string) string {
-	return fmt.Sprintf("migration-secret-%s", vmname)
+func GetMigrationSecretName(vmname string) (string, error) {
+	vmname, err := ConvertToK8sName(vmname)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("migration-secret-%s", vmname), nil
 }
 
 // GetMigrationParams is function that returns the migration parameters
 func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationParams, error) {
 	// Get the values from the secret
+	vmname, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
+	if err != nil {
+		return nil, err
+	}
 	secret := &v1.Secret{}
-	err := client.Get(ctx, types.NamespacedName{
-		Name:      GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME")),
+	err = client.Get(ctx, types.NamespacedName{
+		Name:      vmname,
 		Namespace: constants.MigrationSystemNamespace,
 	}, secret)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get secret")
 	}
 	return &MigrationParams{
-		SourceVMName:          string(secret.Data["SOURCE_VM_NAME"]),
+		SourceVMName:          os.Getenv("SOURCE_VM_NAME"),
 		OpenstackNetworkNames: string(secret.Data["NEUTRON_NETWORK_NAMES"]),
 		OpenstackNetworkPorts: string(secret.Data["NEUTRON_PORT_IDS"]),
 		OpenstackVolumeTypes:  string(secret.Data["CINDER_VOLUME_TYPES"]),
