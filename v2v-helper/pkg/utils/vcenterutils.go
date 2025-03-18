@@ -35,50 +35,44 @@ type MigrationParams struct {
 	Debug               bool
 }
 
-// GetVCenterClient is function that returns vCenter client based on values picked from a secret
-// func GetVCenterClient(ctx context.Context, configmap *v1.ConfigMap) (*vcenter.VCenterClient, error) {
-// 	// Get the secret
-// 	secret := &v1.Secret{}
-// }
-
-// GetMigrationSecretName is function that returns the name of the secret
-func GetMigrationSecretName(vmname string) (string, error) {
+// GetMigrationConfigMapName is function that returns the name of the secret
+func GetMigrationConfigMapName(vmname string) (string, error) {
 	vmname, err := ConvertToK8sName(vmname)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("migration-secret-%s", vmname), nil
+	return fmt.Sprintf("migration-config-%s", vmname), nil
 }
 
 // GetMigrationParams is function that returns the migration parameters
 func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationParams, error) {
 	// Get the values from the secret
-	secretName, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
+	configMapName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
 	if err != nil {
 		return nil, err
 	}
-	secret := &v1.Secret{}
+	configMap := &v1.ConfigMap{}
 	err = client.Get(ctx, types.NamespacedName{
-		Name:      secretName,
+		Name:      configMapName,
 		Namespace: constants.MigrationSystemNamespace,
-	}, secret)
+	}, configMap)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get secret")
+		return nil, errors.Wrap(err, "Failed to get configmap")
 	}
 	return &MigrationParams{
 		SourceVMName:          os.Getenv("SOURCE_VM_NAME"),
-		OpenstackNetworkNames: string(secret.Data["NEUTRON_NETWORK_NAMES"]),
-		OpenstackNetworkPorts: string(secret.Data["NEUTRON_PORT_IDS"]),
-		OpenstackVolumeTypes:  string(secret.Data["CINDER_VOLUME_TYPES"]),
-		OpenstackVirtioWin:    string(secret.Data["VIRTIO_WIN_DRIVER"]),
-		OpenstackOSType:       string(secret.Data["OS_TYPE"]),
-		OpenstackConvert:      string(secret.Data["CONVERT"]) == constants.TrueString,
-		DataCopyStart:         string(secret.Data["DATACOPYSTART"]),
-		VMcutoverStart:        string(secret.Data["CUTOVERSTART"]),
-		VMcutoverEnd:          string(secret.Data["CUTOVEREND"]),
-		MigrationType:         string(secret.Data["TYPE"]),
-		PerformHealthChecks:   string(secret.Data["PERFORM_HEALTH_CHECKS"]) == constants.TrueString,
-		HealthCheckPort:       string(secret.Data["HEALTH_CHECK_PORT"]),
-		Debug:                 string(secret.Data["DEBUG"]) == constants.TrueString,
+		OpenstackNetworkNames: string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
+		OpenstackNetworkPorts: string(configMap.Data["NEUTRON_PORT_IDS"]),
+		OpenstackVolumeTypes:  string(configMap.Data["CINDER_VOLUME_TYPES"]),
+		OpenstackVirtioWin:    string(configMap.Data["VIRTIO_WIN_DRIVER"]),
+		OpenstackOSType:       string(configMap.Data["OS_TYPE"]),
+		OpenstackConvert:      string(configMap.Data["CONVERT"]) == constants.TrueString,
+		DataCopyStart:         string(configMap.Data["DATACOPYSTART"]),
+		VMcutoverStart:        string(configMap.Data["CUTOVERSTART"]),
+		VMcutoverEnd:          string(configMap.Data["CUTOVEREND"]),
+		MigrationType:         string(configMap.Data["TYPE"]),
+		PerformHealthChecks:   string(configMap.Data["PERFORM_HEALTH_CHECKS"]) == constants.TrueString,
+		HealthCheckPort:       string(configMap.Data["HEALTH_CHECK_PORT"]),
+		Debug:                 string(configMap.Data["DEBUG"]) == constants.TrueString,
 	}, nil
 }

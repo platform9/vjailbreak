@@ -17,8 +17,8 @@ func MigrationNameFromVMName(vmname string) string {
 	return fmt.Sprintf("migration-%s", vmname)
 }
 
-func GetMigrationSecretName(vmname string) string {
-	return fmt.Sprintf("migration-secret-%s", vmname)
+func GetMigrationConfigMapName(vmname string) string {
+	return fmt.Sprintf("migration-config-%s", vmname)
 }
 
 func ConvertToK8sName(name string) (string, error) {

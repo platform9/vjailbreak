@@ -451,17 +451,17 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	return configMap, nil
 }
 
-func (r *MigrationPlanReconciler) CreateMigrationSecret(ctx context.Context,
+func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string) (*corev1.Secret, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string) (*corev1.ConfigMap, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	secretName := utils.GetMigrationSecretName(vmname)
+	configMapName := utils.GetMigrationConfigMapName(vmname)
 	virtiodrivers := ""
 	if migrationtemplate.Spec.VirtioWinDriver == "" {
 		virtiodrivers = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
@@ -496,39 +496,38 @@ func (r *MigrationPlanReconciler) CreateMigrationSecret(ctx context.Context,
 		}
 	}
 
-	// Create MigrationSecret
-	secret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: migrationplan.Namespace}, secret)
+	// Create MigrationConfigMap
+	configMap := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
-		r.ctxlog.Info(fmt.Sprintf("Creating new Secret '%s' for VM '%s'", secretName, vmname))
-		secret = &corev1.Secret{
+		r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
+		configMap = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
+				Name:      configMapName,
 				Namespace: migrationplan.Namespace,
 			},
-			Data: map[string][]byte{
-				"CONVERT":               []byte("true"), // Assume that the vm always has to be converted
-				"TYPE":                  []byte(migrationplan.Spec.MigrationStrategy.Type),
-				"DATACOPYSTART":         []byte(migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339)),
-				"CUTOVERSTART":          []byte(migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339)),
-				"CUTOVEREND":            []byte(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339)),
-				"NEUTRON_NETWORK_NAMES": []byte(strings.Join(openstacknws, ",")),
-				"NEUTRON_PORT_IDS":      []byte(strings.Join(openstackports, ",")),
-				"CINDER_VOLUME_TYPES":   []byte(strings.Join(openstackvolumetypes, ",")),
-				"OS_TYPE":               []byte(migrationtemplate.Spec.OSType),
-				// "SOURCE_VM_NAME":        []byte(vm),
-				"VIRTIO_WIN_DRIVER":     []byte(virtiodrivers),
-				"PERFORM_HEALTH_CHECKS": []byte(strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks)),
-				"HEALTH_CHECK_PORT":     []byte(migrationplan.Spec.MigrationStrategy.HealthCheckPort),
+			Data: map[string]string{
+				"CONVERT":               "true", // Assume that the vm always has to be converted
+				"TYPE":                  migrationplan.Spec.MigrationStrategy.Type,
+				"DATACOPYSTART":         migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+				"CUTOVERSTART":          migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+				"CUTOVEREND":            migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
+				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
+				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
+				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
+				"OS_TYPE":               migrationtemplate.Spec.OSType,
+				"VIRTIO_WIN_DRIVER":     virtiodrivers,
+				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 			},
 		}
-		err = r.createResource(ctx, migrationobj, secret)
+		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
-			r.ctxlog.Error(err, fmt.Sprintf("Failed to create Secret '%s'", secretName))
+			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 			return nil, err
 		}
 	}
-	return secret, nil
+	return configMap, nil
 }
 
 func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner metav1.Object, controlled client.Object) error {
@@ -689,7 +688,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
 		}
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
-		_, err = r.CreateMigrationSecret(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm)
 		if err != nil {
 			return fmt.Errorf("failed to create ConfigMap for VM %s: %w", vm, err)
 		}
