@@ -128,32 +128,53 @@ Copy over the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtua
 
 Deploy all the following resources in the same namespace where you installed the Migration Controller. By default, it is `migration-system`.
 1. Create the Creds objects. Ensure that after you create these objects, their status reflects that the credentials have been validated. If it is not validated, the migration will not proceed.
-
-       apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-       kind: OpenstackCreds
-       metadata:
-         name:
-         namespace: migration-system
-       spec:
-         OS_AUTH_URL:
-         OS_DOMAIN_NAME:
-         OS_USERNAME:
-         OS_PASSWORD:
-         OS_REGION_NAME:
-         OS_TENANT_NAME:
-         OS_INSECURE: true/false <optional>
-       ---
-       apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-       kind: VMwareCreds
-       metadata:
-         name:
-         namespace: migration-system
-       spec:
-         VCENTER_HOST:
-         VCENTER_INSECURE:  true/false
-         VCENTER_PASSWORD:
-         VCENTER_USERNAME:
-  
+```yaml
+      apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+      kind: OpenstackCreds
+      metadata:
+        name: osc1
+        namespace: migration-system
+      spec:
+        secretRef:
+          name: osc1-openstack-secret
+      ---
+      apiVersion: v1
+      data:
+        OS_AUTH_URL: 
+        OS_DOMAIN_NAME:
+        OS_INSECURE:
+        OS_PASSWORD:
+        OS_REGION_NAME:
+        OS_TENANT_NAME:
+        OS_USERNAME: 
+      kind: Secret
+      metadata:
+        name: osc1-openstack-secret
+        namespace: migration-system
+      type: Opaque
+```
+```yaml
+      apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+      kind: VMwareCreds
+      metadata:
+        name: vmc1
+        namespace: migration-system
+      spec:
+        secretRef:
+          name: vmc1-vmware-secret
+      ---
+      apiVersion: v1
+      data:
+        VCENTER_HOST:
+        VCENTER_INSECURE: 
+        VCENTER_PASSWORD:
+        VCENTER_USERNAME:
+      kind: Secret
+      metadata:
+        name: vmc1-vmware-secret
+        namespace: migration-system
+      type: Opaque
+  ```
  - OpenstackCreds use the variables from the openstack.rc file. All fields are required except `OS_INSECURE`
   - All fields in VMwareCreds are required
 
