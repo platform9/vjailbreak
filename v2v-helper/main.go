@@ -37,27 +37,9 @@ func main() {
 	var vCenterInsecure = strings.TrimSpace(os.Getenv("VCENTER_INSECURE")) == constants.TrueString
 	var openstackInsecure = strings.TrimSpace(os.Getenv("OS_INSECURE")) == constants.TrueString
 
-	// log.Println(version.GetVersion())
-	// log.Println("URL:", vCenterURL)
-	// log.Println("Username:", vCenterUserName)
-	// log.Println("Insecure:", vCenterInsecure)
-	// log.Println("Source VM Name:", migrationparams.SourceVMName)
-	// log.Println("OS Type:", migrationparams.OpenstackOSType)
-	// log.Println("Network Names:", strings.Split(migrationparams.OpenstackNetworkNames, ","))
-	// networkportslice := utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkPorts, ","))
-	// log.Println("Network Ports:", networkportslice)
-	// log.Println("Volume Types:", strings.Split(migrationparams.OpenstackVolumeTypes, ","))
-
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
-	// log.Println("Data Copy Start Time:", starttime)
-	// log.Println("VM Cutover Start Time:", cutstart)
-	// log.Println("VM Cutover End Time:", cutend)
-	// log.Println("Migration Type:", migrationparams.MigrationType)
-	// log.Println("Perform Health Checks:", migrationparams.PerformHealthChecks)
-	// log.Println("Health Check Port:", migrationparams.HealthCheckPort)
-	// log.Println("Debug:", migrationparams.Debug)
 
 	// Validate vCenter and Openstack connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
