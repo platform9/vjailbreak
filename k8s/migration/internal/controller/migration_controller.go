@@ -241,14 +241,12 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
-	ctxlog := scope.Logger
-	pod := &corev1.Pod{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: migration.Namespace, Name: migration.Spec.PodRef}, pod); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, errors.Wrap(err, "migration pod not found")
-		}
-		ctxlog.Error(err, fmt.Sprintf("Failed to get Pod '%s'", migration.Spec.PodRef))
-		return nil, err
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace), client.MatchingLabels(map[string]string{"vm-name": migration.Spec.VMName})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s'", migration.Spec.VMName))
 	}
-	return pod, nil
+	if len(podList.Items) == 0 {
+		return nil, errors.New("migration pod not found")
+	}
+	return &podList.Items[0], nil
 }

@@ -153,7 +153,7 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 	vmops := migobj.VMops
 	cbt, err := vmops.IsCBTEnabled()
 	if err != nil {
-		return fmt.Errorf("failed to check if CBT is enabled: %s", err)
+		return errors.Wrap(err, "failed to check if CBT is enabled")
 	}
 	migobj.logMessage(fmt.Sprintf("CBT Enabled: %t", cbt))
 
@@ -162,7 +162,7 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 		migobj.logMessage("CBT is not enabled. Enabling CBT")
 		err = vmops.EnableCBT()
 		if err != nil {
-			return fmt.Errorf("failed to enable CBT: %s", err)
+			return errors.Wrap(err, "failed to enable CBT")
 		}
 		_, err := vmops.IsCBTEnabled()
 		if err != nil {
@@ -710,19 +710,17 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	return nil
 }
 
-func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.CancelFunc) {
+func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
-	cancel()
 	migobj.cleanup(vminfo, "Migration terminated")
 	os.Exit(0)
 }
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -733,36 +731,34 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
-		cancel()
-		return fmt.Errorf("failed to get all info: %s", err)
+		return errors.Wrap(err, "failed to get all info")
 	}
 	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
-		return fmt.Errorf("number of volume types does not match number of disks")
+		return errors.Errorf("number of volume types does not match number of disks")
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
-		return fmt.Errorf("number of mac addresses does not match number of network names")
+		return errors.Errorf("number of mac addresses does not match number of network names")
 	}
 
 	// Graceful Termination clean-up volumes and snapshots
-	go migobj.gracefulTerminate(vminfo, cancel)
+	go migobj.gracefulTerminate(vminfo)
 
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
-		return fmt.Errorf("failed to add volumes to host: %s", err)
+		return errors.Wrap(err, "failed to add volumes to host")
 	}
 
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
 		migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
-		return fmt.Errorf("CBT Failure: %s", err)
+		return errors.Wrap(err, "CBT Failure")
 	}
 
 	debug, err := utils.IsDebug(ctx, migobj.K8sClient)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("Failed to get debug value: %s", err))
-		return fmt.Errorf("Failed to get debug value: %s", err)
+		return errors.Wrap(err, "Failed to get debug value")
 	}
 
 	// Create NBD servers
@@ -777,23 +773,22 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err))
-		return fmt.Errorf("failed to live replicate disks: %s", err)
+		return errors.Wrap(err, "failed to live replicate disks")
 	}
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err))
-		return fmt.Errorf("failed to convert disks: %s", err)
+		return errors.Wrap(err, "failed to convert disks")
 	}
 
 	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
 		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
-		return fmt.Errorf("failed to create target instance: %s", err)
+		return errors.Wrap(err, "failed to create target instance")
 	}
 
-	cancel()
 	return nil
 }
 
