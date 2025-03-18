@@ -17,6 +17,10 @@ func MigrationNameFromVMName(vmname string) string {
 	return fmt.Sprintf("migration-%s", vmname)
 }
 
+func GetMigrationSecretName(vmname string) string {
+	return fmt.Sprintf("migration-secret-%s", vmname)
+}
+
 func ConvertToK8sName(name string) (string, error) {
 	// Convert to lowercase
 	name = strings.ToLower(name)

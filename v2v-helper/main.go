@@ -7,118 +7,97 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/version"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
-func removeEmptyStrings(slice []string) []string {
-	var result []string
-	for _, str := range slice {
-		if str != "" {
-			result = append(result, str)
-		}
-	}
-	return result
-}
-
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	var envURL = os.Getenv("VCENTER_HOST")
-	var envUserName = os.Getenv("VCENTER_USERNAME")
-	var envPassword = os.Getenv("VCENTER_PASSWORD")
-	var envInsecure = os.Getenv("VCENTER_INSECURE")
-	var sourcevmname = os.Getenv("SOURCE_VM_NAME")
-	var networknames = os.Getenv("NEUTRON_NETWORK_NAMES")
-	var networkports = os.Getenv("NEUTRON_PORT_IDS")
-	var volumeTypes = os.Getenv("CINDER_VOLUME_TYPES")
-	var virtiowin = os.Getenv("VIRTIO_WIN_DRIVER")
-	var ostype = strings.ToLower(os.Getenv("OS_TYPE"))
-	var envconvert = os.Getenv("CONVERT")
-	var datacopystart = os.Getenv("DATACOPYSTART")
-	var vmcutoverstart = os.Getenv("CUTOVERSTART")
-	var vmcutoverend = os.Getenv("CUTOVEREND")
-	var migrationtype = os.Getenv("TYPE")
-	var envopenstackinsecure = os.Getenv("OS_INSECURE")
-	var performhealthchecks = os.Getenv("PERFORM_HEALTH_CHECKS")
-	var healthcheckport = os.Getenv("HEALTH_CHECK_PORT")
-	var debug = os.Getenv("DEBUG")
+	client, err := utils.GetInclusterClient()
+	if err != nil {
+		log.Fatalf("Failed to get in-cluster client: %v", err)
+	}
 
-	log.Println(version.GetVersion())
-	log.Println("URL:", envURL)
-	log.Println("Username:", envUserName)
-	log.Println("Insecure:", envInsecure)
-	log.Println("Source VM Name:", sourcevmname)
-	log.Println("OS Type:", ostype)
-	log.Println("Network Names:", strings.Split(networknames, ","))
-	networkportslice := removeEmptyStrings(strings.Split(networkports, ","))
-	log.Println("Network Ports:", networkportslice)
-	log.Println("Volume Types:", strings.Split(volumeTypes, ","))
+	migrationparams, err := utils.GetMigrationParams(ctx, client)
+	if err != nil {
+		log.Fatalf("Failed to get migration parameters: %v", err)
+	}
+	var vCenterURL = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
+	var vCenterUserName = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
+	var vCenterPassword = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
+	var vCenterInsecure = strings.TrimSpace(os.Getenv("VCENTER_INSECURE")) == constants.TrueString
+	var openstackInsecure = strings.TrimSpace(os.Getenv("OS_INSECURE")) == constants.TrueString
 
-	starttime, _ := time.Parse(time.RFC3339, datacopystart)
-	cutstart, _ := time.Parse(time.RFC3339, vmcutoverstart)
-	cutend, _ := time.Parse(time.RFC3339, vmcutoverend)
-	log.Println("Data Copy Start Time:", starttime)
-	log.Println("VM Cutover Start Time:", cutstart)
-	log.Println("VM Cutover End Time:", cutend)
-	log.Println("Migration Type:", migrationtype)
-	log.Println("Perform Health Checks:", performhealthchecks)
-	log.Println("Health Check Port:", healthcheckport)
-	log.Println("Debug:", debug)
+	// log.Println(version.GetVersion())
+	// log.Println("URL:", vCenterURL)
+	// log.Println("Username:", vCenterUserName)
+	// log.Println("Insecure:", vCenterInsecure)
+	// log.Println("Source VM Name:", migrationparams.SourceVMName)
+	// log.Println("OS Type:", migrationparams.OpenstackOSType)
+	// log.Println("Network Names:", strings.Split(migrationparams.OpenstackNetworkNames, ","))
+	// networkportslice := utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkPorts, ","))
+	// log.Println("Network Ports:", networkportslice)
+	// log.Println("Volume Types:", strings.Split(migrationparams.OpenstackVolumeTypes, ","))
 
-	insecure, _ := strconv.ParseBool(envInsecure)
-	convert, _ := strconv.ParseBool(envconvert)
-	openstackinsecure, _ := strconv.ParseBool(envopenstackinsecure)
-	performhealthchecksbool, _ := strconv.ParseBool(performhealthchecks)
-	debugbool, _ := strconv.ParseBool(debug)
+	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
+	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
+	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
+	// log.Println("Data Copy Start Time:", starttime)
+	// log.Println("VM Cutover Start Time:", cutstart)
+	// log.Println("VM Cutover End Time:", cutend)
+	// log.Println("Migration Type:", migrationparams.MigrationType)
+	// log.Println("Perform Health Checks:", migrationparams.PerformHealthChecks)
+	// log.Println("Health Check Port:", migrationparams.HealthCheckPort)
+	// log.Println("Debug:", migrationparams.Debug)
 
 	// Validate vCenter and Openstack connection
-	vcclient, err := vcenter.VCenterClientBuilder(ctx, envUserName, envPassword, envURL, insecure)
+	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
 		log.Fatalf("Failed to validate vCenter connection: %v", err)
 	}
-	log.Printf("Connected to vCenter: %s\n", envURL)
+	log.Printf("Connected to vCenter: %s\n", vCenterURL)
 
 	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
-	openstackclients, err := openstack.NewOpenStackClients(openstackinsecure)
+	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
 		log.Fatalf("Failed to validate OpenStack connection: %v", err)
 	}
 	log.Println("Connected to OpenStack")
 
 	// Get thumbprint
-	thumbprint, err := vcenter.GetThumbprint(envURL)
+	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
 		log.Fatalf("Failed to get thumbprint: %s\n", err)
 	}
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
 
 	// Retrieve the source VM
-	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, sourcevmname)
+	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
 	if err != nil {
 		log.Fatalf("Failed to get source VM: %s\n", err)
 	}
 
 	migrationobj := migrate.Migrate{
-		URL:              envURL,
-		UserName:         envUserName,
-		Password:         envPassword,
-		Insecure:         insecure,
-		Networknames:     strings.Split(networknames, ","),
-		Networkports:     networkportslice,
-		Volumetypes:      strings.Split(volumeTypes, ","),
-		Virtiowin:        virtiowin,
-		Ostype:           ostype,
+		URL:              vCenterURL,
+		UserName:         vCenterUserName,
+		Password:         vCenterPassword,
+		Insecure:         vCenterInsecure,
+		Networknames:     strings.Split(migrationparams.OpenstackNetworkNames, ","),
+		Networkports:     strings.Split(migrationparams.OpenstackNetworkPorts, ","),
+		Volumetypes:      strings.Split(migrationparams.OpenstackVolumeTypes, ","),
+		Virtiowin:        migrationparams.OpenstackVirtioWin,
+		Ostype:           migrationparams.OpenstackOSType,
 		Thumbprint:       thumbprint,
-		Convert:          convert,
+		Convert:          migrationparams.OpenstackConvert,
 		Openstackclients: openstackclients,
 		Vcclient:         vcclient,
 		VMops:            vmops,
@@ -131,10 +110,10 @@ func main() {
 			VMCutoverStart: cutstart,
 			VMCutoverEnd:   cutend,
 		},
-		MigrationType:       migrationtype,
-		PerformHealthChecks: performhealthchecksbool,
-		HealthCheckPort:     healthcheckport,
-		Debug:               debugbool,
+		MigrationType:       migrationparams.MigrationType,
+		PerformHealthChecks: migrationparams.PerformHealthChecks,
+		HealthCheckPort:     migrationparams.HealthCheckPort,
+		Debug:               migrationparams.Debug,
 	}
 
 	eventReporter, err := reporter.NewReporter()
