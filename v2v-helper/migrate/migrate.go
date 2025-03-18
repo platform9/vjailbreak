@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
-
-	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
@@ -51,7 +51,7 @@ type Migrate struct {
 	MigrationType       string
 	PerformHealthChecks bool
 	HealthCheckPort     string
-	Debug               bool
+	K8sClient           client.Client
 }
 
 type MigrationTimes struct {
@@ -759,9 +759,17 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return fmt.Errorf("CBT Failure: %s", err)
 	}
 
+	debug, err := utils.IsDebug(ctx, migobj.K8sClient)
+	if err != nil {
+		migobj.cleanup(vminfo, fmt.Sprintf("Failed to get debug value: %s", err))
+		return fmt.Errorf("Failed to get debug value: %s", err)
+	}
+
+	// Create NBD servers
 	for range vminfo.VMDisks {
 		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{
-			Debug: migobj.Debug,
+			// Add debug
+			Debug: debug,
 		})
 	}
 

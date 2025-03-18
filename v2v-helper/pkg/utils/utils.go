@@ -1,14 +1,20 @@
 package utils
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	migrationconstants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -57,12 +63,30 @@ func ConvertToK8sName(name string) (string, error) {
 	// Remove leading and trailing hyphens
 	name = strings.Trim(name, "-")
 	// Truncate to 242 characters, as we prepend v2v-helper- to the name
-	if len(name) > constants.NameMaxLength {
-		name = name[:constants.NameMaxLength]
+	if len(name) > migrationconstants.NameMaxLength {
+		name = name[:migrationconstants.NameMaxLength]
 	}
 	nameerrors := validation.IsQualifiedName(name)
 	if len(nameerrors) == 0 {
 		return name, nil
 	}
 	return name, fmt.Errorf("name '%s' is not a valid K8s name: %v", name, nameerrors)
+}
+
+func IsDebug(ctx context.Context, client client.Client) (bool, error) {
+	// get the secret
+	secretName, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
+	if err != nil {
+		return false, err
+	}
+	secret := &v1.Secret{}
+	err = client.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: constants.MigrationSystemNamespace,
+	}, secret)
+	if err != nil {
+		return false, errors.Wrap(err, "Failed to get secret")
+	}
+	debug := strings.TrimSpace(string(secret.Data["DEBUG"]))
+	return debug == constants.TrueString, nil
 }

@@ -53,13 +53,13 @@ func GetMigrationSecretName(vmname string) (string, error) {
 // GetMigrationParams is function that returns the migration parameters
 func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationParams, error) {
 	// Get the values from the secret
-	vmname, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
+	secretName, err := GetMigrationSecretName(os.Getenv("SOURCE_VM_NAME"))
 	if err != nil {
 		return nil, err
 	}
 	secret := &v1.Secret{}
 	err = client.Get(ctx, types.NamespacedName{
-		Name:      vmname,
+		Name:      secretName,
 		Namespace: constants.MigrationSystemNamespace,
 	}, secret)
 	if err != nil {
