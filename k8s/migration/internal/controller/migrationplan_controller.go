@@ -335,7 +335,7 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 							},
 							{
 								Name:  "SOURCE_VM_NAME",
-								Value: vmname,
+								Value: vm,
 							},
 						},
 						EnvFrom: []corev1.EnvFromSource{
