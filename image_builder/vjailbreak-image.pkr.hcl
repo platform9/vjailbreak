@@ -55,6 +55,9 @@ build {
 
   provisioner "shell" {
     inline = [
+      "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3".
+      "sudo chmod 700 get_helm.sh",
+      "sudo ./get_helm.sh",
       "sudo mkdir -p /etc/pf9",
       "sudo mv /tmp/install.sh /etc/pf9/install.sh",
       "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
