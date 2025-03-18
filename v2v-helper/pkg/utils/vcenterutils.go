@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/pkg/errors"
@@ -56,7 +55,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		Namespace: constants.MigrationSystemNamespace,
 	}, secret)
 	if err != nil {
-		log.Printf("Failed to get secret: %v\n", err)
 		return nil, errors.Wrap(err, "Failed to get secret")
 	}
 	return &MigrationParams{
