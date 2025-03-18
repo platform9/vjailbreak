@@ -172,10 +172,10 @@ jobs:
     - name: setup-oras
       uses: oras-project/setup-oras@v1.2.1
           
-    - name: Download base image
+    - name: Download ubuntu base image
       if: env.release_found == 'true'
       run: |
-          oras pull quay.io/platform9/vjailbreak:base-v0.1.4
+          oras pull quay.io/platform9/vjailbreak:ubuntu-base
 
     - name: Run `packer build`
       if: env.release_found == 'true'
