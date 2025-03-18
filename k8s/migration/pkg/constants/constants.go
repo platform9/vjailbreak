@@ -68,4 +68,6 @@ runcmd:
 		vjailbreakv1alpha1.MigrationPhaseFailed:                   9,
 		vjailbreakv1alpha1.MigrationPhaseUnknown:                  10,
 	}
+
+	MigrationJobTTL int32 = 300
 )
