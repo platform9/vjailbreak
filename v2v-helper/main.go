@@ -113,7 +113,7 @@ func main() {
 		MigrationType:       migrationparams.MigrationType,
 		PerformHealthChecks: migrationparams.PerformHealthChecks,
 		HealthCheckPort:     migrationparams.HealthCheckPort,
-		Debug:               migrationparams.Debug,
+		K8sClient:           client,
 	}
 
 	eventReporter, err := reporter.NewReporter()
