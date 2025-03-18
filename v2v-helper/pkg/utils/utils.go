@@ -74,19 +74,19 @@ func ConvertToK8sName(name string) (string, error) {
 }
 
 func IsDebug(ctx context.Context, client client.Client) (bool, error) {
-	// get the secret
-	secretName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
+	// get the configmap
+	configMapName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
 	if err != nil {
 		return false, err
 	}
-	secret := &v1.Secret{}
+	configMap := &v1.ConfigMap{}
 	err = client.Get(ctx, types.NamespacedName{
-		Name:      secretName,
+		Name:      configMapName,
 		Namespace: constants.MigrationSystemNamespace,
-	}, secret)
+	}, configMap)
 	if err != nil {
-		return false, errors.Wrap(err, "Failed to get secret")
+		return false, errors.Wrap(err, "Failed to get configmap")
 	}
-	debug := strings.TrimSpace(string(secret.Data["DEBUG"]))
+	debug := strings.TrimSpace(string(configMap.Data["DEBUG"]))
 	return debug == constants.TrueString, nil
 }

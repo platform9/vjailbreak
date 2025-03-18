@@ -29,6 +29,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -61,6 +62,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationplans,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationplans/status,verbs=get;update;patch
@@ -280,7 +282,8 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
-func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
+// Create Job to run v2v-helper
+func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vm string,
@@ -291,122 +294,140 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	podName := fmt.Sprintf("v2v-helper-%s", vmname)
+	jobName := fmt.Sprintf("v2v-helper-%s", vmname)
 	pointtrue := true
 	cutoverlabel := "yes"
 	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
 		cutoverlabel = "no"
 	}
-	pod := &corev1.Pod{}
-	err = r.Get(ctx, types.NamespacedName{Name: podName, Namespace: migrationplan.Namespace}, pod)
+	job := &batchv1.Job{}
+	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
-		r.ctxlog.Info(fmt.Sprintf("Creating new Pod '%s' for VM '%s'", podName, vmname))
-		pod = &corev1.Pod{
+		r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vmname))
+		job = &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      podName,
+				Name:      jobName,
 				Namespace: migrationplan.Namespace,
-				Labels: map[string]string{
-					"vm-name":      vmname,
-					"startCutover": cutoverlabel,
-				},
 			},
-			Spec: corev1.PodSpec{
-				RestartPolicy:                 corev1.RestartPolicyNever,
-				ServiceAccountName:            "migration-controller-manager",
-				TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
-				HostNetwork:                   true,
-				Containers: []corev1.Container{
-					{
-						Name:            "fedora",
-						Image:           v2vimage,
-						ImagePullPolicy: corev1.PullAlways,
-						Command:         []string{"/home/fedora/manager"},
-						SecurityContext: &corev1.SecurityContext{
-							Privileged: &pointtrue,
-						},
-						Env: []corev1.EnvVar{
-							{
-								Name: "POD_NAME",
-								ValueFrom: &corev1.EnvVarSource{
-									FieldRef: &corev1.ObjectFieldSelector{
-										FieldPath: "metadata.name",
-									},
-								},
-							},
-							{
-								Name:  "SOURCE_VM_NAME",
-								Value: vm,
-							},
-						},
-						EnvFrom: []corev1.EnvFromSource{
-							{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: vmwareSecretRef,
-									},
-								},
-							},
-							{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: openstackSecretRef,
-									},
-								},
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "vddk",
-								MountPath: "/home/fedora/vmware-vix-disklib-distrib",
-							},
-							{
-								Name:      "dev",
-								MountPath: "/dev",
-							},
-							{
-								Name:      "firstboot",
-								MountPath: "/home/fedora/scripts",
-							},
-						},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:              resource.MustParse("1000m"),
-								corev1.ResourceMemory:           resource.MustParse("1Gi"),
-								corev1.ResourceEphemeralStorage: resource.MustParse("200Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:              resource.MustParse("2000m"),
-								corev1.ResourceMemory:           resource.MustParse("3Gi"),
-								corev1.ResourceEphemeralStorage: resource.MustParse("2Gi"),
+			Spec: batchv1.JobSpec{
+				PodFailurePolicy: &batchv1.PodFailurePolicy{
+					Rules: []batchv1.PodFailurePolicyRule{
+						{
+							Action: batchv1.PodFailurePolicyActionFailJob,
+							OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+								Values:   []int32{0},
+								Operator: batchv1.PodFailurePolicyOnExitCodesOpNotIn,
 							},
 						},
 					},
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: "vddk",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-								Type: utils.NewHostPathType("Directory"),
-							},
+				TTLSecondsAfterFinished: ptr.To(int32(300)),
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"vm-name":      vmname,
+							"startCutover": cutoverlabel,
 						},
 					},
-					{
-						Name: "dev",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/dev",
-								Type: utils.NewHostPathType("Directory"),
+					Spec: corev1.PodSpec{
+						RestartPolicy:                 corev1.RestartPolicyNever,
+						ServiceAccountName:            "migration-controller-manager",
+						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
+						HostNetwork:                   true,
+						Containers: []corev1.Container{
+							{
+								Name:            "fedora",
+								Image:           v2vimage,
+								ImagePullPolicy: corev1.PullAlways,
+								Command:         []string{"/home/fedora/manager"},
+								SecurityContext: &corev1.SecurityContext{
+									Privileged: &pointtrue,
+								},
+								Env: []corev1.EnvVar{
+									{
+										Name: "POD_NAME",
+										ValueFrom: &corev1.EnvVarSource{
+											FieldRef: &corev1.ObjectFieldSelector{
+												FieldPath: "metadata.name",
+											},
+										},
+									},
+									{
+										Name:  "SOURCE_VM_NAME",
+										Value: vm,
+									},
+								},
+								EnvFrom: []corev1.EnvFromSource{
+									{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: vmwareSecretRef,
+											},
+										},
+									},
+									{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: openstackSecretRef,
+											},
+										},
+									},
+								},
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "vddk",
+										MountPath: "/home/fedora/vmware-vix-disklib-distrib",
+									},
+									{
+										Name:      "dev",
+										MountPath: "/dev",
+									},
+									{
+										Name:      "firstboot",
+										MountPath: "/home/fedora/scripts",
+									},
+								},
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:              resource.MustParse("1000m"),
+										corev1.ResourceMemory:           resource.MustParse("1Gi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("200Mi"),
+									},
+									Limits: corev1.ResourceList{
+										corev1.ResourceCPU:              resource.MustParse("2000m"),
+										corev1.ResourceMemory:           resource.MustParse("3Gi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("2Gi"),
+									},
+								},
 							},
 						},
-					},
-					{
-						Name: "firstboot",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: firstbootconfigMapName,
+						Volumes: []corev1.Volume{
+							{
+								Name: "vddk",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
+										Type: utils.NewHostPathType("Directory"),
+									},
+								},
+							},
+							{
+								Name: "dev",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/dev",
+										Type: utils.NewHostPathType("Directory"),
+									},
+								},
+							},
+							{
+								Name: "firstboot",
+								VolumeSource: corev1.VolumeSource{
+									ConfigMap: &corev1.ConfigMapVolumeSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: firstbootconfigMapName,
+										},
+									},
 								},
 							},
 						},
@@ -414,8 +435,8 @@ func (r *MigrationPlanReconciler) CreatePod(ctx context.Context,
 				},
 			},
 		}
-		if err := r.createResource(ctx, migrationobj, pod); err != nil {
-			r.ctxlog.Error(err, fmt.Sprintf("Failed to create Pod '%s'", podName))
+		if err := r.createResource(ctx, migrationobj, job); err != nil {
+			r.ctxlog.Error(err, fmt.Sprintf("Failed to create Job '%s'", jobName))
 			return err
 		}
 	}
@@ -685,6 +706,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	for _, vm := range parallelvms {
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm)
 		if err != nil {
+			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.MigrationPhaseSucceeded {
+				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
+				continue
+			}
 			return fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
 		}
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
@@ -696,7 +721,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
-		err = r.CreatePod(ctx,
+		err = r.CreateJob(ctx,
 			migrationplan,
 			migrationobj,
 			vm,
@@ -704,7 +729,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name)
 		if err != nil {
-			return fmt.Errorf("failed to create Pod for VM %s: %w", vm, err)
+			return fmt.Errorf("failed to create Job for VM %s: %w", vm, err)
 		}
 		counter--
 
