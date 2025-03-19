@@ -40,17 +40,42 @@ build {
 
   provisioner "file" {
     source      = "${path.root}/deploy"
-    destination = "/tmp/yamls"
+    destination = "etc/pf9/yamls"
   }
 
   provisioner "file" {
     source      = "${path.root}/scripts/install.sh"
-    destination = "/tmp/install.sh"
+    destination = "/etc/pf9/install.sh"
   }
 
   provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
-    destination = "/tmp/k3s.env"
+    destination = "/etc/pf9/k3s.env"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/scripts/agent-key-registration.sh"
+    destination = "/etc/pf9/agent-key-registration.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/scripts/key-registration-service.sh"
+    destination = "/etc/pf9/key-registration-service.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/scripts/sync-agents.sh"
+    destination = "/etc/pf9/sync-agents.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/service-init/vddk-sync.service"
+    destination = "/etc/systemd/system/vddk-sync.service"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/service-init/vddk-sync.timer"
+    destination = "/etc/systemd/system/vddk-sync.timer"
   }
 
   provisioner "shell" {
@@ -58,14 +83,20 @@ inline = [
   "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
   "sudo chmod 700 get_helm.sh",
   "sudo ./get_helm.sh",
-  "sudo mkdir -p /etc/pf9",
-  "sudo mv /tmp/install.sh /etc/pf9/install.sh",
-  "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-  "sudo mv /tmp/yamls /etc/pf9/yamls",
   "sudo chmod +x /etc/pf9/install.sh",
   "sudo chown root:root /etc/pf9/k3s.env",
   "sudo chmod 644 /etc/pf9/k3s.env",
-  "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+  "sudo chmod +x /etc/pf9/agent-key-registration.sh",
+  "sudo chmod +x /etc/pf9/key-registration-service.sh",
+  "sudo chmod 644 /etc/systemd/system/vddk-sync.service",
+  "sudo chmod 644 /etc/systemd/system/vddk-sync.timer",
+  "sudo chmod +x /etc/pf9/sync-agents.sh",
+  "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
+  "echo '@reboot root /etc/pf9/agent-key-registration.sh' | sudo tee -a /etc/crontab",
+  "echo '@reboot root /etc/pf9/key-registration-service.sh' | sudo tee -a /etc/crontab",
+  "sudo systemctl daemon-reload",
+  "sudo systemctl enable vddk-sync.timer",
+  "sudo systemctl start vddk-sync.timer",
 ]
   }
 }
