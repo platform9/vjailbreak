@@ -17,9 +17,11 @@ systemctl enable --now serial-getty@ttyS0.service`
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 12
 
-	InspectOSCommand      = "inspect-os"
-	LSBootCommand         = "ls /boot"
-	XMLFileName           = "libxml.xml"
-	MigrationSnapshotName = "migration-snap"
-	MaxHTTPRetryCount     = 5
+	InspectOSCommand         = "inspect-os"
+	LSBootCommand            = "ls /boot"
+	XMLFileName              = "libxml.xml"
+	MigrationSnapshotName    = "migration-snap"
+	MaxHTTPRetryCount        = 5
+	MigrationSystemNamespace = "migration-system"
+	TrueString               = "true"
 )
