@@ -58,14 +58,14 @@ runcmd:
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,
 		vjailbreakv1alpha1.MigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    2,
-		vjailbreakv1alpha1.MigrationPhaseCopying:                  3,
-		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     4,
-		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           5,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 6,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     7,
-		vjailbreakv1alpha1.MigrationPhaseSucceeded:                8,
-		vjailbreakv1alpha1.MigrationPhaseFailed:                   9,
+		vjailbreakv1alpha1.MigrationPhaseFailed:                   2,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    3,
+		vjailbreakv1alpha1.MigrationPhaseCopying:                  4,
+		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     5,
+		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           6,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 7,
+		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     8,
+		vjailbreakv1alpha1.MigrationPhaseSucceeded:                9,
 		vjailbreakv1alpha1.MigrationPhaseUnknown:                  10,
 	}
 )
