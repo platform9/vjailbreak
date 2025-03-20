@@ -17,8 +17,8 @@ const (
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
 
-	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer"
-	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"
+	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string
 
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")

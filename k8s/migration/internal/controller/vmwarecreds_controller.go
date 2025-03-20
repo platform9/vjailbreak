@@ -80,9 +80,8 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
-	} else {
-		return r.reconcileDelete(ctx, scope)
 	}
+	return r.reconcileDelete(ctx, scope)
 }
 
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {

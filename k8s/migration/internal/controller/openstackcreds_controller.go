@@ -85,7 +85,8 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return r.reconcileNormal(ctx, scope)
 }
 
-func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
+func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
+	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 
@@ -129,7 +130,8 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context, scope *s
 	return ctrl.Result{}, nil
 }
 
-func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
+func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
+	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s' deletion", scope.OpenstackCreds.Name))
 	// Delete the associated secret
