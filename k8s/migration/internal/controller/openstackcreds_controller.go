@@ -23,11 +23,16 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -53,7 +58,6 @@ type OpenstackCredsReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s'", req.Name))
 	// Get the OpenstackCreds object
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if err := r.Get(ctx, req.NamespacedName, openstackcreds); err != nil {
@@ -64,44 +68,81 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading OpenstackCreds '%s' object", openstackcreds.Name))
 		return ctrl.Result{}, err
 	}
+	scope, err := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
+		Logger:         ctxlog,
+		Client:         r.Client,
+		OpenstackCreds: openstackcreds,
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
-	if openstackcreds.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Check if speck matches with kubectl.kubernetes.io/last-applied-configuration
-		ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is being created or updated", openstackcreds.Name))
-		ctxlog.Info(fmt.Sprintf("Validating OpenstackCreds '%s' object", openstackcreds.Name))
-		if _, err := utils.ValidateAndGetProviderClient(ctx, openstackcreds); err != nil {
-			// Update the status of the OpenstackCreds object
-			ctxlog.Error(err, fmt.Sprintf("Error validating OpenstackCreds '%s'", openstackcreds.Name))
-			openstackcreds.Status.OpenStackValidationStatus = "Failed"
-			openstackcreds.Status.OpenStackValidationMessage = fmt.Sprintf("Error validating OpenstackCreds '%s'", openstackcreds.Name)
-			if err := r.Status().Update(ctx, openstackcreds); err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", openstackcreds.Name))
-				return ctrl.Result{}, err
-			}
-		} else {
-			err := utils.UpdateMasterNodeImageID(ctx, r.Client, openstackcreds)
-			if err != nil {
-				if strings.Contains(err.Error(), "404") {
-					ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconciliation")
-				} else {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
-				}
-			}
-			openstackCredential, err := utils.GetOpenstackCredentials(context.TODO(), openstackcreds.Spec.SecretRef.Name)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
-			}
+	defer scope.Close()
 
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredential.AuthURL))
-			// Update the status of the OpenstackCreds object
-			openstackcreds.Status.OpenStackValidationStatus = "Succeeded"
-			openstackcreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-			if err := r.Status().Update(ctx, openstackcreds); err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", openstackcreds.Name))
-				return ctrl.Result{}, err
+	if !openstackcreds.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, scope)
+	}
+	return r.reconcileNormal(ctx, scope)
+}
+
+func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+
+	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
+
+	// Check if speck matches with kubectl.kubernetes.io/last-applied-configuration
+	ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is being created or updated", scope.OpenstackCreds.Name))
+	ctxlog.Info(fmt.Sprintf("Validating OpenstackCreds '%s' object", scope.OpenstackCreds.Name))
+	if _, err := utils.ValidateAndGetProviderClient(ctx, scope.OpenstackCreds); err != nil {
+		// Update the status of the OpenstackCreds object
+		ctxlog.Error(err, fmt.Sprintf("Error validating OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = fmt.Sprintf("Error validating OpenstackCreds '%s'", scope.OpenstackCreds.Name)
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+			return ctrl.Result{}, err
+		}
+	} else {
+		err := utils.UpdateMasterNodeImageID(ctx, r.Client)
+		if err != nil {
+			if strings.Contains(err.Error(), "404") {
+				ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconciliation")
+			} else {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 			}
 		}
+		openstackCredential, err := utils.GetOpenstackCredentials(context.TODO(), scope.OpenstackCreds.Spec.SecretRef.Name)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
+		}
+
+		ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredential.AuthURL))
+		// Update the status of the OpenstackCreds object
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Succeeded"
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+			return ctrl.Result{}, err
+		}
 	}
+	return ctrl.Result{}, nil
+}
+
+func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s' deletion", scope.OpenstackCreds.Name))
+	// Delete the associated secret
+	err := r.Client.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+	})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
+	}
+	controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
 	return ctrl.Result{}, nil
 }
 

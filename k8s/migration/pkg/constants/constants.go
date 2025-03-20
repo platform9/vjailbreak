@@ -17,13 +17,16 @@ const (
 	InternalIPAnnotation         = "k3s.io/internal-ip"
 	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
 
+	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer"
+	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"
+
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
 	VjailbreakNodePhaseDeleting   = vjailbreakv1alpha1.VjailbreakNodePhase("Deleting")
 	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
 
 	NamespaceMigrationSystem = "migration-system"
-	MasterVjailbreakNodeName = "vjailbreak-master"
+	VjailbreakMasterNodeName = "vjailbreak-master"
 	VjailbreakNodeFinalizer  = "vjailbreak.k8s.pf9.io/finalizer"
 
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
