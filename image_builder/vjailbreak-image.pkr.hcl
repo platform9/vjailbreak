@@ -54,28 +54,8 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/scripts/agent-key-registration.sh"
-    destination = "/etc/pf9/agent-key-registration.sh"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/scripts/key-registration-service.sh"
-    destination = "/etc/pf9/key-registration-service.sh"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/scripts/sync-agents.sh"
-    destination = "/etc/pf9/sync-agents.sh"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/service-init/vddk-sync.service"
-    destination = "/etc/systemd/system/vddk-sync.service"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/service-init/vddk-sync.timer"
-    destination = "/etc/systemd/system/vddk-sync.timer"
+    source      = "${path.root}/configs/daemonset.yaml"
+    destination = "/etc/pf9/yamls/daemonset.yaml"
   }
 
   provisioner "shell" {
