@@ -169,9 +169,6 @@ loop:
 	for i := range events.Items {
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
-		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed):
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
-			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
@@ -199,6 +196,9 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart
+			break loop
+		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed):
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
 			// If none of the above phases matched
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):

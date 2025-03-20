@@ -13,8 +13,8 @@ check_command() {
   fi
 }
 
-# sleep for 1min for env variables to be reflected properly in the VM after startup. 
-sleep 60
+# sleep for 20s for env variables to be reflected properly in the VM after startup. 
+sleep 20
 
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
