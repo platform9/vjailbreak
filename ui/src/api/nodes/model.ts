@@ -38,7 +38,7 @@ export interface Spec {
 }
 
 export interface Status {
-  activeMigrations?: string[]
+  activemigrations?: string[]
   openstackuuid: string
   phase: string
   vmip: string
