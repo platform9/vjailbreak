@@ -21,9 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // VMwareCredsSpec defines the desired state of VMwareCreds
 type VMwareCredsSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -41,6 +38,7 @@ type VMwareCredsStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.vmwareValidationStatus`,name=Status,type=string
 
 // VMwareCreds is the Schema for the vmwarecreds API
 type VMwareCreds struct {

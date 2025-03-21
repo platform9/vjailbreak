@@ -22,7 +22,11 @@ spec:
     singular: migrationplan
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.migrationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: MigrationPlan is the Schema for the migrationplans API
@@ -97,7 +101,7 @@ spec:
                 type: string
               retry:
                 type: boolean
-              virtualmachines:
+              virtualMachines:
                 items:
                   items:
                     type: string
@@ -106,7 +110,7 @@ spec:
             required:
             - migrationStrategy
             - migrationTemplate
-            - virtualmachines
+            - virtualMachines
             type: object
           status:
             description: MigrationPlanStatus defines the observed state of MigrationPlan
@@ -140,7 +144,14 @@ spec:
     singular: migration
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.agentName
+      name: AgentName
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Migration is the Schema for the migrations API
@@ -187,7 +198,7 @@ spec:
           status:
             description: Status defines the observed state of Migration
             properties:
-              AgentName:
+              agentName:
                 description: AgentName is the name of the agent where migration is
                   running
                 type: string
@@ -387,7 +398,11 @@ spec:
     singular: networkmapping
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.NetworkmappingValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkMapping is the Schema for the networkmappings API
@@ -457,7 +472,11 @@ spec:
     singular: openstackcreds
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.openstackValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: OpenstackCreds is the Schema for the openstackcreds API
@@ -556,7 +575,11 @@ spec:
     singular: storagemapping
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.storageMappingValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: StorageMapping is the Schema for the storagemappings API
@@ -582,6 +605,7 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
+                description: Storages is a list of storage mappings
                 items:
                   properties:
                     source:
@@ -625,7 +649,14 @@ spec:
     singular: vjailbreaknode
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.vmIP
+      name: VMIP
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: VjailbreakNode is the Schema for the vjailbreaknodes API
@@ -650,7 +681,7 @@ spec:
           spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
-              availableflavors:
+              availableFlavors:
                 description: AvailableFlavors is the list of available flavors in
                   openstack
                 items:
@@ -703,13 +734,10 @@ spec:
                   - vcpus
                   type: object
                 type: array
-              imageid:
-                description: OpenstackImageID is the image of the VM
-                type: string
-              noderole:
+              nodeRole:
                 description: NodeRole is the role assigned to the node
                 type: string
-              openstackcreds:
+              openstackCreds:
                 description: OpenstackCreds is the credentials for Openstack Environment
                 properties:
                   apiVersion:
@@ -752,34 +780,38 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              openstackflavorid:
+              openstackFlavorID:
                 description: OpenstackFlavorID is the flavor of the VM
                 type: string
+              openstackImageID:
+                description: OpenstackImageID is the image of the VM
+                type: string
             required:
-            - noderole
-            - openstackcreds
-            - openstackflavorid
+            - nodeRole
+            - openstackCreds
+            - openstackFlavorID
+            - openstackImageID
             type: object
           status:
             description: Status defines the observed state of VjailbreakNode
             properties:
-              activemigrations:
+              activeMigrations:
                 description: ActiveMigrations is the list of active migrations happening
                   on the node
                 items:
                   type: string
                 type: array
-              openstackuuid:
+              openstackUUID:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
               phase:
                 description: Phase is the current phase of the node
                 type: string
-              vmip:
+              vmIP:
                 description: VMIP is the IP address of the VM
                 type: string
             required:
-            - vmip
+            - vmIP
             type: object
         type: object
     served: true
@@ -802,7 +834,11 @@ spec:
     singular: vmwarecreds
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.vmwareValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: VMwareCreds is the Schema for the vmwarecreds API
@@ -1498,7 +1534,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.5
+        image: quay.io/platform9/vjailbreak-controller:v0.1.6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
