@@ -1,13 +1,19 @@
 // @ts-check
 import starlight from '@astrojs/starlight';
 import { defineConfig } from "astro/config";
-
+import AutoImport from 'astro-auto-import';
+import mdx from '@astrojs/mdx';
 // https://astro.build/config
 export default defineConfig({
 	site: process.env.SITE_URL || 'https://platform9.github.io',
 	base: '/' + (process.env.BASE || ''),
 	trailingSlash: "always",
 	integrations: [
+		AutoImport({
+			imports: [
+			  './src/components/ReadMore.astro',
+			],
+		  }),
 		starlight({
 			title: 'vJailbreak',
 			editLink: {
@@ -27,14 +33,26 @@ export default defineConfig({
 						// Each item here is one entry in the navigation menu.
 						// manually done so to we can keep the order
 						{ label: 'What is vJailbreak', slug: 'introduction/what_is_vjailbreak' },
-						{ label: 'Components', slug: 'introduction/components' },
-						{ label: 'Pre-requisites', slug: 'introduction/prerequisites' },
 						{ label: 'Getting Started', slug: 'introduction/getting_started' },
+						{ label: 'Prerequisites', slug: 'introduction/prerequisites' },
+						{ label: 'Components', slug: 'introduction/components' },
 					],
 				},
 				{
 					label: 'Guide',
-					autogenerate: { directory: 'guides' },
+					//autogenerate: { directory: 'guides' },
+					items: [
+						{ label: 'Scaling', slug: 'guides/scaling' },
+						{ label: 'Troubleshooting', slug: 'guides/troubleshooting' },
+						{ label: 'Building', slug: 'guides/building' },
+						{ label: 'Using APIs', slug: 'guides/using_apis' },
+					],
+				},
+				{
+					label: 'Reference',
+					items: [
+						{ label: 'vJailbreak CRDs', slug: 'reference/reference' },
+					],
 				},
 				{
 					label: 'Release Notes',
@@ -45,5 +63,6 @@ export default defineConfig({
 				'./src/styles/custom.css'
 				],
 		}),
+		mdx(),
 	],
 });

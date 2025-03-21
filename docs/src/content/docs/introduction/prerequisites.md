@@ -1,5 +1,5 @@
 ---
-title: Prerequisites
+title: FAQ & Prerequisites
 description: prerequisites for vJailbreak
 ---
 
@@ -24,7 +24,7 @@ Please refer to the following table for the required privileges:
 | `Virtual machine.Interaction.Power Off` | Allows powering off a powered-on virtual machine. This operation powers down the guest operating system. |
 | `Virtual machine.Interaction.Power On` | Allows powering on a powered-off virtual machine and resuming a suspended virtual machine. |
 | `Virtual machine.Guest operating system management by VIX API` | Allows managing a virtual machine by the VMware VIX API. |
-| `Virtual machine.Provisioning` privileges:<br><br>Note<br><br>All `Virtual machine.Provisioning` privileges are required. |     |
+| `Virtual machine.Provisioning` | Note: All `Virtual machine.Provisioning` privileges are required.  |
 | `Virtual machine.Provisioning.Allow disk access` | Allows opening a disk on a virtual machine for random read and write access. Used mostly for remote disk mounting. |
 | `Virtual machine.Provisioning.Allow file access` | Allows operations on files associated with a virtual machine, including VMX, disks, logs, and NVRAM. |
 | `Virtual machine.Provisioning.Allow read-only disk access` | Allows opening a disk on a virtual machine for random read access. Used mostly for remote disk mounting. |
@@ -52,8 +52,7 @@ Please refer to the following table for the required privileges:
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
-
-## What ports do I need to open for vJailbreak to work?
+### What ports do I need to open for vJailbreak to work?
 Please refer the following table for the required ports:
 
 | Port | Protocol | Source | Destination | Purpose |
@@ -62,3 +61,17 @@ Please refer the following table for the required ports:
 | 443 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer authentication |
 | 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy |
 | 5480 | TCP | PCD nodes | VMware vCenter API endpoint | VMware Site Recovery Manager Appliance Management Interface |
+
+### What network connectivity do I need for vJailbreak?
+The vJailbreak VM and any helper nodes must be able to resolve & connect to your VMware vCenter environment and all ESXi hosts, and must be able to resolve & connect to [quay.io](quay.io).
+
+### Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
+
+| **Component**      | **Port**  | **Protocol** | **Source** | **Purpose** |
+|--------------------|----------|-------------|------------|-------------|
+| **Kubelet API**    | 10250   | TCP         | Control Plane / Prometheus | Health checks, logs, metrics |
+| **Kubelet Read-Only (Optional)** | 10255 | TCP | Internal Only | Deprecated but might be used in some cases |
+| **Metrics Server** | 4443    | TCP         | Internal Cluster | K8s resource metrics (`kubectl top`) |
+| **Prometheus**     | 9090    | TCP         | Internal Cluster / Monitoring Server | Prometheus UI and API |
+| **Node Exporter** (if used) | 9100 | TCP | Prometheus | Node-level metrics |
+| **Cadvisor (Optional)** | 4194 | TCP | Internal Cluster / Prometheus | Container metrics collection |
