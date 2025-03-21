@@ -9,3 +9,4 @@ v2v-helper/vendor/*
 .vscode
 node_modules
 openstack.rc
+.qodo
