@@ -115,19 +115,19 @@ const columns: GridColDef[] = [
         headerName: "IP Address",
         flex: 1,
     },
-    // {
-    //     field: "activeMigrations",
-    //     headerName: "Active Migrations",
-    //     flex: 2,
-    //     valueGetter: (_, params) => params?.activeMigrations || [],
-    //     renderCell: (params) => {
-    //         const migrations = params.value as string[];
-    //         if (!migrations || migrations.length === 0) {
-    //             return "-";
-    //         }
-    //         return migrations.join(", ");
-    //     },
-    // },
+    {
+        field: "activeMigrations",
+        headerName: "Active Migrations",
+        flex: 2,
+        valueGetter: (_, params) => params?.activeMigrations || [],
+        renderCell: (params) => {
+            const migrations = params.value as string[];
+            if (!migrations || migrations.length === 0) {
+                return "-";
+            }
+            return migrations.join(", ");
+        },
+    },
     {
         field: 'actions',
         headerName: 'Actions',
