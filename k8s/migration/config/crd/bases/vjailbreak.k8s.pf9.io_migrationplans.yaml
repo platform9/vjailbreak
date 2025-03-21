@@ -14,7 +14,11 @@ spec:
     singular: migrationplan
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.migrationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: MigrationPlan is the Schema for the migrationplans API
@@ -89,7 +93,7 @@ spec:
                 type: string
               retry:
                 type: boolean
-              virtualmachines:
+              virtualMachines:
                 items:
                   items:
                     type: string
@@ -98,7 +102,7 @@ spec:
             required:
             - migrationStrategy
             - migrationTemplate
-            - virtualmachines
+            - virtualMachines
             type: object
           status:
             description: MigrationPlanStatus defines the observed state of MigrationPlan

@@ -1,5 +1,7 @@
 package constants
 
+import "time"
+
 const (
 	RhelFirstBootScript = `#!/bin/bash
 nmcli -t -f NAME connection show | while read -r conn; do
@@ -22,4 +24,6 @@ systemctl enable --now serial-getty@ttyS0.service`
 	XMLFileName           = "libxml.xml"
 	MigrationSnapshotName = "migration-snap"
 	MaxHTTPRetryCount     = 5
+	MaxVMActiveCheckCount = 15
+	VMActiveCheckInterval = 20 * time.Second
 )

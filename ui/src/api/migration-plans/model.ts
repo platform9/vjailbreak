@@ -58,7 +58,7 @@ export interface FSpec {
   "f:migrationStrategy": FMigrationStrategy
   "f:migrationTemplate": FMigrationTemplate
   "f:retry": FMigrationTemplate
-  "f:virtualmachines": FMigrationTemplate
+  "f:virtualMachines": FMigrationTemplate
 }
 
 export interface FMigrationStrategy {
@@ -75,7 +75,7 @@ export interface Spec {
   migrationStrategy: MigrationStrategy
   migrationTemplate: string
   retry: boolean
-  virtualmachines: Array<string[]>
+  virtualMachines: Array<string[]>
 }
 
 export interface MigrationStrategy {

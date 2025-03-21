@@ -152,6 +152,14 @@ func main() {
 			migrationobj.EventReporter <- msg
 		}
 		log.Fatalf(msg)
+
+		// Power on the VM
+		poweronerr := vmops.VMPowerOn()
+		if poweronerr != nil {
+			log.Fatalf("Failed to power on VM after migration failure: %s\n", poweronerr)
+		}
+
+		log.Printf("VM powered on after migration failure\n")
 	}
 
 	cancel()

@@ -21,9 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
@@ -38,6 +35,7 @@ type OpenstackCredsStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.openstackValidationStatus`,name=Status,type=string
 
 // OpenstackCreds is the Schema for the openstackcreds API
 type OpenstackCreds struct {
