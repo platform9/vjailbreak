@@ -30,11 +30,12 @@ interface CredentialSelectorProps {
     options: CredentialOption[]
     value: string | null
     onChange: (value: string | null) => void
-    onAddNew: () => void
+    onAddNew?: () => void
     loading: boolean
     error?: string
     emptyMessage?: string
     size?: "small" | "medium"
+    showAddNewButton?: boolean
 }
 
 export default function CredentialSelector({
@@ -48,6 +49,7 @@ export default function CredentialSelector({
     error,
     size = "small",
     emptyMessage = "No credentials found",
+    showAddNewButton = false,
 }: CredentialSelectorProps) {
     const [inputValue, setInputValue] = useState("")
 
@@ -93,14 +95,16 @@ export default function CredentialSelector({
                         />
                     )}
                 />
-                <Button
-                    color="primary"
-                    onClick={onAddNew}
-                    startIcon={<AddIcon />}
-                    sx={{ minWidth: "120px" }}
-                >
-                    Add New
-                </Button>
+                {showAddNewButton && onAddNew && (
+                    <Button
+                        color="primary"
+                        onClick={onAddNew}
+                        startIcon={<AddIcon />}
+                        sx={{ minWidth: "120px" }}
+                    >
+                        Add New
+                    </Button>
+                )}
             </Box>
             {!!error && (
                 <Box sx={{ mt: 1 }}>

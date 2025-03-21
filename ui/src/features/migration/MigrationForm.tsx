@@ -42,7 +42,6 @@ import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
 import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
-import { createOpenstackCredsWithSecretFlow, createVMwareCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
 
@@ -148,9 +147,6 @@ export default function MigrationFormDrawer({
   } = useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
   // Form Statuses
-  const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
-  const [validatingOpenstackCreds, setValidatingOpenstackCreds] =
-    useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   // Migration Resources
@@ -179,130 +175,49 @@ export default function MigrationFormDrawer({
     openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
 
   // Polling Conditions
-  const shouldPollVmwareCreds =
-    !!vmwareCredentials?.metadata?.name &&
-    vmwareCredentials?.status === undefined
-
-  const shouldPollOpenstackCreds =
-    !!openstackCredentials?.metadata?.name &&
-    openstackCredentials?.status === undefined
-
   const shouldPollMigrationTemplate =
     !!migrationTemplate?.metadata?.name &&
     migrationTemplate?.status === undefined
 
-
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
 
+  // Update this effect to only handle existing credential selection
   useEffect(() => {
-    const postCreds = async () => {
-      if (!params.vmwareCreds) return;
-
-      if (params.vmwareCreds.existingCredName) {
-        try {
-          const existingCredName = params.vmwareCreds.existingCredName;
-          const response = await getVmwareCredentials(existingCredName);
-          setVmwareCredentials(response);
-        } catch (error) {
-          console.error("Error fetching existing VMware credentials:", error);
-          getFieldErrorsUpdater("vmwareCreds")(
-            "Error fetching VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
-          )
-        }
-        return;
-      }
-      setValidatingVmwareCreds(true);
+    const fetchCredentials = async () => {
+      if (!params.vmwareCreds || !params.vmwareCreds.existingCredName) return;
 
       try {
-        const vmwareCreds = params.vmwareCreds as {
-          vcenterHost: string;
-          datacenter: string;
-          username: string;
-          password: string;
-          credentialName: string;
-        };
-
-        // Use the new secret-based flow
-        const response = await createVMwareCredsWithSecretFlow(
-          vmwareCreds.credentialName,
-          {
-            VCENTER_HOST: vmwareCreds.vcenterHost,
-            VCENTER_DATACENTER: vmwareCreds.datacenter,
-            VCENTER_USERNAME: vmwareCreds.username,
-            VCENTER_PASSWORD: vmwareCreds.password,
-          }
-        );
-
+        const existingCredName = params.vmwareCreds.existingCredName;
+        const response = await getVmwareCredentials(existingCredName);
         setVmwareCredentials(response);
       } catch (error) {
-        console.error("Error creating VMware credentials:", error);
-        setValidatingVmwareCreds(false);
+        console.error("Error fetching existing VMware credentials:", error);
         getFieldErrorsUpdater("vmwareCreds")(
-          "Error creating VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+          "Error fetching VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
         )
-
       }
     }
+
     if (isNilOrEmpty(params.vmwareCreds)) return
     setVmwareCredentials(undefined)
     getFieldErrorsUpdater("vmwareCreds")("")
-    postCreds()
+    fetchCredentials()
   }, [params.vmwareCreds, getFieldErrorsUpdater])
 
+  // Update this effect to only handle existing credential selection
   useEffect(() => {
-    const postCreds = async () => {
-      if (!params.openstackCreds) return;
-
-      // If using an existing credential, fetch it instead of creating new one
-      if (params.openstackCreds.existingCredName) {
-        try {
-          const existingCredName = params.openstackCreds.existingCredName;
-          const response = await getOpenstackCredentials(existingCredName);
-          setOpenstackCredentials(response);
-        } catch (error) {
-          console.error("Error fetching existing OpenStack credentials:", error);
-          getFieldErrorsUpdater("openstackCreds")(
-            "Error fetching OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
-          )
-        }
-        return;
-      }
-
-      setValidatingOpenstackCreds(true);
+    const fetchCredentials = async () => {
+      if (!params.openstackCreds || !params.openstackCreds.existingCredName) return;
 
       try {
-        const openstackCreds = params.openstackCreds as {
-          OS_AUTH_URL: string;
-          OS_DOMAIN_NAME: string;
-          OS_USERNAME: string;
-          OS_PASSWORD: string;
-          OS_REGION_NAME: string;
-          OS_TENANT_NAME: string;
-          OS_INSECURE?: boolean;
-          credentialName: string;
-        };
-
-        // Use the new secret-based flow
-        const response = await createOpenstackCredsWithSecretFlow(
-          openstackCreds.credentialName,
-          {
-            OS_AUTH_URL: openstackCreds.OS_AUTH_URL,
-            OS_DOMAIN_NAME: openstackCreds.OS_DOMAIN_NAME,
-            OS_USERNAME: openstackCreds.OS_USERNAME,
-            OS_PASSWORD: openstackCreds.OS_PASSWORD,
-            OS_REGION_NAME: openstackCreds.OS_REGION_NAME,
-            OS_TENANT_NAME: openstackCreds.OS_TENANT_NAME,
-            OS_INSECURE: openstackCreds.OS_INSECURE || false
-          }
-        );
-
+        const existingCredName = params.openstackCreds.existingCredName;
+        const response = await getOpenstackCredentials(existingCredName);
         setOpenstackCredentials(response);
       } catch (error) {
-        console.error("Error creating OpenStack credentials:", error);
-        setValidatingOpenstackCreds(false);
+        console.error("Error fetching existing OpenStack credentials:", error);
         getFieldErrorsUpdater("openstackCreds")(
-          "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+          "Error fetching OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
         )
       }
     }
@@ -311,7 +226,7 @@ export default function MigrationFormDrawer({
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
     getFieldErrorsUpdater("openstackCreds")("")
-    postCreds()
+    fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
   useEffect(() => {
@@ -334,76 +249,6 @@ export default function MigrationFormDrawer({
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
   ])
-
-  useInterval(
-    async () => {
-      if (shouldPollVmwareCreds) {
-        try {
-          const response = await getVmwareCredentials(
-            vmwareCredentials?.metadata?.name
-          )
-          setVmwareCredentials(response)
-          const validationStatus = response?.status?.vmwareValidationStatus
-          if (validationStatus) {
-            setValidatingVmwareCreds(false)
-            if (validationStatus !== "Succeeded") {
-              getFieldErrorsUpdater("vmwareCreds")(
-                response?.status?.vmwareValidationMessage
-              )
-            }
-          }
-        } catch (err) {
-          console.error("Error validating VMware credentials", err)
-          getFieldErrorsUpdater("vmwareCreds")(
-            "Error validating VMware credentials"
-          )
-        }
-      }
-    },
-    THREE_SECONDS,
-    shouldPollVmwareCreds
-  )
-
-  useInterval(
-    async () => {
-      if (shouldPollOpenstackCreds) {
-        try {
-          const response = await getOpenstackCredentials(
-            openstackCredentials?.metadata?.name
-          )
-          setOpenstackCredentials(response)
-          const validationStatus = response?.status?.openstackValidationStatus
-          if (validationStatus) {
-            setValidatingOpenstackCreds(false)
-            if (validationStatus !== "Succeeded") {
-              getFieldErrorsUpdater("openstackCreds")(
-                response?.status?.openstackValidationMessage
-              )
-
-              // Delete the failed OpenStack credential and its secret
-              try {
-                await deleteOpenStackCredsWithSecretFlow(
-                  response.metadata.name
-                )
-                console.log(`Deleted failed OpenStack credential: ${response.metadata.name}`)
-              } catch (deleteErr) {
-                console.error(`Error deleting failed OpenStack credential: ${response.metadata.name}`, deleteErr)
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Error validating Openstack credentials", err)
-          getFieldErrorsUpdater("openstackCreds")(
-            "Error validating Openstack credentials"
-          )
-          setValidatingOpenstackCreds(false)
-        }
-      }
-    },
-    THREE_SECONDS,
-    shouldPollOpenstackCreds
-  )
-
 
   const fetchMigrationTemplate = async () => {
     try {
@@ -453,7 +298,6 @@ export default function MigrationFormDrawer({
       setLoadingVms(false)
     }
   }
-
 
   useInterval(
     async () => {
@@ -742,15 +586,6 @@ export default function MigrationFormDrawer({
           <SourceAndDestinationEnvStep
             onChange={getParamsUpdater}
             errors={fieldErrors}
-            validatingVmwareCreds={validatingVmwareCreds}
-            validatingOpenstackCreds={validatingOpenstackCreds}
-            vmwareCredsValidated={
-              vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
-            }
-            openstackCredsValidated={
-              openstackCredentials?.status?.openstackValidationStatus ===
-              "Succeeded"
-            }
           />
           {/* Step 2 */}
           <VmsSelectionStep
