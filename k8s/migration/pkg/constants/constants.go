@@ -12,8 +12,8 @@ const (
 	NameMaxLength     = 242
 
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
-	OpenstackCredsControllerName = "openstackcreds-controller"
-	VMwareCredsControllerName    = "vmwarecreds-controller"
+	OpenstackCredsControllerName = "openstackcreds-controller" //nolint:gosec // not a password string
+	VMwareCredsControllerName    = "vmwarecreds-controller"    //nolint:gosec // not a password string
 
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 	NodeRoleMaster          = "master"
