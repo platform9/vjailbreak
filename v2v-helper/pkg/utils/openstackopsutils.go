@@ -441,3 +441,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	}
 	return server, nil
 }
+
+func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
+	result, err := servers.Get(osclient.ComputeClient, vmID).Extract()
+	if err != nil {
+		return false, fmt.Errorf("failed to get server: %s", err)
+	}
+	if result.Status != "ACTIVE" {
+		return false, fmt.Errorf("server is not active")
+	}
+	return true, nil
+}
