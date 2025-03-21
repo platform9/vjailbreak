@@ -269,3 +269,18 @@ func (mr *MockOpenstackOperationsMockRecorder) WaitForVolumeAttachment(volumeID 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolumeAttachment", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolumeAttachment), volumeID)
 }
+
+// WaitUntilVMActive mocks base method.
+func (m *MockOpenstackOperations) WaitUntilVMActive(vmID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitUntilVMActive", vmID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitUntilVMActive indicates an expected call of WaitUntilVMActive.
+func (mr *MockOpenstackOperationsMockRecorder) WaitUntilVMActive(vmID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilVMActive", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitUntilVMActive), vmID)
+}
