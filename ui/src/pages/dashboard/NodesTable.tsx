@@ -116,10 +116,10 @@ const columns: GridColDef[] = [
         flex: 1,
     },
     {
-        field: "activemigrations",
+        field: "activeMigrations",
         headerName: "Active Migrations",
         flex: 2,
-        valueGetter: (_, params) => params?.activemigrations || [],
+        valueGetter: (_, params) => params?.activeMigrations || [],
         renderCell: (params) => {
             const migrations = params.value as string[];
             if (!migrations || migrations.length === 0) {
@@ -170,7 +170,7 @@ interface NodeSelector {
     status: string
     ipAddress: string
     role: string,
-    activemigrations: string[]
+    activeMigrations: string[]
 }
 const NodesToolbar = ({
     onScaleUp,
@@ -261,7 +261,7 @@ export default function NodesTable() {
         ipAddress: node.status?.vmIP || '-',
         role: node.spec.nodeRole,
         creationTimestamp: node.metadata.creationTimestamp,
-        activemigrations: node.status?.activemigrations || []
+        activeMigrations: node.status?.activeMigrations || []
     })) || [];
 
     const handleSelectionChange = (newSelection) => {
