@@ -40,7 +40,7 @@ build {
 
   provisioner "file" {
     source      = "${path.root}/deploy"
-    destination = "etc/pf9/yamls"
+    destination = "/etc/pf9/yamls"
   }
 
   provisioner "file" {
