@@ -586,7 +586,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string) ([]string, error) {
-	vmnws, err := GetVMwNetworks(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter, vm)
+	vmnws, err := utils.GetVMwNetworks(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter, vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network: %w", err)
 	}
@@ -630,7 +630,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vm string) ([]string, error) {
-	vmds, err := GetVMwDatastore(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter, vm)
+	vmds, err := utils.GetVMwDatastore(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter, vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get datastores: %w", err)
 	}

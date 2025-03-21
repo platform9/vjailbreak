@@ -12,10 +12,16 @@ const (
 	NameMaxLength     = 242
 
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
-	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/control-plane"
-	NodeRoleMaster               = "master"
-	InternalIPAnnotation         = "k3s.io/internal-ip"
-	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
+	OpenstackCredsControllerName = "openstackcreds-controller" //nolint:gosec // not a password string
+	VMwareCredsControllerName    = "vmwarecreds-controller"    //nolint:gosec // not a password string
+
+	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
+	NodeRoleMaster          = "master"
+	InternalIPAnnotation    = "k3s.io/internal-ip"
+	NumberOfDisksLabel      = "vjailbreak.k8s.pf9.io/disk-count"
+
+	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string
 
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 	VjailbreakNodePhaseVMCreated  = vjailbreakv1alpha1.VjailbreakNodePhase("VMCreated")
@@ -23,7 +29,7 @@ const (
 	VjailbreakNodePhaseNodeReady  = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
 
 	NamespaceMigrationSystem = "migration-system"
-	MasterVjailbreakNodeName = "vjailbreak-master"
+	VjailbreakMasterNodeName = "vjailbreak-master"
 	VjailbreakNodeFinalizer  = "vjailbreak.k8s.pf9.io/finalizer"
 
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
