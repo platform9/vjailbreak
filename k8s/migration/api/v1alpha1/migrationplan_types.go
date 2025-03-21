@@ -54,7 +54,7 @@ type MigrationPlanSpec struct {
 	MigrationTemplate string                `json:"migrationTemplate"`
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
 	Retry             bool                  `json:"retry,omitempty"`
-	VirtualMachines   [][]string            `json:"virtualmachines"`
+	VirtualMachines   [][]string            `json:"virtualMachines"`
 	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript string `json:"firstBootScript,omitempty"`
@@ -68,6 +68,7 @@ type MigrationPlanStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.migrationStatus`,name=Status,type=string
 
 // MigrationPlan is the Schema for the migrationplans API
 type MigrationPlan struct {

@@ -121,7 +121,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, opens
 		return errors.Wrap(err, "failed to get image id of master node")
 	}
 
-	vjNode.Spec.ImageID = imageID
+	vjNode.Spec.OpenstackImageID = imageID
 	vjNode.Spec.OpenstackCreds = corev1.ObjectReference{
 		Name:      openstackcreds.Name,
 		Namespace: openstackcreds.Namespace,
@@ -399,7 +399,7 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vjailbreak node")
 	}
-	return vjNode.Spec.ImageID, nil
+	return vjNode.Spec.OpenstackImageID, nil
 }
 
 func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
