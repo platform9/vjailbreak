@@ -19,23 +19,22 @@ package controller
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	"github.com/vmware/govmomi/find"
-	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/session/cache"
-	"github.com/vmware/govmomi/vim25"
-	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/vim25/types"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -70,239 +69,63 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading VMWareCreds '%s' object", vmwcreds.Name))
 		return ctrl.Result{}, err
 	}
+	scope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
+		Logger:      ctxlog,
+		Client:      r.Client,
+		VMwareCreds: vmwcreds,
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
-		ctxlog.Info(fmt.Sprintf("VMwareCreds '%s' CR is being created or updated", vmwcreds.Name))
-		ctxlog.Info(fmt.Sprintf("Validating VMwareCreds '%s' object", vmwcreds.Name))
+		return r.reconcileNormal(ctx, scope)
+	}
+	return r.reconcileDelete(ctx, scope)
+}
 
-		if _, err := validateVMwareCreds(vmwcreds); err != nil {
-			// Update the status of the VMwareCreds object
-			vmwcreds.Status.VMwareValidationStatus = "Failed"
-			vmwcreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", vmwcreds.Name, err)
-			if err := r.Status().Update(ctx, vmwcreds); err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", vmwcreds.Name, err))
-				return ctrl.Result{}, err
-			}
-		} else {
-			ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", vmwcreds.Name))
-			// Update the status of the VMwareCreds object
-			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
-			vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
-			if err := r.Status().Update(ctx, vmwcreds); err != nil {
-				ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", vmwcreds.Name, err))
-				return ctrl.Result{}, err
-			}
+func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
+	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+
+	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
+		// Update the status of the VMwareCreds object
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Failed"
+		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", scope.Name(), err))
+			return ctrl.Result{}, err
+		}
+	} else {
+		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+		// Update the status of the VMwareCreds object
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", scope.Name(), err))
+			return ctrl.Result{}, err
 		}
 	}
 	return ctrl.Result{}, nil
 }
 
-func validateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := utils.GetVMwareCredentials(context.TODO(), vmwcreds.Spec.SecretRef.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
-	}
+func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
-	host := VMwareCredentials.Host
-	username := VMwareCredentials.Username
-	password := VMwareCredentials.Password
-	disableSSLVerification := VMwareCredentials.Insecure
-	if host[:4] != "http" {
-		host = "https://" + host
+	// Delete the associated secret
+	err := r.Client.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+	})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
-	}
-	u, err := url.Parse(host)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
-	}
-	u.User = url.UserPassword(username, password)
-	// fmt.Println(u)
-	// Connect and log in to ESX or vCenter
-	// Share govc's session cache
-	s := &cache.Session{
-		URL:      u,
-		Insecure: disableSSLVerification,
-		Reauth:   true,
-	}
-
-	c := new(vim25.Client)
-	err = s.Login(context.Background(), c, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to login: %w", err)
-	}
-	return c, nil
-}
-
-func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	var networks []string
-	c, err := validateVMwareCreds(vmwcreds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
-	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
-	}
-	finder.SetDatacenter(dc)
-
-	// Get the vm
-	vm, err := finder.VirtualMachine(ctx, vmname)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find vm: %w", err)
-	}
-
-	// Get the network name of the VM
-	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VM properties: %w", err)
-	}
-
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *types.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *types.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		}
-	}
-
-	return networks, nil
-}
-
-func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	c, err := validateVMwareCreds(vmwcreds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
-	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
-	}
-	finder.SetDatacenter(dc)
-
-	// Get the vm
-	vm, err := finder.VirtualMachine(ctx, vmname)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find vm: %w", err)
-	}
-
-	var vmProps mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VM properties: %w", err)
-	}
-
-	var datastores []string
-	var ds mo.Datastore
-	var dsref types.ManagedObjectReference
-	for _, device := range vmProps.Config.Hardware.Device {
-		if _, ok := device.(*types.VirtualDisk); ok {
-			switch backing := device.GetVirtualDevice().Backing.(type) {
-			case *types.VirtualDiskFlatVer2BackingInfo:
-				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskSparseVer2BackingInfo:
-				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-				dsref = backing.Datastore.Reference()
-			default:
-				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
-			}
-			err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get datastore: %w", err)
-			}
-			datastores = append(datastores, ds.Name)
-		}
-	}
-	return datastores, nil
-}
-
-func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
-	c, err := validateVMwareCreds(vmwcreds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
-	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
-	}
-	finder.SetDatacenter(dc)
-
-	// Get all the vms
-	vms, err := finder.VirtualMachineList(ctx, "*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get vms: %w", err)
-	}
-	var vminfo []vjailbreakv1alpha1.VMInfo
-	for _, vm := range vms {
-		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get VM properties: %w", err)
-		}
-		var datastores []string
-		var networks []string
-		var disks []string
-		var ds mo.Datastore
-		var dsref types.ManagedObjectReference
-		if vmProps.Config == nil {
-			// VM is not powered on or is in creating state
-			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
-			continue
-		}
-		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *types.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualDisk:
-				switch backing := device.GetVirtualDevice().Backing.(type) {
-				case *types.VirtualDiskFlatVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *types.VirtualDiskSparseVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-					dsref = backing.Datastore.Reference()
-				default:
-					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
-				}
-				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get datastore: %w", err)
-				}
-				datastores = appendUnique(datastores, ds.Name)
-				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
-			}
-		}
-
-		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:       vmProps.Config.Name,
-			Datastores: datastores,
-			Disks:      disks,
-			Networks:   networks,
-			IPAddress:  vmProps.Guest.IpAddress,
-			VMState:    vmProps.Guest.GuestState,
-			OSType:     vmProps.Guest.GuestFamily,
-		})
-	}
-
-	return vminfo, nil
-}
-
-func appendUnique(slice []string, values ...string) []string {
-	for _, v := range values {
-		if !slices.Contains(slice, v) {
-			slice = append(slice, v)
-		}
-	}
-	return slice
+	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
