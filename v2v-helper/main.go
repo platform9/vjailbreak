@@ -158,6 +158,8 @@ func main() {
 		if poweronerr != nil {
 			log.Fatalf("Failed to power on VM after migration failure: %s\n", poweronerr)
 		}
+
+		log.Printf("VM powered on after migration failure\n")
 	}
 
 	cancel()
