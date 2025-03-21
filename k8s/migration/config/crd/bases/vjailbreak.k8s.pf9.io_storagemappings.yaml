@@ -14,7 +14,11 @@ spec:
     singular: storagemapping
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.storageMappingValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: StorageMapping is the Schema for the storagemappings API
@@ -40,6 +44,7 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
+                description: Storages is a list of storage mappings
                 items:
                   properties:
                     source:

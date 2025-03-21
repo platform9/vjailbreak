@@ -134,18 +134,17 @@ const createNodeSpec = (params: {
   flavorId: string
   role?: string
 }): Spec => ({
-  imageid: params.imageId,
-  noderole: params.role || "worker",
-  openstackcreds: params.openstackCreds,
-  openstackflavorid: params.flavorId,
+  openstackImageID: params.imageId,
+  nodeRole: params.role || "worker",
+  openstackCreds: params.openstackCreds,
+  openstackFlavorID: params.flavorId,
 })
 
-const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6);
+const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 6)
 
 function generateAgentName() {
-    return `vjailbreak-agent-${nanoid()}`;
+  return `vjailbreak-agent-${nanoid()}`
 }
-
 
 // Create VjailbreakNode object
 const createNodeObject = (params: {
@@ -163,10 +162,11 @@ const createNodeObject = (params: {
 })
 
 // Get master VjailbreakNode
-export const getMasterNode = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
-
+export const getMasterNode = async (
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
   const nodes = await getNodes(namespace)
-  const masterNode = nodes.find((node) => node.spec.noderole === "master")
+  const masterNode = nodes.find((node) => node.spec.nodeRole === "master")
 
   return masterNode
 }

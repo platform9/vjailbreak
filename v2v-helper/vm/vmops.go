@@ -29,6 +29,7 @@ type VMOperations interface {
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
 	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
 	VMPowerOff() error
+	VMPowerOn() error
 }
 
 type VMInfo struct {
@@ -349,7 +350,26 @@ func (vmops *VMOps) VMPowerOff() error {
 	}
 	err = task.Wait(vmops.ctx)
 	if err != nil {
-		return fmt.Errorf("failed while waiting for task: %s", err)
+		return fmt.Errorf("failed while waiting for power off task: %s", err)
+	}
+	return nil
+}
+
+func (vmops *VMOps) VMPowerOn() error {
+	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get VM power state: %s", err)
+	}
+	if currstate == types.VirtualMachinePowerStatePoweredOn {
+		return nil
+	}
+	task, err := vmops.VMObj.PowerOn(vmops.ctx)
+	if err != nil {
+		return err
+	}
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for power on task: %s", err)
 	}
 	return nil
 }

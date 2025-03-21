@@ -133,15 +133,11 @@ export default function VmwareCredentialsForm({
       refetchCredentials().then(() => {
         setTimeout(() => {
           const createdCredName = vmwareCreds.credentialName;
-          const matchingCred = credentialsList.find(
-            (cred) => cred.metadata.name === createdCredName
-          );
+          const matchingCred = credentialsList.find((cred) => cred.metadata.name === createdCredName);
 
           if (matchingCred && onCredentialSelect) {
             onCredentialSelect(matchingCred.metadata.name);
             setShowForm(false);
-          } else if (refetchCredentials) {
-            refetchCredentials();
           }
         }, 1000);
       });

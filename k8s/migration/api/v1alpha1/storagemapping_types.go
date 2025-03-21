@@ -20,14 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // StorageMappingSpec defines the desired state of StorageMapping
 type StorageMappingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
+	// Storages is a list of storage mappings
 	Storages []Storage `json:"storages"`
 }
 
@@ -38,15 +33,13 @@ type Storage struct {
 
 // StorageMappingStatus defines the observed state of StorageMapping
 type StorageMappingStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	StoragemappingValidationStatus  string `json:"storageMappingValidationStatus,omitempty"`
 	StoragemappingValidationMessage string `json:"storageMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.storageMappingValidationStatus`,name=Status,type=string
 
 // StorageMapping is the Schema for the storagemappings API
 type StorageMapping struct {
