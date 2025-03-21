@@ -56,7 +56,7 @@ type OpenstackCredsReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx)
 	// Get the OpenstackCreds object
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -77,7 +77,12 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	defer scope.Close()
+	// Always close the scope when exiting this function such that we can persist any Migration changes.
+	defer func() {
+		if err := scope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
 
 	if !openstackcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
@@ -87,12 +92,12 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
-	ctxlog := log.FromContext(ctx)
+	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
 	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 
 	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
 
-	// Check if speck matches with kubectl.kubernetes.io/last-applied-configuration
+	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is being created or updated", scope.OpenstackCreds.Name))
 	ctxlog.Info(fmt.Sprintf("Validating OpenstackCreds '%s' object", scope.OpenstackCreds.Name))
 	if _, err := utils.ValidateAndGetProviderClient(ctx, scope.OpenstackCreds); err != nil {

@@ -115,8 +115,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
-		log.Info("Skipping master node")
-		return ctrl.Result{}, nil
+		log.Info("Skipping master node, updating flavor", "name", vjNode.Name)
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating

@@ -12,10 +12,13 @@ const (
 	NameMaxLength     = 242
 
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
-	K8sMasterNodeAnnotation      = "node-role.kubernetes.io/control-plane"
-	NodeRoleMaster               = "master"
-	InternalIPAnnotation         = "k3s.io/internal-ip"
-	NumberOfDisksLabel           = "vjailbreak.k8s.pf9.io/disk-count"
+	OpenstackCredsControllerName = "openstackcreds-controller"
+	VMwareCredsControllerName    = "vmwarecreds-controller"
+
+	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
+	NodeRoleMaster          = "master"
+	InternalIPAnnotation    = "k3s.io/internal-ip"
+	NumberOfDisksLabel      = "vjailbreak.k8s.pf9.io/disk-count"
 
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string
