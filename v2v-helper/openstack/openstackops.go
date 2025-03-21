@@ -43,6 +43,7 @@ type OpenstackOperations interface {
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
+	WaitUntilVMActive(vmID string) (bool, error)
 }
 
 func getCert(endpoint string) (*x509.Certificate, error) {
