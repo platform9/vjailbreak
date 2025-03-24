@@ -115,19 +115,19 @@ const columns: GridColDef[] = [
         headerName: "IP Address",
         flex: 1,
     },
-    // {
-    //     field: "activeMigrations",
-    //     headerName: "Active Migrations",
-    //     flex: 2,
-    //     valueGetter: (_, params) => params?.activeMigrations || [],
-    //     renderCell: (params) => {
-    //         const migrations = params.value as string[];
-    //         if (!migrations || migrations.length === 0) {
-    //             return "-";
-    //         }
-    //         return migrations.join(", ");
-    //     },
-    // },
+    {
+        field: "activeMigrations",
+        headerName: "Active Migrations",
+        flex: 2,
+        valueGetter: (_, params) => params?.activeMigrations || [],
+        renderCell: (params) => {
+            const migrations = params.value as string[];
+            if (!migrations || migrations.length === 0) {
+                return "-";
+            }
+            return migrations.join(", ");
+        },
+    },
     {
         field: 'actions',
         headerName: 'Actions',
@@ -250,7 +250,7 @@ export default function NodesTable() {
     const queryClient = useQueryClient();
     const [scaleDownError, setScaleDownError] = useState<string | null>(null);
 
-    const masterNode = nodes?.find(node => node.spec.noderole === 'master') || null;
+    const masterNode = nodes?.find(node => node.spec.nodeRole === 'master') || null;
 
     const transformedNodes: NodeSelector[] = nodes?.map((node: NodeItem) => ({
         id: node.metadata.name,
@@ -258,8 +258,8 @@ export default function NodesTable() {
         // status: node.status?.status || 'Unknown',
         status: 'Unknown',
         phase: node.status?.phase || 'Unknown',
-        ipAddress: node.status?.vmip || '-',
-        role: node.spec.noderole,
+        ipAddress: node.status?.vmIP || '-',
+        role: node.spec.nodeRole,
         creationTimestamp: node.metadata.creationTimestamp,
         activeMigrations: node.status?.activeMigrations || []
     })) || [];

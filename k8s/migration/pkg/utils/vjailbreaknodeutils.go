@@ -27,6 +27,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -67,7 +68,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.MasterVjailbreakNodeName,
+			Name:      constants.VjailbreakMasterNodeName,
 			Namespace: constants.NamespaceMigrationSystem,
 		},
 		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
@@ -82,7 +83,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 
 	err = k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
-		Name:      constants.MasterVjailbreakNodeName,
+		Name:      constants.VjailbreakMasterNodeName,
 	}, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak node")
@@ -100,11 +101,15 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	return nil
 }
 
-func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
+func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error {
+	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials for master")
+	}
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
-	err := k3sclient.Get(ctx, types.NamespacedName{
+	err = k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
-		Name:      constants.MasterVjailbreakNodeName,
+		Name:      constants.VjailbreakMasterNodeName,
 	}, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak node")
@@ -121,7 +126,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, opens
 		return errors.Wrap(err, "failed to get image id of master node")
 	}
 
-	vjNode.Spec.ImageID = imageID
+	vjNode.Spec.OpenstackImageID = imageID
 	vjNode.Spec.OpenstackCreds = corev1.ObjectReference{
 		Name:      openstackcreds.Name,
 		Namespace: openstackcreds.Namespace,
@@ -204,7 +209,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master node")
 	}
 
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -241,14 +246,20 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	return server.ID, nil
 }
 
-func GetOpenstackCreds(ctx context.Context, k3sclient client.Client,
-	scope *scope.VjailbreakNodeScope) (*vjailbreakv1alpha1.OpenstackCreds, error) {
-	vjNode := scope.VjailbreakNode
-
-	oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
+func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*vjailbreakv1alpha1.OpenstackCreds, error) {
+	// Get master vjailbreakNode
+	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name:      constants.VjailbreakMasterNodeName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, &vjNode)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, errors.Wrap(err, "failed to get vjailbreak node")
+	}
+	oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	err = k3sclient.Get(ctx, client.ObjectKey{
 		Name:      vjNode.Spec.OpenstackCreds.Name,
-		Namespace: vjNode.Spec.OpenstackCreds.Namespace,
+		Namespace: constants.NamespaceMigrationSystem,
 	}, oscreds)
 	if err != nil && !apierrors.IsNotFound(err) {
 		fmt.Printf("failed to get openstack creds associated with the vjailbreakNode. Using latest available creds : %v", err)
@@ -305,8 +316,8 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	return networks, nil
 }
 
-func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client) (string, error) {
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -371,8 +382,8 @@ func ListAllFlavors(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 	return flavors.ExtractFlavors(allPages)
 }
 
-func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) error {
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client) error {
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -394,16 +405,16 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 	// Get the image ID from the vjailbreak master node
 	err := k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
-		Name:      constants.MasterVjailbreakNodeName,
+		Name:      constants.VjailbreakMasterNodeName,
 	}, &vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vjailbreak node")
 	}
-	return vjNode.Spec.ImageID, nil
+	return vjNode.Spec.OpenstackImageID, nil
 }
 
-func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
-	creds, err := GetOpenstackCreds(ctx, k3sclient, scope)
+func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client) (string, error) {
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -506,4 +517,45 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 		return errors.Wrap(err, "failed to delete node")
 	}
 	return nil
+}
+
+func handleFinalizerForCreds(ctx context.Context, k3sclient client.Client, add bool) error {
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack creds")
+	}
+	secret := &corev1.Secret{}
+	err = k3sclient.Get(ctx, types.NamespacedName{
+		Name:      creds.Spec.SecretRef.Name,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials from secret")
+	}
+
+	if add {
+		controllerutil.AddFinalizer(creds, constants.VjailbreakNodeFinalizer)
+		controllerutil.AddFinalizer(secret, constants.VjailbreakNodeFinalizer)
+	} else {
+		controllerutil.RemoveFinalizer(creds, constants.VjailbreakNodeFinalizer)
+		controllerutil.RemoveFinalizer(secret, constants.VjailbreakNodeFinalizer)
+	}
+
+	err = k3sclient.Update(ctx, creds)
+	if err != nil {
+		return errors.Wrap(err, "failed to update openstack creds with finalizer")
+	}
+	err = k3sclient.Update(ctx, secret)
+	if err != nil {
+		return errors.Wrap(err, "failed to update openstack secret with finalizer")
+	}
+	return nil
+}
+
+func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
+	return handleFinalizerForCreds(ctx, k3sclient, true)
+}
+
+func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) error {
+	return handleFinalizerForCreds(ctx, k3sclient, false)
 }

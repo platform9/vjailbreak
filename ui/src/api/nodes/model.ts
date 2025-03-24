@@ -30,18 +30,18 @@ export interface OpenstackCredsRef {
 }
 
 export interface Spec {
-  imageid: string
-  noderole: string
-  openstackcreds: OpenstackCredsRef
-  openstackflavorid: string
-  availableflavors?: OpenstackFlavor []
+  openstackImageID: string
+  nodeRole: string
+  openstackCreds: OpenstackCredsRef
+  openstackFlavorID: string
+  availableFlavors?: OpenstackFlavor[]
 }
 
 export interface Status {
   activeMigrations?: string[]
-  openstackuuid: string
+  openstackUUID: string
   phase: string
-  vmip: string
+  vmIP: string
 }
 
 export interface NodeListMetadata {

@@ -14,7 +14,11 @@ spec:
     singular: vmwarecreds
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.vmwareValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: VMwareCreds is the Schema for the vmwarecreds API

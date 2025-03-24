@@ -565,6 +565,23 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
+
+	// Wait for VM to become active
+	for i := 0; i < constants.MaxVMActiveCheckCount; i++ {
+		log.Printf("Waiting for VM to become active: %d/%d retries\n", i+1, constants.MaxVMActiveCheckCount)
+		active, err := openstackops.WaitUntilVMActive(newVM.ID)
+		if err != nil {
+			return fmt.Errorf("failed to wait for VM to become active: %s", err)
+		}
+		if active {
+			break
+		}
+		if i == constants.MaxVMActiveCheckCount-1 {
+			return fmt.Errorf("VM is not active after %d retries", constants.MaxVMActiveCheckCount)
+		}
+		time.Sleep(constants.VMActiveCheckInterval)
+	}
+
 	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))
 
 	if migobj.PerformHealthChecks {
