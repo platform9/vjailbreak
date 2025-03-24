@@ -21,11 +21,19 @@ export default defineConfig({
 			},
 			social: {
 				github: 'https://github.com/platform9/vjailbreak',
+				slack: 'https://join.slack.com/t/vjailbreak/shared_invite/zt-314pppw43-F1vzd6ZaPW5PoZqF~aa8lA',
+			},
+			plugins: [],
+			components: {
+				Header: './src/components/Header.astro',
+				//SocialIcons: './src/components/githubRelease.astro',
 			},
 			logo: {
-				src: './src/assets/logo.jpg',
+				src: './src/assets/classic_logo.jpeg',
 				replacesTitle: true,
 			},
+			head: [
+			],
 			sidebar: [
 				{
 					label: 'Introduction',
