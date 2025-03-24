@@ -140,7 +140,10 @@ jobs:
     - name: Set environment variables
       run: |
         echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
-      
+    - name: Install libnbd dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libguestfs-dev libnbd-dev pkg-config
     - name: Build v2v-helper image
       run: make v2v-helper
 
