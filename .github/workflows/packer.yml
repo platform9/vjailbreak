@@ -4,18 +4,20 @@ on:
   push:
     branches:
       - main
+      - release/*
   pull_request:
     branches:
       - main
+      - release/*
   release:
     types:
       - published
   workflow_dispatch:
     inputs:
-        branch:
-          description: 'Branch to use'
-          required: true
-          default: 'main'
+      branch:
+        description: 'Branch to use'
+        required: true
+        default: 'main'
 
 env:
   PACKER_VERSION: "latest"
