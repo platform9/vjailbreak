@@ -1021,6 +1021,18 @@ rules:
   - patch
   - update
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
   - migrationplans
@@ -1534,7 +1546,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.6
+        image: quay.io/platform9/vjailbreak-controller:v0.1.7
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
