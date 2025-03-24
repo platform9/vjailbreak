@@ -1,20 +1,9 @@
 import {
   Box,
   FormControl,
-  FormLabel,
-  TextField,
-  CircularProgress,
-  Collapse,
-  InputAdornment,
-  IconButton,
+  FormHelperText,
 } from "@mui/material";
-import { Visibility, VisibilityOff } from "@mui/icons-material";
-import CheckIcon from "@mui/icons-material/Check";
-import { useState, useCallback, useEffect } from "react";
 import CredentialSelector from "./CredentialSelector";
-import { debounce, isValidName } from "src/utils";
-import { RefetchOptions } from "@tanstack/react-query";
-import { QueryObserverResult } from "@tanstack/react-query";
 
 export interface VmwareCredential {
   metadata: {
@@ -39,39 +28,24 @@ export interface VmwareCredential {
 export interface VmwareCredentialsFormProps {
   credentialsList?: VmwareCredential[];
   loadingCredentials?: boolean;
-  refetchCredentials?: (
-    options?: RefetchOptions
-  ) => Promise<QueryObserverResult<VmwareCredential[], Error>>;
-  validatingCredentials?: boolean;
-  credentialsValidated?: boolean | null;
   error?: string;
-  onChange: (values: Record<string, string | number | boolean>) => void;
   onCredentialSelect?: (credId: string | null) => void;
   selectedCredential?: string | null;
+  showCredentialSelector?: boolean;
+  showCredentialNameField?: boolean;
+  fullWidth?: boolean;
+  size?: "small" | "medium";
 }
 
 export default function VmwareCredentialsForm({
   credentialsList = [],
   loadingCredentials = false,
-  refetchCredentials,
-  validatingCredentials = false,
-  credentialsValidated = null,
   error,
-  onChange,
   onCredentialSelect,
   selectedCredential = null,
+  showCredentialSelector = true,
+  size = "small",
 }: VmwareCredentialsFormProps) {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [vmwareCreds, setVmwareCreds] = useState({
-    vcenterHost: "",
-    datacenter: "",
-    username: "",
-    password: "",
-    credentialName: "",
-  });
-  const [credNameError, setCredNameError] = useState<string | null>(null);
-
   const credentialOptions = credentialsList.map((cred) => ({
     label: cred.metadata.name,
     value: cred.metadata.name,
@@ -82,227 +56,27 @@ export default function VmwareCredentialsForm({
     },
   }));
 
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-  const handleMouseDownPassword = (
-    event: React.MouseEvent<HTMLButtonElement>
-  ) => {
-    event.preventDefault();
-  };
-
-  const handleVmwareCredsChange = (value) => {
-    setVmwareCreds({ ...vmwareCreds, ...value });
-
-    if (value.credentialName) {
-      setCredNameError(null);
-    }
-  };
-
-  const debouncedOnChange = useCallback(
-    debounce((creds) => {
-      const mappedCreds = {
-        ...creds,
-        name: creds.credentialName,
-      };
-      onChange(mappedCreds);
-    }, 1000 * 3),
-    [onChange]
-  );
-
-  useEffect(() => {
-    if (
-      vmwareCreds.vcenterHost &&
-      vmwareCreds.datacenter &&
-      vmwareCreds.username &&
-      vmwareCreds.password
-    ) {
-      if (!vmwareCreds.credentialName) {
-        setCredNameError("Please provide a credential name");
-        return;
-      }
-
-      debouncedOnChange(vmwareCreds);
-    }
-    return () => {
-      debouncedOnChange.cancel();
-    };
-  }, [vmwareCreds]);
-
-  useEffect(() => {
-    if (credentialsValidated === true && showForm && refetchCredentials) {
-      refetchCredentials().then(() => {
-        setTimeout(() => {
-          const createdCredName = vmwareCreds.credentialName;
-          const matchingCred = credentialsList.find((cred) => cred.metadata.name === createdCredName);
-
-          if (matchingCred && onCredentialSelect) {
-            onCredentialSelect(matchingCred.metadata.name);
-            setShowForm(false);
-          }
-        }, 1000);
-      });
-    }
-  }, [
-    credentialsValidated,
-    credentialsList,
-    vmwareCreds.credentialName,
-    onCredentialSelect,
-    refetchCredentials,
-  ]);
-
-  const toggleForm = () => {
-    if (showForm) {
-      setVmwareCreds({
-        vcenterHost: "",
-        datacenter: "",
-        username: "",
-        password: "",
-        credentialName: "",
-      });
-      setCredNameError(null);
-    }
-    setShowForm(!showForm);
-  };
-
-  const isValidCredentialName = isValidName(vmwareCreds?.credentialName);
-
   return (
     <div>
-      <CredentialSelector
-        placeholder="Select VMware credentials"
-        options={credentialOptions}
-        value={selectedCredential}
-        onChange={onCredentialSelect || (() => { })}
-        onAddNew={toggleForm}
-        loading={loadingCredentials}
-        emptyMessage="No VMware credentials found. Please create new ones."
-      />
-
-      <Collapse in={showForm}>
-        <FormControl fullWidth error={!!error} required>
-          <Box sx={{ mt: 2 }}>
-            <TextField
-              id="credentialName"
-              label="Enter VMware Credential Name"
-              variant="outlined"
-              value={vmwareCreds.credentialName}
-              onChange={(e) =>
-                handleVmwareCredsChange({ credentialName: e.target.value })
-              }
-              error={!!error || !!credNameError || !isValidCredentialName}
-              helperText={
-                credNameError
-                  ? credNameError
-                  : !isValidCredentialName
-                    ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
-                    : ""
-              }
-              required
-              size="small"
-              sx={{ mb: 2, width: "440px" }}
-            />
-            <Box
-              sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}
-            >
-              <TextField
-                id="vcenterHost"
-                label="vCenter Server"
-                variant="outlined"
-                value={vmwareCreds.vcenterHost}
-                onChange={(e) =>
-                  handleVmwareCredsChange({ vcenterHost: e.target.value })
-                }
-                error={!!error}
-                required
-                size="small"
-              />
-              <TextField
-                id="datacenter"
-                label="Datacenter Name"
-                size="small"
-                variant="outlined"
-                value={vmwareCreds.datacenter}
-                onChange={(e) =>
-                  handleVmwareCredsChange({ datacenter: e.target.value })
-                }
-                error={!!error}
-                required
-              />
+      {showCredentialSelector && (
+        <FormControl fullWidth error={!!error}>
+          <CredentialSelector
+            placeholder="Select VMware credentials"
+            options={credentialOptions}
+            value={selectedCredential}
+            onChange={onCredentialSelect || (() => { })}
+            loading={loadingCredentials}
+            size={size}
+            emptyMessage="No VMware credentials found. Please use the credential drawer to create new ones."
+            showAddNewButton={false}
+          />
+          {error && (
+            <Box sx={{ mt: 1 }}>
+              <FormHelperText error>{error}</FormHelperText>
             </Box>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 2,
-                mt: 2,
-              }}
-            >
-              <TextField
-                id="username"
-                label="Username"
-                variant="outlined"
-                value={vmwareCreds.username}
-                onChange={(e) =>
-                  handleVmwareCredsChange({ username: e.target.value })
-                }
-                error={!!error}
-                required
-                size="small"
-              />
-              <TextField
-                label="Password"
-                type={showPassword ? "text" : "password"}
-                variant="outlined"
-                size="small"
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={handleClickShowPassword}
-                          onMouseDown={handleMouseDownPassword}
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-                onChange={(e) =>
-                  handleVmwareCredsChange({ password: e.target.value })
-                }
-                fullWidth
-                required
-              />
-            </Box>
-
-            {/* VMware Validation Status */}
-            <Box sx={{ display: "flex", gap: 2, mt: 2, alignItems: "center" }}>
-              {validatingCredentials && (
-                <>
-                  <CircularProgress size={24} />
-                  <FormLabel>
-                    Validating & Creating VMware credentials...
-                  </FormLabel>
-                </>
-              )}
-              {credentialsValidated === true && vmwareCreds.credentialName && (
-                <>
-                  <CheckIcon color="success" fontSize="small" />
-                  <FormLabel>VMware credentials created</FormLabel>
-                </>
-              )}
-              {error && (
-                <FormLabel sx={{ fontSize: "12px" }} color="error">
-                  {error}
-                </FormLabel>
-              )}
-            </Box>
-          </Box>
+          )}
         </FormControl>
-      </Collapse>
+      )}
     </div>
   );
 }

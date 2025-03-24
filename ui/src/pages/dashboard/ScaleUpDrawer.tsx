@@ -25,9 +25,6 @@ import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/nodes/model";
 import { NodeItem } from "src/api/nodes/model";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
-import { createOpenstackCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers";
-import { useInterval } from "src/hooks/useInterval";
-import { THREE_SECONDS } from "src/constants";
 import axios from "axios";
 
 // Mock data - replace with actual data from API
@@ -54,7 +51,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const [nodeCount, setNodeCount] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [validatingOpenstackCreds, setValidatingOpenstackCreds] = useState(false);
     const [selectedOpenstackCred, setSelectedOpenstackCred] = useState<string | null>(null);
     const [openstackError, setOpenstackError] = useState<string | null>(null);
 
@@ -64,15 +60,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const [flavorsError, setFlavorsError] = useState<string | null>(null);
 
     // Fetch credentials list
-    const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds, refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery();
-
+    const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } = useOpenstackCredentialsQuery();
 
     const openstackCredsValidated = openstackCredentials?.status?.openstackValidationStatus === "Succeeded";
-
-    // Polling condition for OpenStack credentials
-    const shouldPollOpenstackCreds =
-        !!openstackCredentials?.metadata?.name &&
-        openstackCredentials?.status === undefined;
 
     // Reset state when drawer closes
     const handleClose = () => {
@@ -83,7 +73,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const clearStates = () => {
         setOpenstackCredentials(null);
         setSelectedOpenstackCred(null);
-        setValidatingOpenstackCreds(false);
         setOpenstackError(null);
         setNodeCount(1);
         setError(null);
@@ -92,48 +81,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setLoadingFlavors(false);
         setFlavorsError(null);
     }
-
-    const handleOpenstackCredChange = (values: Record<string, string | number | boolean>) => {
-        setOpenstackError(null);
-
-        // If this is a new credential being created
-        if ('credentialName' in values) {
-            handleCreateOpenstackCred(values);
-        }
-    };
-
-    const handleCreateOpenstackCred = async (values: Record<string, string | number | boolean>) => {
-        setValidatingOpenstackCreds(true);
-        try {
-            // Format the values for the secret-based flow
-            const response = await createOpenstackCredsWithSecretFlow(
-                values.credentialName as string,
-                {
-                    OS_AUTH_URL: values.OS_AUTH_URL as string,
-                    OS_DOMAIN_NAME: values.OS_DOMAIN_NAME as string,
-                    OS_USERNAME: values.OS_USERNAME as string,
-                    OS_PASSWORD: values.OS_PASSWORD as string,
-                    OS_REGION_NAME: values.OS_REGION_NAME as string,
-                    OS_TENANT_NAME: values.OS_TENANT_NAME as string,
-                    OS_INSECURE: values.OS_INSECURE as boolean || false
-                }
-            );
-            setOpenstackCredentials(response);
-            // Only set validatingOpenstackCreds to false if status is already defined
-            if (response?.status) {
-                setValidatingOpenstackCreds(false);
-                if (response?.status?.openstackValidationStatus !== "Succeeded") {
-                    setOpenstackError("Error Validating OpenStack credentials");
-                }
-            }
-        } catch (error) {
-            console.error("Error creating OpenStack credentials:", error);
-            setValidatingOpenstackCreds(false);
-            setOpenstackError(
-                "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error)
-            );
-        }
-    };
 
     const handleOpenstackCredSelect = async (credId: string | null) => {
         setSelectedOpenstackCred(credId);
@@ -196,46 +143,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         fetchFlavours();
     }, [openstackCredsValidated, openstackCredentials]);
 
-    useInterval(
-        async () => {
-            if (shouldPollOpenstackCreds) {
-                try {
-                    const response = await getOpenstackCredentials(
-                        openstackCredentials?.metadata?.name
-                    );
-                    setOpenstackCredentials(response);
-                    const validationStatus = response?.status?.openstackValidationStatus;
-                    if (validationStatus) {
-                        setValidatingOpenstackCreds(false);
-                        if (validationStatus !== "Succeeded") {
-                            setOpenstackError(
-                                response?.status?.openstackValidationMessage || "Error validating OpenStack credentials"
-                            );
-
-                            // Delete the failed OpenStack credential and its secret
-                            try {
-                                await deleteOpenStackCredsWithSecretFlow(
-                                    response.metadata.name
-                                );
-                                console.log(`Deleted failed OpenStack credential: ${response.metadata.name}`);
-                            } catch (deleteErr) {
-                                console.error(`Error deleting failed OpenStack credential: ${response.metadata.name}`, deleteErr);
-                            }
-                        }
-                    }
-                } catch (err) {
-                    console.error("Error validating OpenStack credentials", err);
-                    setOpenstackError(
-                        "Error validating OpenStack credentials"
-                    );
-                    setValidatingOpenstackCreds(false);
-                }
-            }
-        },
-        THREE_SECONDS,
-        shouldPollOpenstackCreds
-    );
-
     const handleSubmit = async () => {
         if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCredentials?.metadata?.name) {
             setError('Please fill in all required fields');
@@ -278,23 +185,18 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         <StepHeader
                             number="1"
                             label="OpenStack Credentials"
-                            tooltip="Select existing OpenStack credentials or create new ones to authenticate with the OpenStack platform where new nodes will be created."
+                            tooltip="Select existing OpenStack credentials to authenticate with the OpenStack platform where new nodes will be created."
                         />
                         <Box sx={{ ml: 6, mt: 2 }}>
                             <FormControl fullWidth error={!!openstackError} required>
                                 <OpenstackCredentialsForm
                                     fullWidth={true}
-                                    size="medium"
+                                    size="small"
                                     credentialsList={openstackCredsList}
                                     loadingCredentials={loadingOpenstackCreds}
-                                    refetchCredentials={refetchOpenstackCreds}
-                                    validatingCredentials={validatingOpenstackCreds}
-                                    credentialsValidated={openstackCredsValidated}
                                     error={openstackError || ""}
-                                    onChange={handleOpenstackCredChange}
                                     onCredentialSelect={handleOpenstackCredSelect}
                                     selectedCredential={selectedOpenstackCred}
-                                    showCredentialNameField={true}
                                     showCredentialSelector={true}
                                 />
                             </FormControl>
@@ -315,6 +217,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                     value={'Image selected from the first vjailbreak node'}
                                     disabled
                                     fullWidth
+                                    size="small"
                                 />
                             </FormControl>
                             <FormControl fullWidth>
@@ -323,12 +226,13 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                 </Typography>
                             </FormControl>
                             <FormControl error={!!flavorsError} fullWidth>
-                                <InputLabel>{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
+                                <InputLabel size="small">{loadingFlavors ? "Loading Flavors..." : "Flavor"}</InputLabel>
                                 <Select
                                     value={selectedFlavor}
                                     label="Flavor"
                                     onChange={(e) => setSelectedFlavor(e.target.value)}
                                     required
+                                    size="small"
                                     disabled={loadingFlavors || !openstackCredsValidated || !openstackCredentials}
                                     IconComponent={
                                         loadingFlavors
@@ -371,6 +275,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                 }}
                                 inputProps={{ min: 1, max: 5 }}
                                 fullWidth
+                                size="small"
                                 helperText="Min: 1, Max: 5 nodes"
                             />
                         </Box>
