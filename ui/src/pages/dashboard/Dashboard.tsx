@@ -91,13 +91,13 @@ export default function Dashboard() {
     await Promise.all(
       Object.entries(migrationPlanUpdates).map(async ([planId, { vmsToRemove, migrationsToDelete }]) => {
         const migrationPlan = await getMigrationPlan(planId)
-        const updatedVirtualMachines = migrationPlan.spec.virtualmachines?.[0]?.filter(
+        const updatedVirtualMachines = migrationPlan.spec.virtualMachines?.[0]?.filter(
           vm => !vmsToRemove.has(vm)
         )
 
         await patchMigrationPlan(planId, {
           spec: {
-            virtualmachines: [updatedVirtualMachines]
+            virtualMachines: [updatedVirtualMachines]
           }
         })
 

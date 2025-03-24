@@ -107,7 +107,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 try {
                     const response = await getMasterNode();
                     console.log(response);
-                    const flavours = response?.spec.availableflavors;
+                    const flavours = response?.spec.availableFlavors;
                     console.log(flavours);
 
                     if (!flavours) {
@@ -116,7 +116,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                         const interval = setInterval(async () => {
                             const response = await getMasterNode();
                             console.log(response);
-                            const flavours = response?.spec.availableflavors
+                            const flavours = response?.spec.availableFlavors
                             console.log(flavours);
                             if (flavours) {
                                 clearInterval(interval);
@@ -144,7 +144,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     }, [openstackCredsValidated, openstackCredentials]);
 
     const handleSubmit = async () => {
-        if (!masterNode?.spec.imageid || !selectedFlavor || !nodeCount || !openstackCredentials?.metadata?.name) {
+        if (!masterNode?.spec.openstackImageID || !selectedFlavor || !nodeCount || !openstackCredentials?.metadata?.name) {
             setError('Please fill in all required fields');
             return;
         }
@@ -152,7 +152,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         try {
             setLoading(true);
             await createNodes({
-                imageId: masterNode.spec.imageid,
+                imageId: masterNode.spec.openstackImageID,
                 openstackCreds: {
                     kind: "openstackcreds" as const,
                     name: openstackCredentials.metadata.name,
