@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -20,6 +21,12 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -387,4 +394,217 @@ func ValidateAndGetProviderClient(ctx context.Context,
 	}
 
 	return providerClient, nil
+}
+
+// ValidateVMwareCreds validates the VMware credentials
+func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
+	VMwareCredentials, err := GetVMwareCredentials(context.TODO(), vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
+	}
+
+	host := VMwareCredentials.Host
+	username := VMwareCredentials.Username
+	password := VMwareCredentials.Password
+	disableSSLVerification := VMwareCredentials.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+	u.User = url.UserPassword(username, password)
+	// fmt.Println(u)
+	// Connect and log in to ESX or vCenter
+	// Share govc's session cache
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+		Reauth:   true,
+	}
+
+	c := new(vim25.Client)
+	err = s.Login(context.Background(), c, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to login: %w", err)
+	}
+	return c, nil
+}
+
+// GetVMwNetworks gets the networks of a VM
+func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	var networks []string
+	c, err := ValidateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get the vm
+	vm, err := finder.VirtualMachine(ctx, vmname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find vm: %w", err)
+	}
+
+	// Get the network name of the VM
+	var o mo.VirtualMachine
+	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %w", err)
+	}
+
+	for _, device := range o.Config.Hardware.Device {
+		switch dev := device.(type) {
+		case *types.VirtualE1000e:
+			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+		case *types.VirtualVmxnet3:
+			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+		}
+	}
+
+	return networks, nil
+}
+
+// GetVMwDatastore gets the datastores of a VM
+func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	c, err := ValidateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get the vm
+	vm, err := finder.VirtualMachine(ctx, vmname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find vm: %w", err)
+	}
+
+	var vmProps mo.VirtualMachine
+	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &vmProps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %w", err)
+	}
+
+	var datastores []string
+	var ds mo.Datastore
+	var dsref types.ManagedObjectReference
+	for _, device := range vmProps.Config.Hardware.Device {
+		if _, ok := device.(*types.VirtualDisk); ok {
+			switch backing := device.GetVirtualDevice().Backing.(type) {
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskSparseVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				dsref = backing.Datastore.Reference()
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
+			}
+			err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datastore: %w", err)
+			}
+			datastores = append(datastores, ds.Name)
+		}
+	}
+	return datastores, nil
+}
+
+// GetAllVMs gets all the VMs in a datacenter
+func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
+	c, err := ValidateVMwareCreds(vmwcreds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get all the vms
+	vms, err := finder.VirtualMachineList(ctx, "*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vms: %w", err)
+	}
+	var vminfo []vjailbreakv1alpha1.VMInfo
+	for _, vm := range vms {
+		var vmProps mo.VirtualMachine
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get VM properties: %w", err)
+		}
+		var datastores []string
+		var networks []string
+		var disks []string
+		var ds mo.Datastore
+		var dsref types.ManagedObjectReference
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
+			continue
+		}
+		for _, device := range vmProps.Config.Hardware.Device {
+			switch dev := device.(type) {
+			case *types.VirtualE1000e:
+				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			case *types.VirtualVmxnet3:
+				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			case *types.VirtualDisk:
+				switch backing := device.GetVirtualDevice().Backing.(type) {
+				case *types.VirtualDiskFlatVer2BackingInfo:
+					dsref = backing.Datastore.Reference()
+				case *types.VirtualDiskSparseVer2BackingInfo:
+					dsref = backing.Datastore.Reference()
+				case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+					dsref = backing.Datastore.Reference()
+				default:
+					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
+				}
+				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get datastore: %w", err)
+				}
+				datastores = AppendUnique(datastores, ds.Name)
+				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
+			}
+		}
+
+		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
+			Name:       vmProps.Config.Name,
+			Datastores: datastores,
+			Disks:      disks,
+			Networks:   networks,
+			IPAddress:  vmProps.Guest.IpAddress,
+			VMState:    vmProps.Guest.GuestState,
+			OSType:     vmProps.Guest.GuestFamily,
+		})
+	}
+
+	return vminfo, nil
+}
+
+// AppendUnique appends unique values to a slice
+func AppendUnique(slice []string, values ...string) []string {
+	for _, v := range values {
+		if !slices.Contains(slice, v) {
+			slice = append(slice, v)
+		}
+	}
+	return slice
 }

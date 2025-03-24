@@ -179,3 +179,17 @@ func (mr *MockVMOperationsMockRecorder) VMPowerOff() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VMPowerOff", reflect.TypeOf((*MockVMOperations)(nil).VMPowerOff))
 }
+
+// VMPowerOn mocks base method.
+func (m *MockVMOperations) VMPowerOn() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VMPowerOn")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// VMPowerOn indicates an expected call of VMPowerOn.
+func (mr *MockVMOperationsMockRecorder) VMPowerOn() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VMPowerOn", reflect.TypeOf((*MockVMOperations)(nil).VMPowerOn))
+}
