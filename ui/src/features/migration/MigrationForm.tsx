@@ -528,6 +528,12 @@ export default function MigrationFormDrawer({
     isNilOrEmpty(params.vms) ||
     isNilOrEmpty(params.networkMappings) ||
     isNilOrEmpty(params.storageMappings) ||
+    // Check if all networks are mapped
+    availableVmwareNetworks.some(network =>
+      !params.networkMappings?.some(mapping => mapping.source === network)) ||
+    // Check if all datastores are mapped
+    availableVmwareDatastores.some(datastore =>
+      !params.storageMappings?.some(mapping => mapping.source === datastore)) ||
     !migrationOptionValidated
 
   const sortedOpenstackNetworks = useMemo(
