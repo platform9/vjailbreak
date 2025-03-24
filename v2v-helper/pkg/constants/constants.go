@@ -28,4 +28,14 @@ systemctl enable --now serial-getty@ttyS0.service`
 	VMActiveCheckInterval    = 20 * time.Second
 	MigrationSystemNamespace = "migration-system"
 	TrueString               = "true"
+
+	EventMessageConvertingDisk                    = "Converting disk"
+	EventMessageWaitingForCutOverStart            = "Waiting for VM Cutover start time"
+	EventMessageCopyingChangedBlocksWithIteration = "Copying changed blocks"
+	EventMessageWaitingForDataCopyStart           = "Waiting for data copy start time"
+	EventMessageDataCopyStart                     = "Data copy start time reached"
+	EventMessageWaitingForAdminCutOver            = "Waiting for Admin Cutover conditions to be met"
+	EventMessageMigrationSucessful                = "VM created successfully"
+	EventMessageMigrationFailed                   = "Trying to perform cleanup"
+	EventMessageCopyingDisk                       = "Copying disk"
 )
