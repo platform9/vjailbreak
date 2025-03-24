@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/gophercloud/gophercloud v1.13.0
+	github.com/gophercloud/gophercloud v1.14.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
