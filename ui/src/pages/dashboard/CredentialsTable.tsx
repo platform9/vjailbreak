@@ -204,9 +204,14 @@ export default function CredentialsTable() {
 
     // Handle deletion of a credential
     const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
+        // Extract the actual credential name from the ID
+        const credentialName = id.startsWith('vmware-')
+            ? id.replace('vmware-', '')
+            : id.replace('openstack-', '');
+
         const credential = type === 'VMware'
-            ? vmwareCredentials?.find(cred => cred.metadata.name === id)
-            : openstackCredentials?.find(cred => cred.metadata.name === id);
+            ? vmwareCredentials?.find(cred => cred.metadata.name === credentialName)
+            : openstackCredentials?.find(cred => cred.metadata.name === credentialName);
 
         if (credential) {
             const credItem: CredentialItem = {
@@ -246,11 +251,17 @@ export default function CredentialsTable() {
             const openstackCreds = selectedForDeletion.filter(cred => cred.type === 'OpenStack');
 
             await Promise.all(
-                vmwareCreds.map(cred => deleteVMwareCredsWithSecretFlow(cred.id))
+                vmwareCreds.map(cred => {
+                    const credName = cred.id.replace('vmware-', '');
+                    return deleteVMwareCredsWithSecretFlow(credName);
+                })
             );
 
             await Promise.all(
-                openstackCreds.map(cred => deleteOpenStackCredsWithSecretFlow(cred.id))
+                openstackCreds.map(cred => {
+                    const credName = cred.id.replace('openstack-', '');
+                    return deleteOpenStackCredsWithSecretFlow(credName);
+                })
             );
 
             queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY });
@@ -275,7 +286,7 @@ export default function CredentialsTable() {
     }, []);
 
     const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VmwareCredential) => ({
-        id: cred.metadata.name,
+        id: `vmware-${cred.metadata.name}`,
         name: cred.metadata.name,
         type: 'VMware' as const,
         status: cred.status?.vmwareValidationStatus || 'Unknown',
@@ -283,7 +294,7 @@ export default function CredentialsTable() {
     })) || [];
 
     const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
-        id: cred.metadata.name,
+        id: `openstack-${cred.metadata.name}`,
         name: cred.metadata.name,
         type: 'OpenStack' as const,
         status: cred.status?.openstackValidationStatus || 'Unknown',
