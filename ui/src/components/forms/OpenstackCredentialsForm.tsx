@@ -1,20 +1,9 @@
 import {
   Box,
   FormControl,
-  FormLabel,
-  TextField,
-  CircularProgress,
-  Collapse,
+  FormHelperText,
 } from "@mui/material";
-import CheckIcon from "@mui/icons-material/Check";
-import { useState, useCallback, useEffect, useRef } from "react";
-import OpenstackRCFileUpload, {
-  OpenstackRCFileUploaderRef,
-} from "./OpenstackRCFileUpload";
 import CredentialSelector from "./CredentialSelector";
-import { debounce, isValidName } from "src/utils";
-import { QueryObserverResult } from "@tanstack/react-query";
-import { RefetchOptions } from "@tanstack/react-query";
 
 export interface OpenstackCredential {
   metadata: {
@@ -42,13 +31,7 @@ export interface OpenstackCredential {
 export interface OpenstackCredentialsFormProps {
   credentialsList?: OpenstackCredential[];
   loadingCredentials?: boolean;
-  refetchCredentials?: (
-    options?: RefetchOptions
-  ) => Promise<QueryObserverResult<OpenstackCredential[], Error>>;
-  validatingCredentials?: boolean;
-  credentialsValidated?: boolean | null;
   error?: string;
-  onChange: (values: Record<string, string | number | boolean>) => void;
   onCredentialSelect?: (credId: string | null) => void;
   selectedCredential?: string | null;
   showCredentialNameField?: boolean;
@@ -60,32 +43,12 @@ export interface OpenstackCredentialsFormProps {
 export default function OpenstackCredentialsForm({
   credentialsList = [],
   loadingCredentials = false,
-  refetchCredentials,
-  validatingCredentials = false,
-  credentialsValidated = null,
   error,
   size = "small",
-  fullWidth = false,
-  onChange,
   onCredentialSelect,
   selectedCredential = null,
-  showCredentialNameField = true,
   showCredentialSelector = true,
 }: OpenstackCredentialsFormProps) {
-  const [showForm, setShowForm] = useState(!showCredentialSelector);
-  const [openstackCreds, setOpenstackCreds] = useState({
-    OS_AUTH_URL: "",
-    OS_DOMAIN_NAME: "",
-    OS_USERNAME: "",
-    OS_PASSWORD: "",
-    OS_REGION_NAME: "",
-    OS_TENANT_NAME: "",
-    credentialName: "",
-  });
-
-  // Add ref for the OpenStack RC file uploader
-  const openstackRCFileUploaderRef = useRef<OpenstackRCFileUploaderRef>(null);
-
   // Format credentials for the selector
   const credentialOptions = credentialsList.map((cred) => ({
     label: cred.metadata.name,
@@ -97,167 +60,27 @@ export default function OpenstackCredentialsForm({
     },
   }));
 
-  const handleOpenstackCredsChange = (values) => {
-    const updatedCreds = { ...openstackCreds, ...values };
-    setOpenstackCreds(updatedCreds);
-  };
-
-  const debouncedOnChange = useCallback(
-    debounce((creds) => {
-      onChange({
-        ...creds,
-        name: creds.credentialName,
-      });
-    }, 1000 * 3),
-    [onChange]
-  );
-
-  useEffect(() => {
-    if (
-      openstackCreds.OS_AUTH_URL &&
-      openstackCreds.OS_DOMAIN_NAME &&
-      openstackCreds.OS_USERNAME &&
-      openstackCreds.OS_PASSWORD &&
-      openstackCreds.credentialName
-    ) {
-      debouncedOnChange(openstackCreds);
-    }
-
-    return () => {
-      debouncedOnChange.cancel();
-    };
-  }, [openstackCreds]);
-
-  useEffect(() => {
-    if (credentialsValidated === true && showForm && refetchCredentials) {
-      refetchCredentials().then(() => {
-        setTimeout(() => {
-          const createdCredName = openstackCreds.credentialName;
-          const matchingCred = credentialsList.find(
-            (cred) => cred.metadata.name === createdCredName
-          );
-
-          if (matchingCred && onCredentialSelect) {
-            onCredentialSelect(matchingCred.metadata.name);
-            setShowForm(false);
-
-            // Reset the file uploader when credentials are validated
-            if (openstackRCFileUploaderRef.current) {
-              openstackRCFileUploaderRef.current.reset();
-            }
-          } else if (refetchCredentials) {
-            refetchCredentials();
-          }
-        }, 1000);
-      });
-    }
-  }, [
-    credentialsValidated,
-    credentialsList,
-    openstackCreds.credentialName,
-    onCredentialSelect,
-    refetchCredentials,
-  ]);
-
-  // Handle form visibility toggle
-  const toggleForm = () => {
-    if (showForm) {
-      setOpenstackCreds({
-        OS_AUTH_URL: "",
-        OS_DOMAIN_NAME: "",
-        OS_USERNAME: "",
-        OS_PASSWORD: "",
-        OS_REGION_NAME: "",
-        OS_TENANT_NAME: "",
-        credentialName: "",
-      });
-
-      // Reset the file uploader when hiding the form
-      if (openstackRCFileUploaderRef.current) {
-        openstackRCFileUploaderRef.current.reset();
-      }
-    }
-    setShowForm(!showForm);
-  };
-
-  const isValidCredentialName = isValidName(openstackCreds?.credentialName);
-
   return (
     <div>
       {showCredentialSelector && (
-        <CredentialSelector
-          placeholder="Select OpenStack credentials"
-          options={credentialOptions}
-          value={selectedCredential}
-          onChange={onCredentialSelect || (() => { })}
-          onAddNew={toggleForm}
-          size={size}
-          loading={loadingCredentials}
-          emptyMessage="No OpenStack credentials found. Please create new ones."
-        />
-      )}
-
-      <Collapse in={showForm}>
-        <FormControl fullWidth error={!!error} required>
-          {showCredentialNameField && (
-            <TextField
-              id="openstackCredentialName"
-              label="Enter OpenStack Credential Name"
-              variant="outlined"
-              size={size}
-              value={openstackCreds.credentialName}
-              onChange={(e) => {
-                handleOpenstackCredsChange({
-                  credentialName: e.target.value,
-                });
-              }}
-              error={!!error || !isValidCredentialName}
-              helperText={
-                !isValidCredentialName
-                  ? "Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters"
-                  : ""
-              }
-              required
-              sx={{ mt: 2, width: fullWidth ? "100%" : "440px" }}
-            />
-          )}
-
-          <OpenstackRCFileUpload
+        <FormControl fullWidth error={!!error}>
+          <CredentialSelector
+            placeholder="Select OpenStack credentials"
+            options={credentialOptions}
+            value={selectedCredential}
+            onChange={onCredentialSelect || (() => { })}
+            loading={loadingCredentials}
             size={size}
-            ref={openstackRCFileUploaderRef}
-            openstackCredsError={error}
-            onChange={(values) => {
-              handleOpenstackCredsChange({
-                ...(values as Record<string, string>),
-                credentialName: openstackCreds.credentialName, // Preserve the credential name
-              });
-            }}
+            emptyMessage="No OpenStack credentials found. Please use the credential drawer to create new ones."
+            showAddNewButton={false}
           />
-
-          {/* OpenStack Validation Status */}
-          <Box sx={{ display: "flex", gap: 2, mt: 2, alignItems: "center" }}>
-            {validatingCredentials && (
-              <>
-                <CircularProgress size={24} />
-                <FormLabel>
-                  Validating & Creating OpenStack credentials...
-                </FormLabel>
-              </>
-            )}
-            {credentialsValidated === true && openstackCreds.credentialName && (
-              <>
-                <CheckIcon color="success" fontSize="small" />
-                <FormLabel>OpenStack credentials created</FormLabel>
-              </>
-            )}
-            {error && (
-              <FormLabel sx={{ fontSize: "12px" }} color="error">
-                {error}
-              </FormLabel>
-            )}
-          </Box>
+          {error && (
+            <Box sx={{ mt: 1 }}>
+              <FormHelperText error>{error}</FormHelperText>
+            </Box>
+          )}
         </FormControl>
-      </Collapse>
+      )}
     </div>
   );
 }

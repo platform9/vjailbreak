@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import WarningIcon from '@mui/icons-material/Warning';
+import AddIcon from '@mui/icons-material/Add';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { useState, useCallback, useEffect } from "react";
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery";
@@ -25,6 +26,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { VMWARE_CREDS_QUERY_KEY } from "src/hooks/api/useVmwareCredentialsQuery";
 import { OPENSTACK_CREDS_QUERY_KEY } from "src/hooks/api/useOpenstackCredentialsQuery";
 import { deleteVMwareCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers";
+import VMwareCredentialsDrawer from "src/components/drawers/VMwareCredentialsDrawer";
+import OpenstackCredentialsDrawer from "src/components/drawers/OpenstackCredentialsDrawer";
 
 interface CredentialItem {
     id: string;
@@ -95,8 +98,17 @@ interface CustomToolbarProps {
     onDeleteSelected: () => void;
     loading: boolean;
     onRefresh: () => void;
+    onAddVMwareCredential: () => void;
+    onAddOpenstackCredential: () => void;
 }
-const CustomToolbar = ({ numSelected, onDeleteSelected, loading, onRefresh }: CustomToolbarProps) => {
+const CustomToolbar = ({
+    numSelected,
+    onDeleteSelected,
+    loading,
+    onRefresh,
+    onAddVMwareCredential,
+    onAddOpenstackCredential
+}: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -112,6 +124,24 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, loading, onRefresh }: Cu
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={onAddVMwareCredential}
+                    sx={{ height: 40 }}
+                >
+                    Add VMware Credentials
+                </Button>
+                <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={onAddOpenstackCredential}
+                    sx={{ height: 40 }}
+                >
+                    Add OpenStack Credentials
+                </Button>
                 {numSelected > 0 && (
                     <Button
                         variant="outlined"
@@ -158,6 +188,8 @@ export default function CredentialsTable() {
     const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([]);
     const [deleteError, setDeleteError] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false);
+    const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false);
 
     // Force refetch when the component mounts
     useEffect(() => {
@@ -268,6 +300,26 @@ export default function CredentialsTable() {
 
     const isLoading = loadingVmware || loadingOpenstack || deleting;
 
+    const handleOpenVMwareCredDrawer = () => {
+        setVmwareCredDrawerOpen(true);
+    };
+
+    const handleCloseVMwareCredDrawer = () => {
+        setVmwareCredDrawerOpen(false);
+        // Refresh credentials list after drawer closes
+        refetchVmware();
+    };
+
+    const handleOpenOpenstackCredDrawer = () => {
+        setOpenstackCredDrawerOpen(true);
+    };
+
+    const handleCloseOpenstackCredDrawer = () => {
+        setOpenstackCredDrawerOpen(false);
+        // Refresh credentials list after drawer closes
+        refetchOpenstack();
+    };
+
     return (
         <div style={{ height: 'calc(100vh - 180px)', width: '100%', overflow: 'hidden' }}>
             <DataGrid
@@ -294,6 +346,8 @@ export default function CredentialsTable() {
                             onDeleteSelected={handleDeleteSelected}
                             loading={isLoading}
                             onRefresh={handleRefresh}
+                            onAddVMwareCredential={handleOpenVMwareCredDrawer}
+                            onAddOpenstackCredential={handleOpenOpenstackCredDrawer}
                         />
                     ),
                 }}
@@ -331,6 +385,22 @@ export default function CredentialsTable() {
                 errorMessage={deleteError}
                 onErrorChange={setDeleteError}
             />
+
+            {/* VMware Credentials Drawer */}
+            {vmwareCredDrawerOpen && (
+                <VMwareCredentialsDrawer
+                    open={vmwareCredDrawerOpen}
+                    onClose={handleCloseVMwareCredDrawer}
+                />
+            )}
+
+            {/* OpenStack Credentials Drawer */}
+            {openstackCredDrawerOpen && (
+                <OpenstackCredentialsDrawer
+                    open={openstackCredDrawerOpen}
+                    onClose={handleCloseOpenstackCredDrawer}
+                />
+            )}
         </div>
     );
 }
