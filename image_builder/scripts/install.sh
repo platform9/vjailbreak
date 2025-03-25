@@ -1,5 +1,7 @@
 #!/bin/bash
-set -x 
+
+set -x
+
 # Define the log function for easy logging
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/pf9-install.log
