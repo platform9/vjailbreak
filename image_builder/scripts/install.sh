@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -x
 
 # Define the log function for easy logging
 log() {
