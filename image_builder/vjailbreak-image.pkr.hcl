@@ -38,6 +38,12 @@ source "qemu" "vjailbreak-image" {
 build {
   sources = ["source.qemu.vjailbreak-image"]
 
+provisioner "shell" {
+  inline = [
+    "sudo mkdir -p /etc/pf9/yamls"
+  ]
+}
+
   provisioner "file" {
     source      = "${path.root}/deploy"
     destination = "/etc/pf9/yamls"
