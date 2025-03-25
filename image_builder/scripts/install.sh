@@ -1,6 +1,5 @@
 #!/bin/bash
-set -x
-
+set -x 
 # Define the log function for easy logging
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/pf9-install.log
@@ -102,16 +101,16 @@ EOF
 
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
-  sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/deploy/kube-prometheus/manifests/setup
+  sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
   check_command "Applying kube-prometheus setup manifests"
 
   sudo kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring --timeout=300s
   check_command "Waiting for CustomResourceDefinitions to be established"
 
-  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/deploy/kube-prometheus/manifests/
+  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
   check_command "Applying kube-prometheus manifests"
 
-  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/deploy/
+  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 
   log "K3s master setup completed"
