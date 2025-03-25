@@ -4,8 +4,8 @@ import '../styles/custom.css';
 const fetchReleases = async () => {
   const latestVersion = [{
     id: 0,
-    name: "v0.1.5",
-    html_url: "https://github.com/platform9/vjailbreak/releases/tag/v0.1.5"
+    name: "v0.1.6",
+    html_url: "https://github.com/platform9/vjailbreak/releases/tag/v0.1.6"
   }];
 
   try {
@@ -77,8 +77,8 @@ const baseURL = Astro.site || '/'; // Fallback to '/' if Astro.site is undefined
       console.error("Error fetching releases:", error);
       populateDropdown([{
         id: 0,
-        name: "v0.1.5",
-        html_url: "https://github.com/platform9/vjailbreak/releases/tag/v0.1.5"
+        name: "v0.1.6",
+        html_url: "https://github.com/platform9/vjailbreak/releases/tag/v0.1.6"
       }]);
     }
 

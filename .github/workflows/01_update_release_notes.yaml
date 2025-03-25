@@ -81,9 +81,6 @@ jobs:
             echo "SKIP_UPDATE=true" >> $GITHUB_OUTPUT
             exit 0  # Exit gracefully without failing the action
           fi
-
-          YOUTUBE_LINK_VAL=${{ vars.HERO_VIDEO }}  
-          sed -i -E 's|src="https://www.youtube.com/embed/[a-zA-Z0-9_-]+"|src="$YOUTUBE_LINK_VAL"|g' docs/src/content/docs/index.mdx
           
           # Fetch changes from origin and prune stale remote tracking branches
           git fetch origin --prune
@@ -102,6 +99,7 @@ jobs:
             LAST_TAG=$RELEASE_TAG
           fi
           sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.md
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
           sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
 
           # Add a header to the file
