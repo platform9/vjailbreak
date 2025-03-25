@@ -58,20 +58,26 @@ build {
     destination = "/tmp/daemonset.yaml"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/configs/rsyncd.conf"
+    destination = "/tmp/rsyncd.conf"
+  }
+
   provisioner "shell" {
-inline = [
-  "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
-  "sudo chmod 700 get_helm.sh",
-  "sudo ./get_helm.sh",
-  "sudo mkdir -p /etc/pf9/yamls",
-  "sudo mv /tmp/yamls /etc/pf9/yamls",
-  "sudo mv /tmp/install.sh /etc/pf9/install.sh",
-  "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-  "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
-  "sudo chmod +x /etc/pf9/install.sh",
-  "sudo chown root:root /etc/pf9/k3s.env",
-  "sudo chmod 644 /etc/pf9/k3s.env",
-  "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
-]
+    inline = [
+      "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
+      "sudo chmod 700 get_helm.sh",
+      "sudo ./get_helm.sh",
+      "sudo mkdir -p /etc/pf9",
+      "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+      "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+      "sudo mv /tmp/yamls /etc/pf9/yamls",
+      "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
+      "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
+      "sudo chmod +x /etc/pf9/install.sh",
+      "sudo chown root:root /etc/pf9/k3s.env",
+      "sudo chmod 644 /etc/pf9/k3s.env",
+      "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    ]
   }
 }
