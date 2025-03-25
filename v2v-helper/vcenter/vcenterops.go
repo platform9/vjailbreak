@@ -76,20 +76,6 @@ func VCenterClientBuilder(ctx context.Context, username, password, host string, 
 	return &VCenterClient{VCClient: client, VCFinder: finder, VCPropertyCollector: pc}, nil
 }
 
-// This was used to generate the VDDK URL in case it was virt-v2v needed it
-// func GenerateVDDKUrl(username, vcenterurl, datacenter, cluster, host string) string {
-// 	if vcenterurl[:4] != "http" {
-// 		vcenterurl = "http://" + vcenterurl + "/" + datacenter + "/" + cluster + "/" + host + "?no_verify=1"
-// 	}
-// 	u, err := url.Parse(vcenterurl)
-// 	if err != nil {
-// 		return ""
-// 	}
-// 	u.User = url.User(username)
-// 	// fmt.Println(u.String())
-// 	return u.String()
-// }
-
 func GetThumbprint(host string) (string, error) {
 	// Get the thumbprint of the vCenter server
 	// Establish a TLS connection to the server

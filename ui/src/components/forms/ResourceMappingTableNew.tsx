@@ -7,7 +7,7 @@ import {
   Select,
   Typography,
 } from "@mui/material"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useState, useEffect } from "react"
 
 import DeleteIcon from "@mui/icons-material/Delete"
 import {
@@ -51,8 +51,10 @@ export default function ResourceMappingTable({
 }: ResourceMappingProps) {
   const [selectedSourceItem, setSelectedSourceItem] = useState("")
   const [selectedTargetItem, setSelectedTargetItem] = useState("")
+  const [showEmptyRow, setShowEmptyRow] = useState(true)
 
-  const handleAddMapping = useCallback(() => {
+  // Automatically add mapping when both source and target are selected
+  useEffect(() => {
     if (selectedSourceItem && selectedTargetItem) {
       const updatedMappings = [
         ...values,
@@ -65,8 +67,16 @@ export default function ResourceMappingTable({
       onChange(updatedMappings)
       setSelectedSourceItem("")
       setSelectedTargetItem("")
+
+      // Ensure an empty row is shown after adding a mapping
+      setShowEmptyRow(true)
     }
-  }, [values, selectedSourceItem, selectedTargetItem, onChange])
+  }, [selectedSourceItem, selectedTargetItem, values, onChange])
+
+  // Add empty row function - only used for the "+" button now
+  const handleAddEmptyRow = useCallback(() => {
+    setShowEmptyRow(true)
+  }, [])
 
   const handleDeleteMapping = useCallback(
     (mapping: ResourceMap) => {
@@ -97,6 +107,18 @@ export default function ResourceMappingTable({
       (item) => !values.some((mapping) => mapping.target === item)
     )
   }, [oneToManyMapping, targetItems, values])
+
+  // Hide empty row only when there are no available items to map
+  useEffect(() => {
+    if (availableSourceItems.length === 0) {
+      setShowEmptyRow(false)
+    } else if (values.length === 0 || !showEmptyRow) {
+      // Show empty row when we have items to map and either:
+      // 1. No mappings exist yet
+      // 2. Empty row is currently hidden
+      setShowEmptyRow(true)
+    }
+  }, [availableSourceItems, values, showEmptyRow])
 
   const renderValues = useCallback(() => {
     return values.length ? (
@@ -137,62 +159,71 @@ export default function ResourceMappingTable({
           </TableHead>
           <TableBody>
             {renderValues()}
-            <TableRow sx={{ height: "60px" }}>
-              <TableCell width={400}>
-                <FormControl
-                  fullWidth
-                  size="small"
-                  disabled={availableSourceItems.length === 0}
-                >
-                  <InputLabel id="source-item-label">{sourceLabel}</InputLabel>
-                  <Select
-                    labelId="source-item-label"
-                    value={selectedSourceItem}
-                    onChange={(e) => setSelectedSourceItem(e.target.value)}
-                    label={sourceLabel}
+            {showEmptyRow && (
+              <TableRow sx={{ height: "60px" }}>
+                <TableCell width={400}>
+                  <FormControl
                     fullWidth
+                    size="small"
+                    disabled={availableSourceItems.length === 0}
                   >
-                    {availableSourceItems.map((item) => (
-                      <MenuItem key={item} value={item}>
-                        {item}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </TableCell>
-              <TableCell width={400}>
-                <FormControl
-                  fullWidth
-                  size="small"
-                  disabled={availableTargetItems.length === 0}
-                >
-                  <InputLabel id="target-item-label">{targetLabel}</InputLabel>
-                  <Select
-                    labelId="target-item-label"
-                    value={selectedTargetItem}
-                    onChange={(e) => setSelectedTargetItem(e.target.value)}
-                    label={targetLabel}
+                    <InputLabel id="source-item-label">{sourceLabel}</InputLabel>
+                    <Select
+                      labelId="source-item-label"
+                      value={selectedSourceItem}
+                      onChange={(e) => setSelectedSourceItem(e.target.value)}
+                      label={sourceLabel}
+                      fullWidth
+                    >
+                      {availableSourceItems.map((item) => (
+                        <MenuItem key={item} value={item}>
+                          {item}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </TableCell>
+                <TableCell width={400}>
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    disabled={availableTargetItems.length === 0}
                   >
-                    {availableTargetItems.map((item) => (
-                      <MenuItem key={item} value={item}>
-                        {item}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </TableCell>
-              <TableCell align="right">
-                <IconButton
-                  size="small"
-                  color="primary"
-                  onClick={handleAddMapping}
-                  disabled={!selectedSourceItem || !selectedTargetItem}
-                  aria-label="add-mapping"
-                >
-                  <AddCircleOutlineIcon />
-                </IconButton>
-              </TableCell>
-            </TableRow>
+                    <InputLabel id="target-item-label">{targetLabel}</InputLabel>
+                    <Select
+                      labelId="target-item-label"
+                      value={selectedTargetItem}
+                      onChange={(e) => setSelectedTargetItem(e.target.value)}
+                      label={targetLabel}
+                    >
+                      {availableTargetItems.map((item) => (
+                        <MenuItem key={item} value={item}>
+                          {item}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </TableCell>
+                <TableCell align="right">
+                  {/* The plus button is now hidden since mappings are automatically added */}
+                </TableCell>
+              </TableRow>
+            )}
+            {!showEmptyRow && availableSourceItems.length > 0 && (
+              <TableRow>
+                <TableCell colSpan={3} align="center">
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={handleAddEmptyRow}
+                    aria-label="add-row"
+                  >
+                    <AddCircleOutlineIcon />
+                    <Typography variant="caption" sx={{ ml: 1 }}>Add Another Mapping</Typography>
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

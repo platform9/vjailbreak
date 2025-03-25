@@ -32,6 +32,7 @@ ui:
 
 .PHONY: v2v-helper
 v2v-helper:
+	make -C v2v-helper build
 	docker build --platform linux/amd64 --build-arg RELEASE_VERSION=$(VERSION) -t $(V2V_IMG) v2v-helper/
 	docker push $(V2V_IMG)
 

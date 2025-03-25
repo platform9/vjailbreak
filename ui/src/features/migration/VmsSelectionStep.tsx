@@ -130,7 +130,7 @@ export default function VmsSelectionStep({
         const migratedVmSet = new Set<string>();
 
         plans.forEach(plan => {
-          plan.spec.virtualmachines.forEach(vmList => {
+          plan.spec.virtualMachines.forEach(vmList => {
             vmList.forEach(vm => migratedVmSet.add(vm));
           });
         });

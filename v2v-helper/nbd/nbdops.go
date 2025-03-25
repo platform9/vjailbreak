@@ -15,6 +15,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 
 	"golang.org/x/sys/unix"
@@ -155,7 +156,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
-		return fmt.Errorf("Failed to create pipe: %v", err)
+		return errors.Wrapf(err, "failed to create pipe")
 	}
 	defer progressRead.Close()
 	defer progressWrite.Close()
@@ -188,8 +189,13 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	}
 	err = cmd.Run()
 	if err != nil {
-		log.Println("Error running nbdcopy")
-		return fmt.Errorf("failed to run nbdcopy: %v", err)
+		// retry once with debug enabled, to get more details
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return errors.Wrapf(err, "failed to run nbdcopy")
+		}
 	}
 
 	return nil
@@ -292,7 +298,7 @@ func pwrite(fd *os.File, buffer []byte, offset uint64) (int, error) {
 	blocksize := len(buffer)
 	written, err := syscall.Pwrite(int(fd.Fd()), buffer, int64(offset))
 	if err != nil {
-		return -1, fmt.Errorf("Failed to write %d bytes at offset %d: %v", blocksize, offset, err)
+		return -1, errors.Wrapf(err, "failed to write %d bytes at offset %d", blocksize, offset)
 	}
 	if written < blocksize {
 		log.Printf("Wrote less than blocksize (%d): %d", blocksize, written)
@@ -310,7 +316,7 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 
 	err := punch(offset, length)
 	if err != nil {
-		return fmt.Errorf("Failed to punch hole at offset %d: %v", offset, err)
+		return errors.Wrapf(err, "failed to punch hole at offset %d", offset)
 	}
 
 	if err != nil { // Fall back to regular pwrite

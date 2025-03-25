@@ -97,9 +97,16 @@ export const createVMwareCredsSecret = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
+  let vcenterHost = credentials.VCENTER_HOST
+  if (vcenterHost.toLowerCase().startsWith("https://")) {
+    vcenterHost = vcenterHost.substring(8) // Remove 'https://'
+  } else if (vcenterHost.toLowerCase().startsWith("http://")) {
+    vcenterHost = vcenterHost.substring(7) // Remove 'http://'
+  }
+
   // Prepare data for the secret
   const secretData: SecretData = {
-    VCENTER_HOST: credentials.VCENTER_HOST,
+    VCENTER_HOST: vcenterHost,
     VCENTER_USERNAME: credentials.VCENTER_USERNAME,
     VCENTER_PASSWORD: credentials.VCENTER_PASSWORD,
     VCENTER_DATACENTER: credentials.VCENTER_DATACENTER,
