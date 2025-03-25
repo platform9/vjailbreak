@@ -135,7 +135,7 @@ const columns: GridColDef[] = [
         width: 100,
         sortable: false,
         renderCell: (params) => (
-            <Tooltip title={params.row.role === 'master' ? "Master node cannot be scaled down" : "Scale down node"}>
+            <Tooltip title={params.row.role === 'master' ? "Master node cannot be scaled down" : params.row.activeMigrations.length > 0 ? "Node has active migrations" : "Scale down node"}>
                 <span> {/* Wrapper for disabled button tooltip */}
                     <IconButton
                         onClick={(e) => {
@@ -145,7 +145,7 @@ const columns: GridColDef[] = [
                         size="small"
                         color="warning"
                         aria-label="scale down node"
-                        disabled={params.row.role === 'master'}
+                        disabled={params.row.role === 'master' || params.row.activeMigrations.length > 0}
                     >
                         <RemoveCircleOutlineIcon />
                     </IconButton>
