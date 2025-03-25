@@ -15,7 +15,7 @@ endif
 endif
 endif
 
-VERSION = $(RELEASE_VER)-$(GIT_BRANCH)-$(GIT_SHA)
+VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
 export REPO ?= platform9
 export TAG ?= $(VERSION)

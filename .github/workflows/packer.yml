@@ -167,6 +167,7 @@ jobs:
     - name: Set environment variables
       run: |
         echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
+        echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
       
     - name: Build controller image
       run: make -o v2v-helper vjail-controller
