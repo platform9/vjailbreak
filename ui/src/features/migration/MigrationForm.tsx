@@ -408,8 +408,7 @@ export default function MigrationFormDrawer({
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-      virtualmachines: vmsToMigrate,
-      // Optional Migration Params
+      virtualMachines: vmsToMigrate,
       type:
         selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
           ? params.dataCopyMethod
