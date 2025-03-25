@@ -115,18 +115,6 @@ EOF
 
   log "K3s master setup completed"
 
-  log "Master node detected. Waiting for content in /home/ubuntu/vmware-vix-disklib-distrib/ before starting rsync daemon."
-
-  # Wait until the directory is not empty
-  while [ ! -d "/home/ubuntu/vmware-vix-disklib-distrib/" ] || [ -z "$(ls -A /home/ubuntu/vmware-vix-disklib-distrib/ 2>/dev/null)" ]; do
-    log "Waiting for files to be uploaded to /home/ubuntu/vmware-vix-disklib-distrib/ ..."
-    sleep 5
-  done
-
-  log "Files detected in /home/ubuntu/vmware-vix-disklib-distrib/. Starting rsync daemon..."
-
-  sleep 8 
-
   # Start the rsync daemon
   kubectl apply -f /etc/pf9/yamls/daemonset.yaml
   check_command "Installing rsync daemon"
