@@ -38,30 +38,24 @@ source "qemu" "vjailbreak-image" {
 build {
   sources = ["source.qemu.vjailbreak-image"]
 
-provisioner "shell" {
-  inline = [
-    "sudo mkdir -p /etc/pf9/yamls"
-  ]
-}
-
   provisioner "file" {
     source      = "${path.root}/deploy"
-    destination = "/etc/pf9/yamls"
+    destination = "/tmp/deploy"
   }
 
   provisioner "file" {
     source      = "${path.root}/scripts/install.sh"
-    destination = "/etc/pf9/install.sh"
+    destination = "/tmp/install.sh"
   }
 
   provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
-    destination = "/etc/pf9/k3s.env"
+    destination = "/tmp/k3s.env"
   }
 
   provisioner "file" {
     source      = "${path.root}/configs/daemonset.yaml"
-    destination = "/etc/pf9/yamls/daemonset.yaml"
+    destination = "/tmp/daemonset.yaml"
   }
 
   provisioner "shell" {
@@ -69,6 +63,11 @@ inline = [
   "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
   "sudo chmod 700 get_helm.sh",
   "sudo ./get_helm.sh",
+  "sudo mkdir -p /etc/pf9/yamls",
+  "sudo mv /tmp/deploy /etc/pf9/yamls/",
+  "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+  "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+  "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
   "sudo chmod +x /etc/pf9/install.sh",
   "sudo chown root:root /etc/pf9/k3s.env",
   "sudo chmod 644 /etc/pf9/k3s.env",
