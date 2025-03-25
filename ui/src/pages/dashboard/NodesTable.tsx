@@ -324,7 +324,7 @@ export default function NodesTable() {
     }));
 
     const isRowSelectable = (params: GridRowParams) => {
-        return params.row.role === 'worker';
+        return params.row.role === 'worker' && params.row.activeMigrations.length === 0;
     };
 
     return (
