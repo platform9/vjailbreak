@@ -6,6 +6,15 @@ import {
   styled,
   Tooltip,
   Box,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormLabel,
+  MenuItem,
+  Select,
+  Typography,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
@@ -14,6 +23,23 @@ import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
 import { useEffect, useState } from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
+
+// Example flavor data structure - replace with your actual flavor data source
+interface FlavorOption {
+  id: string;
+  name: string;
+  vcpu: number;
+  ram: number;
+  storage: string;
+}
+
+const EXAMPLE_FLAVORS: FlavorOption[] = [
+  { id: "t2.micro", name: "t2.micro", vcpu: 1, ram: 1, storage: "10GB" },
+  { id: "t2.small", name: "t2.small", vcpu: 1, ram: 2, storage: "20GB" },
+  { id: "t2.medium", name: "t2.medium", vcpu: 2, ram: 4, storage: "50GB" },
+  { id: "m4.large", name: "m4.large", vcpu: 2, ram: 8, storage: "100GB" },
+  { id: "m4.xlarge", name: "m4.xlarge", vcpu: 4, ram: 16, storage: "200GB" },
+];
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -29,7 +55,35 @@ const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(6),
 }));
 
+// Custom toolbar with assign flavors button
+const CustomToolbarWithActions = (props) => {
+  const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
 
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px  8px' }}>
+      {rowSelectionModel.length > 0 && (
+        <Button
+          variant="text"
+          color="primary"
+          onClick={onAssignFlavor}
+          size="small"
+          sx={{ ml: 1 }}
+        >
+          Assign Flavor ({rowSelectionModel.length})
+        </Button>
+      )}
+      <CustomSearchToolbar {...toolbarProps} />
+    </Box>
+  );
+};
+
+// Modify VmData interface to include flavor
+interface VmDataWithFlavor extends VmData {
+  flavor?: string;
+  isMigrated?: boolean;
+}
+
+// Update columns to include flavor
 const columns: GridColDef[] = [
   {
     field: "name",
@@ -91,7 +145,12 @@ const columns: GridColDef[] = [
     },
     flex: 1,
   },
-  // { field: "version", headerName: "Version", flex: 1 },
+  {
+    field: "flavor",
+    headerName: "Flavor",
+    flex: 1,
+    valueGetter: (value) => value || "-",
+  },
 ];
 
 const paginationModel = { page: 0, pageSize: 5 };
@@ -119,6 +178,10 @@ export default function VmsSelectionStep({
 }: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
+  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
+  const [selectedFlavor, setSelectedFlavor] = useState<string>("");
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([]);
 
   useEffect(() => {
     const fetchMigratedVms = async () => {
@@ -146,15 +209,56 @@ export default function VmsSelectionStep({
     fetchMigratedVms();
   }, [open]);
 
-  const vmsWithMigrationStatus = vms.map(vm => ({
-    ...vm,
-    isMigrated: migratedVms.has(vm.name)
-  }));
+  useEffect(() => {
+    // Initialize VMs with flavor data
+    const initialVmsWithFlavor = vms.map(vm => ({
+      ...vm,
+      isMigrated: migratedVms.has(vm.name),
+      flavor: undefined
+    }));
+    setVmsWithFlavor(initialVmsWithFlavor);
+  }, [vms, migratedVms]);
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
-    const selectedVms = vmsWithMigrationStatus.filter((vm) => selectedRowIds.includes(vm.name));
+    setRowSelectionModel(selectedRowIds);
+    const selectedVms = vmsWithFlavor.filter((vm) => selectedRowIds.includes(vm.name));
     onChange("vms")(selectedVms);
   };
+
+  const handleOpenFlavorDialog = () => {
+    if (rowSelectionModel.length === 0) return;
+    setFlavorDialogOpen(true);
+  };
+
+  const handleCloseFlavorDialog = () => {
+    setFlavorDialogOpen(false);
+    setSelectedFlavor("");
+  };
+
+  const handleFlavorChange = (event) => {
+    setSelectedFlavor(event.target.value);
+  };
+
+  const handleApplyFlavor = () => {
+    if (!selectedFlavor) {
+      handleCloseFlavorDialog();
+      return;
+    }
+
+    // Update VMs with the selected flavor
+    const updatedVms = vmsWithFlavor.map(vm => {
+      if (rowSelectionModel.includes(vm.name)) {
+        return { ...vm, flavor: selectedFlavor };
+      }
+      return vm;
+    });
+
+    setVmsWithFlavor(updatedVms);
+    onChange("vms")(updatedVms.filter((vm) => rowSelectionModel.includes(vm.name)));
+    handleCloseFlavorDialog();
+  };
+
+  const selectedFlavorDetails = EXAMPLE_FLAVORS.find(f => f.id === selectedFlavor);
 
   const isRowSelectable = (params) => {
     if (params.row.isMigrated) return false;
@@ -168,7 +272,7 @@ export default function VmsSelectionStep({
         <FormControl error={!!error} required>
           <Paper sx={{ width: "100%", height: 389 }}>
             <DataGrid
-              rows={vmsWithMigrationStatus}
+              rows={vmsWithFlavor}
               columns={columns}
               initialState={{
                 pagination: { paginationModel },
@@ -180,15 +284,18 @@ export default function VmsSelectionStep({
               localeText={{ noRowsLabel: "No VMs discovered" }}
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
+              rowSelectionModel={rowSelectionModel}
               getRowId={(row) => row.name}
               isRowSelectable={isRowSelectable}
               slots={{
                 toolbar: (props) => (
-                  <CustomSearchToolbar
+                  <CustomToolbarWithActions
                     {...props}
                     onRefresh={onRefresh}
                     disableRefresh={loadingVms || loadingMigratedVms}
-                    placeholder="Search by  Name, Status, IP Address, or Network Interface(s)"
+                    placeholder="Search by Name, Status, IP Address, or Network Interface(s)"
+                    rowSelectionModel={rowSelectionModel}
+                    onAssignFlavor={handleOpenFlavorDialog}
                   />
                 ),
                 loadingOverlay: () => (
@@ -234,6 +341,56 @@ export default function VmsSelectionStep({
         </FormControl>
         {error && <FormHelperText error>{error}</FormHelperText>}
       </FieldsContainer>
+
+      {/* Flavor Assignment Dialog */}
+      <Dialog
+        open={flavorDialogOpen}
+        onClose={handleCloseFlavorDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          Assign Flavor to {rowSelectionModel.length} {rowSelectionModel.length === 1 ? 'VM' : 'VMs'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ my: 2 }}>
+            <FormLabel>Select Flavor</FormLabel>
+            <Select
+              fullWidth
+              value={selectedFlavor}
+              onChange={handleFlavorChange}
+              size="small"
+              sx={{ mt: 1 }}
+            >
+              {EXAMPLE_FLAVORS.map((flavor) => (
+                <MenuItem key={flavor.id} value={flavor.id}>
+                  {flavor.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+
+          {selectedFlavorDetails && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+              <Typography variant="subtitle2">Flavor details:</Typography>
+              <Typography variant="body2">
+                {selectedFlavorDetails.vcpu} vCPU, {selectedFlavorDetails.ram}GB RAM, {selectedFlavorDetails.storage} Storage
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
+          <Button
+            onClick={handleApplyFlavor}
+            variant="contained"
+            color="primary"
+            disabled={!selectedFlavor}
+          >
+            Apply to selected VMs
+          </Button>
+        </DialogActions>
+      </Dialog>
     </VmsSelectionStepContainer>
   );
 }
