@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -x
 
 # Define the log function for easy logging
@@ -115,6 +116,13 @@ EOF
   check_command "Applying additional manifests"
 
   log "K3s master setup completed"
+
+  # Start the rsync daemon
+  kubectl apply -f /etc/pf9/yamls/daemonset.yaml
+  check_command "Installing rsync daemon"
+
+  log "Rsync daemon started successfully."
+
 else
   log "Setting up K3s Worker..."
 
@@ -138,23 +146,6 @@ else
   log "K3s worker setup completed."
   sleep 20 
 
-  log "Master node detected. Waiting for content in /home/ubuntu/vmware-vix-disklib-distrib/ before starting rsync daemon."
-
-  # Wait until the directory is not empty
-  while [ ! -d "/home/ubuntu/vmware-vix-disklib-distrib/" ] || [ -z "$(ls -A /home/ubuntu/vmware-vix-disklib-distrib/ 2>/dev/null)" ]; do
-    log "Waiting for files to be uploaded to /home/ubuntu/vmware-vix-disklib-distrib/ ..."
-    sleep 5
-  done
-
-  log "Files detected in /home/ubuntu/vmware-vix-disklib-distrib/. Starting rsync daemon..."
-
-  sleep 8 
-
-  # Start the rsync daemon
-  kubectl apply -f /etc/pf9/yamls/daemonset.yaml
-  check_command "Installing rsync daemon"
-
-  log "Rsync daemon started successfully."
 fi
 
 # Remove cron job to ensure this runs only once 
