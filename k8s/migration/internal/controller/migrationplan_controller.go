@@ -266,8 +266,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan:   migrationplan.Name,
-				VMName:          vm,
+				MigrationPlan: migrationplan.Name,
+				VMName:        vm,
+				// PodRef will be set in the migration controller
 				PodRef:          fmt.Sprintf("v2v-helper-%s", vmname),
 				InitiateCutover: !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 			},

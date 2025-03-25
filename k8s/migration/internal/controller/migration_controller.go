@@ -56,7 +56,7 @@ type MigrationReconciler struct {
 
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
-	ctxlog := log.FromContext(ctx)
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
 	ctxlog.Info("Reconciling Migration object")
 	migration := &vjailbreakv1alpha1.Migration{}
@@ -68,7 +68,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
-
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,
@@ -93,7 +92,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
 		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
 	}
-
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
 		return ctrl.Result{}, fmt.Errorf("pod is not Running nor Succeeded for migration %s", migration.Name)
 	}
@@ -130,6 +128,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if string(pod.Status.Phase) != string(corev1.PodSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -160,7 +159,6 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	if err != nil {
 		return err
 	}
-
 	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
 		vjailbreakv1alpha1.MigrationPhaseValidating,
 		vjailbreakv1alpha1.MigrationPhasePending}
@@ -225,6 +223,7 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 		ctxlog.Error(err, fmt.Sprintf("Failed to get events for Pod '%s'", migration.Spec.PodRef))
 		return nil, err
 	}
+
 	filteredEvents := &corev1.EventList{}
 	for i := 0; i < len(allevents.Items); i++ {
 		if allevents.Items[i].InvolvedObject.Name == migration.Spec.PodRef && string(allevents.Items[i].InvolvedObject.UID) == string(pod.UID) {
@@ -236,6 +235,7 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return filteredEvents.Items[i].CreationTimestamp.Time.After(filteredEvents.Items[j].CreationTimestamp.Time)
 	})
+
 	return filteredEvents, nil
 }
 
@@ -249,5 +249,6 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 	if len(podList.Items) == 0 {
 		return nil, errors.New("migration pod not found")
 	}
+	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil
 }
