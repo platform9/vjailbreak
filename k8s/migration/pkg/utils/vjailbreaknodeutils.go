@@ -106,6 +106,11 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials for master")
 	}
+	// Add finalizer to openstack creds
+	err = AddFinalizerToCreds(ctx, k3sclient)
+	if err != nil {
+		return errors.Wrap(err, "failed to add finalizer to openstack creds")
+	}
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err = k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
