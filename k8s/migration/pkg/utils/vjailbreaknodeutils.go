@@ -364,11 +364,11 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 	if server.Image["id"] != nil {
 		fmt.Println("Image ID found", "Image ID", server.Image["id"])
 	} else {
-		imageId, err := GetImageIDOfVMBootFromVolume(ctx, uuid, openstackcreds)
+		imageID, err := GetImageIDOfVMBootFromVolume(ctx, uuid, openstackcreds)
 		if err != nil {
 			return "", errors.Wrap(err, "Failed to get image ID from VM or volume")
 		}
-		return imageId, nil
+		return imageID, nil
 	}
 
 	if imageID, ok := server.Image["id"].(string); ok {
