@@ -61,6 +61,12 @@ jobs:
         if [[ "${{ github.event_name }}" == "release" ]]; then
           echo "release_found=true" >> $GITHUB_ENV
         fi
+    
+    - name: Check if PR raised from release branch
+      id: check_pr_is_from_release_branch
+      if: github.event.pull_request && startsWith(github.head_ref, 'release-v') 
+      run: |
+        echo "release_found=true" >> $GITHUB_ENV
 
     - name: Set environment variables for images
       id: set_env
