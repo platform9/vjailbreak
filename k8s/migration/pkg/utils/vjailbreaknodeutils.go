@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -363,13 +364,49 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 	if server.Image["id"] != nil {
 		fmt.Println("Image ID found", "Image ID", server.Image["id"])
 	} else {
-		return "", fmt.Errorf("instance was booted from a volume, no image ID available")
+		imageID, err := GetImageIDOfVMBootFromVolume(ctx, uuid, openstackcreds)
+		if err != nil {
+			return "", errors.Wrap(err, "Failed to get image ID from VM or volume")
+		}
+		return imageID, nil
 	}
 
 	if imageID, ok := server.Image["id"].(string); ok {
 		return imageID, nil
 	}
 	return "", fmt.Errorf("failed to assert image ID as string")
+}
+
+// GetImageIDOfVMBootFromVolume returns the ID of the image used to create the volume
+func GetImageIDOfVMBootFromVolume(ctx context.Context, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get OpenStack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+
+	// Get attached volumes on that server
+	attachedVolumes := server.AttachedVolumes
+
+	// Check if the root volume is an image
+	for _, volume := range attachedVolumes {
+		// Get volume details
+		volume, err := volumes.Get(openstackClients.BlockStorageClient, volume.ID).Extract()
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get volume details")
+		}
+		fmt.Println("Volume metadata", volume.VolumeImageMetadata)
+		imageID := volume.VolumeImageMetadata["image_id"]
+		if imageID != "" {
+			return imageID, nil
+		}
+	}
+	return "", fmt.Errorf("no image found for the volume")
 }
 
 func ListAllFlavors(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
