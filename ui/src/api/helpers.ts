@@ -12,7 +12,6 @@ import {
 } from "./network-mapping/networkMappings"
 import {
   deleteOpenstackCredentials,
-  getOpenstackCredentials,
   getOpenstackCredentialsList,
 } from "./openstack-creds/openstackCreds"
 import {
@@ -21,13 +20,12 @@ import {
 } from "./storage-mappings/storageMappings"
 import {
   deleteVmwareCredentials,
-  getVmwareCredentials,
+  
   getVmwareCredentialsList,
 } from "./vmware-creds/vmwareCreds"
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
-  deleteSecret,
 } from "./secrets/secrets"
 import { createOpenstackCredsWithSecret } from "./openstack-creds/openstackCreds"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
