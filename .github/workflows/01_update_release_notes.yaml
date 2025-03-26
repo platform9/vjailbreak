@@ -98,7 +98,7 @@ jobs:
             #If you are working on a repo with no initial release, you need to add a commit message.
             LAST_TAG=$RELEASE_TAG
           fi
-          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.md
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
           sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
           sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
 
