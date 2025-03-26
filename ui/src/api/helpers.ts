@@ -149,21 +149,7 @@ export const deleteVMwareCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const credential = await getVmwareCredentials(credName, namespace)
-
     await deleteVmwareCredentials(credName, namespace)
-
-    if (credential?.spec?.secretRef?.name) {
-      await deleteSecret(credential.spec.secretRef.name, namespace)
-    } else {
-      const secretName = `${credName}-vmware-secret`
-      try {
-        await deleteSecret(secretName, namespace)
-      } catch (error) {
-        console.log(`No secret found with name ${secretName} : ${error}`)
-      }
-    }
-
     return { success: true }
   } catch (error) {
     console.error(`Error deleting VMware credential ${credName}:`, error)
@@ -177,21 +163,7 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const credential = await getOpenstackCredentials(credName, namespace)
-
     await deleteOpenstackCredentials(credName, namespace)
-
-    if (credential?.spec?.secretRef?.name) {
-      await deleteSecret(credential.spec.secretRef.name, namespace)
-    } else {
-      const secretName = `${credName}-openstack-secret`
-      try {
-        await deleteSecret(secretName, namespace)
-      } catch (error) {
-        console.log(`No secret found with name ${secretName} : ${error}`)
-      }
-    }
-
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
