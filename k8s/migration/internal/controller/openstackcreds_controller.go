@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -138,7 +139,8 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 	}
-	return ctrl.Result{}, nil
+	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
+	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
