@@ -39,13 +39,39 @@ spec:
           spec:
             description: VMwareMachineSpec defines the desired state of VMwareMachine
             properties:
-              foo:
-                description: Foo is an example field of VMwareMachine. Edit vmwaremachine_types.go
-                  to remove/update
-                type: string
+              vms:
+                description: VMs is the list of VMs in the VMwareMachine
+                properties:
+                  datastores:
+                    items:
+                      type: string
+                    type: array
+                  disks:
+                    items:
+                      type: string
+                    type: array
+                  ipAddress:
+                    type: string
+                  name:
+                    type: string
+                  networks:
+                    items:
+                      type: string
+                    type: array
+                  osType:
+                    type: string
+                  vmState:
+                    type: string
+                required:
+                - name
+                type: object
             type: object
           status:
             description: VMwareMachineStatus defines the observed state of VMwareMachine
+            properties:
+              powerState:
+                description: PowerState is the state of the VMs in the VMware
+                type: string
             type: object
         type: object
     served: true

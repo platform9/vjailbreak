@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,6 +31,9 @@ type OpenstackInfo struct {
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+
+	// Flavors is the list of available flavors in openstack
+	Flavors []flavors.Flavor `json:"flavors,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

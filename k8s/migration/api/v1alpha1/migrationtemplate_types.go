@@ -41,10 +41,6 @@ type MigrationTemplateSpec struct {
 	Destination     MigrationTemplateDestination `json:"destination"`
 }
 
-// MigrationTemplateStatus defines the observed state of MigrationTemplate
-type MigrationTemplateStatus struct {
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
@@ -53,8 +49,7 @@ type MigrationTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MigrationTemplateSpec   `json:"spec,omitempty"`
-	Status MigrationTemplateStatus `json:"status,omitempty"`
+	Spec MigrationTemplateSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true
