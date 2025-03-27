@@ -13,6 +13,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- vmwarehost_editor_role.yaml
+- vmwarehost_viewer_role.yaml
 - vmwarecluster_editor_role.yaml
 - vmwarecluster_viewer_role.yaml
 - vjailbreaknode_editor_role.yaml
