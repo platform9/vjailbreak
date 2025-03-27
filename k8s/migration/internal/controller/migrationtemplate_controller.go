@@ -83,12 +83,6 @@ func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}, err
 	}
 
-	vminfo, err := utils.GetAllVMs(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter)
-	if err != nil {
-		r.ctxlog.Error(err, "Failed to get info of all VMs")
-		return ctrl.Result{}, err
-	}
-
 	openstackinfo, err := utils.GetOpenstackInfo(ctx, openstackcreds)
 	if err != nil {
 		r.ctxlog.Error(err, "Failed to get info of Openstack")

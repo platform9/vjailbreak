@@ -22,8 +22,7 @@ import (
 
 // MigrationTemplateSource defines the source details for the migrationtemplate
 type MigrationTemplateSource struct {
-	VMwareRef  string `json:"vmwareRef"`
-	DataCenter string `json:"datacenter"`
+	VMwareRef string `json:"vmwareRef"`
 }
 
 // MigrationTemplateDestination defines the destination details for the migrationtemplate
@@ -42,27 +41,8 @@ type MigrationTemplateSpec struct {
 	Destination     MigrationTemplateDestination `json:"destination"`
 }
 
-type VMInfo struct {
-	Name       string   `json:"name"`
-	Datastores []string `json:"datastores,omitempty"`
-	Disks      []string `json:"disks,omitempty"`
-	Networks   []string `json:"networks,omitempty"`
-	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmState,omitempty"`
-	OSType     string   `json:"osType,omitempty"`
-}
-
-type OpenstackInfo struct {
-	VolumeTypes []string `json:"volumeTypes,omitempty"`
-	Networks    []string `json:"networks,omitempty"`
-}
-
 // MigrationTemplateStatus defines the observed state of MigrationTemplate
 type MigrationTemplateStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	VMWare    []VMInfo      `json:"vmware,omitempty"`
-	Openstack OpenstackInfo `json:"openstack,omitempty"`
 }
 
 // +kubebuilder:object:root=true

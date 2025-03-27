@@ -20,22 +20,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type VMInfo struct {
+	Name       string   `json:"name"`
+	Datastores []string `json:"datastores,omitempty"`
+	Disks      []string `json:"disks,omitempty"`
+	Networks   []string `json:"networks,omitempty"`
+	IPAddress  string   `json:"ipAddress,omitempty"`
+	VMState    string   `json:"vmState,omitempty"`
+	OSType     string   `json:"osType,omitempty"`
+}
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of VMwareMachine. Edit vmwaremachine_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// VMs is the list of VMs in the VMwareMachine
+	VMs VMInfo `json:"vms,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine
 type VMwareMachineStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// PowerState is the state of the VMs in the VMware
+	PowerState string `json:"powerState,omitempty"`
 }
 
 // +kubebuilder:object:root=true

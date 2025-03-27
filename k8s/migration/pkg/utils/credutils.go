@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud"
@@ -28,6 +29,7 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -607,4 +609,36 @@ func AppendUnique(slice []string, values ...string) []string {
 		}
 	}
 	return slice
+}
+
+func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
+	for _, vm := range vminfo {
+		err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: fmt.Sprintf("vm-%s-", vminfo.Name),
+			Namespace:    vmwcreds.Namespace,
+			Labels:       map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
+		},
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMs: vminfo,
+		},
+		Status: vjailbreakv1alpha1.VMwareMachineStatus{
+			PowerState: vminfo.VMState,
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
