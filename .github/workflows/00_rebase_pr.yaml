@@ -1,0 +1,88 @@
+name: Rebase PR
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch: # Enable manual triggering
+    inputs:
+      branch:
+        description: 'Select the branch to rebase the PR too'
+        required: true
+
+jobs:
+  check-comment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: What was the comment
+        run: |
+         echo "Comment: $COMMENT_BODY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  rebase:
+    if: ${{ github.event.issue.pull_request }} && startsWith(github.event.comment.body, '/rebase')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Check user permissions
+        id: check-permissions
+        run: |
+          USER_LOGIN="${{ github.event.comment.user.login }}"
+          COLLABORATORS=$(gh api "/repos/${{ github.repository }}/collaborators" \
+            --jq '.[] | select(.permissions.admin == true or .permissions.maintain == true or .permissions.push == true) | .login')
+          if [[ "$COLLABORATORS" =~ "$USER_LOGIN" ]]; then
+            echo "is_authorized=true" >> $GITHUB_OUTPUT
+          else
+            echo "::error::User $USER_LOGIN lacks required permissions"
+            gh pr comment ${{ github.event.issue.number }} --body "$USER_LOGIN lacks required permissions. Please contact a maintainer."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install gh
+          echo "gh cli installed"
+
+      - name: Find latest release branch
+        id: find_release_branch
+        run: |
+          git fetch origin
+          LATEST_BRANCH=$(git branch -r | grep 'origin/release-v' | sed 's/origin\///' | sort -V | tail -n 1)
+          echo "Latest release branch: $LATEST_BRANCH"
+          echo "latest_branch=$LATEST_BRANCH" >> $GITHUB_OUTPUT
+          echo "::set-output name=latest_branch::$LATEST_BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebase current PR onto latest release branch
+        if: steps.check-permissions.outputs.is_authorized == 'true'
+        run: |
+          # Configure Git
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions Bot"
+
+          echo "going to branch: $TARGET_BRANCH"
+          git fetch origin $TARGET_BRANCH
+          #git rebase origin/$TARGET_BRANCH
+          gh pr edit ${{ github.event.issue.number }} --base $TARGET_BRANCH
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.event.repository.name }}
+          TARGET_BRANCH: ${{ steps.find_release_branch.outputs.latest_branch }}
