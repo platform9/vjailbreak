@@ -6,7 +6,7 @@
 [![Go Report Card V2V Helper](https://goreportcard.com/badge/github.com/platform9/vjailbreak/v2v-helper)](https://goreportcard.com/report/github.com/platform9/vjailbreak/v2v-helper)
 # vJailbreak
 A free and open-source tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
-* Connect to vCenter
+* Connect to a vCenter
 * Select virtual machines to migrate
   * VM disks are converted from `vmdk` to `qcow2`
   * VMware Tools are uninstalled
