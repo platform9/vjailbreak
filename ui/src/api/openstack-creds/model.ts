@@ -71,9 +71,6 @@ export interface OpenstackFlavor {
   disk: number
 }
 
-export interface OpenstackFlavorsResponse {
-  flavors: OpenstackFlavor[]
-}
 
 
 export interface OpenstackCredsSpec {
