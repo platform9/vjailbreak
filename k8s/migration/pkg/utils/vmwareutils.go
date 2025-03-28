@@ -76,21 +76,36 @@ func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsS
 		return errors.Wrap(err, "failed to get clusters and hosts")
 	}
 	for _, cluster := range clusters {
+		clusterk8sName, err := ConvertToK8sName(cluster.Name)
+		if err != nil {
+			return errors.Wrap(err, "failed to convert cluster name to k8s name")
+		}
 		vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name,
+				Name:      clusterk8sName,
 				Namespace: scope.Namespace(),
+			},
+			Spec: vjailbreakv1alpha1.VMwareClusterSpec{
+				Name:  cluster.Name,
+				Hosts: []string{},
 			},
 		}
 		for _, host := range cluster.Hosts {
+			hostk8sName, err := ConvertToK8sName(host.Name)
+			if err != nil {
+				return errors.Wrap(err, "failed to convert host name to k8s name")
+			}
 			vmwareHost := vjailbreakv1alpha1.VMwareHost{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      host.Name,
+					Name:      hostk8sName,
 					Namespace: scope.Namespace(),
+				},
+				Spec: vjailbreakv1alpha1.VMwareHostSpec{
+					Name: host.Name,
 				},
 			}
 			vmwareCluster.Spec.Hosts = append(vmwareCluster.Spec.Hosts, vmwareHost.Name)
-			_, err := controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareHost, func() error {
+			_, err = controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareHost, func() error {
 				return nil
 			})
 			if err != nil {
