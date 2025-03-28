@@ -105,9 +105,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             if (openstackCredsValidated || openstackCredentials) {
                 setLoadingFlavors(true);
                 try {
-                    const response = await getMasterNode();
-                    console.log(response);
-                    const flavours = response?.spec.availableFlavors;
+                    const flavours = openstackCredentials?.spec.flavors;
                     console.log(flavours);
 
                     if (!flavours) {

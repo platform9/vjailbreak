@@ -65,6 +65,7 @@ rules:
   - storagemappings
   - vjailbreaknodes
   - vmwarecreds
+  - vmwaremachines
   verbs:
   - create
   - delete

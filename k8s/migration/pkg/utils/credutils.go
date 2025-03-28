@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	k8stype "k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -623,10 +624,24 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	}
 	return nil
 }
+
+func sanitizeName(name string) string {
+	// Convert to lowercase
+	name = strings.ToLower(name)
+	// Remove any invalid characters (keep only lowercase alphanumeric and '-')
+	re := regexp.MustCompile(`[^a-z0-9-]`)
+	name = re.ReplaceAllString(name, "-")
+	// Ensure the name starts and ends with an alphanumeric character
+	name = strings.Trim(name, "-")
+	return name
+}
+
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
+	sanitizedVMName := sanitizeName(vminfo.Name)
+
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("vm-%s-", vminfo.Name),
+			GenerateName: fmt.Sprintf("vm-%s-", sanitizedVMName), // Use sanitized name
 			Namespace:    vmwcreds.Namespace,
 			Labels:       map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
 		},
@@ -635,20 +650,25 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 		},
 		Status: vjailbreakv1alpha1.VMwareMachineStatus{
 			PowerState: vminfo.VMState,
-			Migrated:   false,
 		},
 	}
+
 	// Create or update the VM
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		// Fetch existing object if it exists
 		existingVM := &vjailbreakv1alpha1.VMwareMachine{}
-		if err := client.Get(ctx, k8stype.NamespacedName{Name: vmwvm.Name, Namespace: vmwvm.Namespace}, existingVM); err == nil {
-			// Preserve targetFlavour if the object already exists
-			vmwvm.Spec.TargetFlavor = existingVM.Spec.TargetFlavor
+		if err := client.Get(ctx, k8stypes.NamespacedName{Name: vmwvm.Name, Namespace: vmwvm.Namespace}, existingVM); err != nil {
+			// This means it's a new resource
+			// Explicitly set Migrated to false for new resources
+			vmwvm.Status.Migrated = false
+		} else {
+			// For existing resources, preserve the current Migrated status
 			vmwvm.Status.Migrated = existingVM.Status.Migrated
 		}
 
 		// Don't modify targetFlavour but allow other updates
+		// Preserve other existing specifications
+		vmwvm.Spec.TargetFlavor = existingVM.Spec.TargetFlavor
 		return nil
 	})
 	if err != nil {
