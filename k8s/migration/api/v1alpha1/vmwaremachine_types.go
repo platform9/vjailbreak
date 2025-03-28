@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,18 +29,26 @@ type VMInfo struct {
 	IPAddress  string   `json:"ipAddress,omitempty"`
 	VMState    string   `json:"vmState,omitempty"`
 	OSType     string   `json:"osType,omitempty"`
+	CPU        int      `json:"cpu,omitempty"`
+	Memory     int      `json:"memory,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMs is the list of VMs in the VMwareMachine
 	VMs VMInfo `json:"vms,omitempty"`
+
+	// TargetFlavor is the flavor to be used for the VMs in the VMwareMachine
+	TargetFlavor flavors.Flavor `json:"targetFlavor,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine
 type VMwareMachineStatus struct {
 	// PowerState is the state of the VMs in the VMware
 	PowerState string `json:"powerState,omitempty"`
+
+	// Migrated flag to indicate if the VMs have been migrated
+	Migrated bool `json:"migrated,omitempty"`
 }
 
 // +kubebuilder:object:root=true

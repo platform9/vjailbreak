@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -170,6 +171,14 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
+			vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+			if err := r.Client.Get(ctx, types.NamespacedName{Name: "vm-" + scope.Migration.Spec.VMName, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+				return err
+			}
+			vmwvm.Status.Migrated = true
+			if err := r.Status().Update(ctx, vmwvm); err != nil {
+				return err
+			}
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver]:

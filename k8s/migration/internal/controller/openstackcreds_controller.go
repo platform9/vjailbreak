@@ -124,11 +124,20 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
+		ctxlog.Info(fmt.Sprintf("Getting flavors for OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 		flavors, err := utils.ListAllFlavors(ctx, scope.OpenstackCreds)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
 		}
+		ctxlog.Info(fmt.Sprintf("Successfully got flavors for OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+		ctxlog.Info(fmt.Sprintf("Setting flavors for OpenstackCreds '%v\n'", flavors))
 		scope.OpenstackCreds.Spec.Flavors = flavors
+
+		// Update the spec field
+		if err := r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating spec of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+			return ctrl.Result{}, err
+		}
 
 		ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredential.AuthURL))
 		// Update the status of the OpenstackCreds object

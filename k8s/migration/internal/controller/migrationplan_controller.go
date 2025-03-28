@@ -244,18 +244,12 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vm string, vmMachines *vjailbreakv1alpha1.VMwareMachineList) (*vjailbreakv1alpha1.Migration, error) {
+	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	var vminfo *vjailbreakv1alpha1.VMInfo
-	for i := range vmMachines.Items {
-		if vmMachines.Items[i].Name == vm {
-			vminfo = &vmMachines.Items[i].Spec.VMs
-			break
-		}
-	}
+	vminfo := &vmMachine.Spec.VMs
 
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmname), Namespace: migrationplan.Namespace}, migrationobj)
@@ -480,7 +474,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string) (*corev1.ConfigMap, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*corev1.ConfigMap, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
@@ -544,6 +538,10 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 			},
+		}
+		// Check if target flavor is set
+		if vmMachine.Spec.TargetFlavor.ID != "" {
+			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavor.ID
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
@@ -706,8 +704,15 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	}
 	counter := len(nodeList.Items)
 
+	var vmMachineObj *vjailbreakv1alpha1.VMwareMachine
 	for _, vm := range parallelvms {
-		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachines)
+		for i := range vmMachines.Items {
+			if vmMachines.Items[i].Name == vm {
+				vmMachineObj = &vmMachines.Items[i]
+				break
+			}
+		}
+		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.MigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
@@ -716,7 +721,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
 		}
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj)
 		if err != nil {
 			return fmt.Errorf("failed to create ConfigMap for VM %s: %w", vm, err)
 		}

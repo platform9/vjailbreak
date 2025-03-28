@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	k8stype "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -595,6 +596,8 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			IPAddress:  vmProps.Guest.IpAddress,
 			VMState:    vmProps.Guest.GuestState,
 			OSType:     vmProps.Guest.GuestFamily,
+			CPU:        int(vmProps.Config.Hardware.NumCPU),
+			Memory:     int(vmProps.Config.Hardware.MemoryMB),
 		})
 	}
 
@@ -632,9 +635,20 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 		},
 		Status: vjailbreakv1alpha1.VMwareMachineStatus{
 			PowerState: vminfo.VMState,
+			Migrated:   false,
 		},
 	}
+	// Create or update the VM
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		// Fetch existing object if it exists
+		existingVM := &vjailbreakv1alpha1.VMwareMachine{}
+		if err := client.Get(ctx, k8stype.NamespacedName{Name: vmwvm.Name, Namespace: vmwvm.Namespace}, existingVM); err == nil {
+			// Preserve targetFlavour if the object already exists
+			vmwvm.Spec.TargetFlavor = existingVM.Spec.TargetFlavor
+			vmwvm.Status.Migrated = existingVM.Status.Migrated
+		}
+
+		// Don't modify targetFlavour but allow other updates
 		return nil
 	})
 	if err != nil {
