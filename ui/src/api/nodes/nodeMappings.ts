@@ -9,7 +9,6 @@ import {
   NodeItem as Node,
   Spec,
   NodeItem,
-  OpenstackFlavorsResponse,
   OpenstackProjectsResponse,
   OpenstackCredsRef,
 } from "./model"
