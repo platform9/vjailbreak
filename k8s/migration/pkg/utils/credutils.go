@@ -35,6 +35,7 @@ type OpenStackClients struct {
 	BlockStorageClient *gophercloud.ServiceClient
 	ComputeClient      *gophercloud.ServiceClient
 	NetworkingClient   *gophercloud.ServiceClient
+	ContainerClient    *gophercloud.ServiceClient
 }
 
 // VMwareCredentials holds the actual credentials after decoding
@@ -330,10 +331,16 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack networking client for region '%s'",
 			openstackCredential.RegionName))
 	}
+	containerClient, err := openstack.NewContainerInfraV1(providerClient, endpoint)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack container client for region '%s'",
+			openstackCredential.RegionName))
+	}
 	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
+		ContainerClient:    containerClient,
 	}, nil
 }
 

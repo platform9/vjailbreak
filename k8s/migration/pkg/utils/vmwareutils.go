@@ -1,0 +1,98 @@
+package utils
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/vim25/mo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type VMwareHostInfo struct {
+	Name string
+}
+
+type VMwareClusterInfo struct {
+	Name  string
+	Hosts []VMwareHostInfo
+}
+
+func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]VMwareClusterInfo, error) {
+	var clusters []VMwareClusterInfo
+	c, err := ValidateVMwareCreds(scope.VMwareCreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to validate vCenter connection")
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, datacenter)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find datacenter")
+	}
+	finder.SetDatacenter(dc)
+	clusterList, err := finder.ClusterComputeResourceList(ctx, "*")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get cluster list")
+	}
+
+	// Print cluster names
+	fmt.Println("Clusters in vSphere:")
+	for _, cluster := range clusterList {
+		var clusterProperties mo.ClusterComputeResource
+		err := cluster.Properties(ctx, cluster.Reference(), []string{"name"}, &clusterProperties)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get cluster properties")
+		}
+		fmt.Printf("- %s\n", clusterProperties.Name)
+
+		hosts, err := cluster.Hosts(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get hosts")
+		}
+		var vmHosts []VMwareHostInfo
+		for _, host := range hosts {
+			vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name()})
+		}
+		clusters = append(clusters, VMwareClusterInfo{
+			Name:  clusterProperties.Name,
+			Hosts: vmHosts,
+		})
+	}
+	return clusters, nil
+}
+
+func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) error {
+	clusters, err := GetVMwareClustersAndHosts(ctx, scope, datacenter)
+	if err != nil {
+		return errors.Wrap(err, "failed to get clusters and hosts")
+	}
+	for _, cluster := range clusters {
+		vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cluster.Name,
+				Namespace: scope.Namespace(),
+			},
+		}
+		for _, host := range cluster.Hosts {
+			vmwareHost := vjailbreakv1alpha1.VMwareHost{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      host.Name,
+					Namespace: scope.Namespace(),
+				},
+			}
+			vmwareCluster.Spec.Hosts = append(vmwareCluster.Spec.Hosts, vmwareHost.Name)
+			err := scope.Client.Create(ctx, &vmwareHost)
+			if err != nil {
+				return errors.Wrap(err, "failed to create vmware host")
+			}
+		}
+		err := scope.Client.Create(ctx, &vmwareCluster)
+		if err != nil {
+			return errors.Wrap(err, "failed to create vmware cluster")
+		}
+	}
+	return nil
+}

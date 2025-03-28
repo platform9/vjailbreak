@@ -20,22 +20,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type VMwareClusterPhase string
+
+const (
+	VMwareClusterPending   VMwareClusterPhase = "Pending"
+	VMwareClusterRunning   VMwareClusterPhase = "Running"
+	VMwareClusterFailed    VMwareClusterPhase = "Failed"
+	VMwareClusterCompleted VMwareClusterPhase = "Completed"
+)
 
 // VMwareClusterSpec defines the desired state of VMwareCluster
 type VMwareClusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of VMwareCluster. Edit vmwarecluster_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Hosts []string `json:"hosts,omitempty"`
 }
 
 // VMwareClusterStatus defines the observed state of VMwareCluster
 type VMwareClusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Phase VMwareClusterPhase `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true
