@@ -39,9 +39,7 @@ spec:
           spec:
             description: VMwareHostSpec defines the desired state of VMwareHost
             properties:
-              foo:
-                description: Foo is an example field of VMwareHost. Edit vmwarehost_types.go
-                  to remove/update
+              name:
                 type: string
             type: object
           status:

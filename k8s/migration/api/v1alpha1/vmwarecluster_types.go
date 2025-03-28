@@ -31,6 +31,7 @@ const (
 
 // VMwareClusterSpec defines the desired state of VMwareCluster
 type VMwareClusterSpec struct {
+	Name  string   `json:"name,omitempty"`
 	Hosts []string `json:"hosts,omitempty"`
 }
 
