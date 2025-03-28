@@ -40,10 +40,11 @@ type OpenStackClients struct {
 
 // VMwareCredentials holds the actual credentials after decoding
 type VMwareCredentials struct {
-	Host     string
-	Username string
-	Password string
-	Insecure bool
+	Host       string
+	Username   string
+	Password   string
+	Datacenter string
+	Insecure   bool
 }
 
 // OpenStackCredentials holds the actual credentials after decoding
@@ -79,6 +80,7 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	username := string(secret.Data["VCENTER_USERNAME"])
 	password := string(secret.Data["VCENTER_PASSWORD"])
 	insecureStr := string(secret.Data["VCENTER_INSECURE"])
+	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
@@ -89,14 +91,18 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	if password == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
+	if datacenter == "" {
+		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+	}
 
 	insecure := strings.TrimSpace(insecureStr) == "true"
 
 	return VMwareCredentials{
-		Host:     host,
-		Username: username,
-		Password: password,
-		Insecure: insecure,
+		Host:       host,
+		Username:   username,
+		Password:   password,
+		Datacenter: datacenter,
+		Insecure:   insecure,
 	}, nil
 }
 
@@ -227,16 +233,16 @@ func VerifyPorts(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opensta
 func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
 	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get openstack clients")
 	}
 	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return fmt.Errorf("failed to list volume types: %w", err)
+		return errors.Wrap(err, "failed to list volume types")
 	}
 
 	allvoltypes, err := volumetypes.ExtractVolumeTypes(allPages)
 	if err != nil {
-		return fmt.Errorf("failed to extract all volume types: %w", err)
+		return errors.Wrap(err, "failed to extract all volume types")
 	}
 
 	// Verify that all volume types in targetstorage exist in the openstack volume types
@@ -249,7 +255,7 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 			}
 		}
 		if !found {
-			return fmt.Errorf("volume type '%s' not found in OpenStack", targetstorage)
+			return errors.Wrap(fmt.Errorf("volume type '%s' not found in OpenStack", targetstorage), "failed to verify volume types")
 		}
 	}
 	return nil
@@ -260,16 +266,16 @@ func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Op
 	var openstacknetworks []string
 	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list volume types: %w", err)
+		return nil, errors.Wrap(err, "failed to list volume types")
 	}
 
 	allvoltypes, err := volumetypes.ExtractVolumeTypes(allVolumeTypePages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract all volume types: %w", err)
+		return nil, errors.Wrap(err, "failed to extract all volume types")
 	}
 
 	for i := 0; i < len(allvoltypes); i++ {
@@ -278,12 +284,12 @@ func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Op
 
 	allNetworkPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list networks: %w", err)
+		return nil, errors.Wrap(err, "failed to list networks")
 	}
 
 	allNetworks, err := networks.ExtractNetworks(allNetworkPages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract all networks: %w", err)
+		return nil, errors.Wrap(err, "failed to extract all networks")
 	}
 
 	for i := 0; i < len(allNetworks); i++ {
@@ -299,7 +305,7 @@ func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Op
 // GetOpenStackClients is a function to create openstack clients
 func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
 	if openstackcreds == nil {
-		return nil, fmt.Errorf("openstackcreds cannot be nil")
+		return nil, errors.New("openstackcreds cannot be nil")
 	}
 
 	openstackCredential, err := GetOpenstackCredentials(ctx, openstackcreds.Spec.SecretRef.Name)
@@ -315,7 +321,7 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
 	if providerClient == nil {
-		return nil, fmt.Errorf("failed to get provider client for region '%s'", openstackCredential.RegionName)
+		return nil, errors.New(fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
@@ -331,16 +337,16 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack networking client for region '%s'",
 			openstackCredential.RegionName))
 	}
-	containerClient, err := openstack.NewContainerInfraV1(providerClient, endpoint)
-	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack container client for region '%s'",
-			openstackCredential.RegionName))
-	}
+	// containerClient, err := openstack.NewContainerInfraV1(providerClient, endpoint)
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack container client for region '%s'",
+	// 		openstackCredential.RegionName))
+	// }
 	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
-		ContainerClient:    containerClient,
+		// ContainerClient:    containerClient,
 	}, nil
 }
 

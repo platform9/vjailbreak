@@ -221,7 +221,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 
 	openstackClients, err := GetOpenStackClients(ctx, creds)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get compute client")
+		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	networkIDs, err := GetCurrentInstanceNetworkInfo()
@@ -328,7 +328,7 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client)
 	}
 	openstackClients, err := GetOpenStackClients(ctx, creds)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get compute client")
+		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	// Fetch the VM details
@@ -351,7 +351,7 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
 	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get compute client")
+		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	// Fetch the VM details
@@ -375,7 +375,7 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 func ListAllFlavors(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
 	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get compute client")
+		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	// List flavors
@@ -394,7 +394,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	}
 	openstackClients, err := GetOpenStackClients(ctx, creds)
 	if err != nil {
-		return errors.Wrap(err, "failed to get compute client")
+		return errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	// delete the VM
@@ -425,7 +425,7 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 	}
 	openstackClients, err := GetOpenStackClients(ctx, creds)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get compute client")
+		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
 	listOpts := servers.ListOpts{Name: name}

@@ -10,6 +10,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25/mo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type VMwareHostInfo struct {
@@ -21,14 +22,18 @@ type VMwareClusterInfo struct {
 	Hosts []VMwareHostInfo
 }
 
-func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]VMwareClusterInfo, error) {
+func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
 	var clusters []VMwareClusterInfo
+	vmwarecreds, err := GetVMwareCredentials(ctx, scope.VMwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vCenter credentials")
+	}
 	c, err := ValidateVMwareCreds(scope.VMwareCreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
 	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
+	dc, err := finder.Datacenter(ctx, vmwarecreds.Datacenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find datacenter")
 	}
@@ -64,8 +69,9 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 	return clusters, nil
 }
 
-func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) error {
-	clusters, err := GetVMwareClustersAndHosts(ctx, scope, datacenter)
+func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) error {
+
+	clusters, err := GetVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to get clusters and hosts")
 	}
@@ -84,12 +90,16 @@ func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsS
 				},
 			}
 			vmwareCluster.Spec.Hosts = append(vmwareCluster.Spec.Hosts, vmwareHost.Name)
-			err := scope.Client.Create(ctx, &vmwareHost)
+			_, err := controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareHost, func() error {
+				return nil
+			})
 			if err != nil {
 				return errors.Wrap(err, "failed to create vmware host")
 			}
 		}
-		err := scope.Client.Create(ctx, &vmwareCluster)
+		_, err = controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareCluster, func() error {
+			return nil
+		})
 		if err != nil {
 			return errors.Wrap(err, "failed to create vmware cluster")
 		}

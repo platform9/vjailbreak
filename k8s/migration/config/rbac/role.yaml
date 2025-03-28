@@ -65,7 +65,9 @@ rules:
   - openstackcreds
   - storagemappings
   - vjailbreaknodes
+  - vmwareclusters
   - vmwarecreds
+  - vmwarehosts
   verbs:
   - create
   - delete
