@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -624,46 +626,97 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	return nil
 }
 
+// sanitizeName sanitizes a string to be used as a Kubernetes resource name.
+func sanitizeName(name string) string {
+	// Convert to lowercase
+	name = strings.ToLower(name)
+
+	// Replace invalid characters with '-'
+	re := regexp.MustCompile(`[^a-z0-9-]`)
+	name = re.ReplaceAllString(name, "-")
+
+	// Replace multiple consecutive dashes with a single one
+	name = regexp.MustCompile("-{2,}").ReplaceAllString(name, "-")
+
+	// Ensure the name starts and ends with an alphanumeric character
+	name = strings.Trim(name, "-")
+
+	// If name is empty after sanitization, use a default fallback name
+	if name == "" {
+		name = "default"
+	}
+
+	// Kubernetes names must be ≤ 63 characters
+	if len(name) > 63 {
+		name = name[:63]
+
+		// Edge case: Ensure truncated name does not end with '-'
+		name = strings.TrimRight(name, "-")
+	}
+
+	return name
+}
+
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
-	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
-	if err != nil {
-		return fmt.Errorf("failed to convert VM name: %w", err)
+	ctxlog := log.FromContext(ctx)
+	sanitizedVMName := sanitizeName(vminfo.Name)
+	init := false
+
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+	vmwvmKey := k8stypes.NamespacedName{Name: fmt.Sprintf("vm-%s", sanitizedVMName), Namespace: vmwcreds.Namespace}
+
+	// Try to fetch existing resource
+	err := client.Get(ctx, vmwvmKey, vmwvm)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
 
-	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: sanitizedVMName, // Use sanitized name
-			Namespace:    vmwcreds.Namespace,
-			Labels:       map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
-		},
-		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-			VMs: vminfo,
-		},
-		Status: vjailbreakv1alpha1.VMwareMachineStatus{
-			PowerState: vminfo.VMState,
-		},
-	}
-
-	// Create or update the VM
-	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
-		// Fetch existing object if it exists
-		existingVM := &vjailbreakv1alpha1.VMwareMachine{}
-		if err := client.Get(ctx, k8stypes.NamespacedName{Name: vmwvm.Name, Namespace: vmwvm.Namespace}, existingVM); err != nil {
-			// This means it's a new resource
-			// Explicitly set Migrated to false for new resources
-			vmwvm.Status.Migrated = false
-		} else {
-			// For existing resources, preserve the current Migrated status
-			vmwvm.Status.Migrated = existingVM.Status.Migrated
+	if k8serrors.IsNotFound(err) {
+		// If not found, create a new object
+		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      vmwvmKey.Name,
+				Namespace: vmwcreds.Namespace,
+				Labels:    map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
+			},
+			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+				VMs: vminfo,
+			},
+			Status: vjailbreakv1alpha1.VMwareMachineStatus{
+				PowerState: vminfo.VMState,
+				Migrated:   false,
+			},
 		}
+		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
+		init = true
+	}
 
-		// Don't modify targetFlavour but allow other updates
-		// Preserve other existing specifications
-		vmwvm.Spec.TargetFlavorId = existingVM.Spec.TargetFlavorId
+	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
+	}
+
+	// Update the status
+	if init {
+		vmwvm.Status = vjailbreakv1alpha1.VMwareMachineStatus{
+			PowerState: vminfo.VMState,
+			Migrated:   false,
+		}
+		ctxlog.Info("Creating new VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
+	} else {
+		currentMigratedStatus := vmwvm.Status.Migrated
+		if vmwvm.Status.PowerState != vminfo.VMState {
+			vmwvm.Status.PowerState = vminfo.VMState
+			ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name)
+		}
+		vmwvm.Status.Migrated = currentMigratedStatus
+		ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
+	}
+
+	if err := client.Status().Update(ctx, vmwvm); err != nil {
+		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
 	}
 	return nil
 }

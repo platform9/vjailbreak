@@ -968,11 +968,14 @@ spec:
             description: VMwareMachineStatus defines the observed state of VMwareMachine
             properties:
               migrated:
+                default: false
                 description: Migrated flag to indicate if the VMs have been migrated
                 type: boolean
               powerState:
                 description: PowerState is the state of the VMs in the VMware
                 type: string
+            required:
+            - migrated
             type: object
         type: object
     served: true
@@ -1126,6 +1129,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwaremachines/status
   verbs:
   - get
   - patch

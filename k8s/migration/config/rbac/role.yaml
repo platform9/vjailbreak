@@ -95,6 +95,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwaremachines/status
   verbs:
   - get
   - patch

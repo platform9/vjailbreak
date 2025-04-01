@@ -47,7 +47,9 @@ type VMwareMachineStatus struct {
 	PowerState string `json:"powerState,omitempty"`
 
 	// Migrated flag to indicate if the VMs have been migrated
-	Migrated bool `json:"migrated,omitempty"`
+	// +kubebuilder:default=false
+	// +kubebuilder:validation:Required
+	Migrated bool `json:"migrated"`
 }
 
 // +kubebuilder:object:root=true
