@@ -626,8 +626,8 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	return nil
 }
 
-// sanitizeName sanitizes a string to be used as a Kubernetes resource name.
-func sanitizeName(name string) string {
+// SanitizeName sanitizes a string to be used as a Kubernetes resource name.
+func SanitizeName(name string) string {
 	// Convert to lowercase
 	name = strings.ToLower(name)
 
