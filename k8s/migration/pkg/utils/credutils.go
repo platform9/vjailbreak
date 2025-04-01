@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -626,51 +626,27 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	return nil
 }
 
-// SanitizeName sanitizes a string to be used as a Kubernetes resource name.
-func SanitizeName(name string) string {
-	// Convert to lowercase
-	name = strings.ToLower(name)
-
-	// Replace invalid characters with '-'
-	re := regexp.MustCompile(`[^a-z0-9-]`)
-	name = re.ReplaceAllString(name, "-")
-
-	// Replace multiple consecutive dashes with a single one
-	name = regexp.MustCompile("-{2,}").ReplaceAllString(name, "-")
-
-	// Ensure the name starts and ends with an alphanumeric character
-	name = strings.Trim(name, "-")
-
-	// If name is empty after sanitization, use a default fallback name
-	if name == "" {
-		name = "default"
-	}
-
-	// Kubernetes names must be ≤ 63 characters
-	if len(name) > 63 {
-		name = name[:63]
-
-		// Edge case: Ensure truncated name does not end with '-'
-		name = strings.TrimRight(name, "-")
-	}
-
-	return name
-}
-
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
 	ctxlog := log.FromContext(ctx)
-	sanitizedVMName := sanitizeName(vminfo.Name)
+	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
+	if err != nil {
+		return fmt.Errorf("failed to convert VM name: %w", err)
+	}
+	// We need this flag because, there can be multiple VMwarecreds and each will trigger its own reconcilation loop,
+	// so we need to know if the object is new or not. if it is new we mark the migrated field to false and powerstate to the current state of the vm.
+	// If the object is not new, we update the status and persist the migrated status.
 	init := false
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	vmwvmKey := k8stypes.NamespacedName{Name: fmt.Sprintf("vm-%s", sanitizedVMName), Namespace: vmwcreds.Namespace}
 
 	// Try to fetch existing resource
-	err := client.Get(ctx, vmwvmKey, vmwvm)
+	err = client.Get(ctx, vmwvmKey, vmwvm)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
 
+	// Check if the object is present or not if not present create a new object and set init to true.
 	if k8serrors.IsNotFound(err) {
 		// If not found, create a new object
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
@@ -681,10 +657,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMs: vminfo,
-			},
-			Status: vjailbreakv1alpha1.VMwareMachineStatus{
-				PowerState: vminfo.VMState,
-				Migrated:   false,
 			},
 		}
 		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
@@ -698,7 +670,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
 	}
 
-	// Update the status
+	// Assumption is if init is true, the object is new and it is not migrated hence mark migrated to false.
 	if init {
 		vmwvm.Status = vjailbreakv1alpha1.VMwareMachineStatus{
 			PowerState: vminfo.VMState,
@@ -706,6 +678,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 		}
 		ctxlog.Info("Creating new VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	} else {
+		// If the object is not new, update the status and persist migrated status.
 		currentMigratedStatus := vmwvm.Status.Migrated
 		if vmwvm.Status.PowerState != vminfo.VMState {
 			vmwvm.Status.PowerState = vminfo.VMState
@@ -715,8 +688,44 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 		ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	}
 
+	// Update the status
 	if err := client.Status().Update(ctx, vmwvm); err != nil {
 		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
 	}
 	return nil
+}
+
+func GetClosestFlavour(ctx context.Context, cpu int32, memory int32, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+	ctxlog := log.FromContext(ctx)
+	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flavors: %s", err)
+	}
+
+	allFlavors, err := flavors.ExtractFlavors(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract all flavors: %s", err)
+	}
+
+	ctxlog.Info("Current requirements:", "CPU", cpu, "Memory", memory)
+
+	bestFlavor := new(flavors.Flavor)
+	bestFlavor.VCPUs = constants.MaxVCPUs
+	bestFlavor.RAM = constants.MaxRAM
+	// Find the smallest flavor that meets the requirements
+	for _, flavor := range allFlavors {
+		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
+			if flavor.VCPUs < bestFlavor.VCPUs || (flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
+				bestFlavor = &flavor
+			}
+		}
+	}
+
+	if bestFlavor.VCPUs != constants.MaxVCPUs {
+		ctxlog.Info("The best flavor is:", "Name", bestFlavor.Name, "ID", bestFlavor.ID, "RAM", bestFlavor.RAM, "VCPUs", bestFlavor.VCPUs, "Disk", bestFlavor.Disk)
+	} else {
+		ctxlog.Info("No suitable flavor found.")
+	}
+
+	return bestFlavor, nil
 }

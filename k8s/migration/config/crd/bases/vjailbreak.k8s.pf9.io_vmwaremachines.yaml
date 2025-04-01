@@ -40,11 +40,11 @@ spec:
             description: VMwareMachineSpec defines the desired state of VMwareMachine
             properties:
               targetFlavorId:
-                description: TargetFlavor is the flavor to be used for the VMs in
-                  the VMwareMachine
+                description: TargetFlavorId is the flavor to be used to create the
+                  target VM on openstack
                 type: string
               vms:
-                description: VMs is the list of VMs in the VMwareMachine
+                description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
                   cpu:
                     type: integer

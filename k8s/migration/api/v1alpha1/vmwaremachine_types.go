@@ -34,10 +34,10 @@ type VMInfo struct {
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
-	// VMs is the list of VMs in the VMwareMachine
+	// VMInfo is the info of the VMs in the VMwareMachine
 	VMs VMInfo `json:"vms,omitempty"`
 
-	// TargetFlavor is the flavor to be used for the VMs in the VMwareMachine
+	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorId string `json:"targetFlavorId,omitempty"`
 }
 
@@ -49,7 +49,7 @@ type VMwareMachineStatus struct {
 	// Migrated flag to indicate if the VMs have been migrated
 	// +kubebuilder:default=false
 	// +kubebuilder:validation:Required
-	Migrated bool `json:"migrated"`
+	Migrated bool `json:"migrated,omitempty"`
 }
 
 // +kubebuilder:object:root=true

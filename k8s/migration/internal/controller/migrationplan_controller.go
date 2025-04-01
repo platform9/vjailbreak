@@ -167,11 +167,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			RequeueAfter: time.Minute,
 		}, err
 	}
-	// Get all VMwareMachines object from the cluster
-	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
-	if err := r.List(ctx, vmMachines, client.InNamespace(migrationtemplate.Namespace)); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list VMwareMachines: %w", err)
-	}
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
 		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodRunning), "Migration(s) in progress")
@@ -182,7 +177,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachines, parallelvms)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -543,7 +538,16 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		if vmMachine.Spec.TargetFlavorId != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorId
 		} else {
-			configMap.Data["TARGET_FLAVOR_ID"] = ""
+			// If target flavor is not set, use the closest matching flavor
+			computeClient, err := utils.GetOpenStackClients(ctx, openstackcreds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get OpenStack clients: %w", err)
+			}
+			flavor, err := utils.GetClosestFlavour(ctx, int32(vmMachine.Spec.VMs.CPU), int32(vmMachine.Spec.VMs.Memory), computeClient.ComputeClient)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
+			}
+			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
@@ -693,7 +697,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vmMachines *vjailbreakv1alpha1.VMwareMachineList,
 	parallelvms []string) error {
 	var (
 		fbcm *corev1.ConfigMap
@@ -706,13 +709,23 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	}
 	counter := len(nodeList.Items)
 
+	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
+
+	err = r.Client.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace})
+	if err != nil {
+		return errors.Wrap(err, "failed to list vmwaremachines")
+	}
+
 	var vmMachineObj *vjailbreakv1alpha1.VMwareMachine
 	for _, vm := range parallelvms {
 		for i := range vmMachines.Items {
-			if vmMachines.Items[i].Name == vm {
+			if vmMachines.Items[i].Spec.VMs.Name == vm {
 				vmMachineObj = &vmMachines.Items[i]
 				break
 			}
+		}
+		if vmMachineObj == nil {
+			return fmt.Errorf("VM '%s' not found in VMwareMachine", vm)
 		}
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachineObj)
 		if err != nil {

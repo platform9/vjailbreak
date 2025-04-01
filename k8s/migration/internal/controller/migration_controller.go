@@ -173,9 +173,12 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
-			name := "vm-" + utils.SanitizeName(scope.Migration.Spec.VMName)
+			name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
+			if err != nil {
+				return err
+			}
 			vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-			if err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+			if err := r.Client.Get(ctx, types.NamespacedName{Name: "vm-" + name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
 				return err
 			}
 			vmwvm.Status.Migrated = true

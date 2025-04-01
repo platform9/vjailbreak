@@ -44,6 +44,9 @@ const (
 	MigrationReason = "Migration"
 	StartCutOverYes = "yes"
 	StartCutOverNo  = "no"
+
+	MaxVCPUs = 99999
+	MaxRAM   = 99999
 )
 
 var (
