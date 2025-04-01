@@ -43,12 +43,8 @@ type OpenStackMetadata struct {
 	Networks []Network `json:"networks"`
 }
 
-func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
-	k3sclient, err := GetInclusterClient()
-	if err != nil {
-		return errors.Wrap(err, "failed to get client")
-	}
-
+func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
+	var openstackuuid string
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
@@ -60,12 +56,16 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 		return nil
 	}
 
-	// Controller manager is always on the master node due to pod affinity
-	openstackuuid, err := openstackutils.GetCurrentInstanceUUID()
-	if err != nil {
-		return errors.Wrap(err, "failed to get current instance uuid")
+	if local {
+		// Local mode
+		openstackuuid = "fake-openstackuuid"
+	} else {
+		// Controller manager is always on the master node due to pod affinity
+		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
+		if err != nil {
+			return errors.Wrap(err, "failed to get current instance uuid")
+		}
 	}
-
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      constants.VjailbreakMasterNodeName,
@@ -101,7 +101,8 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context) error {
 	return nil
 }
 
-func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error {
+func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
+	var openstackuuid, imageID string
 	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials for master")
@@ -120,15 +121,20 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error
 		return errors.Wrap(err, "failed to get vjailbreak node")
 	}
 
-	// Controller manager is always on the master node due to pod affinity
-	openstackuuid, err := openstackutils.GetCurrentInstanceUUID()
-	if err != nil {
-		return errors.Wrap(err, "failed to get current instance uuid")
-	}
-
-	imageID, err := GetImageIDFromVM(ctx, openstackuuid, openstackcreds)
-	if err != nil {
-		return errors.Wrap(err, "failed to get image id of master node")
+	if local {
+		// Local mode
+		openstackuuid = "fake-openstackuuid"
+		imageID = "fake-image-id"
+	} else {
+		// Controller manager is always on the master node due to pod affinity
+		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
+		if err != nil {
+			return errors.Wrap(err, "failed to get current instance uuid")
+		}
+		imageID, err = GetImageIDFromVM(ctx, k3sclient, openstackuuid, openstackcreds)
+		if err != nil {
+			return errors.Wrap(err, "failed to get image id of master node")
+		}
 	}
 
 	vjNode.Spec.OpenstackImageID = imageID
@@ -138,7 +144,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error
 		Kind:      openstackcreds.Kind,
 	}
 
-	flavors, err := ListAllFlavors(ctx, openstackcreds)
+	flavors, err := ListAllFlavors(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get flavors")
 	}
@@ -219,7 +225,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
 
-	openstackClients, err := GetOpenStackClients(ctx, creds)
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -326,7 +332,7 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
-	openstackClients, err := GetOpenStackClients(ctx, creds)
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -347,9 +353,9 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client)
 	return "", errors.New("failed to get vm ip")
 }
 
-func GetImageIDFromVM(ctx context.Context, uuid string,
+func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -372,8 +378,8 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 	return "", fmt.Errorf("failed to assert image ID as string")
 }
 
-func ListAllFlavors(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -392,7 +398,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack creds")
 	}
-	openstackClients, err := GetOpenStackClients(ctx, creds)
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -423,7 +429,7 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
-	openstackClients, err := GetOpenStackClients(ctx, creds)
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}

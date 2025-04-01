@@ -91,7 +91,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
-	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
+	if _, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = "Failed"
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
@@ -102,7 +102,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	} else {
 		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 		// Update the status of the VMwareCreds object
-		err := utils.CreateVMwareClustersAndHosts(ctx, scope)
+		err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

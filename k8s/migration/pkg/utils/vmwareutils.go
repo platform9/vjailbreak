@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -10,6 +9,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25/mo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -22,13 +22,13 @@ type VMwareClusterInfo struct {
 	Hosts []VMwareHostInfo
 }
 
-func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
+func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
 	var clusters []VMwareClusterInfo
-	vmwarecreds, err := GetVMwareCredentials(ctx, scope.VMwareCreds.Spec.SecretRef.Name)
+	vmwarecreds, err := GetVMwareCredentials(ctx, k3sclient, scope.VMwareCreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vCenter credentials")
 	}
-	c, err := ValidateVMwareCreds(scope.VMwareCreds)
+	c, err := ValidateVMwareCreds(ctx, k3sclient, scope.VMwareCreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
@@ -43,15 +43,12 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 		return nil, errors.Wrap(err, "failed to get cluster list")
 	}
 
-	// Print cluster names
-	fmt.Println("Clusters in vSphere:")
 	for _, cluster := range clusterList {
 		var clusterProperties mo.ClusterComputeResource
 		err := cluster.Properties(ctx, cluster.Reference(), []string{"name"}, &clusterProperties)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get cluster properties")
 		}
-		fmt.Printf("- %s\n", clusterProperties.Name)
 
 		hosts, err := cluster.Hosts(ctx)
 		if err != nil {
@@ -69,9 +66,9 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 	return clusters, nil
 }
 
-func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) error {
+func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
 
-	clusters, err := GetVMwareClustersAndHosts(ctx, scope)
+	clusters, err := GetVMwareClustersAndHosts(ctx, k3sclient, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to get clusters and hosts")
 	}
