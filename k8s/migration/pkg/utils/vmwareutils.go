@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -96,6 +97,9 @@ func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, 
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      hostk8sName,
 					Namespace: scope.Namespace(),
+					Labels: map[string]string{
+						constants.VMwareClusterLabel: clusterk8sName,
+					},
 				},
 				Spec: vjailbreakv1alpha1.VMwareHostSpec{
 					Name: host.Name,
