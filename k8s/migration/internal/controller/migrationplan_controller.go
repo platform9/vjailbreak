@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
 	"github.com/pkg/errors"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -538,7 +537,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
 		} else {
-			var computeClient *gophercloud.ServiceClient
+			var computeClient *utils.OpenStackClients
 			// If target flavor is not set, use the closest matching flavor
 			computeClient, err = utils.GetOpenStackClients(ctx, openstackcreds)
 			if err != nil {
