@@ -97,24 +97,22 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 			return ctrl.Result{}, errors.Wrap(err, errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name())).Error())
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
-	} else {
-		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-		// Update the status of the VMwareCreds object
-		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
-		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
-		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
-		}
+	}
+	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+	// Update the status of the VMwareCreds object
+	scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
+	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
+	}
 
-		vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
-		}
-		err = utils.CreateOrUpdateVMwareMachines(ctx, scope.Client, scope.VMwareCreds, vminfo)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
-		}
-
+	vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	err = utils.CreateOrUpdateVMwareMachines(ctx, scope.Client, scope.VMwareCreds, vminfo)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
 	return ctrl.Result{RequeueAfter: constants.VMwareCredsRequeueAfter}, nil
 }

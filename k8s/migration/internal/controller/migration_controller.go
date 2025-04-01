@@ -173,16 +173,7 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
-			name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
-			if err != nil {
-				return err
-			}
-			vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-			if err := r.Client.Get(ctx, types.NamespacedName{Name: "vm-" + name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
-				return err
-			}
-			vmwvm.Status.Migrated = true
-			if err := r.Status().Update(ctx, vmwvm); err != nil {
+			if err := r.markMigrationSuccessful(ctx, scope); err != nil {
 				return err
 			}
 			break loop
@@ -221,6 +212,23 @@ loop:
 		}
 	}
 	return nil
+}
+
+// Extracted function to handle successful migration updates
+func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope *scope.MigrationScope) error {
+	scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
+	name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
+	if err != nil {
+		return err
+	}
+
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: "vm-" + name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+		return err
+	}
+
+	vmwvm.Status.Migrated = true
+	return r.Status().Update(ctx, vmwvm)
 }
 
 func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.MigrationScope) (*corev1.EventList, error) {

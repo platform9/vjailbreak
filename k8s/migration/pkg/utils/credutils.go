@@ -616,8 +616,10 @@ func AppendUnique(slice []string, values ...string) []string {
 	return slice
 }
 
-func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
-	for _, vm := range vminfo {
+func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
+	for i := range vminfo {
+		vm := &vminfo[i] // Use a pointer
 		err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
 		if err != nil {
 			return err
@@ -626,14 +628,17 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	return nil
 }
 
-func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
+func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
 	ctxlog := log.FromContext(ctx)
 	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	// We need this flag because, there can be multiple VMwarecreds and each will trigger its own reconcilation loop,
-	// so we need to know if the object is new or not. if it is new we mark the migrated field to false and powerstate to the current state of the vm.
+	// We need this flag because, there can be multiple VMwarecreds and each will
+	// trigger its own reconciliation loop,
+	// so we need to know if the object is new or not. if it is new we mark the migrated
+	// field to false and powerstate to the current state of the vm.
 	// If the object is not new, we update the status and persist the migrated status.
 	init := false
 
@@ -656,7 +661,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 				Labels:    map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-				VMs: vminfo,
+				VMs: *vminfo,
 			},
 		}
 		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
@@ -695,16 +700,16 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 	return nil
 }
 
-func GetClosestFlavour(ctx context.Context, cpu int32, memory int32, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
 	ctxlog := log.FromContext(ctx)
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list flavors: %s", err)
+		return nil, fmt.Errorf("failed to list flavors: %w", err)
 	}
 
 	allFlavors, err := flavors.ExtractFlavors(allPages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract all flavors: %s", err)
+		return nil, fmt.Errorf("failed to extract all flavors: %w", err)
 	}
 
 	ctxlog.Info("Current requirements:", "CPU", cpu, "Memory", memory)
@@ -722,7 +727,8 @@ func GetClosestFlavour(ctx context.Context, cpu int32, memory int32, computeClie
 	}
 
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		ctxlog.Info("The best flavor is:", "Name", bestFlavor.Name, "ID", bestFlavor.ID, "RAM", bestFlavor.RAM, "VCPUs", bestFlavor.VCPUs, "Disk", bestFlavor.Disk)
+		ctxlog.Info("The best flavor is:",
+			bestFlavor.RAM, "VCPUs", bestFlavor.VCPUs, "Disk", bestFlavor.Disk)
 	} else {
 		ctxlog.Info("No suitable flavor found.")
 	}

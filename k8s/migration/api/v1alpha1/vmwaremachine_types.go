@@ -38,7 +38,7 @@ type VMwareMachineSpec struct {
 	VMs VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
-	TargetFlavorId string `json:"targetFlavorId,omitempty"`
+	TargetFlavorID string `json:"targetFlavorId,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine

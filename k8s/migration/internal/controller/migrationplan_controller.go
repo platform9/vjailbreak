@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/pkg/errors"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -238,7 +239,6 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
@@ -535,15 +535,17 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			},
 		}
 		// Check if target flavor is set
-		if vmMachine.Spec.TargetFlavorId != "" {
-			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorId
+		if vmMachine.Spec.TargetFlavorID != "" {
+			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
 		} else {
+			var computeClient *gophercloud.ServiceClient
 			// If target flavor is not set, use the closest matching flavor
-			computeClient, err := utils.GetOpenStackClients(ctx, openstackcreds)
+			computeClient, err = utils.GetOpenStackClients(ctx, openstackcreds)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get OpenStack clients: %w", err)
 			}
-			flavor, err := utils.GetClosestFlavour(ctx, int32(vmMachine.Spec.VMs.CPU), int32(vmMachine.Spec.VMs.Memory), computeClient.ComputeClient)
+
+			flavor, err := utils.GetClosestFlavour(ctx, vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
@@ -727,7 +729,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if vmMachineObj == nil {
 			return fmt.Errorf("VM '%s' not found in VMwareMachine", vm)
 		}
-		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachineObj)
+		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.MigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
