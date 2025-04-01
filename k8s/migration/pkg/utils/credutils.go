@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -625,23 +624,15 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client, vmw
 	return nil
 }
 
-func sanitizeName(name string) string {
-	// Convert to lowercase
-	name = strings.ToLower(name)
-	// Remove any invalid characters (keep only lowercase alphanumeric and '-')
-	re := regexp.MustCompile(`[^a-z0-9-]`)
-	name = re.ReplaceAllString(name, "-")
-	// Ensure the name starts and ends with an alphanumeric character
-	name = strings.Trim(name, "-")
-	return name
-}
-
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo vjailbreakv1alpha1.VMInfo) error {
-	sanitizedVMName := sanitizeName(vminfo.Name)
+	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
+	if err != nil {
+		return fmt.Errorf("failed to convert VM name: %w", err)
+	}
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("vm-%s-", sanitizedVMName), // Use sanitized name
+			GenerateName: sanitizedVMName, // Use sanitized name
 			Namespace:    vmwcreds.Namespace,
 			Labels:       map[string]string{constants.VMwareCredsLabel: vmwcreds.Name},
 		},
@@ -654,7 +645,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 	}
 
 	// Create or update the VM
-	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		// Fetch existing object if it exists
 		existingVM := &vjailbreakv1alpha1.VMwareMachine{}
 		if err := client.Get(ctx, k8stypes.NamespacedName{Name: vmwvm.Name, Namespace: vmwvm.Namespace}, existingVM); err != nil {
