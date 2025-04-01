@@ -12,7 +12,6 @@ import {
 } from "./network-mapping/networkMappings"
 import {
   deleteOpenstackCredentials,
-  getOpenstackCredentials,
   getOpenstackCredentialsList,
 } from "./openstack-creds/openstackCreds"
 import {
@@ -21,13 +20,12 @@ import {
 } from "./storage-mappings/storageMappings"
 import {
   deleteVmwareCredentials,
-  getVmwareCredentials,
+  
   getVmwareCredentialsList,
 } from "./vmware-creds/vmwareCreds"
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
-  deleteSecret,
 } from "./secrets/secrets"
 import { createOpenstackCredsWithSecret } from "./openstack-creds/openstackCreds"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
@@ -149,21 +147,7 @@ export const deleteVMwareCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const credential = await getVmwareCredentials(credName, namespace)
-
     await deleteVmwareCredentials(credName, namespace)
-
-    if (credential?.spec?.secretRef?.name) {
-      await deleteSecret(credential.spec.secretRef.name, namespace)
-    } else {
-      const secretName = `${credName}-vmware-secret`
-      try {
-        await deleteSecret(secretName, namespace)
-      } catch (error) {
-        console.log(`No secret found with name ${secretName} : ${error}`)
-      }
-    }
-
     return { success: true }
   } catch (error) {
     console.error(`Error deleting VMware credential ${credName}:`, error)
@@ -177,21 +161,7 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const credential = await getOpenstackCredentials(credName, namespace)
-
     await deleteOpenstackCredentials(credName, namespace)
-
-    if (credential?.spec?.secretRef?.name) {
-      await deleteSecret(credential.spec.secretRef.name, namespace)
-    } else {
-      const secretName = `${credName}-openstack-secret`
-      try {
-        await deleteSecret(secretName, namespace)
-      } catch (error) {
-        console.log(`No secret found with name ${secretName} : ${error}`)
-      }
-    }
-
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
