@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -543,8 +544,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			if err != nil {
 				return nil, fmt.Errorf("failed to get OpenStack clients: %w", err)
 			}
-
-			flavor, err := utils.GetClosestFlavour(ctx, vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
+			var flavor *flavors.Flavor
+			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}

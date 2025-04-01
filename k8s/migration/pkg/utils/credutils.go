@@ -719,7 +719,7 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	bestFlavor.RAM = constants.MaxRAM
 	// Find the smallest flavor that meets the requirements
 	for _, flavor := range allFlavors {
-		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
+		if flavor.VCPUs >= cpu && flavor.RAM >= memory {
 			if flavor.VCPUs < bestFlavor.VCPUs || (flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
 				bestFlavor = &flavor
 			}
