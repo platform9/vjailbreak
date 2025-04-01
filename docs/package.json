@@ -10,8 +10,13 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/mdx": "^4.2.1",
     "@astrojs/starlight": "^0.32.1",
     "astro": "^5.1.5",
+    "astro-auto-import": "^0.4.4",
     "sharp": "^0.32.5"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.6.1"
   }
 }

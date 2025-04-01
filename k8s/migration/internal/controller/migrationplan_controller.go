@@ -133,8 +133,6 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	// The object is being deleted
 	log.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
 
-	// TODO implement finalizer logic
-
 	// Now that the finalizer has completed deletion tasks, we can remove it
 	// to allow deletion of the Migration object
 	controllerutil.RemoveFinalizer(migrationplan, migrationPlanFinalizer)
@@ -268,8 +266,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan:   migrationplan.Name,
-				VMName:          vm,
+				MigrationPlan: migrationplan.Name,
+				VMName:        vm,
+				// PodRef will be set in the migration controller
 				PodRef:          fmt.Sprintf("v2v-helper-%s", vmname),
 				InitiateCutover: !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 			},

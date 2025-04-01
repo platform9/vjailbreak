@@ -9,7 +9,7 @@ hero:
       <div class="video-container">
         <div class="video-wrapper">
           <iframe
-            src="https://www.youtube.com/watch?v=seThilJ5ujM"
+            src="https://www.youtube.com/embed/FgkBWttOfsc"
             title="vJailbreak Demo"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen
@@ -26,36 +26,115 @@ hero:
       variant: minimal
   align: center
 ---
-import { Card, CardGrid } from '@astrojs/starlight/components';
-import AboutVJB from '../../components/about.astro';
 
-<div class="download-section">
-  <div class="download-content">
-    <h3>Download Latest Version</h3>
-    <div class="command-box">
-      <pre><code>oras pull quay.io/platform9/vjailbreak:v0.1.6</code></pre>
-      <button class="copy-button" onclick="navigator.clipboard.writeText('oras pull quay.io/platform9/vjailbreak:v0.1.6')">
-        Copy
-      </button>
-    </div>
-    <a href="https://oras.land/docs/installation/" target="_blank" class="oras-link">
-      <span>Need ORAS?</span>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/>
-      </svg>
-    </a>
-  </div>
-</div>
+import {
+  Card,
+  CardGrid,
+  Icon,
+  Steps,
+  Tabs,
+  TabItem,
+} from "@astrojs/starlight/components"
+import AboutVJB from "../../components/about.astro"
+import Aurora from "../../components/Aurora.astro"
+
+<Aurora bands={100} />
+
+### Download the latest Version
+
+<Steps>
+  <ol>
+    <li>
+      **Install ORAS**
+
+      <Tabs syncKey="oras">
+        <TabItem label="brew">
+          ```
+          brew install oras
+          ```
+        </TabItem>
+
+        <TabItem label="snap">
+          ```
+          snap install oras --classic
+          ```
+        </TabItem>
+
+        <TabItem label="Apple Silicon">
+          ```
+          VERSION="1.2.2"
+          curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_darwin_arm64.tar.gz"
+          mkdir -p oras-install/
+          tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/
+          sudo mv oras-install/oras /usr/local/bin/
+          rm -rf oras_${VERSION}_*.tar.gz oras-install/
+          ```
+        </TabItem>
+
+        <TabItem label="Linux">
+          ```
+          VERSION="1.2.2"
+          curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
+          mkdir -p oras-install/
+          tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/
+          sudo mv oras-install/oras /usr/local/bin/
+          rm -rf oras_${VERSION}_*.tar.gz oras-install/
+          ```
+        </TabItem>
+      </Tabs>
+    </li>
+
+    <li>
+      **Download Image**
+
+      ```
+      oras pull quay.io/platform9/vjailbreak:v0.1.7
+      ```
+    </li>
+
+    <li>
+      **Get PCD**
+
+      <Tabs syncKey="pcd" variant="underlined">
+        <TabItem label="PCD">
+          ```
+          https://platform9.com/private-cloud-director/
+          ```
+        </TabItem>
+
+        <TabItem label="PCD Community Edition (Free)">
+          ```
+          https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition
+          ```
+        </TabItem>
+
+        <TabItem label="OpenStack">
+          ```
+          https://www.openstack.org/
+          ```
+        </TabItem>
+      </Tabs>
+    </li>
+
+  </ol>
+</Steps>
 
 <div style="text-align: center; width: 100%; padding: 2rem 1rem;">
-  <h2 class="gradient-heading" style="font-size: 2.4rem; margin-bottom: 1.5rem;">
+  <h2
+    class="gradient-heading"
+    style="font-size: 2.4rem; margin-bottom: 1.5rem;"
+  >
     Enterprise VM Migration: VMware to OpenStack, Simplified
   </h2>
   <p style="font-size: 1.2rem; line-height: 1.6; color: var(--sl-color-gray-2); max-width: 1200px; margin: 0 auto;">
-    vJailbreak is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) from VMware vSphere environments to any OpenStack-compliant cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
+    vJailbreak is an open-source tool featuring a user-friendly interface
+    designed to simplify and accelerate the migration of virtual machines (VMs)
+    from VMware vSphere environments to any OpenStack-compliant cloud. It
+    eliminates the complexities of cross-platform VM migration, enabling you to
+    modernize your infrastructure with minimal disruption and a streamlined,
+    visual workflow.
   </p>
 </div>
-
 
 <h2 class="section-title">Key Benefits</h2>
 
@@ -63,23 +142,23 @@ import AboutVJB from '../../components/about.astro';
   <Card title="Visual Interface" icon="laptop">
     Intuitive UI with no command-line requirements for seamless VM migration
   </Card>
-  
+
   <Card title="Fast & Efficient" icon="rocket">
     Automated tasks with real-time progress tracking reduce migration time
   </Card>
-  
+
   <Card title="Zero Disruption" icon="warning">
     Maintain source environment operations with minimal downtime
   </Card>
-  
+
   <Card title="Cost Effective" icon="seti:todo">
     Open-source solution eliminating expensive licensing costs
   </Card>
-  
+
   <Card title="OpenStack Ready" icon="puzzle">
     Compatible with any standard OpenStack-compliant cloud platform
   </Card>
-  
+
   <Card title="Step-by-Step Guide" icon="list-format">
     Guided workflow with automated health checks and validation
   </Card>
@@ -91,15 +170,18 @@ import AboutVJB from '../../components/about.astro';
   Ready to experience simplified, UI-driven VM migration?
 </p>
 
-
 <CardGrid stagger>
-    <Card title="Deploy vJailbreak" icon="rocket">
-        Deploy vJailbreak and connect it to your vSphere and OpenStack environments. Learn more about installation, configuration, and usage in the [vJailbreak Documentation](introduction/getting_started/).
-    </Card>
-    <Card title="Contribute to vJailbreak" icon="add-document">
-        Help improve vJailbreak by contributing code, documentation, or bug reports. View our [contribution guidelines](https://github.com/platform9/vjailbreak/blob/main/CONTRIBUTING.md) to get started.
-    </Card>
+  <Card title="Deploy vJailbreak" icon="rocket">
+    Deploy vJailbreak and connect it to your vSphere and OpenStack environments.
+    Learn more about installation, configuration, and usage in the [vJailbreak
+    Documentation](introduction/getting_started/).
+  </Card>
+  <Card title="Contribute to vJailbreak" icon="add-document">
+    Help improve vJailbreak by contributing code, documentation, or bug reports.
+    View our [contribution
+    guidelines](https://github.com/platform9/vjailbreak/blob/main/CONTRIBUTING.md)
+    to get started.
+  </Card>
 </CardGrid>
 
-<AboutVJB>
-</AboutVJB>
+<AboutVJB></AboutVJB>

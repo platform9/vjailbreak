@@ -14,6 +14,7 @@ const (
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
 	OpenstackCredsControllerName = "openstackcreds-controller" //nolint:gosec // not a password string
 	VMwareCredsControllerName    = "vmwarecreds-controller"    //nolint:gosec // not a password string
+	MigrationControllerName      = "migration-controller"
 
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 	NodeRoleMaster          = "master"

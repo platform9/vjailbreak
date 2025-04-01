@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 # Define the log function for easy logging
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/pf9-install.log
@@ -114,6 +116,13 @@ EOF
   check_command "Applying additional manifests"
 
   log "K3s master setup completed"
+
+  # Start the rsync daemon
+  kubectl apply -f /etc/pf9/yamls/daemonset.yaml
+  check_command "Installing rsync daemon"
+
+  log "Rsync daemon started successfully."
+
 else
   log "Setting up K3s Worker..."
 
@@ -135,6 +144,8 @@ else
   check_command "Installing K3s worker"
 
   log "K3s worker setup completed."
+  sleep 20 
+
 fi
 
 # Remove cron job to ensure this runs only once 

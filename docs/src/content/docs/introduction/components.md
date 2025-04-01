@@ -1,9 +1,7 @@
 ---
-title: Components
+title: vJailbreak Components
 description: Overview of vJailbreak components
 ---
-
-## vJailbreak Components
 
 vJailbreak is composed of several key components that work together to facilitate the migration of virtual machines from VMware environments to OpenStack-compliant clouds. Below is an overview of each component and its role in the migration process.
 
