@@ -540,8 +540,10 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			},
 		}
 		// Check if target flavor is set
-		if vmMachine.Spec.TargetFlavor.ID != "" {
-			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavor.ID
+		if vmMachine.Spec.TargetFlavorId != "" {
+			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorId
+		} else {
+			configMap.Data["TARGET_FLAVOR_ID"] = ""
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {

@@ -37,6 +37,7 @@ type OpenstackOperations interface {
 	SetVolumeImageMetadata(volume *volumes.Volume) error
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
+	GetFlavor(flavorId string) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
 	GetPort(portID string) (*ports.Port, error)
 	CreatePort(networkid *networks.Network, mac, ip, vmname string) (*ports.Port, error)

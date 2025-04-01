@@ -668,7 +668,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client, vmwc
 
 		// Don't modify targetFlavour but allow other updates
 		// Preserve other existing specifications
-		vmwvm.Spec.TargetFlavor = existingVM.Spec.TargetFlavor
+		vmwvm.Spec.TargetFlavorId = existingVM.Spec.TargetFlavorId
 		return nil
 	})
 	if err != nil {

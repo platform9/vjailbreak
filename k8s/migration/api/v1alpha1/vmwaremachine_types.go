@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,7 +38,7 @@ type VMwareMachineSpec struct {
 	VMs VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavor is the flavor to be used for the VMs in the VMwareMachine
-	TargetFlavor flavors.Flavor `json:"targetFlavor,omitempty"`
+	TargetFlavorId string `json:"targetFlavorId,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine

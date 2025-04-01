@@ -39,54 +39,10 @@ spec:
           spec:
             description: VMwareMachineSpec defines the desired state of VMwareMachine
             properties:
-              targetFlavor:
+              targetFlavorId:
                 description: TargetFlavor is the flavor to be used for the VMs in
                   the VMwareMachine
-                properties:
-                  OS-FLV-EXT-DATA:ephemeral:
-                    description: Ephemeral is the amount of ephemeral disk space,
-                      measured in GB.
-                    type: integer
-                  description:
-                    description: |-
-                      Description is a free form description of the flavor. Limited to
-                      65535 characters in length. Only printable characters are allowed.
-                      New in version 2.55
-                    type: string
-                  disk:
-                    description: Disk is the amount of root disk, measured in GB.
-                    type: integer
-                  id:
-                    description: ID is the flavor's unique ID.
-                    type: string
-                  name:
-                    description: Name is the name of the flavor.
-                    type: string
-                  os-flavor-access:is_public:
-                    description: IsPublic indicates whether the flavor is public.
-                    type: boolean
-                  ram:
-                    description: RAM is the amount of memory, measured in MB.
-                    type: integer
-                  rxtx_factor:
-                    description: RxTxFactor describes bandwidth alterations of the
-                      flavor.
-                    type: number
-                  vcpus:
-                    description: VCPUs indicates how many (virtual) CPUs are available
-                      for this flavor.
-                    type: integer
-                required:
-                - OS-FLV-EXT-DATA:ephemeral
-                - description
-                - disk
-                - id
-                - name
-                - os-flavor-access:is_public
-                - ram
-                - rxtx_factor
-                - vcpus
-                type: object
+                type: string
               vms:
                 description: VMs is the list of VMs in the VMwareMachine
                 properties:
