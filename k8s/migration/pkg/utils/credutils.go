@@ -647,7 +647,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	init := false
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	vmwvmKey := k8stypes.NamespacedName{Name: fmt.Sprintf("vm-%s", sanitizedVMName), Namespace: vmwcreds.Namespace}
+	vmwvmKey := k8stypes.NamespacedName{Name: sanitizedVMName, Namespace: vmwcreds.Namespace}
 
 	// Try to fetch existing resource
 	err = client.Get(ctx, vmwvmKey, vmwvm)
