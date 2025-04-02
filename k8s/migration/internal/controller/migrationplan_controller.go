@@ -240,6 +240,10 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
+
+	ctxlog := r.ctxlog.WithValues("vm", vm)
+	ctxlog.Info("Creating Migration for VM")
+
 	vmname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
@@ -700,6 +704,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []string) error {
+
+	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var (
 		fbcm *corev1.ConfigMap
 	)
@@ -720,8 +726,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 	var vmMachineObj *vjailbreakv1alpha1.VMwareMachine
 	for _, vm := range parallelvms {
+		vmMachineObj = nil
 		for i := range vmMachines.Items {
 			if vmMachines.Items[i].Spec.VMs.Name == vm {
+				ctxlog.Info(fmt.Sprintf("Found VMwareMachineobject '%v'", vmMachines.Items[i]))
 				vmMachineObj = &vmMachines.Items[i]
 				break
 			}

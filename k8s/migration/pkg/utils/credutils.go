@@ -702,6 +702,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
 	ctxlog := log.FromContext(ctx)
+
+	// Fixed logging with proper string keys
+	ctxlog.Info("Checking flavor requirements",
+		"CPU", cpu,
+		"MemoryMB", memory)
+
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -712,26 +718,32 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		return nil, fmt.Errorf("failed to extract all flavors: %w", err)
 	}
 
-	ctxlog.Info("Current requirements:", "CPU", cpu, "Memory", memory)
-
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxVCPUs
 	bestFlavor.RAM = constants.MaxRAM
+
 	// Find the smallest flavor that meets the requirements
 	for _, flavor := range allFlavors {
 		if flavor.VCPUs >= cpu && flavor.RAM >= memory {
-			if flavor.VCPUs < bestFlavor.VCPUs || (flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
+			if flavor.VCPUs < bestFlavor.VCPUs ||
+				(flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
 				bestFlavor = &flavor
 			}
 		}
 	}
 
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		ctxlog.Info("The best flavor is:",
-			bestFlavor.RAM, "VCPUs", bestFlavor.VCPUs, "Disk", bestFlavor.Disk)
-	} else {
-		ctxlog.Info("No suitable flavor found.")
+		// Fixed logging with proper string keys and descriptive field names
+		ctxlog.Info("Found matching OpenStack flavor",
+			"flavorName", bestFlavor.Name,
+			"vCPUs", bestFlavor.VCPUs,
+			"RAM_MB", bestFlavor.RAM,
+			"diskGB", bestFlavor.Disk)
+		return bestFlavor, nil
 	}
 
-	return bestFlavor, nil
+	ctxlog.Info("No suitable flavor found matching requirements",
+		"required_vCPUs", cpu,
+		"required_RAM_MB", memory)
+	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }

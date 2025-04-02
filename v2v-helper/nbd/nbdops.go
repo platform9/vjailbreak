@@ -189,12 +189,15 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	}
 	err = cmd.Run()
 	if err != nil {
+		cmd.Cancel()
 		// retry once with debug enabled, to get more details
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return errors.Wrapf(err, "failed to run nbdcopy")
+		newerr := cmd.Run()
+		if newerr != nil {
+			cmd.Cancel()
+			log.Printf("Failed to run nbdcopy: %v", newerr)
+			return errors.Wrapf(newerr, "failed to run nbdcopy")
 		}
 	}
 
