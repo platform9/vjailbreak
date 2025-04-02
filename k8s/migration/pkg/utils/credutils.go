@@ -689,7 +689,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			vmwvm.Labels[label] = "true"
 
 			// Update only if we made changes
-			if err := client.Update(ctx, vmwvm); err != nil {
+			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)
 			}
 		}
