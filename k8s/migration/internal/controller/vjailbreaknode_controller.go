@@ -40,6 +40,7 @@ import (
 type VjailbreakNodeReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Local  bool
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes,verbs=get;list;watch;create;update;patch;delete
@@ -111,7 +112,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client)
+		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}

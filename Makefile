@@ -19,11 +19,11 @@ VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
 export REPO ?= platform9
 export TAG ?= $(VERSION)
-
 export UI_IMG ?= ${REPO}/vjailbreak-ui:${TAG}
 export V2V_IMG ?= ${REPO}/v2v-helper:${TAG}
 export CONTROLLER_IMG ?= ${REPO}/vjailbreak-controller:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
+export KUBECONFIG ?= ~/.kube/config
 
 .PHONY: ui
 ui:
@@ -68,3 +68,6 @@ lint-check:
 build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
+
+run-local:
+	cd k8s/migration/cmd/ && go run main.go --kubeconfig ${KUBECONFIG} --local true
