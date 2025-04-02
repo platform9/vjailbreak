@@ -22,6 +22,7 @@ const (
 
 	NumberOfDisksLabel = "vjailbreak.k8s.pf9.io/disk-count"
 	VMwareCredsLabel   = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vmware-cluster"
 
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string

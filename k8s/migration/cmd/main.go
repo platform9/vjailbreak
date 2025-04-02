@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -54,7 +56,7 @@ func init() {
 
 func main() {
 	var metricsAddr, probeAddr string
-	var secureMetrics, enableLeaderElection, enableHTTP2 bool
+	var secureMetrics, enableLeaderElection, enableHTTP2, local bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
 		"Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -65,6 +67,8 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&local, "local", false,
+		"If set, the controller manager will run in local mode")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -131,6 +135,7 @@ func main() {
 	if err = (&controller.OpenstackCredsReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
 		os.Exit(1)
@@ -166,6 +171,7 @@ func main() {
 	if err = (&controller.VjailbreakNodeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
 		os.Exit(1)
@@ -181,16 +187,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check and create master node entry
-	err = utils.CheckAndCreateMasterNodeEntry(context.TODO())
-	if err != nil {
+	// Create a channel to signal when cache is ready
+	cacheSyncCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Start the manager in a goroutine
+	go func() {
+		setupLog.Info("starting manager")
+		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "problem running manager")
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for cache to sync
+	if !mgr.GetCache().WaitForCacheSync(cacheSyncCtx) {
+		setupLog.Error(fmt.Errorf("timeout waiting for cache to sync"), "")
+		os.Exit(1)
+	}
+
+	// Now that cache is synced, we can create master node entry
+	if err = utils.CheckAndCreateMasterNodeEntry(context.Background(), mgr.GetClient(), local); err != nil {
 		setupLog.Error(err, "Problem creating master node entry")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
+	// Block forever
+	select {}
 }
