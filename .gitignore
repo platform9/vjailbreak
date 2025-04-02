@@ -7,8 +7,6 @@ v2v-helper/vendor/*
 v2v-helper/manager
 pkg/vpwned/vendor/*
 bin/*
-pkg/vpwned/vendor/*
-bin/*
 .vite
 .env
 .env.local

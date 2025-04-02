@@ -100,10 +100,23 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
-		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
+		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 			return ctrl.Result{}, errors.Wrap(err,
 				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'",
 					scope.Name())).Error())
+		}
+	} else {
+		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+		// Update the status of the VMwareCreds object
+		err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", scope.Name(), err))
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
