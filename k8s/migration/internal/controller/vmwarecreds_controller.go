@@ -106,6 +106,19 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'",
 					scope.Name())).Error())
 		}
+	} else {
+		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+		// Update the status of the VMwareCreds object
+		err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating status of VMwareCreds '%s': %s", scope.Name(), err))
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
