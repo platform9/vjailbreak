@@ -191,7 +191,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	if err != nil {
 		log.Printf("Failed to run nbdcopy: %v", err)
 		// retry once with debug enabled, to get more details
-		cmd = exec.CommandContext(ctx, "nbdcopy", "--verbose", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
+		cmd = exec.CommandContext(ctx, "LIBNBD_DEBUG=1", "nbdcopy", "--verbose", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
 		cmd.ExtraFiles = []*os.File{progressWrite}
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
