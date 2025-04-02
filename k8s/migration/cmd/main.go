@@ -112,6 +112,7 @@ func main() {
 	if err = (&controller.ESXIMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ESXIMigration")
 		os.Exit(1)

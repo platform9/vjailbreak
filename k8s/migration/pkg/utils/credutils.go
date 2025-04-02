@@ -49,8 +49,8 @@ type VMwareCredentials struct {
 	Host       string
 	Username   string
 	Password   string
-	Insecure   bool
 	Datacenter string
+	Insecure   bool
 }
 
 // OpenStackCredentials holds the actual credentials after decoding
@@ -122,8 +122,8 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 		Host:       host,
 		Username:   username,
 		Password:   password,
-		Insecure:   insecure,
 		Datacenter: datacenter,
+		Insecure:   insecure,
 	}, nil
 }
 
@@ -553,7 +553,7 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 			if err != nil {
 				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
-			datastores = append(datastores, ds.Name)
+			datastores = AppendUnique(datastores, ds.Name)
 		}
 	}
 	return datastores, nil
