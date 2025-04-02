@@ -4,6 +4,7 @@ k8s/migration/dist/*
 k8s/migration/vendor/*
 v2v-helper/vendor/*
 v2v-helper/manager
+pkg/vpwned/vendor/*
 .vite
 .env
 .env.local
