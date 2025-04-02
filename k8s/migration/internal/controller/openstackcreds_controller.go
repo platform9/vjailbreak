@@ -127,8 +127,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		} else {
 			ctxlog.Info("Successfully updated master node image ID")
 		}
-		ctxlog.Info("Getting OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
-		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+		openstackCredential, err := utils.GetOpenstackCredentials(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
@@ -151,7 +150,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 
 		// update the status field openstackInfo
-		ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
 		openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
