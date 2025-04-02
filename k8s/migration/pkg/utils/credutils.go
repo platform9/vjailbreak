@@ -61,6 +61,10 @@ type OpenStackCredentials struct {
 	DomainName string
 }
 
+const (
+	trueString = "true" // Define at package level
+)
+
 // GetVMwareCredentials retrieves vCenter credentials from a secret
 func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredentials, error) {
 	secret := &corev1.Secret{}
@@ -94,7 +98,7 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 
-	insecure := strings.TrimSpace(insecureStr) == "true"
+	insecure := strings.TrimSpace(insecureStr) == trueString
 
 	return VMwareCredentials{
 		Host:     host,
@@ -133,7 +137,7 @@ func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackC
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
-	insecure := strings.TrimSpace(insecureStr) == "true"
+	insecure := strings.TrimSpace(insecureStr) == trueString
 
 	return OpenStackCredentials{
 		AuthURL:    fields["AuthURL"],

@@ -240,7 +240,6 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
-
 	ctxlog := r.ctxlog.WithValues("vm", vm)
 	ctxlog.Info("Creating Migration for VM")
 
@@ -704,7 +703,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []string) error {
-
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var (
 		fbcm *corev1.ConfigMap
