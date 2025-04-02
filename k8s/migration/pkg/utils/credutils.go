@@ -654,7 +654,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if k8serrors.IsNotFound(err) {
 		// If not found, create a new object
-		label := fmt.Sprintf("%s=%s", constants.VMwareCredsLabel, vmwcreds.Name)
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
@@ -668,7 +668,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
 		init = true
 	} else {
-		label := fmt.Sprintf("%s=%s", constants.VMwareCredsLabel, vmwcreds.Name)
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		if vmwvm.Labels == nil {
 			vmwvm.Labels = map[string]string{label: "true"}
 		} else {
