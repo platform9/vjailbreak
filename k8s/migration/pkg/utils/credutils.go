@@ -673,10 +673,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		init = true
 	} else {
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-		if vmwvm.Labels == nil {
-			vmwvm.Labels = map[string]string{label: "true"}
+		if vmwvm.ObjectMeta.Labels == nil {
+			vmwvm.ObjectMeta.Labels = map[string]string{label: "true"}
 		} else {
-			vmwvm.Labels[label] = "true"
+			vmwvm.ObjectMeta.Labels[label] = "true"
 		}
 	}
 
