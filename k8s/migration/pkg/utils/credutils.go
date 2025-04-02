@@ -1,3 +1,4 @@
+// Package utils provides utility functions for handling credentials and other operations
 package utils
 
 import (
@@ -8,12 +9,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
+	govmitypes "github.com/vmware/govmomi/vim25/types"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -21,17 +26,14 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	"github.com/vmware/govmomi/find"
-	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/session/cache"
-	"github.com/vmware/govmomi/vim25"
-	"github.com/vmware/govmomi/vim25/mo"
-	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
+// OpenStackClients holds clients for interacting with OpenStack services
 type OpenStackClients struct {
 	BlockStorageClient *gophercloud.ServiceClient
 	ComputeClient      *gophercloud.ServiceClient
@@ -138,6 +140,7 @@ func GetOpenstackCredentials(ctx context.Context, k3sclient client.Client, secre
 	}, nil
 }
 
+// GetCert retrieves an X.509 certificate from an endpoint
 func GetCert(endpoint string) (*x509.Certificate, error) {
 	conf := &tls.Config{
 		//nolint:gosec // This is required to skip certificate verification
@@ -152,12 +155,16 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "error connecting to %s", hostname)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			ctrllog.Log.Info("Error closing connection", "error", err)
+		}
+	}()
 	cert := conn.ConnectionState().PeerCertificates[0]
 	return cert, nil
 }
 
-//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
+// VerifyNetworks verifies the existence of specified networks in OpenStack
 func VerifyNetworks(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetnetworks []string) error {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
@@ -188,7 +195,7 @@ func VerifyNetworks(ctx context.Context, k3sclient client.Client, openstackcreds
 	return nil
 }
 
-//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
+// VerifyPorts verifies the existence of specified ports in OpenStack
 func VerifyPorts(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetports []string) error {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
@@ -220,6 +227,7 @@ func VerifyPorts(ctx context.Context, k3sclient client.Client, openstackcreds *v
 	return nil
 }
 
+// VerifyStorage verifies the existence of specified storage in OpenStack
 func VerifyStorage(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
@@ -251,13 +259,14 @@ func VerifyStorage(ctx context.Context, k3sclient client.Client, openstackcreds 
 	return nil
 }
 
+// GetOpenstackInfo retrieves OpenStack information using provided credentials
 func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*vjailbreakv1alpha1.OpenstackInfo, error) {
-	var openstackvoltypes []string
-	var openstacknetworks []string
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
+	var openstackvoltypes []string
+	var openstacknetworks []string
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -338,8 +347,8 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 // ValidateAndGetProviderClient is a function to get provider client
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
-	ctxlog := log.FromContext(ctx)
 	openstackCredential, err := GetOpenstackCredentials(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	ctxlog := ctrllog.Log
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -367,7 +376,10 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			Bytes: caCert.Raw,
 		})))
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
-		caCertPool, _ := x509.SystemCertPool()
+		caCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get system cert pool: %w", err)
+		}
 		if caCertPool == nil {
 			caCertPool = x509.NewCertPool()
 		}
@@ -416,9 +428,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
-	// fmt.Println(u)
 	// Connect and log in to ESX or vCenter
-	// Share govc's session cache
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
@@ -428,7 +438,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	c := new(vim25.Client)
 	err = s.Login(context.Background(), c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to login: %w", err)
+		return nil, fmt.Errorf("failed to login to vSphere: %w", err)
 	}
 	return c, nil
 }
@@ -540,7 +550,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	var vminfo []vjailbreakv1alpha1.VMInfo
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
@@ -600,9 +610,18 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 // AppendUnique appends unique values to a slice
 func AppendUnique(slice []string, values ...string) []string {
 	for _, v := range values {
-		if !slices.Contains(slice, v) {
+		if !contains(slice, v) {
 			slice = append(slice, v)
 		}
 	}
 	return slice
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }

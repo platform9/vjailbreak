@@ -85,7 +85,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}()
 
-	if !openstackcreds.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !openstackcreds.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
 	}
 	return r.reconcileNormal(ctx, scope)
@@ -141,7 +141,8 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling OpenstackCreds '%s' deletion", scope.OpenstackCreds.Name))
 	// Delete the associated secret
-	err := r.Client.Delete(ctx, &corev1.Secret{
+	client := r.Client
+	err := client.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
 			Namespace: constants.NamespaceMigrationSystem,

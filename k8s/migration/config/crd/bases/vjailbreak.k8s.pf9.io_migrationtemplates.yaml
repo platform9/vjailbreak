@@ -81,6 +81,7 @@ spec:
             description: MigrationTemplateStatus defines the observed state of MigrationTemplate
             properties:
               openstack:
+                description: OpenstackInfo contains OpenStack-specific information
                 properties:
                   networks:
                     items:
@@ -96,6 +97,7 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                 items:
+                  description: VMInfo contains information about a virtual machine
                   properties:
                     datastores:
                       items:

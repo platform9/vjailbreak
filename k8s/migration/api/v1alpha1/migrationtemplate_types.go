@@ -42,6 +42,7 @@ type MigrationTemplateSpec struct {
 	Destination     MigrationTemplateDestination `json:"destination"`
 }
 
+// VMInfo contains information about a virtual machine
 type VMInfo struct {
 	Name       string   `json:"name"`
 	Datastores []string `json:"datastores,omitempty"`
@@ -52,6 +53,7 @@ type VMInfo struct {
 	OSType     string   `json:"osType,omitempty"`
 }
 
+// OpenstackInfo contains OpenStack-specific information
 type OpenstackInfo struct {
 	VolumeTypes []string `json:"volumeTypes,omitempty"`
 	Networks    []string `json:"networks,omitempty"`

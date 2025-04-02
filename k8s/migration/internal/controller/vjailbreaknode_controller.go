@@ -48,12 +48,14 @@ type VjailbreakNodeReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;delete
 
+// Reconcile handles the reconciliation of VjailbreakNode resources
 func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
 
 	// Fetch the VjailbreakNode instance.
 	vjailbreakNode := vjailbreakv1alpha1.VjailbreakNode{}
-	err := r.Client.Get(ctx, req.NamespacedName, &vjailbreakNode, &client.GetOptions{})
+	client := r.Client
+	err := client.Get(ctx, req.NamespacedName, &vjailbreakNode)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -85,7 +87,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Handle deleted VjailbreakNode
-	if !vjailbreakNode.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !vjailbreakNode.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, vjailbreakNodeScope)
 	}
 
@@ -117,7 +119,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 
-	uuid, err := utils.GetOpenstackVMByName(vjNode.Name, ctx, r.Client)
+	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
 	}
@@ -126,7 +128,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		log.Info("Skipping creation of already created node, updating status", "name", vjNode.Name)
 		if vjNode.Status.OpenstackUUID == "" {
 			// This will error until the the IP is available
-			vmip, err = utils.GetOpenstackVMIP(uuid, ctx, r.Client)
+			vmip, err = utils.GetOpenstackVMIP(ctx, uuid, r.Client)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
@@ -212,7 +214,7 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
-	uuid, err := utils.GetOpenstackVMByName(scope.VjailbreakNode.Name, ctx, r.Client)
+	uuid, err := utils.GetOpenstackVMByName(ctx, scope.VjailbreakNode.Name, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
 	}
@@ -223,7 +225,7 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	err = utils.DeleteOpenstackVM(scope.VjailbreakNode.Status.OpenstackUUID, ctx, r.Client)
+	err = utils.DeleteOpenstackVM(ctx, scope.VjailbreakNode.Status.OpenstackUUID, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
 	}
@@ -249,7 +251,7 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 	vjNode := scope.VjailbreakNode
 
 	// Get active migrations happening on the node
-	activeMigrations, err := utils.GetActiveMigrations(vjNode.Name, ctx, r.Client)
+	activeMigrations, err := utils.GetActiveMigrations(ctx, vjNode.Name, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
 	}

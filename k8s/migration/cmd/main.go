@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main is the entry point for the migration controller
 package main
 
 import (
@@ -148,15 +149,19 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StorageMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
 		os.Exit(1)
 	}
 	if err = (&controller.NetworkMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
 		os.Exit(1)

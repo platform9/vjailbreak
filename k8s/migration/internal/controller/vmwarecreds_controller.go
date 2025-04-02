@@ -80,7 +80,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
+	if vmwcreds.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
 	}
 	return r.reconcileDelete(ctx, scope)
@@ -121,7 +121,8 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
 	// Delete the associated secret
-	err := r.Client.Delete(ctx, &corev1.Secret{
+	client := r.Client
+	err := client.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
 			Namespace: constants.NamespaceMigrationSystem,
