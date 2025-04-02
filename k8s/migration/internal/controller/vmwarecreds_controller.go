@@ -46,6 +46,8 @@ type VMwareCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarehosts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwareclusters,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -89,7 +91,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
-	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
+	if _, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = "Failed"
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
@@ -100,6 +102,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	} else {
 		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 		// Update the status of the VMwareCreds object
+		err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
 		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
 		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {

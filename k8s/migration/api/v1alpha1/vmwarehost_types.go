@@ -17,43 +17,39 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// VMwareCredsSpec defines the desired state of VMwareCreds
-type VMwareCredsSpec struct {
-	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+// VMwareHostSpec defines the desired state of VMwareHost
+type VMwareHostSpec struct {
+	Name string `json:"name,omitempty"`
 }
 
-// VMwareCredsStatus defines the observed state of VMwareCreds
-type VMwareCredsStatus struct {
-	VMwareValidationStatus  string `json:"vmwareValidationStatus,omitempty"`
-	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
+// VMwareHostStatus defines the observed state of VMwareHost
+type VMwareHostStatus struct {
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.vmwareValidationStatus`,name=Status,type=string
 
-// VMwareCreds is the Schema for the vmwarecreds API
-type VMwareCreds struct {
+// VMwareHost is the Schema for the vmwarehosts API
+type VMwareHost struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   VMwareCredsSpec   `json:"spec,omitempty"`
-	Status VMwareCredsStatus `json:"status,omitempty"`
+	Spec   VMwareHostSpec   `json:"spec,omitempty"`
+	Status VMwareHostStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// VMwareCredsList contains a list of VMwareCreds
-type VMwareCredsList struct {
+// VMwareHostList contains a list of VMwareHost
+type VMwareHostList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []VMwareCreds `json:"items"`
+	Items           []VMwareHost `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&VMwareCreds{}, &VMwareCredsList{})
+	SchemeBuilder.Register(&VMwareHost{}, &VMwareHostList{})
 }
