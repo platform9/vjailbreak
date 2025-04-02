@@ -672,12 +672,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
 		init = true
 	} else {
+		// If the object is present, add the label
+		ctxlog.Info("Adding label to existing VMwareMachine", "Name", vmwvmKey.Name)
+
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-		if vmwvm.ObjectMeta.Labels == nil {
-			vmwvm.ObjectMeta.Labels = map[string]string{label: "true"}
-		} else {
-			vmwvm.ObjectMeta.Labels[label] = "true"
-		}
+		vmwvm.Labels[label] = "true"
+		ctxlog.Info("Label added to existing VMwareMachine", "Name", vmwvm.Labels[label])
 	}
 
 	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
