@@ -60,6 +60,7 @@ rules:
   resources:
   - migrationplans
   - migrations
+  - migrationtemplates
   - networkmappings
   - openstackcreds
   - storagemappings
@@ -78,6 +79,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - migrationplans/finalizers
+  - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
   - storagemappings/finalizers
@@ -90,6 +92,7 @@ rules:
   resources:
   - migrationplans/status
   - migrations/status
+  - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
   - storagemappings/status
@@ -100,11 +103,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrationtemplates
-  verbs:
-  - get
-  - list
-  - watch
