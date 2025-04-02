@@ -41,6 +41,7 @@ import (
 type OpenstackCredsReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Local  bool
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
@@ -57,7 +58,7 @@ type OpenstackCredsReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
-	ctxlog := log.FromContext(ctx)
+	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
 	// Get the OpenstackCreds object
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if err := r.Get(ctx, req.NamespacedName, openstackcreds); err != nil {
@@ -100,7 +101,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	ctxlog.Info(fmt.Sprintf("OpenstackCreds '%s' CR is being created or updated", scope.OpenstackCreds.Name))
 	ctxlog.Info(fmt.Sprintf("Validating OpenstackCreds '%s' object", scope.OpenstackCreds.Name))
-	if _, err := utils.ValidateAndGetProviderClient(ctx, scope.OpenstackCreds); err != nil {
+	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		// Update the status of the OpenstackCreds object
 		ctxlog.Error(err, fmt.Sprintf("Error validating OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
@@ -110,7 +111,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 	} else {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client)
+		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
 			if strings.Contains(err.Error(), "404") {
 				ctxlog.Error(err, "failed to update master node image id and flavor list, skipping reconciliation")
@@ -118,13 +119,13 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 			}
 		}
-		openstackCredential, err := utils.GetOpenstackCredentials(context.TODO(), scope.OpenstackCreds.Spec.SecretRef.Name)
+		openstackCredential, err := utils.GetOpenstackCredentials(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
 		ctxlog.Info(fmt.Sprintf("Getting flavors for OpenstackCreds '%s'", scope.OpenstackCreds.Name))
-		flavors, err := utils.ListAllFlavors(ctx, scope.OpenstackCreds)
+		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
 		}
@@ -144,7 +145,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 
 		// update the status field openstackInfo
-		openstackinfo, err := utils.GetOpenstackInfo(ctx, scope.OpenstackCreds)
+		openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
 		}
