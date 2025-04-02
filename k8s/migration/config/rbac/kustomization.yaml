@@ -15,6 +15,10 @@ resources:
 # if you do not want those helpers be installed with your Project.
 - vmwaremachine_editor_role.yaml
 - vmwaremachine_viewer_role.yaml
+- vmwarehost_editor_role.yaml
+- vmwarehost_viewer_role.yaml
+- vmwarecluster_editor_role.yaml
+- vmwarecluster_viewer_role.yaml
 - vjailbreaknode_editor_role.yaml
 - vjailbreaknode_viewer_role.yaml
 - migrationtemplate_editor_role.yaml
