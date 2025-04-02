@@ -129,9 +129,14 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 
 	if local {
 		// Local mode
+		openstackuuid = "fake-openstackuuid"
 		imageID = "fake-image-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
+		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
+		if err != nil {
+			return errors.Wrap(err, "failed to get current instance uuid")
+		}
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, openstackuuid, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
