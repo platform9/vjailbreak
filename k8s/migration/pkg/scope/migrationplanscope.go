@@ -1,3 +1,4 @@
+// Package scope provides scoped client functionality for controllers
 package scope
 
 import (
