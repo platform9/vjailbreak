@@ -10,7 +10,7 @@ A free and open-source tool that simplifies the migration of virtual machines fr
 * Select virtual machines to migrate
   * VM disks are converted from `vmdk` to `qcow2`
   * VMware Tools are uninstalled
-  * Virtual devices & drivers are installed
+  * Virtual devices & drivers are installed (for windows)
 * Post-migration health checks are performed
 
 ----
@@ -19,8 +19,7 @@ All documentation for vJailbreak can be found here: [Documentation](https://plat
 # Demonstration
 ## Video Demo
 
-https://github.com/user-attachments/assets/1f829fba-60dc-422e-b28d-ff79347a1d87
-
+[![vJailbreak demo](https://img.youtube.com/vi/seThilJ5ujM/0.jpg)](https://www.youtube.com/watch?v=seThilJ5ujM)
 ## Sample Screenshots
 
 ### Form to start a migration
