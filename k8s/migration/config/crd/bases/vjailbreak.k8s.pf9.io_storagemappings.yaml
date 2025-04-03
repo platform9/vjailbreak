@@ -46,6 +46,8 @@ spec:
               storages:
                 description: Storages is a list of storage mappings
                 items:
+                  description: Storage defines the mapping between source and destination
+                    storage
                   properties:
                     source:
                       type: string

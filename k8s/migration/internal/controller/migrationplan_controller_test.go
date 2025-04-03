@@ -19,8 +19,8 @@ package controller
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -30,8 +30,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
-var _ = Describe("MigrationPlan Controller", func() {
-	Context("When reconciling a resource", func() {
+var _ = ginkgo.Describe("MigrationPlan Controller", func() {
+	ginkgo.Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
 		ctx := context.Background()
@@ -42,32 +42,30 @@ var _ = Describe("MigrationPlan Controller", func() {
 		}
 		migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind MigrationPlan")
+		ginkgo.BeforeEach(func() {
+			ginkgo.By("creating the custom resource for the Kind MigrationPlan")
 			err := k8sClient.Get(ctx, typeNamespacedName, migrationplan)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &vjailbreakv1alpha1.MigrationPlan{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				gomega.Expect(k8sClient.Create(ctx, resource)).To(gomega.Succeed())
 			}
 		})
 
-		AfterEach(func() {
+		ginkgo.AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &vjailbreakv1alpha1.MigrationPlan{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
-			By("Cleanup the specific resource instance MigrationPlan")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			ginkgo.By("Cleanup the specific resource instance MigrationPlan")
+			gomega.Expect(k8sClient.Delete(ctx, resource)).To(gomega.Succeed())
 		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+		ginkgo.It("should successfully reconcile the resource", func() {
+			ginkgo.By("Reconciling the created resource")
 			controllerReconciler := &MigrationPlanReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -76,7 +74,7 @@ var _ = Describe("MigrationPlan Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
-			Expect(err).NotTo(HaveOccurred())
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})

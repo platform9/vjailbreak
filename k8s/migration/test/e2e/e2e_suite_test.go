@@ -20,13 +20,15 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
-	RegisterFailHandler(Fail)
-	fmt.Fprintf(GinkgoWriter, "Starting migration suite\n")
-	RunSpecs(t, "e2e suite")
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	if _, err := fmt.Fprintf(ginkgo.GinkgoWriter, "Starting migration suite\n"); err != nil {
+		ginkgo.Fail(fmt.Sprintf("Failed to write to GinkgoWriter: %v", err))
+	}
+	ginkgo.RunSpecs(t, "E2E Suite")
 }
