@@ -134,7 +134,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		scope.OpenstackCreds.Spec.Flavors = flavors
 
 		// Update the spec field
-		if err := r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+		if err = r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Error updating spec of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 			return ctrl.Result{}, err
 		}
