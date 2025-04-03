@@ -34,7 +34,6 @@ export interface Spec {
   nodeRole: string
   openstackCreds: OpenstackCredsRef
   openstackFlavorID: string
-  availableFlavors?: OpenstackFlavor[]
 }
 
 export interface Status {
@@ -49,17 +48,7 @@ export interface NodeListMetadata {
   resourceVersion: string
 }
 
-export interface OpenstackFlavor {
-  id: string
-  name: string
-  vcpus: number
-  ram: number
-  disk: number
-}
 
-export interface OpenstackFlavorsResponse {
-  flavors: OpenstackFlavor[]
-}
 
 export interface OpenstackProject {
   id: string

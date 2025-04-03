@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
@@ -52,6 +53,7 @@ type Migrate struct {
 	PerformHealthChecks bool
 	HealthCheckPort     string
 	K8sClient           client.Client
+	TargetFlavorId      string
 }
 
 type MigrationTimes struct {
@@ -506,15 +508,25 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
+func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	networknames := migobj.Networknames
-	closestFlavour, err := openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
-	if err != nil {
-		return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
+	var flavor *flavors.Flavor
+	var err error
+
+	if flavorId == "" {
+		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
+		if err != nil {
+			return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
+		}
+		log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM)
+	} else {
+		flavor, err = openstackops.GetFlavor(flavorId)
+		if err != nil {
+			return fmt.Errorf("failed to get OpenStack flavor: %s", err)
+		}
 	}
-	log.Printf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", closestFlavour.Name, closestFlavour.VCPUs, closestFlavour.RAM)
 
 	networkids := []string{}
 	ipaddresses := []string{}
@@ -561,7 +573,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(closestFlavour, networkids, portids, vminfo)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
@@ -783,7 +795,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(vminfo)
+	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {
 		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
 		return errors.Wrap(err, "failed to create target instance")

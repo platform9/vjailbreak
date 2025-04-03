@@ -9,8 +9,6 @@ import {
   NodeItem as Node,
   Spec,
   NodeItem,
-  OpenstackFlavorsResponse,
-  OpenstackProjectsResponse,
   OpenstackCredsRef,
 } from "./model"
 import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
@@ -75,54 +73,6 @@ export const getOpenstackImages = async (creds) => {
     return response.data as OpenstackImagesResponse
   } catch (error) {
     console.error("Failed to fetch OpenStack images:", error)
-    throw error
-  }
-}
-
-const getProjectId = async (creds) => {
-  try {
-    const { token } = await generateOpenstackToken(creds)
-    const response = await axiosInstance({
-      method: "get",
-      url: `${creds.OS_AUTH_URL}/auth/projects`,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Auth-Token": token,
-      },
-    })
-
-    const data = response.data as OpenstackProjectsResponse
-    const projectId = data.projects?.[0]?.id
-
-    if (!projectId) {
-      throw new Error("No project found")
-    }
-
-    return { projectId }
-  } catch (error) {
-    console.error("Failed to get project ID:", error)
-    throw error
-  }
-}
-
-export const getOpenstackFlavors = async (creds) => {
-  try {
-    const { token } = await generateOpenstackToken(creds)
-    const { projectId } = await getProjectId(creds)
-    const baseUrl = creds.OS_AUTH_URL.replace("/keystone/v3", "")
-
-    const response = await axiosInstance({
-      method: "get",
-      url: `${baseUrl}/nova/v2.1/${projectId}/flavors/detail?is_public=None`,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Auth-Token": token,
-      },
-    })
-
-    return response.data as OpenstackFlavorsResponse
-  } catch (error) {
-    console.error("Failed to fetch OpenStack flavors:", error)
     throw error
   }
 }
