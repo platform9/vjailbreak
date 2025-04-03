@@ -122,6 +122,5 @@ func main() {
 
 		log.Printf("VM powered on after migration failure\n")
 	}
-
 	cancel()
 }
