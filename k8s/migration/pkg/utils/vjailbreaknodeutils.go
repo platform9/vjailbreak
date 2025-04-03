@@ -49,11 +49,6 @@ type OpenStackMetadata struct {
 func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
 	var openstackuuid string
 
-	k3sclient, err := GetInclusterClient()
-	if err != nil {
-		return errors.Wrap(err, "failed to get client")
-	}
-
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
@@ -133,14 +128,9 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 
 	if local {
 		// Local mode
-		openstackuuid = "fake-openstackuuid"
 		imageID = "fake-image-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
-		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current instance uuid")
-		}
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, openstackuuid, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
@@ -386,13 +376,8 @@ func GetOpenstackVMIP(ctx context.Context, uuid string, k3sclient client.Client)
 	return "", errors.New("failed to get vm ip")
 }
 
-<<<<<<< HEAD
-func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string,
-=======
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
-func GetImageIDFromVM(ctx context.Context, uuid string,
->>>>>>> 61dfe62 (fix lint issues)
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
@@ -416,14 +401,9 @@ func GetImageIDFromVM(ctx context.Context, uuid string,
 	return "", fmt.Errorf("failed to assert image ID as string")
 }
 
-<<<<<<< HEAD
+// ListAllFlavors retrieves a list of all available OpenStack flavors
 func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
-=======
-// ListAllFlavors retrieves a list of all available OpenStack flavors
-func ListAllFlavors(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
->>>>>>> 61dfe62 (fix lint issues)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -585,12 +565,8 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 	return nil
 }
 
-// getOpenstackCredsWrapper wraps GetOpenstackCredsForMaster to return client.Object
-func getOpenstackCredsWrapper(ctx context.Context, k3sclient client.Client) (client.Object, error) {
-	return GetOpenstackCredsForMaster(ctx, k3sclient)
-}
-
 // AddFinalizerToCreds adds finalizers to credentials and their associated secret
+// nolint:dupl // separation of logic
 func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
@@ -619,6 +595,7 @@ func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
 }
 
 // DeleteFinalizerFromCreds removes finalizers from credentials and their associated secret
+// nolint:dupl // separation of logic
 func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) error {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {

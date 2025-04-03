@@ -320,7 +320,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
 	if providerClient == nil {
-		return nil, errors.New(fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
+		return nil, errors.New(fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName)) //nolint:revive // preferred over revive
 	}
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
@@ -609,17 +609,19 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 
 // AppendUnique appends unique values to a slice
 func AppendUnique(slice []string, values ...string) []string {
-	for _, v := range values {
-		if !contains(slice, v) {
-			slice = append(slice, v)
+	for _, value := range values {
+		if !containsString(slice, value) {
+			slice = append(slice, value)
 		}
 	}
 	return slice
 }
 
-func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
+// containsString checks if a string exists in a slice of strings.
+// It is used internally by the package for string slice operations.
+func containsString(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
 			return true
 		}
 	}
