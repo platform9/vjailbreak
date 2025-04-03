@@ -146,8 +146,14 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Pod{}, builder.WithPredicates(
 			predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
-					oldpod := e.ObjectOld.(*corev1.Pod)
-					newpod := e.ObjectNew.(*corev1.Pod)
+					oldpod, ok := e.ObjectOld.(*corev1.Pod)
+					if !ok {
+						return false
+					}
+					newpod, ok := e.ObjectNew.(*corev1.Pod)
+					if !ok {
+						return false
+					}
 					for _, condition := range newpod.Status.Conditions {
 						// Ignores the disk percentage updates in the pod custom conditions
 						if condition.Type == "Progressing" && !strings.Contains(condition.Message, "Progress:") {
@@ -161,6 +167,8 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// SetupMigrationPhase sets up the migration phase based on current state
+//
 //nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
 	events, err := r.GetEventsSorted(ctx, scope)
@@ -237,6 +245,7 @@ func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope
 	return r.Status().Update(ctx, vmwvm)
 }
 
+// GetEventsSorted retrieves sorted events for a migration
 func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.MigrationScope) (*corev1.EventList, error) {
 	migration := scope.Migration
 	ctxlog := scope.Logger
@@ -262,12 +271,13 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 
 	// Sort filteredEvents by creation timestamp
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
-		return filteredEvents.Items[i].CreationTimestamp.Time.After(filteredEvents.Items[j].CreationTimestamp.Time)
+		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
 
 	return filteredEvents, nil
 }
 
+// GetPod retrieves the pod associated with a migration
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
 	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -15,24 +16,24 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	openstackutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"k8s.io/apimachinery/pkg/runtime"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	openstackutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
 
+// Network represents network configuration for OpenStack VMs
 type Network struct {
 	ID        string `json:"id"`
 	Type      string `json:"type"`
@@ -40,12 +41,15 @@ type Network struct {
 	NetworkID string `json:"network_id"`
 }
 
+// OpenStackMetadata represents metadata for OpenStack VMs
 type OpenStackMetadata struct {
 	Networks []Network `json:"networks"`
 }
 
+// CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
 func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
 	var openstackuuid string
+
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
@@ -102,6 +106,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 	return nil
 }
 
+// UpdateMasterNodeImageID updates the image ID of the master node
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
 	var openstackuuid, imageID string
 	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
@@ -124,14 +129,9 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 
 	if local {
 		// Local mode
-		openstackuuid = "fake-openstackuuid"
 		imageID = "fake-image-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
-		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current instance uuid")
-		}
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, openstackuuid, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
@@ -152,11 +152,13 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 	return nil
 }
 
+// IsMasterNode checks if the given node is a master node
 func IsMasterNode(node *corev1.Node) bool {
 	_, ok := node.Labels[constants.K8sMasterNodeAnnotation]
 	return ok
 }
 
+// GetAllk8sNodes retrieves all Kubernetes nodes in the cluster
 func GetAllk8sNodes(ctx context.Context, k3sclient client.Client) (corev1.NodeList, error) {
 	nodeList := corev1.NodeList{}
 	err := k3sclient.List(ctx, &nodeList)
@@ -166,10 +168,12 @@ func GetAllk8sNodes(ctx context.Context, k3sclient client.Client) (corev1.NodeLi
 	return nodeList, nil
 }
 
+// GetNodeInternalIP retrieves the internal IP address of a node
 func GetNodeInternalIP(node *corev1.Node) string {
 	return node.Annotations[constants.InternalIPAnnotation]
 }
 
+// GetMasterK8sNode retrieves the Kubernetes master node
 func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Node, error) {
 	nodeList, err := GetAllk8sNodes(ctx, k3sclient)
 	if err != nil {
@@ -190,6 +194,7 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 	return masterNode, nil
 }
 
+// CreateOpenstackVMForWorkerNode creates a new OpenStack VM for a worker node
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
 	log := scope.Logger
@@ -251,6 +256,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	return server.ID, nil
 }
 
+// GetOpenstackCredsForMaster retrieves OpenStack credentials for the master node
 func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	// Get master vjailbreakNode
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
@@ -286,6 +292,7 @@ func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*
 	return oscreds, nil
 }
 
+// GetCurrentInstanceNetworkInfo retrieves network information for the current instance
 func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 5
@@ -301,7 +308,11 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get response")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -321,7 +332,8 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 	return networks, nil
 }
 
-func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client) (string, error) {
+// GetOpenstackVMIP retrieves the IP address of an OpenStack VM
+func GetOpenstackVMIP(ctx context.Context, uuid string, k3sclient client.Client) (string, error) {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
@@ -339,16 +351,27 @@ func GetOpenstackVMIP(uuid string, ctx context.Context, k3sclient client.Client)
 
 	// Extract IP addresses
 	for _, addresses := range server.Addresses {
-		for _, addr := range addresses.([]any) {
-			ipInfo := addr.(map[string]any)
-			return ipInfo["addr"].(string), nil
+		addrs, ok := addresses.([]any)
+		if !ok {
+			return "", fmt.Errorf("addresses is not of type []any")
+		}
+		for _, addr := range addrs {
+			ipInfo, ok := addr.(map[string]any)
+			if !ok {
+				continue
+			}
+			addrStr, ok := ipInfo["addr"].(string)
+			if !ok {
+				continue
+			}
+			return addrStr, nil
 		}
 	}
 	return "", errors.New("failed to get vm ip")
 }
 
-func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+// GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
+func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
@@ -407,6 +430,8 @@ func GetImageIDOfVMBootFromVolume(ctx context.Context, uuid string, k3sclient cl
 	}
 	return "", fmt.Errorf("no image found for the volume")
 }
+
+// ListAllFlavors retrieves a list of all available OpenStack flavors
 func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]flavors.Flavor, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
@@ -422,7 +447,8 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 	return flavors.ExtractFlavors(allPages)
 }
 
-func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client) error {
+// DeleteOpenstackVM deletes an OpenStack virtual machine by its UUID
+func DeleteOpenstackVM(ctx context.Context, uuid string, k3sclient client.Client) error {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack creds")
@@ -440,6 +466,7 @@ func DeleteOpenstackVM(uuid string, ctx context.Context, k3sclient client.Client
 	return nil
 }
 
+// GetImageID retrieves the image ID from the Kubernetes client
 func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	// Get the image ID from the vjailbreak master node
@@ -453,7 +480,8 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 	return vjNode.Spec.OpenstackImageID, nil
 }
 
-func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Client) (string, error) {
+// GetOpenstackVMByName retrieves an OpenStack VM's UUID by its name
+func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Client) (string, error) {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
@@ -478,17 +506,23 @@ func GetOpenstackVMByName(name string, ctx context.Context, k3sclient client.Cli
 	return vmID, nil
 }
 
-func ReadFileContent(filePath string) (string, error) {
-	// Read entire file content
-	data, err := os.ReadFile(filePath)
+// ReadFileContent reads and returns the content of a file at the given path
+func ReadFileContent(filePath string) ([]byte, error) {
+	// Validate file path
+	cleanPath := filepath.Clean(filePath)
+	if !strings.HasPrefix(cleanPath, "/") {
+		return nil, fmt.Errorf("invalid file path: must be absolute path")
+	}
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to read file")
+		return nil, errors.Wrap(err, "failed to read file")
 	}
 
-	return string(data), nil
+	return data, nil
 }
 
-func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.Client) ([]string, error) {
+// GetActiveMigrations retrieves a list of active migrations for a given node
+func GetActiveMigrations(ctx context.Context, nodeName string, k3sclient client.Client) ([]string, error) {
 	migrationList := &vjailbreakv1alpha1.MigrationList{}
 	err := k3sclient.List(ctx, migrationList)
 	if err != nil {
@@ -512,6 +546,7 @@ func GetActiveMigrations(nodeName string, ctx context.Context, k3sclient client.
 	return activeMigrations, nil
 }
 
+// GetInclusterClient creates and returns a Kubernetes in-cluster client
 func GetInclusterClient() (client.Client, error) {
 	// Create a direct Kubernetes client
 	config, err := rest.InClusterConfig()
@@ -544,6 +579,7 @@ func GetNodeByName(ctx context.Context, k3sclient client.Client, nodeName string
 	return node, nil
 }
 
+// DeleteNodeByName deletes a Kubernetes node by its name
 func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName string) error {
 	node := &corev1.Node{}
 	err := k3sclient.Get(ctx, client.ObjectKey{
@@ -559,43 +595,60 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 	return nil
 }
 
-func handleFinalizerForCreds(ctx context.Context, k3sclient client.Client, add bool) error {
+// AddFinalizerToCreds adds finalizers to credentials and their associated secret
+// nolint:dupl // separation of logic
+func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
 	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
-		return errors.Wrap(err, "failed to get openstack creds")
+		return errors.Wrap(err, "failed to get credentials")
 	}
+
 	secret := &corev1.Secret{}
 	err = k3sclient.Get(ctx, types.NamespacedName{
 		Name:      creds.Spec.SecretRef.Name,
 		Namespace: constants.NamespaceMigrationSystem,
 	}, secret)
 	if err != nil {
-		return errors.Wrap(err, "failed to get openstack credentials from secret")
+		return errors.Wrap(err, "failed to get credentials from secret")
 	}
 
-	if add {
-		controllerutil.AddFinalizer(creds, constants.VjailbreakNodeFinalizer)
-		controllerutil.AddFinalizer(secret, constants.VjailbreakNodeFinalizer)
-	} else {
-		controllerutil.RemoveFinalizer(creds, constants.VjailbreakNodeFinalizer)
-		controllerutil.RemoveFinalizer(secret, constants.VjailbreakNodeFinalizer)
-	}
+	controllerutil.AddFinalizer(creds, constants.VjailbreakNodeFinalizer)
+	controllerutil.AddFinalizer(secret, constants.VjailbreakNodeFinalizer)
 
-	err = k3sclient.Update(ctx, creds)
-	if err != nil {
-		return errors.Wrap(err, "failed to update openstack creds with finalizer")
+	if err := k3sclient.Update(ctx, creds); err != nil {
+		return errors.Wrap(err, "failed to update credentials with finalizer")
 	}
-	err = k3sclient.Update(ctx, secret)
-	if err != nil {
-		return errors.Wrap(err, "failed to update openstack secret with finalizer")
+	if err := k3sclient.Update(ctx, secret); err != nil {
+		return errors.Wrap(err, "failed to update secret with finalizer")
 	}
 	return nil
 }
 
-func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
-	return handleFinalizerForCreds(ctx, k3sclient, true)
-}
-
+// DeleteFinalizerFromCreds removes finalizers from credentials and their associated secret
+// nolint:dupl // separation of logic
 func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) error {
-	return handleFinalizerForCreds(ctx, k3sclient, false)
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get credentials")
+	}
+
+	secret := &corev1.Secret{}
+	err = k3sclient.Get(ctx, types.NamespacedName{
+		Name:      creds.Spec.SecretRef.Name,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret)
+	if err != nil {
+		return errors.Wrap(err, "failed to get credentials from secret")
+	}
+
+	controllerutil.RemoveFinalizer(creds, constants.VjailbreakNodeFinalizer)
+	controllerutil.RemoveFinalizer(secret, constants.VjailbreakNodeFinalizer)
+
+	if err := k3sclient.Update(ctx, creds); err != nil {
+		return errors.Wrap(err, "failed to update credentials with finalizer")
+	}
+	if err := k3sclient.Update(ctx, secret); err != nil {
+		return errors.Wrap(err, "failed to update secret with finalizer")
+	}
+	return nil
 }

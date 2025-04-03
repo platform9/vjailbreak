@@ -21,18 +21,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// MigrationPhase represents the phase of a migration
+type MigrationPhase string
+
+// MigrationConditionType represents the type of a migration condition
+type MigrationConditionType string
+
 const (
-	MigrationPhasePending                  MigrationPhase = "Pending"
-	MigrationPhaseValidating               MigrationPhase = "Validating"
-	MigrationPhaseAwaitingDataCopyStart    MigrationPhase = "AwaitingDataCopyStart"
-	MigrationPhaseCopying                  MigrationPhase = "CopyingBlocks"
-	MigrationPhaseCopyingChangedBlocks     MigrationPhase = "CopyingChangedBlocks"
-	MigrationPhaseConvertingDisk           MigrationPhase = "ConvertingDisk"
+	// MigrationPhasePending indicates the migration is pending
+	MigrationPhasePending MigrationPhase = "Pending"
+	// MigrationPhaseValidating indicates the migration is being validated
+	MigrationPhaseValidating MigrationPhase = "Validating"
+	// MigrationPhaseAwaitingDataCopyStart indicates the migration is awaiting data copy start
+	MigrationPhaseAwaitingDataCopyStart MigrationPhase = "AwaitingDataCopyStart"
+	// MigrationPhaseCopying indicates data is being copied
+	MigrationPhaseCopying MigrationPhase = "CopyingBlocks"
+	// MigrationPhaseCopyingChangedBlocks indicates changed blocks are being copied
+	MigrationPhaseCopyingChangedBlocks MigrationPhase = "CopyingChangedBlocks"
+	// MigrationPhaseConvertingDisk indicates the disk is being converted
+	MigrationPhaseConvertingDisk MigrationPhase = "ConvertingDisk"
+	// MigrationPhaseAwaitingCutOverStartTime indicates the migration is awaiting cutover start time
 	MigrationPhaseAwaitingCutOverStartTime MigrationPhase = "AwaitingCutOverStartTime"
-	MigrationPhaseAwaitingAdminCutOver     MigrationPhase = "AwaitingAdminCutOver"
-	MigrationPhaseSucceeded                MigrationPhase = "Succeeded"
-	MigrationPhaseFailed                   MigrationPhase = "Failed"
-	MigrationPhaseUnknown                  MigrationPhase = "Unknown"
+	// MigrationPhaseAwaitingAdminCutOver indicates the migration is awaiting admin cutover
+	MigrationPhaseAwaitingAdminCutOver MigrationPhase = "AwaitingAdminCutOver"
+	// MigrationPhaseSucceeded indicates the migration is succeeded
+	MigrationPhaseSucceeded MigrationPhase = "Succeeded"
+	// MigrationPhaseFailed indicates the migration has failed
+	MigrationPhaseFailed MigrationPhase = "Failed"
+	// MigrationPhaseUnknown indicates the migration state is unknown
+	MigrationPhaseUnknown MigrationPhase = "Unknown"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -49,9 +66,6 @@ type MigrationSpec struct {
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
 }
-
-type MigrationPhase string
-type MigrationConditionType string
 
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {

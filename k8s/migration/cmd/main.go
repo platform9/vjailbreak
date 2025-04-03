@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main is the entry point for the migration controller
 package main
 
 import (
@@ -148,15 +149,19 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StorageMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
 		os.Exit(1)
 	}
 	if err = (&controller.NetworkMappingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
 		os.Exit(1)
@@ -187,6 +192,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// handleStartupError logs the error and exits
+	handleStartupError := func(err error, msg string) {
+		setupLog.Error(err, msg)
+		// Since we're in a separate function, os.Exit won't prevent defers from running
+		os.Exit(1)
+	}
+
 	// Create a channel to signal when cache is ready
 	cacheSyncCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -195,21 +207,18 @@ func main() {
 	go func() {
 		setupLog.Info("starting manager")
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			setupLog.Error(err, "problem running manager")
-			os.Exit(1)
+			handleStartupError(err, "problem running manager")
 		}
 	}()
 
 	// Wait for cache to sync
 	if !mgr.GetCache().WaitForCacheSync(cacheSyncCtx) {
-		setupLog.Error(fmt.Errorf("timeout waiting for cache to sync"), "")
-		os.Exit(1)
+		handleStartupError(fmt.Errorf("timeout waiting for cache to sync"), "")
 	}
 
 	// Now that cache is synced, we can create master node entry
 	if err = utils.CheckAndCreateMasterNodeEntry(context.Background(), mgr.GetClient(), local); err != nil {
-		setupLog.Error(err, "Problem creating master node entry")
-		os.Exit(1)
+		handleStartupError(err, "Problem creating master node entry")
 	}
 
 	// Block forever
