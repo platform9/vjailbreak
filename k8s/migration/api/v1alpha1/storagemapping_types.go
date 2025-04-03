@@ -26,6 +26,7 @@ type StorageMappingSpec struct {
 	Storages []Storage `json:"storages"`
 }
 
+// Storage defines the mapping between source and destination storage
 type Storage struct {
 	Source string `json:"source"`
 	Target string `json:"target"`

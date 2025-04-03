@@ -9,22 +9,31 @@ import (
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25/mo"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// VMwareHostInfo represents a host in a VMware cluster.
+// It contains essential information about a VMware ESXi host.
 type VMwareHostInfo struct {
+	// Name is the fully qualified domain name or IP address of the host
 	Name string
 }
 
+// VMwareClusterInfo represents a cluster in a VMware environment.
+// It contains information about a VMware cluster and its associated hosts.
 type VMwareClusterInfo struct {
+	// Name is the unique identifier of the cluster
 	Name  string
+	// Hosts is a list of ESXi hosts that are part of this cluster
 	Hosts []VMwareHostInfo
 }
 
+// GetVMwareClustersAndHosts retrieves a list of all available VMware clusters and their hosts
 func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
-	var clusters []VMwareClusterInfo
+	// Pre-allocate clusters slice with initial capacity
+	clusters := make([]VMwareClusterInfo, 0, 4)
 	vmwarecreds, err := GetVMwareCredentials(ctx, k3sclient, scope.VMwareCreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vCenter credentials")
@@ -67,57 +76,80 @@ func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, sco
 	return clusters, nil
 }
 
-func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
+// createVMwareHost creates a VMware host resource in Kubernetes
+func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareHostInfo, clusterName, namespace string) (string, error) {
+	hostk8sName, err := ConvertToK8sName(host.Name)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert host name to k8s name")
+	}
 
+	vmwareHost := vjailbreakv1alpha1.VMwareHost{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      hostk8sName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				constants.VMwareClusterLabel: clusterName,
+			},
+		},
+		Spec: vjailbreakv1alpha1.VMwareHostSpec{
+			Name: host.Name,
+		},
+	}
+
+	err = k3sclient.Create(ctx, &vmwareHost)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return "", errors.Wrap(err, "failed to create vmware host")
+	}
+
+	return hostk8sName, nil
+}
+
+// createVMwareCluster creates a VMware cluster resource in Kubernetes
+func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster VMwareClusterInfo, namespace string) error {
+	clusterk8sName, err := ConvertToK8sName(cluster.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
+
+	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterk8sName,
+			Namespace: namespace,
+		},
+		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
+			Name:  cluster.Name,
+			Hosts: []string{},
+		},
+	}
+
+	// Create hosts and collect their k8s names
+	for _, host := range cluster.Hosts {
+		hostk8sName, err := createVMwareHost(ctx, k3sclient, host, cluster.Name, namespace)
+		if err != nil {
+			return err
+		}
+		vmwareCluster.Spec.Hosts = append(vmwareCluster.Spec.Hosts, hostk8sName)
+	}
+
+	// Create the cluster
+	err = k3sclient.Create(ctx, &vmwareCluster)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return errors.Wrap(err, "failed to create vmware cluster")
+	}
+
+	return nil
+}
+
+// CreateVMwareClustersAndHosts creates VMware clusters and hosts
+func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
 	clusters, err := GetVMwareClustersAndHosts(ctx, k3sclient, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to get clusters and hosts")
 	}
+
 	for _, cluster := range clusters {
-		clusterk8sName, err := ConvertToK8sName(cluster.Name)
-		if err != nil {
-			return errors.Wrap(err, "failed to convert cluster name to k8s name")
-		}
-		vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterk8sName,
-				Namespace: scope.Namespace(),
-			},
-			Spec: vjailbreakv1alpha1.VMwareClusterSpec{
-				Name:  cluster.Name,
-				Hosts: []string{},
-			},
-		}
-		for _, host := range cluster.Hosts {
-			hostk8sName, err := ConvertToK8sName(host.Name)
-			if err != nil {
-				return errors.Wrap(err, "failed to convert host name to k8s name")
-			}
-			vmwareHost := vjailbreakv1alpha1.VMwareHost{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      hostk8sName,
-					Namespace: scope.Namespace(),
-					Labels: map[string]string{
-						constants.VMwareClusterLabel: clusterk8sName,
-					},
-				},
-				Spec: vjailbreakv1alpha1.VMwareHostSpec{
-					Name: host.Name,
-				},
-			}
-			vmwareCluster.Spec.Hosts = append(vmwareCluster.Spec.Hosts, vmwareHost.Name)
-			_, err = controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareHost, func() error {
-				return nil
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to create vmware host")
-			}
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, scope.Client, &vmwareCluster, func() error {
-			return nil
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to create vmware cluster")
+		if err := createVMwareCluster(ctx, k3sclient, cluster, scope.Namespace()); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VjailbreakNodePhase represents the phase of a vjailbreak node
 type VjailbreakNodePhase string
 
 // VjailbreakNodeSpec defines the desired state of VjailbreakNode

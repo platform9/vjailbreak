@@ -17,16 +17,62 @@ limitations under the License.
 package controller
 
 import (
-	. "github.com/onsi/ginkgo/v2"
+	"context"
+
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("NetworkMapping Controller", func() {
-	Context("When reconciling a resource", func() {
+var _ = ginkgo.Describe("NetworkMapping Controller", func() {
+	ginkgo.Context("When reconciling a resource", func() {
+		const resourceName = "test-resource"
 
-		It("should successfully reconcile the resource", func() {
+		ctx := context.Background()
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default",
+		}
+		networkmapping := &vjailbreakv1alpha1.NetworkMapping{}
 
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		ginkgo.BeforeEach(func() {
+			ginkgo.By("creating the custom resource for the Kind NetworkMapping")
+			err := k8sClient.Get(ctx, typeNamespacedName, networkmapping)
+			if err != nil && errors.IsNotFound(err) {
+				resource := &vjailbreakv1alpha1.NetworkMapping{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: resourceName,
+					},
+				}
+				gomega.Expect(k8sClient.Create(ctx, resource)).To(gomega.Succeed())
+			}
+		})
+
+		ginkgo.AfterEach(func() {
+			resource := &vjailbreakv1alpha1.NetworkMapping{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+			ginkgo.By("Cleanup the specific resource instance NetworkMapping")
+			gomega.Expect(k8sClient.Delete(ctx, resource)).To(gomega.Succeed())
+		})
+
+		ginkgo.It("should successfully reconcile the resource", func() {
+			ginkgo.By("Reconciling the created resource")
+			controllerReconciler := &NetworkMappingReconciler{
+				BaseReconciler: BaseReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				},
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		})
 	})
 })

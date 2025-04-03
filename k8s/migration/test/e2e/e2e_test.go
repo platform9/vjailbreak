@@ -21,67 +21,67 @@ import (
 	"os/exec"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 
 	"github.com/platform9/vjailbreak/k8s/migration/test/utils"
 )
 
 const namespace = "migration-system"
 
-var _ = Describe("controller", Ordered, func() {
-	BeforeAll(func() {
-		By("installing prometheus operator")
-		Expect(utils.InstallPrometheusOperator()).To(Succeed())
+var _ = ginkgo.Describe("controller", ginkgo.Ordered, func() {
+	ginkgo.BeforeAll(func() {
+		ginkgo.By("installing prometheus operator")
+		gomega.Expect(utils.InstallPrometheusOperator()).To(gomega.Succeed())
 
-		By("installing the cert-manager")
-		Expect(utils.InstallCertManager()).To(Succeed())
+		ginkgo.By("installing the cert-manager")
+		gomega.Expect(utils.InstallCertManager()).To(gomega.Succeed())
 
-		By("creating manager namespace")
+		ginkgo.By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, _ = utils.Run(cmd)
 	})
 
-	AfterAll(func() {
-		By("uninstalling the Prometheus manager bundle")
+	ginkgo.AfterAll(func() {
+		ginkgo.By("uninstalling the Prometheus manager bundle")
 		utils.UninstallPrometheusOperator()
 
-		By("uninstalling the cert-manager bundle")
+		ginkgo.By("uninstalling the cert-manager bundle")
 		utils.UninstallCertManager()
 
-		By("removing manager namespace")
+		ginkgo.By("removing manager namespace")
 		cmd := exec.Command("kubectl", "delete", "ns", namespace)
 		_, _ = utils.Run(cmd)
 	})
 
-	Context("Operator", func() {
-		It("should run successfully", func() {
+	ginkgo.Context("Operator", func() {
+		ginkgo.It("should run successfully", func() {
 			var controllerPodName string
 			var err error
 
 			// projectimage stores the name of the image used in the example
 			var projectimage = "example.com/migration:v0.0.1"
 
-			By("building the manager(Operator) image")
+			ginkgo.By("building the manager(Operator) image")
 			cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectimage))
 			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-			By("loading the the manager(Operator) image on Kind")
-			err = utils.LoadImageToKindClusterWithName(projectimage)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			ginkgo.By("loading the the manager(Operator) image on Kind")
+			err = utils.LoadImageToKindClusterWithName(projectimage, "kind")
+			gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-			By("installing CRDs")
+			ginkgo.By("installing CRDs")
 			cmd = exec.Command("make", "install")
 			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-			By("deploying the controller-manager")
+			ginkgo.By("deploying the controller-manager")
 			cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectimage))
 			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-			By("validating that the controller-manager pod is running as expected")
+			ginkgo.By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func() error {
 				// Get pod name
 
@@ -95,13 +95,13 @@ var _ = Describe("controller", Ordered, func() {
 				)
 
 				podOutput, err := utils.Run(cmd)
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				gomega.ExpectWithOffset(2, err).NotTo(gomega.HaveOccurred())
 				podNames := utils.GetNonEmptyLines(string(podOutput))
 				if len(podNames) != 1 {
 					return fmt.Errorf("expect 1 controller pods running, but got %d", len(podNames))
 				}
 				controllerPodName = podNames[0]
-				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
+				gomega.ExpectWithOffset(2, controllerPodName).Should(gomega.ContainSubstring("controller-manager"))
 
 				// Validate pod status
 				cmd = exec.Command("kubectl", "get",
@@ -109,13 +109,13 @@ var _ = Describe("controller", Ordered, func() {
 					"-n", namespace,
 				)
 				status, err := utils.Run(cmd)
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
+				gomega.ExpectWithOffset(2, err).NotTo(gomega.HaveOccurred())
 				if string(status) != "Running" {
 					return fmt.Errorf("controller pod in %s status", status)
 				}
 				return nil
 			}
-			EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+			gomega.Eventually(verifyControllerUp).WithTimeout(time.Minute).WithPolling(time.Second).Should(gomega.Succeed())
 
 		})
 	})

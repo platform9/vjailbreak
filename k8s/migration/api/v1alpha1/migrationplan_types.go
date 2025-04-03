@@ -23,6 +23,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// MigrationPlanStrategy defines the strategy for executing a migration plan
 type MigrationPlanStrategy struct {
 	// +kubebuilder:validation:Enum=hot;cold
 	Type string `json:"type"`
@@ -43,6 +44,7 @@ type MigrationPlanStrategy struct {
 	HealthCheckPort string `json:"healthCheckPort,omitempty"`
 }
 
+// AdvancedOptions defines advanced configuration options for the migration
 type AdvancedOptions struct {
 	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
 	GranularNetworks    []string `json:"granularNetworks,omitempty"`

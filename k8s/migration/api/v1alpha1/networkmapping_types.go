@@ -29,6 +29,7 @@ type NetworkMappingSpec struct {
 	Networks []Network `json:"networks"`
 }
 
+// Network defines the mapping between source and destination networks
 type Network struct {
 	Source string `json:"source"`
 	Target string `json:"target"`

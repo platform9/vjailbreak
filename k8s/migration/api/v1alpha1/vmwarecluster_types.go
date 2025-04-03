@@ -20,12 +20,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VMwareClusterPhase represents the phase of a VMwareCluster
 type VMwareClusterPhase string
 
 const (
-	VMwareClusterPending   VMwareClusterPhase = "Pending"
-	VMwareClusterRunning   VMwareClusterPhase = "Running"
-	VMwareClusterFailed    VMwareClusterPhase = "Failed"
+	// VMwareClusterPending is the initial phase of a VMwareCluster
+	VMwareClusterPending VMwareClusterPhase = "Pending"
+	// VMwareClusterRunning is the phase of a VMwareCluster when it is running
+	VMwareClusterRunning VMwareClusterPhase = "Running"
+	// VMwareClusterFailed is the phase of a VMwareCluster when it fails
+	VMwareClusterFailed VMwareClusterPhase = "Failed"
+	// VMwareClusterCompleted is the final phase of a VMwareCluster
 	VMwareClusterCompleted VMwareClusterPhase = "Completed"
 )
 

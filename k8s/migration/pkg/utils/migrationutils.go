@@ -44,10 +44,11 @@ type MigrationUtils interface {
 	SortConditionsByLastTransitionTime(conditions []corev1.PodCondition)
 }
 
+// CreateValidatedCondition creates a validated condition for a migration
 func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == constants.MigrationReason && eventList.Items[i].Message == "Creating volumes in OpenStack") {
+		if eventList.Items[i].Reason != constants.MigrationReason || eventList.Items[i].Message != "Creating volumes in OpenStack" {
 			continue
 		}
 
@@ -68,10 +69,11 @@ func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
+// CreateDataCopyCondition creates a data copy condition for a migration
 func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "Copying disk")) {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "Copying disk") {
 			continue
 		}
 		reason, message := SplitEventStringOnComma(eventList.Items[i].Message)
@@ -92,10 +94,11 @@ func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList 
 	return existingConditions
 }
 
+// CreateMigratingCondition creates a migrating condition for a migration
 func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == constants.MigrationReason && eventList.Items[i].Message == "Converting disk") {
+		if eventList.Items[i].Reason != constants.MigrationReason || eventList.Items[i].Message != "Converting disk" {
 			continue
 		}
 
@@ -138,6 +141,7 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 	return existingConditions
 }
 
+// SetCutoverLabel sets the cutover label for a migration
 func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	if initiateCutover {
 		if currentLabel != constants.StartCutOverYes {
@@ -151,8 +155,9 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	return currentLabel
 }
 
-// SplitStringOnComma splits a string by comma and returns a slice of substrings.
+// SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
 func SplitEventStringOnComma(input string) (reason, message string) {
+	// SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
 	parts := strings.Split(input, ",")
 	if len(parts) > 1 {
 		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
@@ -160,11 +165,15 @@ func SplitEventStringOnComma(input string) (reason, message string) {
 	return strings.TrimSpace(parts[0]), ""
 }
 
+// GetSatusConditions returns the status conditions of a migration
 func GetSatusConditions(migration *vjailbreakv1alpha1.Migration) []corev1.PodCondition {
+	// GetSatusConditions returns the status conditions of a migration
 	return migration.Status.Conditions
 }
 
+// GetConditonIndex returns the index of a condition in the conditions slice based on type and reasons
 func GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.PodConditionType, reasons ...string) int {
+	// GetConditonIndex returns the index of a condition in the conditions slice based on type and reasons
 	for i, c := range conditions {
 		if c.Type == conditionType && slices.Contains(reasons, c.Reason) {
 			return i
@@ -173,10 +182,12 @@ func GetConditonIndex(conditions []corev1.PodCondition, conditionType corev1.Pod
 	return -1
 }
 
+// GeneratePodCondition creates a new pod condition with the given parameters
 func GeneratePodCondition(conditionType corev1.PodConditionType,
 	status corev1.ConditionStatus,
 	reason, message string,
 	timestamp metav1.Time) *corev1.PodCondition {
+	// GeneratePodCondition creates a new pod condition with the given parameters
 	return &corev1.PodCondition{
 		Type:               conditionType,
 		Status:             status,
@@ -188,6 +199,7 @@ func GeneratePodCondition(conditionType corev1.PodConditionType,
 
 // SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime
 func SortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
+	// SortConditionsByLastTransitionTime sorts conditions by LastTransitionTime
 	sort.Slice(conditions, func(i, j int) bool {
 		return conditions[i].LastTransitionTime.Before(&conditions[j].LastTransitionTime)
 	})

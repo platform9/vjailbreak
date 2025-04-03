@@ -44,6 +44,8 @@ spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
               advancedOptions:
+                description: AdvancedOptions defines advanced configuration options
+                  for the migration
                 properties:
                   granularNetworks:
                     items:
@@ -62,6 +64,8 @@ spec:
                 default: echo "Add your startup script here!"
                 type: string
               migrationStrategy:
+                description: MigrationPlanStrategy defines the strategy for executing
+                  a migration plan
                 properties:
                   adminInitiatedCutOver:
                     default: false
