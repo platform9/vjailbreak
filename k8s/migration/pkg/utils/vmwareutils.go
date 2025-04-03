@@ -127,10 +127,6 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 				constants.VMwareCredsLabel: scope.Name(),
 			},
 		},
-		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
-			Name:  cluster.Name,
-			Hosts: []string{},
-		},
 	}
 
 	// Create hosts and collect their k8s names
