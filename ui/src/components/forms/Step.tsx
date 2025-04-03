@@ -16,8 +16,8 @@ const StepCircle = styled("div")(({ theme }) => ({
   height: "25px",
   borderRadius: "50%",
   fontSize: "16px",
-  backgroundColor: theme.palette.grey[200],
-  border: `1px solid ${theme.palette.grey[400]}`,
+  backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
+  border: `1px solid ${theme.palette.mode === 'dark' ? theme.palette.grey[700] : theme.palette.grey[400]}`,
 }))
 
 interface StepProps {

@@ -15,31 +15,20 @@ import {
   MenuItem,
   Select,
   Typography,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
+import { OpenStackFlavor } from "src/api/openstack-creds/model";
+import { patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
 import { useEffect, useState } from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
-
-// Example flavor data structure - replace with your actual flavor data source
-interface FlavorOption {
-  id: string;
-  name: string;
-  vcpu: number;
-  ram: number;
-  storage: string;
-}
-
-const EXAMPLE_FLAVORS: FlavorOption[] = [
-  { id: "t2.micro", name: "t2.micro", vcpu: 1, ram: 1, storage: "10GB" },
-  { id: "t2.small", name: "t2.small", vcpu: 1, ram: 2, storage: "20GB" },
-  { id: "t2.medium", name: "t2.medium", vcpu: 2, ram: 4, storage: "50GB" },
-  { id: "m4.large", name: "m4.large", vcpu: 2, ram: 8, storage: "100GB" },
-  { id: "m4.xlarge", name: "m4.xlarge", vcpu: 4, ram: 16, storage: "200GB" },
-];
+import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
+import InfoIcon from "@mui/icons-material/Info";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -55,7 +44,6 @@ const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(6),
 }));
 
-// Custom toolbar with assign flavors button
 const CustomToolbarWithActions = (props) => {
   const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
 
@@ -77,13 +65,11 @@ const CustomToolbarWithActions = (props) => {
   );
 };
 
-// Modify VmData interface to include flavor
 interface VmDataWithFlavor extends VmData {
-  flavor?: string;
   isMigrated?: boolean;
+  flavorName?: string; // Add a field to store the flavor name
 }
 
-// Update columns to include flavor
 const columns: GridColDef[] = [
   {
     field: "name",
@@ -126,30 +112,39 @@ const columns: GridColDef[] = [
     field: "ipAddress",
     headerName: "Current IP",
     flex: 1,
-    valueGetter: (value) => value || " -",
+    valueGetter: (value) => value || "- ",
   },
   {
     field: "networks",
     headerName: "Network Interface(s)",
     flex: 1.2,
-    valueGetter: (value: string[]) => value?.join(", "),
+    valueGetter: (value: string[]) => value?.join(", ") || "- ",
   },
   {
-    field: "osType",
-    headerName: "OS",
-    valueGetter: (value) => {
-      if (value === "linuxGuest") return "Linux";
-      if (value === "windowsGuest") return "Windows";
-      if (value === "otherGuestFamily") return "Other";
-      return "";
-    },
-    flex: 1,
+    field: "cpuCount",
+    headerName: "CPU",
+    flex: 0.7,
+    valueGetter: (value) => value || "- ",
+  },
+  {
+    field: "memory",
+    headerName: "Memory (MB)",
+    flex: 0.9,
+    valueGetter: (value) => value || "- ",
   },
   {
     field: "flavor",
     headerName: "Flavor",
     flex: 1,
-    valueGetter: (value) => value || "-",
+    valueGetter: (value) => value || "auto-assign",
+    renderHeader: () => (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <div style={{ fontWeight: 500 }}>Flavor</div>
+        <Tooltip title="Target OpenStack flavor to be assigned to this VM after migration.">
+          <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
+        </Tooltip>
+      </Box>
+    ),
   },
 ];
 
@@ -157,24 +152,27 @@ const paginationModel = { page: 0, pageSize: 5 };
 
 const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or  already has been migrated.";
 const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
-const NO_IP_TOOLTIP_MESSAGE = "VM has not been assigned an IP address yet. Please refresh again.";
 
 interface VmsSelectionStepProps {
-  vms: VmData[];
   onChange: (id: string) => (value: unknown) => void;
   error: string;
-  loadingVms?: boolean;
-  onRefresh?: () => void;
   open?: boolean;
+  vmwareCredsValidated: boolean;
+  openstackCredsValidated: boolean;
+  sessionId?: string;
+  openstackFlavors?: OpenStackFlavor[];
+  vmwareCredName?: string;
 }
 
 export default function VmsSelectionStep({
-  vms = [],
   onChange,
   error,
-  loadingVms = false,
-  onRefresh,
   open = false,
+  vmwareCredsValidated,
+  openstackCredsValidated,
+  sessionId = Date.now().toString(),
+  openstackFlavors = [],
+  vmwareCredName,
 }: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
@@ -182,6 +180,22 @@ export default function VmsSelectionStep({
   const [selectedFlavor, setSelectedFlavor] = useState<string>("");
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([]);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
+  const [updating, setUpdating] = useState(false);
+
+  const {
+    data: vmList = [],
+    isLoading: loadingVms,
+    refetch: refreshVMList
+  } = useVMwareMachinesQuery({
+    vmwareCredsValidated,
+    openstackCredsValidated,
+    enabled: open,
+    sessionId,
+    vmwareCredName
+  });
 
   useEffect(() => {
     const fetchMigratedVms = async () => {
@@ -207,17 +221,27 @@ export default function VmsSelectionStep({
     };
 
     fetchMigratedVms();
-  }, [open]);
+  }, [open, vmList]);
 
   useEffect(() => {
-    // Initialize VMs with flavor data
-    const initialVmsWithFlavor = vms.map(vm => ({
-      ...vm,
-      isMigrated: migratedVms.has(vm.name),
-      flavor: undefined
-    }));
+    const initialVmsWithFlavor = vmList.map(vm => {
+      let flavor = "";
+      if (vm.targetFlavorId) {
+        const foundFlavor = openstackFlavors.find(f => f.id === vm.targetFlavorId);
+        if (foundFlavor) {
+          flavor = foundFlavor.name;
+        } else {
+          flavor = vm.targetFlavorId;
+        }
+      }
+      return {
+        ...vm,
+        isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
+        flavor
+      };
+    });
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vms, migratedVms]);
+  }, [vmList, migratedVms, openstackFlavors]);
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
     setRowSelectionModel(selectedRowIds);
@@ -239,32 +263,75 @@ export default function VmsSelectionStep({
     setSelectedFlavor(event.target.value);
   };
 
-  const handleApplyFlavor = () => {
+  const handleApplyFlavor = async () => {
     if (!selectedFlavor) {
       handleCloseFlavorDialog();
       return;
     }
 
-    // Update VMs with the selected flavor
-    const updatedVms = vmsWithFlavor.map(vm => {
-      if (rowSelectionModel.includes(vm.name)) {
-        return { ...vm, flavor: selectedFlavor };
-      }
-      return vm;
-    });
+    setUpdating(true);
 
-    setVmsWithFlavor(updatedVms);
-    onChange("vms")(updatedVms.filter((vm) => rowSelectionModel.includes(vm.name)));
-    handleCloseFlavorDialog();
+    try {
+      const isAutoAssign = selectedFlavor === "auto-assign";
+      const selectedFlavorObj = !isAutoAssign ? openstackFlavors.find(f => f.id === selectedFlavor) : null;
+      const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : selectedFlavor);
+
+      const updatedVms = vmsWithFlavor.map(vm => {
+        if (rowSelectionModel.includes(vm.name)) {
+          return {
+            ...vm,
+            targetFlavorId: isAutoAssign ? "" : selectedFlavor,
+            flavorName
+          };
+        }
+        return vm;
+      });
+
+      const selectedVmNames = rowSelectionModel as string[];
+
+      const updatePromises = selectedVmNames.map(vmName =>
+        patchVMwareMachine(vmName, isAutoAssign ? "" : selectedFlavor)
+      );
+
+      await Promise.all(updatePromises);
+
+      setVmsWithFlavor(updatedVms);
+      onChange("vms")(updatedVms.filter((vm) => rowSelectionModel.includes(vm.name)));
+
+      const actionText = isAutoAssign ? "cleared flavor assignment for" : "assigned flavor to";
+      setSnackbarMessage(`Successfully ${actionText} ${selectedVmNames.length} VM${selectedVmNames.length > 1 ? 's' : ''}`);
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+
+      refreshVMList();
+
+      handleCloseFlavorDialog();
+    } catch (error) {
+      console.error("Error updating VM flavors:", error);
+      setSnackbarMessage("Failed to assign flavor to VMs");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const selectedFlavorDetails = EXAMPLE_FLAVORS.find(f => f.id === selectedFlavor);
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
 
   const isRowSelectable = (params) => {
     if (params.row.isMigrated) return false;
-    return params.row.vmState === "running" && !!params.row.ipAddress;
+
+    // For the new API, we don't have IP address info, so we'll just use vmState
+    return params.row.vmState === "running";
   };
 
+  // Message to display when credentials aren't validated yet
+  const getNoRowsLabel = () => {
+    return "No VMs discovered";
+  };
+  console.log("vmsWithFlavor", vmsWithFlavor);
   return (
     <VmsSelectionStepContainer>
       <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
@@ -279,9 +346,14 @@ export default function VmsSelectionStep({
                 sorting: {
                   sortModel: [{ field: 'vmState', sort: 'asc' }],
                 },
+                columns: {
+                  columnVisibilityModel: {
+                    osType: false // Hide OS column since new API doesn't provide this
+                  }
+                }
               }}
               pageSizeOptions={[5, 10, 25]}
-              localeText={{ noRowsLabel: "No VMs discovered" }}
+              localeText={{ noRowsLabel: getNoRowsLabel() }}
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               rowSelectionModel={rowSelectionModel}
@@ -291,19 +363,18 @@ export default function VmsSelectionStep({
                 toolbar: (props) => (
                   <CustomToolbarWithActions
                     {...props}
-                    onRefresh={onRefresh}
-                    disableRefresh={loadingVms || loadingMigratedVms}
-                    placeholder="Search by Name, Status, IP Address, or Network Interface(s)"
+                    onRefresh={() => refreshVMList()}
+                    disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
+                    placeholder="Search by Name, Status, Network Interface, CPU, or Memory"
                     rowSelectionModel={rowSelectionModel}
                     onAssignFlavor={handleOpenFlavorDialog}
                   />
                 ),
                 loadingOverlay: () => (
-                  <CustomLoadingOverlay loadingMessage="Scanning for VMs" />
+                  <CustomLoadingOverlay loadingMessage="Loading VMs ..." />
                 ),
                 row: (props) => {
                   const isVmStopped = props.row.vmState !== "running";
-                  const runningButNoIp = props.row.vmState === "running" && !props.row.ipAddress;
                   const isMigrated = props.row.isMigrated;
 
                   let tooltipMessage = "";
@@ -311,8 +382,6 @@ export default function VmsSelectionStep({
                     tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
                   } else if (isVmStopped) {
                     tooltipMessage = DISABLED_TOOLTIP_MESSAGE;
-                  } else if (runningButNoIp) {
-                    tooltipMessage = NO_IP_TOOLTIP_MESSAGE;
                   }
 
                   return (
@@ -332,7 +401,7 @@ export default function VmsSelectionStep({
               disableColumnMenu
               disableColumnResize
               getRowClassName={(params) =>
-                (params.row.vmState !== "running" || !params.row.ipAddress || params.row.isMigrated)
+                (params.row.vmState !== "running" || params.row.isMigrated)
                   ? "disabled-row"
                   : ""
               }
@@ -361,23 +430,31 @@ export default function VmsSelectionStep({
               onChange={handleFlavorChange}
               size="small"
               sx={{ mt: 1 }}
+              displayEmpty
             >
-              {EXAMPLE_FLAVORS.map((flavor) => (
+              <MenuItem value="">
+                <em>Select a flavor</em>
+              </MenuItem>
+              <MenuItem value="auto-assign">
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="body1">Auto Assign</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Let OpenStack automatically assign the most suitable flavor
+                  </Typography>
+                </Box>
+              </MenuItem>
+              {openstackFlavors.map((flavor) => (
                 <MenuItem key={flavor.id} value={flavor.id}>
-                  {flavor.name}
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="body1">{flavor.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {flavor.vcpus} vCPU, {flavor.ram / 1024}GB RAM, {flavor.disk}GB Storage
+                    </Typography>
+                  </Box>
                 </MenuItem>
               ))}
             </Select>
           </Box>
-
-          {selectedFlavorDetails && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-              <Typography variant="subtitle2">Flavor details:</Typography>
-              <Typography variant="body2">
-                {selectedFlavorDetails.vcpu} vCPU, {selectedFlavorDetails.ram}GB RAM, {selectedFlavorDetails.storage} Storage
-              </Typography>
-            </Box>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
@@ -385,12 +462,23 @@ export default function VmsSelectionStep({
             onClick={handleApplyFlavor}
             variant="contained"
             color="primary"
-            disabled={!selectedFlavor}
+            disabled={!selectedFlavor || updating}
           >
-            Apply to selected VMs
+            {updating ? "Applying..." : "Apply to selected VMs"}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </VmsSelectionStepContainer>
   );
 }
