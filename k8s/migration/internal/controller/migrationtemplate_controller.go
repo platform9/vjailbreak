@@ -95,10 +95,22 @@ func (r *MigrationTemplateReconciler) checkStatusSuccess(ctx context.Context,
 		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
-	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.VMwareCreds).Name)
-	} else if !isvmware && credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Name)
+	if isvmware {
+		vmwareCreds, ok := credsobj.(*vjailbreakv1alpha1.VMwareCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to VMwareCreds")
+		}
+		if vmwareCreds.Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", vmwareCreds.Name)
+		}
+	} else {
+		openstackCreds, ok := credsobj.(*vjailbreakv1alpha1.OpenstackCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to OpenstackCreds")
+		}
+		if openstackCreds.Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", openstackCreds.Name)
+		}
 	}
 	return true, nil
 }

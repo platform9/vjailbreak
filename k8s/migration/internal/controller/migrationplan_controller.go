@@ -26,11 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,9 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/go-logr/logr"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
@@ -113,7 +112,7 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}()
 
 	// examine DeletionTimestamp to determine if object is under deletion or not
-	if !migrationplan.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !migrationplan.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, migrationPlanScope)
 	}
 
@@ -122,7 +121,8 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
-	scope.Logger.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
+	log := scope.Logger
+	log.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
 
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
 
@@ -152,7 +152,7 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-// Similar to the Reconcile function above, but specifically for reconciling the Jobs
+// ReconcileMigrationPlanJob reconciles jobs created by the migration plan
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan) (ctrl.Result, error) {
 	// Fetch MigrationTemplate CR
@@ -238,6 +238,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
+// UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status, message string) error {
 	migrationplan.Status.MigrationStatus = status
@@ -249,6 +250,7 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	return nil
 }
 
+// CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
@@ -289,7 +291,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
-// Create Job to run v2v-helper
+// CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration,
@@ -470,6 +472,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	return nil
 }
 
+// CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) (*corev1.ConfigMap, error) {
 	vmname, err := utils.ConvertToK8sName(vm)
@@ -499,6 +502,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	return configMap, nil
 }
 
+// CreateMigrationConfigMap creates a config map for migration
 func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
@@ -615,15 +619,28 @@ func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 	namespace, credsname string,
 	isvmware bool,
 	credsobj client.Object) (bool, error) {
-	err := r.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
+	client := r.Client
+	err := client.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
 		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
-	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.VMwareCreds).Name)
-	} else if !isvmware && credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Name)
+	if isvmware {
+		vmwareCreds, ok := credsobj.(*vjailbreakv1alpha1.VMwareCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to VMwareCreds: %w", err)
+		}
+		if vmwareCreds.Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("vmwarecreds '%s' CR is not validated", vmwareCreds.Name)
+		}
+	} else {
+		openstackCreds, ok := credsobj.(*vjailbreakv1alpha1.OpenstackCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to OpenstackCreds: %w", err)
+		}
+		if openstackCreds.Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("openstackcreds '%s' CR is not validated", openstackCreds.Name)
+		}
 	}
 	return true, nil
 }
@@ -732,6 +749,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	return openstackvolumetypes, nil
 }
 
+// TriggerMigration triggers a migration process
 func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
@@ -745,7 +763,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	)
 
 	nodeList := &corev1.NodeList{}
-	err := r.Client.List(ctx, nodeList, &client.ListOptions{})
+	err := r.Client.List(ctx, nodeList)
 	if err != nil {
 		return errors.Wrap(err, "failed to list nodes")
 	}
