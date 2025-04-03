@@ -21,11 +21,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/vmware/govmomi/find"
-	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/session/cache"
-	"github.com/vmware/govmomi/vim25"
-	"github.com/vmware/govmomi/vim25/mo"
-	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -553,7 +548,7 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 			if err != nil {
 				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
-			datastores = AppendUnique(datastores, ds.Name)
+			datastores = append(datastores, ds.Name)
 		}
 	}
 	return datastores, nil
