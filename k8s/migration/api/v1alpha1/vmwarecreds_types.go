@@ -23,15 +23,12 @@ import (
 
 // VMwareCredsSpec defines the desired state of VMwareCreds
 type VMwareCredsSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+	DataCenter string                 `json:"datacenter"`
+	SecretRef  corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds
 type VMwareCredsStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	VMwareValidationStatus  string `json:"vmwareValidationStatus,omitempty"`
 	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
 }

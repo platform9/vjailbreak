@@ -96,6 +96,7 @@ func main() {
 		PerformHealthChecks: migrationparams.PerformHealthChecks,
 		HealthCheckPort:     migrationparams.HealthCheckPort,
 		K8sClient:           client,
+		TargetFlavorId:      migrationparams.TARGET_FLAVOR_ID,
 	}
 
 	eventReporter, err := reporter.NewReporter()
