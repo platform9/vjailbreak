@@ -197,7 +197,6 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			return errors.Wrapf(err, "failed to run nbdcopy")
 		}
 	}
-
 	return nil
 }
 

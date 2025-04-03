@@ -139,13 +139,6 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client) error
 		Kind:      openstackcreds.Kind,
 	}
 
-	flavors, err := ListAllFlavors(ctx, openstackcreds)
-	if err != nil {
-		return errors.Wrap(err, "failed to get flavors")
-	}
-
-	vjNode.Spec.AvailableFlavors = flavors
-
 	err = k3sclient.Update(ctx, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to update vjailbreak node")

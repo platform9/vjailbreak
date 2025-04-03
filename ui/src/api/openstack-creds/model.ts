@@ -63,6 +63,16 @@ export interface FSpec {
   "f:OS_USERNAME": Empty
 }
 
+export interface OpenstackFlavor {
+  id: string
+  name: string
+  vcpus: number
+  ram: number
+  disk: number
+}
+
+
+
 export interface OpenstackCredsSpec {
   // For credentials using secretRef (new approach)
   secretRef?: {
@@ -76,6 +86,7 @@ export interface OpenstackCredsSpec {
   OS_REGION_NAME?: string
   OS_TENANT_NAME?: string
   OS_INSECURE?: boolean
+  flavors?: OpenstackFlavor[]
 }
 
 export interface GetOpenstackCredsListMetadata {

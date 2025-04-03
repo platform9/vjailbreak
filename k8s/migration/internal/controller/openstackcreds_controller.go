@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -123,16 +124,39 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
+		ctxlog.Info(fmt.Sprintf("Getting flavors for OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+		flavors, err := utils.ListAllFlavors(ctx, scope.OpenstackCreds)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
+		}
+		ctxlog.Info(fmt.Sprintf("Successfully got flavors for OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+		ctxlog.Info(fmt.Sprintf("Setting flavors for OpenstackCreds '%v\n'", flavors))
+		scope.OpenstackCreds.Spec.Flavors = flavors
+
+		// Update the spec field
+		if err = r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Error updating spec of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
+			return ctrl.Result{}, err
+		}
+
 		ctxlog.Info(fmt.Sprintf("Successfully authenticated to Openstack '%s'", openstackCredential.AuthURL))
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Succeeded"
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+
+		// update the status field openstackInfo
+		openstackinfo, err := utils.GetOpenstackInfo(ctx, scope.OpenstackCreds)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
+		}
+		scope.OpenstackCreds.Status.Openstack = *openstackinfo
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 			return ctrl.Result{}, err
 		}
 	}
-	return ctrl.Result{}, nil
+	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
+	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,

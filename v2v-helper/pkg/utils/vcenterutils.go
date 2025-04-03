@@ -33,6 +33,7 @@ type MigrationParams struct {
 	PerformHealthChecks bool
 	HealthCheckPort     string
 	Debug               bool
+	TARGET_FLAVOR_ID    string
 }
 
 // GetMigrationConfigMapName is function that returns the name of the secret
@@ -74,5 +75,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		PerformHealthChecks:   string(configMap.Data["PERFORM_HEALTH_CHECKS"]) == constants.TrueString,
 		HealthCheckPort:       string(configMap.Data["HEALTH_CHECK_PORT"]),
 		Debug:                 string(configMap.Data["DEBUG"]) == constants.TrueString,
+		TARGET_FLAVOR_ID:      string(configMap.Data["TARGET_FLAVOR_ID"]),
 	}, nil
 }
