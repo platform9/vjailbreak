@@ -46,6 +46,8 @@ spec:
               networks:
                 description: Networks is the list of networks
                 items:
+                  description: Network defines the mapping between source and destination
+                    networks
                   properties:
                     source:
                       type: string

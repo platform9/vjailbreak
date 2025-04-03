@@ -763,17 +763,19 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	return nil
 }
 
-func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo) {
+func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.CancelFunc) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
+	cancel()
 	migobj.cleanup(vminfo, "Migration terminated")
 	os.Exit(0)
 }
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -784,6 +786,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
 	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
@@ -792,16 +795,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if len(vminfo.Mac) != len(migobj.Networknames) {
 		return errors.Errorf("number of mac addresses does not match number of network names")
 	}
-
 	// Graceful Termination clean-up volumes and snapshots
-	go migobj.gracefulTerminate(vminfo)
+	go migobj.gracefulTerminate(vminfo, cancel)
 
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to add volumes to host")
 	}
-
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
@@ -842,7 +843,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
-
+	cancel()
 	return nil
 }
 

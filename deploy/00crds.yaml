@@ -52,6 +52,8 @@ spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
               advancedOptions:
+                description: AdvancedOptions defines advanced configuration options
+                  for the migration
                 properties:
                   granularNetworks:
                     items:
@@ -70,6 +72,8 @@ spec:
                 default: echo "Add your startup script here!"
                 type: string
               migrationStrategy:
+                description: MigrationPlanStrategy defines the strategy for executing
+                  a migration plan
                 properties:
                   adminInitiatedCutOver:
                     default: false
@@ -388,6 +392,8 @@ spec:
               networks:
                 description: Networks is the list of networks
                 items:
+                  description: Network defines the mapping between source and destination
+                    networks
                   properties:
                     source:
                       type: string
@@ -629,6 +635,8 @@ spec:
               storages:
                 description: Storages is a list of storage mappings
                 items:
+                  description: Storage defines the mapping between source and destination
+                    storage
                   properties:
                     source:
                       type: string
@@ -839,6 +847,7 @@ spec:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
+                description: VMwareClusterPhase represents the phase of a VMwareCluster
                 type: string
             type: object
         type: object

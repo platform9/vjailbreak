@@ -50,6 +50,7 @@ spec:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
+                description: VMwareClusterPhase represents the phase of a VMwareCluster
                 type: string
             type: object
         type: object
