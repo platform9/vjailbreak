@@ -139,7 +139,7 @@ export const createVMwareCredsWithSecretFlow = async (
     namespace
   )
 
-  return createVMwareCredsWithSecret(credName, secretName, namespace)
+  return createVMwareCredsWithSecret(credName, secretName, namespace, credentials.VCENTER_DATACENTER)
 }
 
 export const deleteVMwareCredsWithSecretFlow = async (

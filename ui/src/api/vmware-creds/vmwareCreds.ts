@@ -53,7 +53,8 @@ export const deleteVmwareCredentials = async (
 export const createVMwareCredsWithSecret = async (
   name: string,
   secretName: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
+  datacenter: string
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds`
 
@@ -68,6 +69,7 @@ export const createVMwareCredsWithSecret = async (
       secretRef: {
         name: secretName,
       },
+      datacenter,
     },
   }
 

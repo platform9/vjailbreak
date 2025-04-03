@@ -292,6 +292,14 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 	return bestFlavor, nil
 }
 
+func (osclient *OpenStackClients) GetFlavor(flavorId string) (*flavors.Flavor, error) {
+	flavor, err := flavors.Get(osclient.ComputeClient, flavorId).Extract()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flavor: %s", err)
+	}
+	return flavor, nil
+}
+
 func (osclient *OpenStackClients) GetNetwork(networkname string) (*networks.Network, error) {
 	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
