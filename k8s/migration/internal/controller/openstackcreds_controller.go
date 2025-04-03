@@ -143,6 +143,13 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Succeeded"
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+
+		// update the status field openstackInfo
+		openstackinfo, err := utils.GetOpenstackInfo(ctx, scope.OpenstackCreds)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
+		}
+		scope.OpenstackCreds.Status.Openstack = *openstackinfo
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Error updating status of OpenstackCreds '%s'", scope.OpenstackCreds.Name))
 			return ctrl.Result{}, err
