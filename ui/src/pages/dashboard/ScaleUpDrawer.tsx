@@ -20,9 +20,9 @@ import OpenstackCredentialsForm from "src/components/forms/OpenstackCredentialsF
 import InfoIcon from '@mui/icons-material/Info';
 import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
 import { OpenstackCreds } from "src/api/openstack-creds/model";
-import { createNodes, getMasterNode } from "src/api/nodes/nodeMappings";
+import { createNodes } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
-import { OpenstackFlavor } from "src/api/nodes/model";
+import { OpenstackFlavor } from "src/api/openstack-creds/model";
 import { NodeItem } from "src/api/nodes/model";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
 import axios from "axios";
@@ -105,31 +105,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             if (openstackCredsValidated || openstackCredentials) {
                 setLoadingFlavors(true);
                 try {
-                    const response = await getMasterNode();
-                    console.log(response);
-                    const flavours = response?.spec.availableFlavors;
+                    const flavours = openstackCredentials?.spec.flavors;
                     console.log(flavours);
-
-                    if (!flavours) {
-                        // retry for 3 times in a interval of 5 seconds
-                        let retries = 0;
-                        const interval = setInterval(async () => {
-                            const response = await getMasterNode();
-                            console.log(response);
-                            const flavours = response?.spec.availableFlavors
-                            console.log(flavours);
-                            if (flavours) {
-                                clearInterval(interval);
-                                setFlavors(flavours || []);
-                            } else {
-                                retries++;
-                                if (retries >= 3) {
-                                    clearInterval(interval);
-                                    setFlavorsError('Failed to fetch OpenStack flavors');
-                                }
-                            }
-                        }, 5000);
-                    }
                     setFlavors(flavours || []);
 
                 } catch (error) {
