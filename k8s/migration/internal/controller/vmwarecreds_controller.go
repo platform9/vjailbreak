@@ -138,6 +138,9 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
 	}
 	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer")
+	}
 	return ctrl.Result{}, nil
 }
 
