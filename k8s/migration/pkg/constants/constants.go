@@ -19,7 +19,9 @@ const (
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 	NodeRoleMaster          = "master"
 	InternalIPAnnotation    = "k3s.io/internal-ip"
-	NumberOfDisksLabel      = "vjailbreak.k8s.pf9.io/disk-count"
+
+	NumberOfDisksLabel = "vjailbreak.k8s.pf9.io/disk-count"
+	VMwareCredsLabel   = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
 
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string
@@ -36,11 +38,15 @@ const (
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 	ENVFileLocation      = "/etc/pf9/k3s.env"
 
-	MigrationTriggerDelay = 5 * time.Second
+	MigrationTriggerDelay   = 5 * time.Second
+	VMwareCredsRequeueAfter = 1 * time.Minute
 
 	MigrationReason = "Migration"
 	StartCutOverYes = "yes"
 	StartCutOverNo  = "no"
+
+	MaxVCPUs = 99999
+	MaxRAM   = 99999
 )
 
 var (
