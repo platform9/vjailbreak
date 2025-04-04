@@ -1,5 +1,5 @@
 import { Box } from "@mui/material";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
 import Footer from "src/components/forms/Footer";
@@ -13,6 +13,7 @@ import { TextField, FormControl, FormLabel, CircularProgress } from "@mui/materi
 import { isValidName } from "src/utils";
 import CheckIcon from "@mui/icons-material/Check";
 import OpenstackRCFileUploader, { OpenstackRCFileUploaderRef } from "src/components/forms/OpenstackRCFileUpload";
+import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 
 interface OpenstackCredentialsDrawerProps {
     open: boolean;
@@ -35,7 +36,7 @@ export default function OpenstackCredentialsDrawer({
     const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery();
 
     // Reset state and clean up when the drawer is closed
-    const closeDrawer = () => {
+    const closeDrawer = useCallback(() => {
         if (createdCredentialName) {
             console.log(`Cleaning up OpenStack credential on drawer close: ${createdCredentialName}`);
             try {
@@ -58,7 +59,7 @@ export default function OpenstackCredentialsDrawer({
         setSubmitting(false);
 
         onClose();
-    };
+    }, [createdCredentialName, onClose]);
 
     // Track form values
     const [credentialName, setCredentialName] = useState("");
@@ -87,7 +88,7 @@ export default function OpenstackCredentialsDrawer({
         setError(null);
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if (!credentialName || !rcFileValues) {
             setError("Please provide a credential name and upload an RC file");
             return;
@@ -119,14 +120,22 @@ export default function OpenstackCredentialsDrawer({
 
         } catch (error) {
             console.error("Error creating OpenStack credentials:", error);
-            setValidatingOpenstackCreds(false);
             setOpenstackCredsValidated(false);
+            setValidatingOpenstackCreds(false);
             setError(
                 "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error)
             );
             setSubmitting(false);
         }
-    };
+    }, [credentialName, rcFileValues, isValidCredentialName, submitting]);
+
+    // Use the custom hook for keyboard events
+    useKeyboardSubmit({
+        open,
+        isSubmitDisabled: submitting || validatingOpenstackCreds || !isValidCredentialName || !rcFileValues,
+        onSubmit: handleSubmit,
+        onClose: closeDrawer
+    });
 
     const handleValidationStatus = (status: string, message?: string) => {
         if (status === "Succeeded") {

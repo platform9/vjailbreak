@@ -1,7 +1,7 @@
 import { styled, Typography } from "@mui/material"
 
-const StyledHeader = styled("header")(() => ({
-  borderBottom: "1px solid #CDD0D4",
+const StyledHeader = styled("header")(({ theme }) => ({
+  borderBottom: `1px solid ${theme.palette.divider}`,
 }))
 
 interface HeaderProps {

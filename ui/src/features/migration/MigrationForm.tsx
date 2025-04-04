@@ -1,7 +1,7 @@
 import { Box, Drawer, styled } from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
 import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
@@ -30,8 +30,9 @@ import {
   getVmwareCredentials,
   deleteVmwareCredentials,
 } from "src/api/vmware-creds/vmwareCreds"
-import { THREE_SECONDS, TWENTY_SECONDS } from "src/constants"
+import { THREE_SECONDS } from "src/constants"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
+import { VMWARE_MACHINES_BASE_KEY } from "src/hooks/api/useVMwareMachinesQuery"
 import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
 import { isNilOrEmpty } from "src/utils"
@@ -44,6 +45,7 @@ import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
+import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 
 const stringsCompareFn = (a, b) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
@@ -52,7 +54,7 @@ const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
     display: "grid",
     gridTemplateRows: "max-content 1fr max-content",
-    width: "1034px",
+    width: "60%",
   },
 }))
 
@@ -166,7 +168,8 @@ export default function MigrationFormDrawer({
     undefined
   )
 
-  const [loadingVms, setLoadingVms] = useState(!isNilOrEmpty(migrationTemplate) && migrationTemplate?.status === undefined)
+  // Generate a unique session ID for this form instance
+  const [sessionId] = useState(() => `form-session-${Date.now()}`);
 
   const vmwareCredsValidated =
     vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
@@ -175,9 +178,7 @@ export default function MigrationFormDrawer({
     openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
 
   // Polling Conditions
-  const shouldPollMigrationTemplate =
-    !!migrationTemplate?.metadata?.name &&
-    migrationTemplate?.status === undefined
+  const shouldPollMigrationTemplate = !migrationTemplate?.metadata?.name
 
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
@@ -250,57 +251,24 @@ export default function MigrationFormDrawer({
     openstackCredentials?.metadata.name,
   ])
 
+  // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
   const fetchMigrationTemplate = async () => {
     try {
-      setLoadingVms(true)
-
       const updatedMigrationTemplate = await getMigrationTemplate(
         migrationTemplate?.metadata?.name
       )
       setMigrationTemplate(updatedMigrationTemplate)
-
-      if (updatedMigrationTemplate?.status?.vmware) {
-        setLoadingVms(false)
-      }
     } catch (err) {
       console.error("Error retrieving migration templates", err)
       getFieldErrorsUpdater("migrationTemplate")(
         "Error retrieving migration templates"
       )
-      setLoadingVms(false)
-    }
-  }
-
-  const refreshMigrationTemplate = async () => {
-    try {
-      setLoadingVms(true)
-
-      const currentRefresh = migrationTemplate?.metadata?.labels?.refresh || "0"
-      const nextRefreshValue = (parseInt(currentRefresh) + 1).toString()
-
-      await patchMigrationTemplate(migrationTemplate?.metadata?.name, {
-        metadata: {
-          labels: {
-            refresh: nextRefreshValue,
-          },
-        },
-      })
-
-      // Wait for 20 seconds before fetching, as the VM statuses are not updated immediately
-      await new Promise(resolve => setTimeout(resolve, TWENTY_SECONDS))
-      await fetchMigrationTemplate()
-
-    } catch (err) {
-      console.error("Error refreshing migration template", err)
-      getFieldErrorsUpdater("migrationTemplate")(
-        "Error refreshing migration template"
-      )
-      setLoadingVms(false)
     }
   }
 
   useInterval(
     async () => {
+      console.log("migrationTemplate", migrationTemplate?.metadata?.name)
       if (shouldPollMigrationTemplate) {
         try {
           fetchMigrationTemplate()
@@ -443,10 +411,9 @@ export default function MigrationFormDrawer({
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     setSubmitting(true)
     setError(null)
-
 
     // Create NetworkMapping
     const networkMappings = await createNetworkMapping(params.networkMappings)
@@ -471,7 +438,15 @@ export default function MigrationFormDrawer({
       updatedMigrationTemplate
     )
     setMigrationPlan(migrationPlanResource)
-  }
+  }, [
+    params.networkMappings,
+    params.storageMappings,
+    migrationTemplate,
+    createNetworkMapping,
+    createStorageMapping,
+    updateMigrationTemplate,
+    createMigrationPlan
+  ]);
 
   useInterval(
     async () => {
@@ -494,7 +469,7 @@ export default function MigrationFormDrawer({
       setSubmitting(false)
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
       onClose()
-      navigate("/dashboard")
+      navigate("/dashboard/migrations")
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
@@ -537,25 +512,29 @@ export default function MigrationFormDrawer({
 
   const sortedOpenstackNetworks = useMemo(
     () =>
-      (migrationTemplate?.status?.openstack?.networks || []).sort(
+      (openstackCredentials?.status?.openstack?.networks || []).sort(
         stringsCompareFn
       ),
-    [migrationTemplate?.status?.openstack?.networks]
+    [openstackCredentials?.status?.openstack?.networks]
   )
   const sortedOpenstackVolumeTypes = useMemo(
     () =>
-      (migrationTemplate?.status?.openstack?.volumeTypes || []).sort(
+      (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(
         stringsCompareFn
       ),
-    [migrationTemplate?.status?.openstack?.volumeTypes]
+    [openstackCredentials?.status?.openstack?.volumeTypes]
   )
 
-  const handleClose = async () => {
+  const handleClose = useCallback(async () => {
     try {
       setMigrationTemplate(undefined)
       setVmwareCredentials(undefined)
       setOpenstackCredentials(undefined)
       setError(null)
+
+      // Invalidate and remove queries when form closes
+      queryClient.invalidateQueries({ queryKey: [VMWARE_MACHINES_BASE_KEY, sessionId] })
+      queryClient.removeQueries({ queryKey: [VMWARE_MACHINES_BASE_KEY, sessionId] })
 
       onClose()
       // Delete migration template if it exists
@@ -575,7 +554,15 @@ export default function MigrationFormDrawer({
       console.error("Error cleaning up resources", err)
       onClose()
     }
-  }
+  }, [migrationTemplate, vmwareCredentials, openstackCredentials, queryClient, sessionId, onClose, params.vmwareCreds, params.openstackCreds])
+
+  // Handle keyboard events
+  useKeyboardSubmit({
+    open,
+    isSubmitDisabled: disableSubmit || submitting,
+    onSubmit: handleSubmit,
+    onClose: handleClose
+  });
 
   return (
     <StyledDrawer
@@ -592,14 +579,16 @@ export default function MigrationFormDrawer({
             onChange={getParamsUpdater}
             errors={fieldErrors}
           />
-          {/* Step 2 */}
+          {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
           <VmsSelectionStep
-            vms={migrationTemplate?.status?.vmware || []}
             onChange={getParamsUpdater}
             error={fieldErrors["vms"]}
-            loadingVms={loadingVms}
-            onRefresh={refreshMigrationTemplate}
             open={open}
+            vmwareCredsValidated={vmwareCredsValidated}
+            openstackCredsValidated={openstackCredsValidated}
+            sessionId={sessionId}
+            openstackFlavors={openstackCredentials?.spec?.flavors}
+            vmwareCredName={params.vmwareCreds?.existingCredName}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep

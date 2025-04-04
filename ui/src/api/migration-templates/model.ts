@@ -44,7 +44,6 @@ export interface Destination {
 }
 
 export interface Source {
-  datacenter: string
   vmwareRef: string
 }
 
@@ -62,6 +61,13 @@ export interface VmData {
   datastores: string[]
   name: string
   networks?: string[]
+  isMigrated?: boolean
+  vmState?: string
+  memory?: number
+  cpuCount?: number
+  ipAddress?: string
+  targetFlavorId?: string
+  disks?: string[]
 }
 
 export interface GetMigrationTemplatesMetadata {
