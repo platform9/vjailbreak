@@ -77,6 +77,11 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	defer func() {
+		if err := scope.Close(); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Failed to close scope for VMWareCreds '%s'", vmwcreds.Name))
+		}
+	}()
 
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
