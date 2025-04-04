@@ -15,7 +15,7 @@ A free and open-source tool that simplifies the migration of virtual machines fr
 
 ----
 # Documentation
-All documentation for vJailbreak can be found here: [Documentation](https://platform9.github.io/vjailbreak/)
+All documentation for vJailbreak can be found here: [Documentation](https://platform9.github.io/vjailbreak/introduction/getting_started/)
 # Demonstration
 ## Video Demo
 
