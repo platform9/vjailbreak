@@ -1,5 +1,5 @@
 import { Box } from "@mui/material";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
 import Footer from "src/components/forms/Footer";
@@ -13,6 +13,7 @@ import { isValidName } from "src/utils";
 import { getVmwareCredentials } from "src/api/vmware-creds/vmwareCreds";
 import { useInterval } from "src/hooks/useInterval";
 import { THREE_SECONDS } from "src/constants";
+import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 
 interface VMwareCredentialsDrawerProps {
     open: boolean;
@@ -31,11 +32,9 @@ export default function VMwareCredentialsDrawer({
     const [showPassword, setShowPassword] = useState(false);
     const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null);
 
-    // Fetch credentials list for the form
     const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery();
 
-    // Reset state and clean up when the drawer is closed
-    const closeDrawer = () => {
+    const closeDrawer = useCallback(() => {
         // Check if we have a created credential that hasn't been fully validated (succeeded)
         if (createdCredentialName) {
             console.log(`Cleaning up VMware credential on drawer close: ${createdCredentialName}`);
@@ -64,9 +63,8 @@ export default function VMwareCredentialsDrawer({
         setSubmitting(false);
         setShowPassword(false);
 
-        // Call the parent onClose
         onClose();
-    };
+    }, [createdCredentialName, onClose]);
 
     // Track form values
     const [formValues, setFormValues] = useState({
@@ -159,7 +157,7 @@ export default function VMwareCredentialsDrawer({
         shouldPollVmwareCreds
     );
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if (!formValues.credentialName || !formValues.vcenterHost || !formValues.datacenter || !formValues.username || !formValues.password) {
             setError("Please fill in all required fields");
             return;
@@ -194,7 +192,15 @@ export default function VMwareCredentialsDrawer({
             );
             setSubmitting(false);
         }
-    };
+    }, [formValues, isValidCredentialName]);
+
+    useKeyboardSubmit({
+        open,
+        isSubmitDisabled: submitting || validatingVmwareCreds || !isValidCredentialName ||
+            !formValues.vcenterHost || !formValues.datacenter || !formValues.username || !formValues.password,
+        onSubmit: handleSubmit,
+        onClose: closeDrawer
+    });
 
     return (
         <StyledDrawer
