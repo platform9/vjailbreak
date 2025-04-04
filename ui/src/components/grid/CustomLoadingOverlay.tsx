@@ -6,10 +6,10 @@ const StyledGridOverlay = styled("div")(({ theme }) => ({
   alignItems: "center",
   justifyContent: "center",
   height: "100%",
-  backgroundColor: "rgba(18, 18, 18, 0.9)",
-  ...theme.applyStyles("light", {
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-  }),
+  backgroundColor: theme.palette.mode === 'dark'
+    ? 'rgba(18, 18, 18, 0.9)'
+    : 'rgba(255, 255, 255, 0.9)',
+  color: theme.palette.text.primary,
 }))
 
 const CustomLoadingOverlay = ({ loadingMessage }) => {

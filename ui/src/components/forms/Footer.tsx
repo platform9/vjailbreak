@@ -1,4 +1,5 @@
 import { Button, CircularProgress, styled } from "@mui/material"
+import { useThemeContext } from "src/theme/ThemeContext"
 
 interface FooterProps {
   cancelButtonLabel?: string
@@ -16,7 +17,7 @@ const StyledFooter = styled("div")(({ theme }) => ({
   gap: theme.spacing(2),
   // marginTop: "auto",
   padding: theme.spacing(2),
-  borderTop: "1px solid #CDD0D4",
+  borderTop: `1px solid ${theme.palette.divider}`,
 }))
 
 export default function Footer({
@@ -27,11 +28,13 @@ export default function Footer({
   submitting = false,
   disableSubmit = false,
 }: FooterProps) {
+  const { mode } = useThemeContext();
+
   return (
     <StyledFooter>
       <Button
         type="button"
-        variant="outlined"
+        variant={mode === 'dark' ? "contained" : "outlined"}
         color="secondary"
         onClick={onClose}
       >
