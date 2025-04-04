@@ -56,7 +56,7 @@ type VMwareCredsReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx)
 
 	// Get the VMwareCreds object
@@ -77,9 +77,10 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	// Always close the scope when exiting this function such that we can persist any vmwarecreds changes.
 	defer func() {
-		if err := scope.Close(); err != nil {
-			ctxlog.Error(err, fmt.Sprintf("Failed to close scope for VMWareCreds '%s'", vmwcreds.Name))
+		if err := scope.Close(); err != nil && reterr == nil {
+			reterr = err
 		}
 	}()
 
