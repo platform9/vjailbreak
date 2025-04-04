@@ -642,10 +642,6 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
 			}
 		}(i)
-		if i%200 == 0 {
-			// Wait for 200 vms to be created or updated
-			wg.Wait()
-		}
 	}
 	// Wait for all vms to be created or updated
 	wg.Wait()
