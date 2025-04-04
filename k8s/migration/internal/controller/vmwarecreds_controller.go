@@ -89,6 +89,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer")
+	}
+
 	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
