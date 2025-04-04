@@ -78,7 +78,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	// Always close the scope when exiting this function such that we can persist any Migration changes.
+	// Always close the scope when exiting this function such that we can persist any OpenstackCreds changes.
 	defer func() {
 		if err := scope.Close(); err != nil && reterr == nil {
 			reterr = err
