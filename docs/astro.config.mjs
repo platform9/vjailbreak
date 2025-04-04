@@ -29,7 +29,7 @@ export default defineConfig({
 				//SocialIcons: './src/components/githubRelease.astro',
 			},
 			logo: {
-				src: './src/assets/classic_logo.jpeg',
+				src: './src/assets/platform9-logo.svg',
 				replacesTitle: true,
 			},
 			head: [
