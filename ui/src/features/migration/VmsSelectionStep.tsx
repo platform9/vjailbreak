@@ -36,6 +36,9 @@ const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   "& .disabled-row": {
     opacity: 0.6,
     cursor: "not-allowed",
+  },
+  "& .hidden-column": {
+    display: "none"
   }
 }));
 
@@ -77,7 +80,18 @@ const columns: GridColDef[] = [
     flex: 2,
     renderCell: (params) => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {params.value}
+        <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
+          <Box
+            sx={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              backgroundColor: params.row.vmState === "running" ? 'success.main' : 'error.main',
+              display: 'inline-block'
+            }}
+          />
+        </Tooltip>
+        <Box sx={{ ml: 0.5 }}>{params.value}</Box>
         {params.row.isMigrated && (
           <Chip
             variant="outlined"
@@ -87,25 +101,6 @@ const columns: GridColDef[] = [
           />
         )}
       </Box>
-    ),
-  },
-  {
-    field: "vmState",
-    headerName: "Status",
-    flex: 1,
-    valueGetter: (value) => value === "running" ? "running" : "stopped", // needed for search to work.
-    sortComparator: (v1, v2) => {
-      if (v1 === "running" && v2 === "stopped") return -1;
-      if (v1 === "stopped" && v2 === "running") return 1;
-      return 0;
-    },
-    renderCell: (params) => (
-      <Chip
-        variant="outlined"
-        label={params.value === "running" ? "Running" : "Stopped"}
-        color={params.value === "running" ? "success" : "error"}
-        size="small"
-      />
     ),
   },
   {
@@ -146,6 +141,19 @@ const columns: GridColDef[] = [
       </Box>
     ),
   },
+  // Hidden column for sorting by vmState
+  {
+    field: "vmState",
+    headerName: "Status",
+    flex: 1,
+    headerClassName: 'hidden-column',
+    sortable: true,
+    sortComparator: (v1, v2) => {
+      if (v1 === "running" && v2 === "stopped") return -1;
+      if (v1 === "stopped" && v2 === "running") return 1;
+      return 0;
+    }
+  }
 ];
 
 const paginationModel = { page: 0, pageSize: 5 };
@@ -331,7 +339,6 @@ export default function VmsSelectionStep({
   const getNoRowsLabel = () => {
     return "No VMs discovered";
   };
-  console.log("vmsWithFlavor", vmsWithFlavor);
   return (
     <VmsSelectionStepContainer>
       <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
@@ -348,7 +355,8 @@ export default function VmsSelectionStep({
                 },
                 columns: {
                   columnVisibilityModel: {
-                    osType: false // Hide OS column since new API doesn't provide this
+                    osType: false,
+                    vmState: false  // Hide the vmState column that we use only for sorting
                   }
                 }
               }}
@@ -365,7 +373,7 @@ export default function VmsSelectionStep({
                     {...props}
                     onRefresh={() => refreshVMList()}
                     disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
-                    placeholder="Search by Name, Status, Network Interface, CPU, or Memory"
+                    placeholder="Search by Name, Network Interface, CPU, or Memory"
                     rowSelectionModel={rowSelectionModel}
                     onAssignFlavor={handleOpenFlavorDialog}
                   />
