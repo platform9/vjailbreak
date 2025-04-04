@@ -1,6 +1,7 @@
 import {
   styled,
   Typography,
+  Box,
 } from "@mui/material"
 import { useState } from "react"
 import Step from "../../components/forms/Step"
@@ -16,8 +17,11 @@ const SourceAndDestinationStepContainer = styled("div")(({ theme }) => ({
   gridGap: theme.spacing(1),
 }))
 
-const FieldsContainer = styled("div")(({ theme }) => ({
+
+const SideBySideContainer = styled(Box)(({ theme }) => ({
   display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: theme.spacing(3),
   marginLeft: theme.spacing(6),
 }))
 
@@ -33,7 +37,6 @@ export default function SourceAndDestinationEnvStep({
   const [selectedVmwareCred, setSelectedVmwareCred] = useState<string | null>(null)
   const [selectedOpenstackCred, setSelectedOpenstackCred] = useState<string | null>(null)
 
-  // Fetch credentials
   const { data: vmwareCredsList = [], isLoading: loadingVmwareCreds } = useVmwareCredentialsQuery()
   const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } = useOpenstackCredentialsQuery()
 
@@ -90,39 +93,36 @@ export default function SourceAndDestinationEnvStep({
       onChange("openstackCreds")({})
     }
   }
-
-  console.log("Errors are ", errors)
-
   return (
     <SourceAndDestinationStepContainer>
       <Step stepNumber="1" label="Source and Destination Environments" />
-      <FieldsContainer>
-        <Typography variant="body1">Source VMware</Typography>
+      <SideBySideContainer>
+        <Box>
+          <Typography variant="body1" sx={{ mb: 1 }}>Source VMware</Typography>
+          <VmwareCredentialsForm
+            credentialsList={vmwareCredsList}
+            loadingCredentials={loadingVmwareCreds}
+            error={errors["vmwareCreds"]}
+            onCredentialSelect={handleVmwareCredSelect}
+            selectedCredential={selectedVmwareCred}
+            showCredentialSelector={true}
+            showCredentialNameField={false}
+          />
+        </Box>
 
-        <VmwareCredentialsForm
-          credentialsList={vmwareCredsList}
-          loadingCredentials={loadingVmwareCreds}
-          error={errors["vmwareCreds"]}
-          onCredentialSelect={handleVmwareCredSelect}
-          selectedCredential={selectedVmwareCred}
-          showCredentialSelector={true}
-          showCredentialNameField={false}
-        />
-      </FieldsContainer>
-
-      <FieldsContainer>
-        <Typography variant="body1">Destination Platform</Typography>
-
-        <OpenstackCredentialsForm
-          credentialsList={openstackCredsList}
-          loadingCredentials={loadingOpenstackCreds}
-          error={errors["openstackCreds"]}
-          onCredentialSelect={handleOpenstackCredSelect}
-          selectedCredential={selectedOpenstackCred}
-          showCredentialSelector={true}
-          showCredentialNameField={false}
-        />
-      </FieldsContainer>
+        <Box>
+          <Typography variant="body1" sx={{ mb: 1 }}>Destination Platform</Typography>
+          <OpenstackCredentialsForm
+            credentialsList={openstackCredsList}
+            loadingCredentials={loadingOpenstackCreds}
+            error={errors["openstackCreds"]}
+            onCredentialSelect={handleOpenstackCredSelect}
+            selectedCredential={selectedOpenstackCred}
+            showCredentialSelector={true}
+            showCredentialNameField={false}
+          />
+        </Box>
+      </SideBySideContainer>
     </SourceAndDestinationStepContainer>
   )
 }

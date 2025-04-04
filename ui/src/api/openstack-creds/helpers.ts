@@ -6,7 +6,20 @@ const getBooleanValue = (value: string | undefined): boolean | undefined => {
   return value.toLowerCase() === "true"
 }
 
-export const createOpenstackCredsJson = (params) => {
+interface OpenstackCredsParams {
+  name?: string
+  namespace?: string
+  OS_AUTH_URL?: string
+  OS_DOMAIN_NAME?: string
+  OS_USERNAME?: string
+  OS_PASSWORD?: string
+  OS_REGION_NAME?: string
+  OS_TENANT_NAME?: string
+  OS_INSECURE?: string
+  existingCredName?: string
+}
+
+export const createOpenstackCredsJson = (params: OpenstackCredsParams) => {
   const {
     name,
     namespace = "migration-system",
@@ -45,7 +58,15 @@ export const createOpenstackCredsJson = (params) => {
   }
 }
 
-export const createOpenstackTokenRequestBody = (creds: any) => {
+interface OpenstackCreds {
+  OS_USERNAME: string
+  OS_USER_DOMAIN_NAME?: string
+  OS_PASSWORD: string
+  OS_PROJECT_NAME?: string
+  OS_PROJECT_DOMAIN_NAME?: string
+}
+
+export const createOpenstackTokenRequestBody = (creds: OpenstackCreds) => {
   return {
     auth: {
       identity: {

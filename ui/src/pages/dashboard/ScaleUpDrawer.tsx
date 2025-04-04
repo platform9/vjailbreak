@@ -11,7 +11,7 @@ import {
     Tooltip,
     CircularProgress,
 } from "@mui/material";
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Step from "src/components/forms/Step";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
@@ -26,6 +26,7 @@ import { OpenstackFlavor } from "src/api/openstack-creds/model";
 import { NodeItem } from "src/api/nodes/model";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
 import axios from "axios";
+import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 
 // Mock data - replace with actual data from API
 
@@ -64,12 +65,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
 
     const openstackCredsValidated = openstackCredentials?.status?.openstackValidationStatus === "Succeeded";
 
-    // Reset state when drawer closes
-    const handleClose = () => {
-        clearStates();
-        onClose();
-    };
-
     const clearStates = () => {
         setOpenstackCredentials(null);
         setSelectedOpenstackCred(null);
@@ -81,6 +76,12 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setLoadingFlavors(false);
         setFlavorsError(null);
     }
+
+    // Reset state when drawer closes
+    const handleClose = useCallback(() => {
+        clearStates();
+        onClose();
+    }, [onClose]);
 
     const handleOpenstackCredSelect = async (credId: string | null) => {
         setSelectedOpenstackCred(credId);
@@ -147,6 +148,13 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             setLoading(false);
         }
     };
+
+    useKeyboardSubmit({
+        open,
+        isSubmitDisabled: !masterNode || !selectedFlavor || loading || !openstackCredsValidated,
+        onSubmit: handleSubmit,
+        onClose: handleClose
+    });
 
     return (
         <StyledDrawer
