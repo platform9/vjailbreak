@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -622,13 +623,28 @@ func AppendUnique(slice []string, values ...string) []string {
 
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
+
+	var wg sync.WaitGroup
 	for i := range vminfo {
-		vm := &vminfo[i] // Use a pointer
-		err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
-		if err != nil {
-			return err
-		}
+		// Batch wise create or update 100 vms Parallely
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// Don't panic on error
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Panic: %v\n", r)
+				}
+			}()
+			vm := &vminfo[i] // Use a pointer
+			err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
+			if err != nil {
+				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
+			}
+		}(i)
 	}
+	// Wait for all vms to be created or updated
+	wg.Wait()
 	return nil
 }
 
