@@ -599,14 +599,14 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var guestID, guestFull, distro string
 		var major int
 		if vmProps.Guest != nil {
-			guestID = vmProps.Config.GuestId                    // e.g. "ubuntu64Guest"
-			guestFull = vmProps.Guest.GuestFullName             // e.g. "Ubuntu Linux (64-bit)"
-			distro, major = parseDistroInfo(guestID, guestFull) // custom parser
+			guestID = vmProps.Config.GuestId           // e.g. "ubuntu64Guest"
+			guestFull = vmProps.Guest.GuestFullName    // e.g. "Ubuntu Linux (64-bit)"
+			distro, major = ParseDistroInfo(guestFull) // custom parser
 		}
 
 		supported, err := ValidateLinuxGuest(distro, major)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate guest: %w", err)
+		if err != nil && strings.Contains(err.Error(), "unsupported") {
+			supported = false
 		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
@@ -809,39 +809,58 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
-func parseDistroInfo(guestID, guestFull string) (string, int) {
-	lower := strings.ToLower(guestID + " " + guestFull)
+// ParseDistroInfo extracts normalized distro and major version from a raw guest full name string.
+func ParseDistroInfo(guestFullName string) (string, int) {
+	guestFullName = strings.ToLower(guestFullName)
+	guestFullName = strings.TrimSpace(guestFullName)
 
-	switch {
-	case strings.Contains(lower, "ubuntu"):
-		return "ubuntu", extractVersion(lower)
-	case strings.Contains(lower, "debian"):
-		return "debian", extractVersion(lower)
-	case strings.Contains(lower, "rhel"), strings.Contains(lower, "redhat"):
-		return "rhel", extractVersion(lower)
-	case strings.Contains(lower, "centos"):
-		return "centos", extractVersion(lower)
-	case strings.Contains(lower, "rocky"):
-		return "rocky", extractVersion(lower)
-	case strings.Contains(lower, "sles"), strings.Contains(lower, "suse"):
-		return "suse", extractVersion(lower)
-	case strings.Contains(lower, "oracle"):
-		return "oraclelinux", extractVersion(lower)
-	case strings.Contains(lower, "windows"):
-		return "windows", extractVersion(lower)
+	distroMap := map[string]string{
+		"red hat":      "rhel",
+		"redhat":       "rhel",
+		"centos":       "centos",
+		"scientific":   "scientificlinux",
+		"oracle linux": "oraclelinux",
+		"oraclelinux":  "oraclelinux",
+		"rocky":        "rocky",
+		"circle":       "circle",
+		"fedora":       "fedora",
+		"alt":          "altlinux",
+		"sles":         "sles",
+		"suse":         "sles",
+		"opensuse":     "opensuse",
+		"debian":       "debian",
+		"ubuntu":       "ubuntu",
+		"linuxmint":    "linuxmint",
+		"kali":         "kalilinux",
+		"windows":      "windows", // optional use
 	}
-	return "unknown", 0
+
+	// Normalize distro name
+	var distro string
+	for key, val := range distroMap {
+		if strings.Contains(guestFullName, key) {
+			distro = val
+			break
+		}
+	}
+
+	version, err := extractVersion(guestFullName)
+	if err != nil {
+		version = 0
+	}
+
+	return distro, version
 }
 
-func extractVersion(s string) int {
+func extractVersion(s string) (int, error) {
 	re := regexp.MustCompile(`\b(\d{1,4})\b`)
 	matches := re.FindAllString(s, -1)
 	if len(matches) > 0 {
 		if val, err := strconv.Atoi(matches[0]); err == nil {
-			return val
+			return val, nil
 		}
 	}
-	return 0
+	return 0, fmt.Errorf("failed to extract version")
 }
 
 // This is according to the support matrix from virt-v2v
@@ -870,7 +889,7 @@ func ValidateLinuxGuest(distro string, version int) (bool, error) {
 		return false, fmt.Errorf("unknown or unsupported Linux distro: %s", distro)
 	}
 
-	if !supported {
+	if !supported && version != 0 {
 		return false, fmt.Errorf("unsupported version %d for distro %s", version, distro)
 	}
 	return true, nil
