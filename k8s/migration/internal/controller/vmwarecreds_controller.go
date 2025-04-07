@@ -115,7 +115,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
-
+	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
