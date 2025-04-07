@@ -84,7 +84,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			reterr = err
 		}
 	}()
-
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
 	}
