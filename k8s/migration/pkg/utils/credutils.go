@@ -827,7 +827,7 @@ func parseDistroInfo(guestID, guestFull string) (string, int) {
 }
 
 func extractVersion(s string) int {
-	re := regexp.MustCompile(`\b(\d{1,2})\b`)
+	re := regexp.MustCompile(`\b(\d{1,4})\b`)
 	matches := re.FindAllString(s, -1)
 	if len(matches) > 0 {
 		if val, err := strconv.Atoi(matches[0]); err == nil {
