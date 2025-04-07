@@ -966,6 +966,8 @@ spec:
                     type: array
                   osType:
                     type: string
+                  supported:
+                    type: boolean
                   vmState:
                     type: string
                 required:
@@ -1663,7 +1665,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:latest
+        image: quay.io/platform9/vjailbreak-controller:v0.1.8
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

@@ -76,6 +76,8 @@ spec:
                     type: array
                   osType:
                     type: string
+                  supported:
+                    type: boolean
                   vmState:
                     type: string
                 required:

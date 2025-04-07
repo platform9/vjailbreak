@@ -34,6 +34,7 @@ type VMInfo struct {
 	GuestFull  string   `json:"guestFullName,omitempty"`
 	Distro     string   `json:"distro,omitempty"`
 	MajorVer   int      `json:"majorVersion,omitempty"`
+	Supported  bool     `json:"supported,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

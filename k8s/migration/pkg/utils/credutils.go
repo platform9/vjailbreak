@@ -604,6 +604,10 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			distro, major = parseDistroInfo(guestID, guestFull) // custom parser
 		}
 
+		supported, err := ValidateLinuxGuest(distro, major)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate guest: %w", err)
+		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
@@ -618,6 +622,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			GuestFull:  guestFull,
 			Distro:     distro,
 			MajorVer:   major,
+			Supported:  supported,
 		})
 	}
 
@@ -837,4 +842,36 @@ func extractVersion(s string) int {
 		}
 	}
 	return 0
+}
+
+// This is according to the support matrix from virt-v2v
+// https://libguestfs.org/virt-v2v-support.1.html
+func ValidateLinuxGuest(distro string, version int) (bool, error) {
+
+	distro = strings.ToLower(distro)
+	var supported bool
+
+	switch distro {
+	case "rhel", "redhat", "centos", "scientificlinux", "oraclelinux", "rocky", "circle":
+		supported = version >= 4 && version <= 10
+	case "fedora":
+		supported = true
+	case "altlinux":
+		supported = version >= 9
+	case "sles", "suse-based":
+		supported = version >= 10
+	case "opensuse":
+		supported = version >= 10
+	case "debian":
+		supported = version >= 6
+	case "ubuntu", "linuxmint", "kalilinux":
+		supported = version >= 10
+	default:
+		return false, fmt.Errorf("unknown or unsupported Linux distro: %s", distro)
+	}
+
+	if !supported {
+		return false, fmt.Errorf("unsupported version %d for distro %s", version, distro)
+	}
+	return true, nil
 }
