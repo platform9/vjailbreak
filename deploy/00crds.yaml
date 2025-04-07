@@ -946,8 +946,16 @@ spec:
                     items:
                       type: string
                     type: array
+                  distro:
+                    type: string
+                  guestFullName:
+                    type: string
+                  guestId:
+                    type: string
                   ipAddress:
                     type: string
+                  majorVersion:
+                    type: integer
                   memory:
                     type: integer
                   name:
@@ -1655,7 +1663,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.8
+        image: quay.io/platform9/vjailbreak-controller:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

@@ -30,6 +30,10 @@ type VMInfo struct {
 	OSType     string   `json:"osType,omitempty"`
 	CPU        int      `json:"cpu,omitempty"`
 	Memory     int      `json:"memory,omitempty"`
+	GuestID    string   `json:"guestId,omitempty"`
+	GuestFull  string   `json:"guestFullName,omitempty"`
+	Distro     string   `json:"distro,omitempty"`
+	MajorVer   int      `json:"majorVersion,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

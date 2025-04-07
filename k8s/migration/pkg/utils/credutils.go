@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -594,6 +596,13 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
+		var guestID, guestFull, distro string
+		var major int
+		if vmProps.Guest != nil {
+			guestID = vmProps.Config.GuestId                    // e.g. "ubuntu64Guest"
+			guestFull = vmProps.Guest.GuestFullName             // e.g. "Ubuntu Linux (64-bit)"
+			distro, major = parseDistroInfo(guestID, guestFull) // custom parser
+		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
@@ -605,6 +614,10 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			OSType:     vmProps.Guest.GuestFamily,
 			CPU:        int(vmProps.Config.Hardware.NumCPU),
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
+			GuestID:    guestID,
+			GuestFull:  guestFull,
+			Distro:     distro,
+			MajorVer:   major,
 		})
 	}
 
@@ -789,4 +802,37 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_vCPUs", cpu,
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
+}
+
+func parseDistroInfo(guestID, guestFull string) (string, int) {
+	lower := strings.ToLower(guestID + " " + guestFull)
+
+	switch {
+	case strings.Contains(lower, "ubuntu"):
+		return "ubuntu", extractVersion(lower)
+	case strings.Contains(lower, "debian"):
+		return "debian", extractVersion(lower)
+	case strings.Contains(lower, "rhel"), strings.Contains(lower, "redhat"):
+		return "rhel", extractVersion(lower)
+	case strings.Contains(lower, "centos"):
+		return "centos", extractVersion(lower)
+	case strings.Contains(lower, "rocky"):
+		return "rocky", extractVersion(lower)
+	case strings.Contains(lower, "sles"), strings.Contains(lower, "suse"):
+		return "suse", extractVersion(lower)
+	case strings.Contains(lower, "oracle"):
+		return "oraclelinux", extractVersion(lower)
+	}
+	return "unknown", 0
+}
+
+func extractVersion(s string) int {
+	re := regexp.MustCompile(`\b(\d{1,2})\b`)
+	matches := re.FindAllString(s, -1)
+	if len(matches) > 0 {
+		if val, err := strconv.Atoi(matches[0]); err == nil {
+			return val
+		}
+	}
+	return 0
 }

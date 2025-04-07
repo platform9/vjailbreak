@@ -56,8 +56,16 @@ spec:
                     items:
                       type: string
                     type: array
+                  distro:
+                    type: string
+                  guestFullName:
+                    type: string
+                  guestId:
+                    type: string
                   ipAddress:
                     type: string
+                  majorVersion:
+                    type: integer
                   memory:
                     type: integer
                   name:
