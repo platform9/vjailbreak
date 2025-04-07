@@ -808,7 +808,9 @@ func isValidGuestOS(guestOS string) bool {
 
 	// List of supported OS strings to check
 	supportedOS := []string{
-		"red hat enterprise linux",
+		"redhat",
+		"red hat",
+		"rhel",
 		"centos",
 		"scientific linux",
 		"oracle linux",
