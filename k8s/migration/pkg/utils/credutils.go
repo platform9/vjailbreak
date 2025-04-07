@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -601,7 +600,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			guestID = vmProps.Config.GuestId
 			guestFull = vmProps.Guest.GuestFullName
 		}
-
 		supported := isValidGuestOS(guestFull)
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
@@ -805,112 +803,28 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 }
 
 func isValidGuestOS(guestOS string) bool {
-	// Normalize the input
-	guestOS = strings.ToLower(strings.TrimSpace(guestOS))
+	// Convert to lowercase for case-insensitive comparison
+	osLower := strings.ToLower(guestOS)
 
-	// Patterns for different OS families
-	patterns := map[string]*regexp.Regexp{
-		// Red Hat Enterprise Linux
-		"rhel": regexp.MustCompile(`^red\s*hat\s*enterprise\s*linux\s*(\d+)$`),
-
-		// CentOS
-		"centos": regexp.MustCompile(`^centos\s*(\d+)$`),
-
-		// Scientific Linux
-		"scientific": regexp.MustCompile(`^scientific\s*linux\s*(\d+)$`),
-
-		// Oracle Linux (no version check)
-		"oracle": regexp.MustCompile(`^oracle\s*linux`),
-
-		// Fedora (no version check)
-		"fedora": regexp.MustCompile(`^fedora`),
-
-		// SLES
-		"sles": regexp.MustCompile(`^sles?\s*(\d+)`),
-
-		// OpenSUSE
-		"opensuse": regexp.MustCompile(`^opensuse\s*(\d+)`),
-
-		// ALT Linux
-		"alt": regexp.MustCompile(`^alt\s*linux\s*(\d+)`),
-
-		// Debian
-		"debian": regexp.MustCompile(`^debian\s*(\d+)`),
-
-		// Ubuntu
-		"ubuntu": regexp.MustCompile(`^ubuntu\s*(\d{2}\.\d{2})`),
-
-		// Windows
-		"windows": regexp.MustCompile(`^windows\s*(xp|vista|7|8|8\.1|10|11|\s*server\s*\d{4})`),
+	// List of supported OS strings to check
+	supportedOS := []string{
+		"red hat enterprise linux",
+		"centos",
+		"scientific linux",
+		"oracle linux",
+		"fedora",
+		"sles",
+		"opensuse",
+		"alt linux",
+		"debian",
+		"ubuntu",
+		"windows",
 	}
 
-	// Check each pattern
-	for osType, pattern := range patterns {
-		matches := pattern.FindStringSubmatch(guestOS)
-		if len(matches) > 0 {
-			switch osType {
-			case "rhel", "centos":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 4-10
-					return version >= "4" && version <= "10"
-				}
-				return false
-			case "scientific":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 4-7
-					return version >= "4" && version <= "7"
-				}
-				return false
-			case "oracle", "fedora":
-				// No version check needed
-				return true
-			case "sles":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 10 and up
-					return version >= "10"
-				}
-				return false
-			case "opensuse":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 10 and up
-					return version >= "10"
-				}
-				return false
-			case "alt":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 9 and up
-					return version >= "9"
-				}
-				return false
-			case "debian":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Supported versions: 6 and up
-					return version >= "6"
-				}
-				return false
-			case "ubuntu":
-				if len(matches) > 1 {
-					version := matches[1]
-					// Check specific versions or newer
-					switch version {
-					case "10.04", "12.04", "14.04", "16.04":
-						return true
-					default:
-						// Any version after 16.04 is supported
-						return version >= "16.04"
-					}
-				}
-				return false
-			case "windows":
-				// All versions from XP to 11/Server 2025 are supported
-				return true
-			}
+	// Check if the OS contains any of the supported strings
+	for _, os := range supportedOS {
+		if strings.Contains(osLower, os) {
+			return true
 		}
 	}
 
