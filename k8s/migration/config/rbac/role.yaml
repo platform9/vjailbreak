@@ -63,6 +63,7 @@ rules:
   - migrationtemplates
   - networkmappings
   - openstackcreds
+  - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
   - vmwareclusters
@@ -84,6 +85,7 @@ rules:
   - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
+  - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
@@ -97,6 +99,7 @@ rules:
   - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
+  - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
