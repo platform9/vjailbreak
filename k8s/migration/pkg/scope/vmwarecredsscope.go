@@ -41,6 +41,7 @@ type VMwareCredsScope struct {
 
 // Close closes the current scope persisting the VMwareCreds configuration and status.
 func (s *VMwareCredsScope) Close(ctx context.Context) error {
+	s.Logger.Info("Closing scope for VMwareCreds", "name", s.Name(), "finalizer", s.VMwareCreds.Finalizers)
 	err := s.Client.Update(ctx, s.VMwareCreds, &client.UpdateOptions{})
 	if err != nil {
 		return err
