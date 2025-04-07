@@ -94,8 +94,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-	ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
 
 	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
@@ -115,6 +113,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
+
+	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
+
 	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
