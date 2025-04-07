@@ -94,6 +94,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", constants.VMwareCredsFinalizer)
 
 	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
