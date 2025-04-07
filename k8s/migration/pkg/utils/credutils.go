@@ -598,15 +598,11 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var guestID, guestFull, distro string
 		var major int
 		if vmProps.Guest != nil {
-			guestID = vmProps.Config.GuestId                    // e.g. "ubuntu64Guest"
-			guestFull = vmProps.Guest.GuestFullName             // e.g. "Ubuntu Linux (64-bit)"
-			distro, major = parseDistroInfo(guestID, guestFull) // custom parser
+			guestID = vmProps.Config.GuestId
+			guestFull = vmProps.Guest.GuestFullName
 		}
 
-		supported, err := ValidateLinuxGuest(distro, major)
-		if err != nil && strings.Contains(err.Error(), "unsupported") {
-			supported = false
-		}
+		supported := isValidGuestOS(guestFull)
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
@@ -807,6 +803,7 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
+
 func isValidGuestOS(guestOS string) bool {
 	// Normalize the input
 	guestOS = strings.ToLower(strings.TrimSpace(guestOS))
