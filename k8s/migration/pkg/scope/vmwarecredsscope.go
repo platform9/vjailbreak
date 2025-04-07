@@ -40,8 +40,8 @@ type VMwareCredsScope struct {
 }
 
 // Close closes the current scope persisting the VMwareCreds configuration and status.
-func (s *VMwareCredsScope) Close() error {
-	err := s.Client.Update(context.TODO(), s.VMwareCreds, &client.UpdateOptions{})
+func (s *VMwareCredsScope) Close(ctx context.Context) error {
+	err := s.Client.Update(ctx, s.VMwareCreds, &client.UpdateOptions{})
 	if err != nil {
 		return err
 	}
