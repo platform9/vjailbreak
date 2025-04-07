@@ -822,6 +822,8 @@ func parseDistroInfo(guestID, guestFull string) (string, int) {
 		return "suse", extractVersion(lower)
 	case strings.Contains(lower, "oracle"):
 		return "oraclelinux", extractVersion(lower)
+	case strings.Contains(lower, "windows"):
+		return "windows", extractVersion(lower)
 	}
 	return "unknown", 0
 }
