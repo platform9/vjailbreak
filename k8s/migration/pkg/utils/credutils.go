@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -599,9 +598,9 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var guestID, guestFull, distro string
 		var major int
 		if vmProps.Guest != nil {
-			guestID = vmProps.Config.GuestId           // e.g. "ubuntu64Guest"
-			guestFull = vmProps.Guest.GuestFullName    // e.g. "Ubuntu Linux (64-bit)"
-			distro, major = ParseDistroInfo(guestFull) // custom parser
+			guestID = vmProps.Config.GuestId                    // e.g. "ubuntu64Guest"
+			guestFull = vmProps.Guest.GuestFullName             // e.g. "Ubuntu Linux (64-bit)"
+			distro, major = parseDistroInfo(guestID, guestFull) // custom parser
 		}
 
 		supported, err := ValidateLinuxGuest(distro, major)
@@ -808,89 +807,115 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
+func isValidGuestOS(guestOS string) bool {
+	// Normalize the input
+	guestOS = strings.ToLower(strings.TrimSpace(guestOS))
 
-// ParseDistroInfo extracts normalized distro and major version from a raw guest full name string.
-func ParseDistroInfo(guestFullName string) (string, int) {
-	guestFullName = strings.ToLower(guestFullName)
-	guestFullName = strings.TrimSpace(guestFullName)
+	// Patterns for different OS families
+	patterns := map[string]*regexp.Regexp{
+		// Red Hat Enterprise Linux
+		"rhel": regexp.MustCompile(`^red\s*hat\s*enterprise\s*linux\s*(\d+)$`),
 
-	distroMap := map[string]string{
-		"red hat":      "rhel",
-		"redhat":       "rhel",
-		"centos":       "centos",
-		"scientific":   "scientificlinux",
-		"oracle linux": "oraclelinux",
-		"oraclelinux":  "oraclelinux",
-		"rocky":        "rocky",
-		"circle":       "circle",
-		"fedora":       "fedora",
-		"alt":          "altlinux",
-		"sles":         "sles",
-		"suse":         "sles",
-		"opensuse":     "opensuse",
-		"debian":       "debian",
-		"ubuntu":       "ubuntu",
-		"linuxmint":    "linuxmint",
-		"kali":         "kalilinux",
-		"windows":      "windows", // optional use
+		// CentOS
+		"centos": regexp.MustCompile(`^centos\s*(\d+)$`),
+
+		// Scientific Linux
+		"scientific": regexp.MustCompile(`^scientific\s*linux\s*(\d+)$`),
+
+		// Oracle Linux (no version check)
+		"oracle": regexp.MustCompile(`^oracle\s*linux`),
+
+		// Fedora (no version check)
+		"fedora": regexp.MustCompile(`^fedora`),
+
+		// SLES
+		"sles": regexp.MustCompile(`^sles?\s*(\d+)`),
+
+		// OpenSUSE
+		"opensuse": regexp.MustCompile(`^opensuse\s*(\d+)`),
+
+		// ALT Linux
+		"alt": regexp.MustCompile(`^alt\s*linux\s*(\d+)`),
+
+		// Debian
+		"debian": regexp.MustCompile(`^debian\s*(\d+)`),
+
+		// Ubuntu
+		"ubuntu": regexp.MustCompile(`^ubuntu\s*(\d{2}\.\d{2})`),
+
+		// Windows
+		"windows": regexp.MustCompile(`^windows\s*(xp|vista|7|8|8\.1|10|11|\s*server\s*\d{4})`),
 	}
 
-	// Normalize distro name
-	var distro string
-	for key, val := range distroMap {
-		if strings.Contains(guestFullName, key) {
-			distro = val
-			break
+	// Check each pattern
+	for osType, pattern := range patterns {
+		matches := pattern.FindStringSubmatch(guestOS)
+		if len(matches) > 0 {
+			switch osType {
+			case "rhel", "centos":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 4-10
+					return version >= "4" && version <= "10"
+				}
+				return false
+			case "scientific":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 4-7
+					return version >= "4" && version <= "7"
+				}
+				return false
+			case "oracle", "fedora":
+				// No version check needed
+				return true
+			case "sles":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 10 and up
+					return version >= "10"
+				}
+				return false
+			case "opensuse":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 10 and up
+					return version >= "10"
+				}
+				return false
+			case "alt":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 9 and up
+					return version >= "9"
+				}
+				return false
+			case "debian":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Supported versions: 6 and up
+					return version >= "6"
+				}
+				return false
+			case "ubuntu":
+				if len(matches) > 1 {
+					version := matches[1]
+					// Check specific versions or newer
+					switch version {
+					case "10.04", "12.04", "14.04", "16.04":
+						return true
+					default:
+						// Any version after 16.04 is supported
+						return version >= "16.04"
+					}
+				}
+				return false
+			case "windows":
+				// All versions from XP to 11/Server 2025 are supported
+				return true
+			}
 		}
 	}
 
-	version, err := extractVersion(guestFullName)
-	if err != nil {
-		version = 0
-	}
-
-	return distro, version
-}
-
-func extractVersion(s string) (int, error) {
-	re := regexp.MustCompile(`\b(\d{1,4})\b`)
-	matches := re.FindAllString(s, -1)
-	if len(matches) > 0 {
-		if val, err := strconv.Atoi(matches[0]); err == nil {
-			return val, nil
-		}
-	}
-	return 0, fmt.Errorf("failed to extract version")
-}
-
-// This is according to the support matrix from virt-v2v
-// https://libguestfs.org/virt-v2v-support.1.html
-func ValidateLinuxGuest(distro string, version int) (bool, error) {
-
-	distro = strings.ToLower(distro)
-	var supported bool
-
-	switch distro {
-	case "rhel", "redhat", "centos", "scientificlinux", "oraclelinux", "rocky", "circle":
-		supported = version >= 4 && version <= 10
-	case "fedora":
-		supported = true
-	case "altlinux":
-		supported = version >= 9
-	case "sles", "suse-based":
-		supported = version >= 10
-	case "opensuse":
-		supported = version >= 10
-	case "debian":
-		supported = version >= 6
-	case "ubuntu", "linuxmint", "kalilinux":
-		supported = version >= 10
-	default:
-		return false, fmt.Errorf("unknown or unsupported Linux distro: %s", distro)
-	}
-
-	if !supported && version != 0 {
-		return false, fmt.Errorf("unsupported version %d for distro %s", version, distro)
-	}
-	return true, nil
+	return false
 }
