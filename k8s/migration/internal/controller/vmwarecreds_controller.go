@@ -129,6 +129,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	return ctrl.Result{RequeueAfter: constants.VMwareCredsRequeueAfter}, nil
 }
 
+// nolint:unparam
 func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
