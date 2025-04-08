@@ -121,7 +121,7 @@ func downloadFile(url, filePath string) error {
 }
 
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
-	// Convert the disk
+	// Step 1: Handle Windows driver injection
 	if ostype == "windows" {
 		filePath := "/home/fedora/virtio-win.iso"
 		log.Println("Downloading virtio windrivers")
@@ -133,44 +133,75 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		defer os.Remove(filePath)
 		os.Setenv("VIRTIO_WIN", filePath)
 	}
+
+	// Step 2: Set guestfs backend
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Step 3: Inspect disk and validate OS
+	log.Println("Inspecting disk with guestfish for OS compatibility check")
+	guestfishArgs := []string{
+		"--format=raw", "--ro",
+		"-a", diskPath,
+		"--",
+		"run", ":", "inspect-os", ":", "inspect-get-product-name",
+	}
+
+	output, err := exec.CommandContext(ctx, "guestfish", guestfishArgs...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to inspect OS using guestfish: %v\nOutput: %s", err, string(output))
+	}
+
+	osDetected := strings.ToLower(strings.TrimSpace(string(output)))
+	log.Printf("Detected OS: %s", osDetected)
+
+	// Supported OSes
+	supportedOS := []string{
+		"redhat",
+		"red hat",
+		"rhel",
+		"centos",
+		"scientific linux",
+		"oracle linux",
+		"fedora",
+		"sles",
+		"opensuse",
+		"alt linux",
+		"debian",
+		"ubuntu",
+		"windows",
+	}
+
+	supported := false
+	for _, s := range supportedOS {
+		if strings.Contains(osDetected, s) {
+			supported = true
+			break
+		}
+	}
+
+	if !supported {
+		return fmt.Errorf("unsupported OS detected by guestfish: %s", osDetected)
+	}
+	log.Println("OS compatibility check passed")
+
+	// Step 4: Prepare virt-v2v args
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
-	// Step 3: Perform pre-conversion compatibility check
-	checkArgs := []string{}
-	if useSingleDisk {
-		checkArgs = append(checkArgs, "-i", "disk", diskPath)
-	} else {
-		checkArgs = append(checkArgs, "-i", "libvirtxml", xmlFile, "--root", path)
-	}
-	checkArgs = append(checkArgs, "-o", "null", "-v", "-x")
-
-	checkCmd := exec.CommandContext(ctx, "virt-v2v", checkArgs...)
-	checkCmd.Stdout = os.Stdout
-	checkCmd.Stderr = os.Stderr
-
-	log.Printf("Performing compatibility check: %s", checkCmd.String())
-	if err := checkCmd.Run(); err != nil {
-		return fmt.Errorf("OS/disk is not supported for virt-v2v conversion: %w", err)
-	}
-	log.Println("Compatibility check passed")
-
 	if useSingleDisk {
 		args = append(args, "-i", "disk", diskPath)
 	} else {
 		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
 	}
-	cmd := exec.CommandContext(ctx,
-		"virt-v2v-in-place",
-		args...,
-	)
+
+	// Step 5: Run virt-v2v-in-place
+	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
