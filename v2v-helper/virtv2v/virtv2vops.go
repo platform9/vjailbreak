@@ -142,8 +142,8 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	guestfishArgs := []string{
 		"--format=raw", "--ro",
 		"-a", diskPath,
-		"--",
-		"run", ":", "inspect-os", ":", "inspect-get-product-name",
+		"-i",
+		"inspect-get-product-name",
 	}
 
 	output, err := exec.CommandContext(ctx, "guestfish", guestfishArgs...).CombinedOutput()
