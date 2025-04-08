@@ -449,6 +449,37 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return fmt.Errorf("failed to get os release: %s", err)
 			}
 		}
+		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
+		fmt.Println("OS detected by guestfish: %s", osDetected)
+		// Supported OSes
+		supportedOS := []string{
+			"redhat",
+			"red hat",
+			"rhel",
+			"centos",
+			"scientific linux",
+			"oracle linux",
+			"fedora",
+			"sles",
+			"opensuse",
+			"alt linux",
+			"debian",
+			"ubuntu",
+		}
+
+		supported := false
+		for _, s := range supportedOS {
+			if strings.Contains(osDetected, s) {
+				supported = true
+				break
+			}
+		}
+
+		if !supported {
+			return fmt.Errorf("unsupported OS detected by guestfish: %s", osDetected)
+		}
+		log.Println("OS compatibility check passed")
+
 	}
 
 	// save the index of bootVolume

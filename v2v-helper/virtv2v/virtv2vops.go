@@ -137,48 +137,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// Step 2: Set guestfs backend
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	// Step 3: Inspect disk and validate OS
-	log.Println("Inspecting disk with guestfish for OS compatibility check")
-	productCmd := exec.CommandContext(ctx, "guestfish", "--format=raw", "--ro", "-a", diskPath, "-i")
-	productCmd.Stdin = strings.NewReader("inspect-get-product-name\n")
-	productOutput, err := productCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get product name using guestfish: %v\nOutput: %s", err, string(productOutput))
-	}
-	osDetected := strings.ToLower(strings.TrimSpace(string(productOutput)))
-	log.Printf("Detected OS: %s", osDetected)
-
-	// Supported OSes
-	supportedOS := []string{
-		"redhat",
-		"red hat",
-		"rhel",
-		"centos",
-		"scientific linux",
-		"oracle linux",
-		"fedora",
-		"sles",
-		"opensuse",
-		"alt linux",
-		"debian",
-		"ubuntu",
-		"windows",
-	}
-
-	supported := false
-	for _, s := range supportedOS {
-		if strings.Contains(osDetected, s) {
-			supported = true
-			break
-		}
-	}
-
-	if !supported {
-		return fmt.Errorf("unsupported OS detected by guestfish: %s", osDetected)
-	}
-	log.Println("OS compatibility check passed")
-
-	// Step 4: Prepare virt-v2v args
+	// Step 3: Prepare virt-v2v args
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
@@ -195,7 +154,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
