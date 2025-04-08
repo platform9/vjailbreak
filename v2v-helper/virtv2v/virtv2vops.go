@@ -138,6 +138,25 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
+	// Step 3: Perform pre-conversion compatibility check
+	checkArgs := []string{}
+	if useSingleDisk {
+		checkArgs = append(checkArgs, "-i", "disk", diskPath)
+	} else {
+		checkArgs = append(checkArgs, "-i", "libvirtxml", xmlFile, "--root", path)
+	}
+	checkArgs = append(checkArgs, "--dry-run", "-v", "-x")
+
+	checkCmd := exec.CommandContext(ctx, "virt-v2v", checkArgs...)
+	checkCmd.Stdout = os.Stdout
+	checkCmd.Stderr = os.Stderr
+
+	log.Printf("Performing compatibility check: %s", checkCmd.String())
+	if err := checkCmd.Run(); err != nil {
+		return fmt.Errorf("OS/disk is not supported for virt-v2v conversion: %w", err)
+	}
+	log.Println("Compatibility check passed")
+
 	if useSingleDisk {
 		args = append(args, "-i", "disk", diskPath)
 	} else {

@@ -740,7 +740,9 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrap(fmt.Errorf("VM '%s' not found in VMwareMachine", vm), "failed to find vmwaremachine")
 		}
 		if !vmMachineObj.Spec.VMs.Supported {
-			return errors.Wrap(fmt.Errorf("VM '%v' with guest '%v' and version '%v' is not supported", vm, vmMachineObj.Spec.VMs.GuestID, vmMachineObj.Spec.VMs.MajorVer), "failed to find vmwaremachine")
+			return errors.Wrap(fmt.Errorf("VM '%v' with guest '%v' and version '%v' is not supported", vm,
+				vmMachineObj.Spec.VMs.GuestID, vmMachineObj.Spec.VMs.MajorVer),
+				"failed to find vmwaremachine")
 		}
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
