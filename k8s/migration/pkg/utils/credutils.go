@@ -594,13 +594,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
-		var guestID, guestFull, distro string
-		var major int
-		if vmProps.Guest != nil {
-			guestID = vmProps.Config.GuestId
-			guestFull = vmProps.Guest.GuestFullName
-		}
-		supported := true
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
@@ -611,11 +604,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			OSType:     vmProps.Guest.GuestFamily,
 			CPU:        int(vmProps.Config.Hardware.NumCPU),
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
-			GuestID:    guestID,
-			GuestFull:  guestFull,
-			Distro:     distro,
-			MajorVer:   major,
-			Supported:  supported,
 		})
 	}
 
