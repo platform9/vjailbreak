@@ -600,7 +600,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			guestID = vmProps.Config.GuestId
 			guestFull = vmProps.Guest.GuestFullName
 		}
-		supported := isValidGuestOS(guestFull)
+		supported := true
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
@@ -798,34 +798,4 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_vCPUs", cpu,
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
-}
-
-func isValidGuestOS(guestOS string) bool {
-	// Convert to lowercase for case-insensitive comparison
-	osLower := strings.ToLower(guestOS)
-	// List of supported OS strings to check
-	supportedOS := []string{
-		"redhat",
-		"red hat",
-		"rhel",
-		"centos",
-		"scientific linux",
-		"oracle linux",
-		"fedora",
-		"sles",
-		"opensuse",
-		"alt linux",
-		"debian",
-		"ubuntu",
-		"windows",
-	}
-
-	// Check if the OS contains any of the supported strings
-	for _, os := range supportedOS {
-		if strings.Contains(osLower, os) {
-			return true
-		}
-	}
-
-	return false
 }
