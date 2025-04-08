@@ -57,6 +57,9 @@ const (
 	// NumberOfDisksLabel is the label for number of disks
 	NumberOfDisksLabel = "vjailbreak.k8s.pf9.io/disk-count"
 
+	// VMwareClusterLabel is the label for vmware cluster
+	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vcenter-cluster"
+
 	// OpenstackCredsFinalizer is the finalizer for openstack credentials
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 
@@ -68,6 +71,9 @@ const (
 
 	// VMwareCredsFinalizer is the finalizer for vmware credentials
 	VMwareCredsFinalizer = "vmwarecreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
+	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
 
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
