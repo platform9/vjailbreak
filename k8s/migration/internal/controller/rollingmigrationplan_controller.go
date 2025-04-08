@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -92,22 +93,25 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	migrationPlan := scope.RollingMigrationPlan
 	log.Info(fmt.Sprintf("Reconciling RollingMigrationPlan '%s'", migrationPlan.Name))
 	controllerutil.AddFinalizer(migrationPlan, constants.RollingMigrationPlanFinalizer)
-
+	var clusterMigration *vjailbreakv1alpha1.ClusterMigration
+	var err error
 	if migrationPlan.Status.Phase == "" {
 		migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseWaiting
-	}
-	if scope.RollingMigrationPlan.Status.Phase == constants.RollingMigrationPlanPhaseSucceeded {
+	} else if migrationPlan.Status.Phase == constants.RollingMigrationPlanPhaseSucceeded {
 		log.Info("RollingMigrationPlan already succeeded")
+		return ctrl.Result{}, nil
+	} else if migrationPlan.Status.Phase == constants.RollingMigrationPlanPhaseFailed {
+		log.Info("RollingMigrationPlan already failed")
 		return ctrl.Result{}, nil
 	}
 	// execute rolling migration plan
 	for _, cluster := range scope.RollingMigrationPlan.Spec.VCenterClusterSequence {
 		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
 		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
-		clusterMigration, err := utils.GetClusterMigration(ctx, scope)
+		clusterMigration, err = utils.GetClusterMigration(ctx, cluster)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if err := utils.CreateClusterMigration(ctx, scope); err != nil {
+				if clusterMigration, err = utils.CreateClusterMigration(ctx, cluster); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to create cluster migration")
 				}
 			} else {
@@ -116,19 +120,24 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		}
 		if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseFailed {
 			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
-			return ctrl.Result{}, errors.New("cluster migration failed")
+			migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseFailed
+			migrationPlan.Status.Message = clusterMigration.Status.Message
+			if err := r.Status().Update(ctx, migrationPlan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return ctrl.Result{}, nil
 		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseSucceeded {
 			continue
+		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseRunning {
+			migrationPlan.Status.CurrentCluster = cluster
+			migrationPlan.Status.CurrentESXI = clusterMigration.Status.CurrentESXI
+			migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseRunning
+
+			if err := r.Status().Update(ctx, migrationPlan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
-
-		migrationPlan.Status.CurrentCluster = cluster
-		migrationPlan.Status.CurrentESXI = clusterMigration.Status.CurrentESXI
-		migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseRunning
-
-		if err := r.Status().Update(ctx, migrationPlan); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
-		}
-
 	}
 
 	return ctrl.Result{}, nil

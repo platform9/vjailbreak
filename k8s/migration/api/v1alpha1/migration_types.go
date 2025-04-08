@@ -25,6 +25,9 @@ import (
 // +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
 type MigrationPhase string
 
+// MigrationConditionType represents the type of condition for a migration
+type MigrationConditionType string
+
 const (
 	// MigrationPhasePending indicates the migration is waiting to start
 	MigrationPhasePending MigrationPhase = "Pending"

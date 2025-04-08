@@ -18,12 +18,17 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -84,6 +89,53 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope *scope.ClusterMigrationScope) (ctrl.Result, error) {
+	log := scope.Logger
+	clusterMigration := scope.ClusterMigration
+	log.Info(fmt.Sprintf("Reconciling ClusterMigration '%s'", clusterMigration.Name))
+	controllerutil.AddFinalizer(clusterMigration, constants.ClusterMigrationFinalizer)
+	var esxiMigration *vjailbreakv1alpha1.ESXIMigration
+	var err error
+	if clusterMigration.Status.Phase == "" {
+		clusterMigration.Status.Phase = constants.ClusterMigrationPhaseWaiting
+	} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseSucceeded {
+		log.Info("Cluster migration already succeeded")
+		return ctrl.Result{}, nil
+	} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseFailed {
+		log.Info("Cluster migration already failed")
+		return ctrl.Result{}, nil
+	}
+
+	for _, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
+		esxiMigration, err = utils.GetESXIMigration(ctx, esxi)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				if esxiMigration, err = utils.CreateESXIMigration(ctx, esxi); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to create esxi migration")
+				}
+			} else {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get esxi migration")
+			}
+		}
+
+		if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
+			clusterMigration.Status.Phase = constants.ClusterMigrationPhaseFailed
+			clusterMigration.Status.Message = esxiMigration.Status.Message
+			if err := r.Status().Update(ctx, clusterMigration); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+			}
+			return ctrl.Result{}, nil
+		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
+			continue
+		} else {
+			clusterMigration.Status.CurrentESXI = esxi
+			clusterMigration.Status.Message = esxiMigration.Status.Message
+			clusterMigration.Status.Phase = constants.ClusterMigrationPhaseRunning
+			if err := r.Status().Update(ctx, clusterMigration); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+			}
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
 	return ctrl.Result{}, nil
 }
 

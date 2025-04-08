@@ -20,6 +20,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type ESXIMigrationPhase string
+
+const (
+	ESXIMigrationPhaseWaiting   ESXIMigrationPhase = "Waiting"
+	ESXIMigrationPhaseRunning   ESXIMigrationPhase = "Running"
+	ESXIMigrationPhaseFailed    ESXIMigrationPhase = "Failed"
+	ESXIMigrationPhaseSucceeded ESXIMigrationPhase = "Succeeded"
+)
+
 // ESXIMigrationSpec defines the desired state of ESXIMigration
 type ESXIMigrationSpec struct {
 	ESXIName string `json:"esxiName"`
@@ -27,8 +36,9 @@ type ESXIMigrationSpec struct {
 
 // ESXIMigrationStatus defines the observed state of ESXIMigration
 type ESXIMigrationStatus struct {
-	VMs   []string `json:"vms,omitempty"`
-	Phase string   `json:"phase,omitempty"`
+	VMs     []string           `json:"vms,omitempty"`
+	Phase   ESXIMigrationPhase `json:"phase,omitempty"`
+	Message string             `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

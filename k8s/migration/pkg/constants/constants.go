@@ -30,6 +30,9 @@ const (
 	// RollingMigrationPlanControllerName is the name of the rolling migration plan controller
 	RollingMigrationPlanControllerName = "rollingmigrationplan-controller"
 
+	// ESXIMigrationControllerName is the name of the ESXi migration controller
+	ESXIMigrationControllerName = "esximigration-controller"
+
 	// ClusterMigrationControllerName is the name of the cluster migration controller
 	ClusterMigrationControllerName = "clustermigration-controller"
 
@@ -56,6 +59,12 @@ const (
 
 	// OpenstackCredsFinalizer is the finalizer for openstack credentials
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ClusterMigrationFinalizer is the finalizer for cluster migration
+	ClusterMigrationFinalizer = "clustermigration.k8s.pf9.io/finalizer"
+
+	// ESXIMigrationFinalizer is the finalizer for ESXi migration
+	ESXIMigrationFinalizer = "esximigration.k8s.pf9.io/finalizer"
 
 	// VMwareCredsFinalizer is the finalizer for vmware credentials
 	VMwareCredsFinalizer = "vmwarecreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
