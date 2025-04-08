@@ -145,7 +145,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	} else {
 		checkArgs = append(checkArgs, "-i", "libvirtxml", xmlFile, "--root", path)
 	}
-	checkArgs = append(checkArgs, "--dry-run", "-v", "-x")
+	checkArgs = append(checkArgs, "-o", "null", "-v", "-x")
 
 	checkCmd := exec.CommandContext(ctx, "virt-v2v", checkArgs...)
 	checkCmd.Stdout = os.Stdout
