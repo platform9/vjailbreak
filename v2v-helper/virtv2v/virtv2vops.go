@@ -139,19 +139,13 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Step 3: Inspect disk and validate OS
 	log.Println("Inspecting disk with guestfish for OS compatibility check")
-	guestfishArgs := []string{
-		"--format=raw", "--ro",
-		"-a", diskPath,
-		"-i",
-		"inspect-get-product-name",
-	}
-
-	output, err := exec.CommandContext(ctx, "guestfish", guestfishArgs...).CombinedOutput()
+	productCmd := exec.CommandContext(ctx, "guestfish", "--format=raw", "--ro", "-a", diskPath, "-i")
+	productCmd.Stdin = strings.NewReader("inspect-get-product-name\n")
+	productOutput, err := productCmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to inspect OS using guestfish: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to get product name using guestfish: %v\nOutput: %s", err, string(productOutput))
 	}
-
-	osDetected := strings.ToLower(strings.TrimSpace(string(output)))
+	osDetected := strings.ToLower(strings.TrimSpace(string(productOutput)))
 	log.Printf("Detected OS: %s", osDetected)
 
 	// Supported OSes
