@@ -14,7 +14,17 @@ spec:
     singular: clustermigration
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.currentESXI
+      name: Current ESXI
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ClusterMigration is the Schema for the clustermigrations API
@@ -49,13 +59,21 @@ spec:
           status:
             description: ClusterMigrationStatus defines the observed state of ClusterMigration
             properties:
+              currentESXI:
+                type: string
               message:
                 type: string
               phase:
-                description: ClusterMigrationPhase is the current phase of the cluster
-                  migration
+                description: ClusterMigrationPhase represents the current phase of
+                  the cluster migration
+                enum:
+                - Pending
+                - Running
+                - Completed
+                - Failed
                 type: string
             required:
+            - currentESXI
             - message
             - phase
             type: object

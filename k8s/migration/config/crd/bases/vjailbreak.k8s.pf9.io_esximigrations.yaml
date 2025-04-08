@@ -47,6 +47,8 @@ spec:
           status:
             description: ESXIMigrationStatus defines the observed state of ESXIMigration
             properties:
+              message:
+                type: string
               phase:
                 type: string
               vms:
