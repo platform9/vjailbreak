@@ -480,6 +480,10 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 		log.Println("OS compatibility check passed")
 
+	} else if vminfo.OSType == "windows" {
+		log.Println("OS compatibility check passed")
+	} else {
+		return fmt.Errorf("unsupported OS type: %s", vminfo.OSType)
 	}
 
 	// save the index of bootVolume
