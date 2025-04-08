@@ -27,6 +27,12 @@ const (
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
+	// RollingMigrationPlanControllerName is the name of the rolling migration plan controller
+	RollingMigrationPlanControllerName = "rollingmigrationplan-controller"
+
+	// ClusterMigrationControllerName is the name of the cluster migration controller
+	ClusterMigrationControllerName = "clustermigration-controller"
+
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
@@ -99,6 +105,24 @@ const (
 
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
+
+	// RollingMigrationPlanPhaseWaiting is the phase for waiting
+	RollingMigrationPlanPhaseWaiting vjailbreakv1alpha1.RollingMigrationPlanPhase = "Waiting"
+	// RollingMigrationPlanPhaseRunning is the phase for running
+	RollingMigrationPlanPhaseRunning vjailbreakv1alpha1.RollingMigrationPlanPhase = "Running"
+	// RollingMigrationPlanPhaseFailed is the phase for failed
+	RollingMigrationPlanPhaseFailed vjailbreakv1alpha1.RollingMigrationPlanPhase = "Failed"
+	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
+	RollingMigrationPlanPhaseSucceeded vjailbreakv1alpha1.RollingMigrationPlanPhase = "Succeeded"
+
+	// ClusterMigrationPhaseWaiting is the phase for waiting
+	ClusterMigrationPhaseWaiting vjailbreakv1alpha1.ClusterMigrationPhase = "Waiting"
+	// ClusterMigrationPhaseRunning is the phase for running
+	ClusterMigrationPhaseRunning vjailbreakv1alpha1.ClusterMigrationPhase = "Running"
+	// ClusterMigrationPhaseFailed is the phase for failed
+	ClusterMigrationPhaseFailed vjailbreakv1alpha1.ClusterMigrationPhase = "Failed"
+	// ClusterMigrationPhaseSucceeded is the phase for succeeded
+	ClusterMigrationPhaseSucceeded vjailbreakv1alpha1.ClusterMigrationPhase = "Succeeded"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization

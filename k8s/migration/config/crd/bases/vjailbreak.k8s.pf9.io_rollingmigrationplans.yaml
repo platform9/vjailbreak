@@ -40,14 +40,50 @@ spec:
           spec:
             description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
             properties:
-              foo:
-                description: Foo is an example field of RollingMigrationPlan. Edit
-                  rollingmigrationplan_types.go to remove/update
-                type: string
+              vcenterClusterSequence:
+                description: VCenterClusterSequence is the sequence of vCenter clusters
+                  to be migrated
+                items:
+                  type: string
+                type: array
+            required:
+            - vcenterClusterSequence
             type: object
           status:
             description: RollingMigrationPlanStatus defines the observed state of
               RollingMigrationPlan
+            properties:
+              currentCluster:
+                description: CurrentCluster is the name of the current vCenter cluster
+                  being migrated
+                type: string
+              currentESXI:
+                description: CurrentESXI is the name of the current ESXi host being
+                  migrated
+                type: string
+              currentVM:
+                description: CurrentVM is the name of the current virtual machine
+                  being migrated
+                type: string
+              failedVMs:
+                description: FailedVMs is the list of virtual machines that have failed
+                  to migrate
+                items:
+                  type: string
+                type: array
+              message:
+                description: Message is the message associated with the current state
+                  of the migration
+                type: string
+              migratedVMs:
+                description: MigratedVMs is the list of virtual machines that have
+                  been migrated
+                items:
+                  type: string
+                type: array
+              phase:
+                description: Phase is the current phase of the migration
+                type: string
             type: object
         type: object
     served: true

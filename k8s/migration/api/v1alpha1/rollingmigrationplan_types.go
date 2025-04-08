@@ -20,12 +20,30 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type RollingMigrationPlanPhase string
+
 // RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
 type RollingMigrationPlanSpec struct {
+	// VCenterClusterSequence is the sequence of vCenter clusters to be migrated
+	VCenterClusterSequence []string `json:"vcenterClusterSequence"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan
 type RollingMigrationPlanStatus struct {
+	// Phase is the current phase of the migration
+	Phase RollingMigrationPlanPhase `json:"phase,omitempty"`
+	// CurrentESXI is the name of the current ESXi host being migrated
+	CurrentESXI string `json:"currentESXI,omitempty"`
+	// CurrentCluster is the name of the current vCenter cluster being migrated
+	CurrentCluster string `json:"currentCluster,omitempty"`
+	// CurrentVM is the name of the current virtual machine being migrated
+	CurrentVM string `json:"currentVM,omitempty"`
+	// Message is the message associated with the current state of the migration
+	Message string `json:"message,omitempty"`
+	// MigratedVMs is the list of virtual machines that have been migrated
+	MigratedVMs []string `json:"migratedVMs,omitempty"`
+	// FailedVMs is the list of virtual machines that have failed to migrate
+	FailedVMs []string `json:"failedVMs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

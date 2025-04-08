@@ -58,6 +58,8 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations
+  - esximigrations
   - migrationplans
   - migrations
   - migrationtemplates
@@ -81,6 +83,8 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/finalizers
+  - esximigrations/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -94,6 +98,8 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/status
+  - esximigrations/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
