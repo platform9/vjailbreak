@@ -58,11 +58,14 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations
+  - esximigrations
   - migrationplans
   - migrations
   - migrationtemplates
   - networkmappings
   - openstackcreds
+  - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
   - vmwareclusters
@@ -80,10 +83,13 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/finalizers
+  - esximigrations/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
+  - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
@@ -92,11 +98,14 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/status
+  - esximigrations/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
+  - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status

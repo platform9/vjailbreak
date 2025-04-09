@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: vmwareclusters.vjailbreak.k8s.pf9.io
+  name: esximigrations.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
   names:
-    kind: VMwareCluster
-    listKind: VMwareClusterList
-    plural: vmwareclusters
-    singular: vmwarecluster
+    kind: ESXIMigration
+    listKind: ESXIMigrationList
+    plural: esximigrations
+    singular: esximigration
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareCluster is the Schema for the vmwareclusters API
+        description: ESXIMigration is the Schema for the esximigrations API
         properties:
           apiVersion:
             description: |-
@@ -37,21 +37,24 @@ spec:
           metadata:
             type: object
           spec:
-            description: VMwareClusterSpec defines the desired state of VMwareCluster
+            description: ESXIMigrationSpec defines the desired state of ESXIMigration
             properties:
-              hosts:
+              esxiName:
+                type: string
+            required:
+            - esxiName
+            type: object
+          status:
+            description: ESXIMigrationStatus defines the observed state of ESXIMigration
+            properties:
+              message:
+                type: string
+              phase:
+                type: string
+              vms:
                 items:
                   type: string
                 type: array
-              name:
-                type: string
-            type: object
-          status:
-            description: VMwareClusterStatus defines the observed state of VMwareCluster
-            properties:
-              phase:
-                description: VMwareClusterPhase represents the phase of a VMwareCluster
-                type: string
             type: object
         type: object
     served: true

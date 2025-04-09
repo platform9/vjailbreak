@@ -15,9 +15,12 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.NetworkmappingValidationStatus
+    - jsonPath: .status.networkMappingValidationStatus
       name: Status
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -44,14 +47,17 @@ spec:
             description: NetworkMappingSpec defines the desired state of NetworkMapping
             properties:
               networks:
-                description: Networks is the list of networks
+                description: Networks is the list of network mappings between source
+                  and target environments
                 items:
-                  description: Network defines the mapping between source and destination
+                  description: Network represents a mapping between source and target
                     networks
                   properties:
                     source:
+                      description: Source is the name of the source network in VMware
                       type: string
                     target:
+                      description: Target is the name of the target network in OpenStack
                       type: string
                   required:
                   - source
@@ -65,8 +71,12 @@ spec:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
             properties:
               networkMappingValidationMessage:
+                description: NetworkmappingValidationMessage provides detailed validation
+                  information
                 type: string
               networkMappingValidationStatus:
+                description: NetworkmappingValidationStatus indicates the validation
+                  status of the network mapping
                 type: string
             type: object
         type: object

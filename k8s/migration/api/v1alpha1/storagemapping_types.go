@@ -22,25 +22,30 @@ import (
 
 // StorageMappingSpec defines the desired state of StorageMapping
 type StorageMappingSpec struct {
-	// Storages is a list of storage mappings
+	// Storages is a list of storage mappings between source and target environments
 	Storages []Storage `json:"storages"`
 }
 
-// Storage defines the mapping between source and destination storage
+// Storage represents a mapping between source and target storage types
 type Storage struct {
+	// Source is the name of the source storage type in VMware
 	Source string `json:"source"`
+	// Target is the name of the target storage type in OpenStack
 	Target string `json:"target"`
 }
 
 // StorageMappingStatus defines the observed state of StorageMapping
 type StorageMappingStatus struct {
-	StoragemappingValidationStatus  string `json:"storageMappingValidationStatus,omitempty"`
+	// StoragemappingValidationStatus indicates the validation status of the storage mapping
+	StoragemappingValidationStatus string `json:"storageMappingValidationStatus,omitempty"`
+	// StoragemappingValidationMessage provides detailed validation information
 	StoragemappingValidationMessage string `json:"storageMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.storageMappingValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.storageMappingValidationStatus"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // StorageMapping is the Schema for the storagemappings API
 type StorageMapping struct {

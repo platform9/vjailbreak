@@ -12,6 +12,153 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: clustermigrations.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ClusterMigration
+    listKind: ClusterMigrationList
+    plural: clustermigrations
+    singular: clustermigration
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.currentESXI
+      name: Current ESXI
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterMigration is the Schema for the clustermigrations API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ClusterMigrationSpec defines the desired state of ClusterMigration
+            properties:
+              esxiMigrationSequence:
+                items:
+                  type: string
+                type: array
+            required:
+            - esxiMigrationSequence
+            type: object
+          status:
+            description: ClusterMigrationStatus defines the observed state of ClusterMigration
+            properties:
+              currentESXI:
+                type: string
+              message:
+                type: string
+              phase:
+                description: ClusterMigrationPhase represents the current phase of
+                  the cluster migration
+                enum:
+                - Pending
+                - Running
+                - Completed
+                - Failed
+                type: string
+            required:
+            - currentESXI
+            - message
+            - phase
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: esximigrations.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ESXIMigration
+    listKind: ESXIMigrationList
+    plural: esximigrations
+    singular: esximigration
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ESXIMigration is the Schema for the esximigrations API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ESXIMigrationSpec defines the desired state of ESXIMigration
+            properties:
+              esxiName:
+                type: string
+            required:
+            - esxiName
+            type: object
+          status:
+            description: ESXIMigrationStatus defines the observed state of ESXIMigration
+            properties:
+              message:
+                type: string
+              phase:
+                type: string
+              vms:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationplans.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -153,8 +300,11 @@ spec:
       name: Phase
       type: string
     - jsonPath: .status.agentName
-      name: AgentName
+      name: Agent Name
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -248,6 +398,18 @@ spec:
                 type: array
               phase:
                 description: Phase is the current phase of the migration
+                enum:
+                - Pending
+                - Validating
+                - AwaitingDataCopyStart
+                - CopyingBlocks
+                - CopyingChangedBlocks
+                - ConvertingDisk
+                - AwaitingCutOverStartTime
+                - AwaitingAdminCutOver
+                - Succeeded
+                - Failed
+                - Unknown
                 type: string
             required:
             - phase
@@ -318,12 +480,9 @@ spec:
                 description: MigrationTemplateSource defines the source details for
                   the migrationtemplate
                 properties:
-                  datacenter:
-                    type: string
                   vmwareRef:
                     type: string
                 required:
-                - datacenter
                 - vmwareRef
                 type: object
               storageMapping:
@@ -335,53 +494,6 @@ spec:
             - networkMapping
             - source
             - storageMapping
-            type: object
-          status:
-            description: MigrationTemplateStatus defines the observed state of MigrationTemplate
-            properties:
-              openstack:
-                description: OpenstackInfo contains OpenStack-specific information
-                properties:
-                  networks:
-                    items:
-                      type: string
-                    type: array
-                  volumeTypes:
-                    items:
-                      type: string
-                    type: array
-                type: object
-              vmware:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
-                items:
-                  description: VMInfo contains information about a virtual machine
-                  properties:
-                    datastores:
-                      items:
-                        type: string
-                      type: array
-                    disks:
-                      items:
-                        type: string
-                      type: array
-                    ipAddress:
-                      type: string
-                    name:
-                      type: string
-                    networks:
-                      items:
-                        type: string
-                      type: array
-                    osType:
-                      type: string
-                    vmState:
-                      type: string
-                  required:
-                  - name
-                  type: object
-                type: array
             type: object
         type: object
     served: true
@@ -405,9 +517,12 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.NetworkmappingValidationStatus
+    - jsonPath: .status.networkMappingValidationStatus
       name: Status
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -434,14 +549,17 @@ spec:
             description: NetworkMappingSpec defines the desired state of NetworkMapping
             properties:
               networks:
-                description: Networks is the list of networks
+                description: Networks is the list of network mappings between source
+                  and target environments
                 items:
-                  description: Network defines the mapping between source and destination
+                  description: Network represents a mapping between source and target
                     networks
                   properties:
                     source:
+                      description: Source is the name of the source network in VMware
                       type: string
                     target:
+                      description: Target is the name of the target network in OpenStack
                       type: string
                   required:
                   - source
@@ -455,8 +573,12 @@ spec:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
             properties:
               networkMappingValidationMessage:
+                description: NetworkmappingValidationMessage provides detailed validation
+                  information
                 type: string
               networkMappingValidationStatus:
+                description: NetworkmappingValidationStatus indicates the validation
+                  status of the network mapping
                 type: string
             type: object
         type: object
@@ -509,6 +631,58 @@ spec:
           spec:
             description: OpenstackCredsSpec defines the desired state of OpenstackCreds
             properties:
+              flavors:
+                description: Flavors is the list of available flavors in openstack
+                items:
+                  description: |-
+                    Flavor represent (virtual) hardware configurations for server resources
+                    in a region.
+                  properties:
+                    OS-FLV-EXT-DATA:ephemeral:
+                      description: Ephemeral is the amount of ephemeral disk space,
+                        measured in GB.
+                      type: integer
+                    description:
+                      description: |-
+                        Description is a free form description of the flavor. Limited to
+                        65535 characters in length. Only printable characters are allowed.
+                        New in version 2.55
+                      type: string
+                    disk:
+                      description: Disk is the amount of root disk, measured in GB.
+                      type: integer
+                    id:
+                      description: ID is the flavor's unique ID.
+                      type: string
+                    name:
+                      description: Name is the name of the flavor.
+                      type: string
+                    os-flavor-access:is_public:
+                      description: IsPublic indicates whether the flavor is public.
+                      type: boolean
+                    ram:
+                      description: RAM is the amount of memory, measured in MB.
+                      type: integer
+                    rxtx_factor:
+                      description: RxTxFactor describes bandwidth alterations of the
+                        flavor.
+                      type: number
+                    vcpus:
+                      description: VCPUs indicates how many (virtual) CPUs are available
+                        for this flavor.
+                      type: integer
+                  required:
+                  - OS-FLV-EXT-DATA:ephemeral
+                  - description
+                  - disk
+                  - id
+                  - name
+                  - os-flavor-access:is_public
+                  - ram
+                  - rxtx_factor
+                  - vcpus
+                  type: object
+                type: array
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -557,9 +731,113 @@ spec:
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
             properties:
+              openstack:
+                description: Openstack is the Openstack configuration for the openstackcreds
+                properties:
+                  networks:
+                    items:
+                      type: string
+                    type: array
+                  volumeTypes:
+                    items:
+                      type: string
+                    type: array
+                type: object
               openstackValidationMessage:
                 type: string
               openstackValidationStatus:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: rollingmigrationplans.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: RollingMigrationPlan
+    listKind: RollingMigrationPlanList
+    plural: rollingmigrationplans
+    singular: rollingmigrationplan
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: RollingMigrationPlan is the Schema for the rollingmigrationplans
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
+            properties:
+              vcenterClusterSequence:
+                description: VCenterClusterSequence is the sequence of vCenter clusters
+                  to be migrated
+                items:
+                  type: string
+                type: array
+            required:
+            - vcenterClusterSequence
+            type: object
+          status:
+            description: RollingMigrationPlanStatus defines the observed state of
+              RollingMigrationPlan
+            properties:
+              currentCluster:
+                description: CurrentCluster is the name of the current vCenter cluster
+                  being migrated
+                type: string
+              currentESXI:
+                description: CurrentESXI is the name of the current ESXi host being
+                  migrated
+                type: string
+              currentVM:
+                description: CurrentVM is the name of the current virtual machine
+                  being migrated
+                type: string
+              failedVMs:
+                description: FailedVMs is the list of virtual machines that have failed
+                  to migrate
+                items:
+                  type: string
+                type: array
+              message:
+                description: Message is the message associated with the current state
+                  of the migration
+                type: string
+              migratedVMs:
+                description: MigratedVMs is the list of virtual machines that have
+                  been migrated
+                items:
+                  type: string
+                type: array
+              phase:
+                description: Phase is the current phase of the migration
                 type: string
             type: object
         type: object
@@ -587,6 +865,9 @@ spec:
     - jsonPath: .status.storageMappingValidationStatus
       name: Status
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -613,14 +894,19 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
-                description: Storages is a list of storage mappings
+                description: Storages is a list of storage mappings between source
+                  and target environments
                 items:
-                  description: Storage defines the mapping between source and destination
-                    storage
+                  description: Storage represents a mapping between source and target
+                    storage types
                   properties:
                     source:
+                      description: Source is the name of the source storage type in
+                        VMware
                       type: string
                     target:
+                      description: Target is the name of the target storage type in
+                        OpenStack
                       type: string
                   required:
                   - source
@@ -634,8 +920,12 @@ spec:
             description: StorageMappingStatus defines the observed state of StorageMapping
             properties:
               storageMappingValidationMessage:
+                description: StoragemappingValidationMessage provides detailed validation
+                  information
                 type: string
               storageMappingValidationStatus:
+                description: StoragemappingValidationStatus indicates the validation
+                  status of the storage mapping
                 type: string
             type: object
         type: object
@@ -691,59 +981,6 @@ spec:
           spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
-              availableFlavors:
-                description: AvailableFlavors is the list of available flavors in
-                  openstack
-                items:
-                  description: |-
-                    Flavor represent (virtual) hardware configurations for server resources
-                    in a region.
-                  properties:
-                    OS-FLV-EXT-DATA:ephemeral:
-                      description: Ephemeral is the amount of ephemeral disk space,
-                        measured in GB.
-                      type: integer
-                    description:
-                      description: |-
-                        Description is a free form description of the flavor. Limited to
-                        65535 characters in length. Only printable characters are allowed.
-                        New in version 2.55
-                      type: string
-                    disk:
-                      description: Disk is the amount of root disk, measured in GB.
-                      type: integer
-                    id:
-                      description: ID is the flavor's unique ID.
-                      type: string
-                    name:
-                      description: Name is the name of the flavor.
-                      type: string
-                    os-flavor-access:is_public:
-                      description: IsPublic indicates whether the flavor is public.
-                      type: boolean
-                    ram:
-                      description: RAM is the amount of memory, measured in MB.
-                      type: integer
-                    rxtx_factor:
-                      description: RxTxFactor describes bandwidth alterations of the
-                        flavor.
-                      type: number
-                    vcpus:
-                      description: VCPUs indicates how many (virtual) CPUs are available
-                        for this flavor.
-                      type: integer
-                  required:
-                  - OS-FLV-EXT-DATA:ephemeral
-                  - description
-                  - disk
-                  - id
-                  - name
-                  - os-flavor-access:is_public
-                  - ram
-                  - rxtx_factor
-                  - vcpus
-                  type: object
-                type: array
               nodeRole:
                 description: NodeRole is the role assigned to the node
                 type: string
@@ -880,6 +1117,7 @@ spec:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
+                description: VMwareClusterPhase represents the phase of a VMwareCluster
                 type: string
             type: object
         type: object
@@ -932,6 +1170,8 @@ spec:
           spec:
             description: VMwareCredsSpec defines the desired state of VMwareCreds
             properties:
+              datacenter:
+                type: string
               secretRef:
                 description: ObjectReference contains enough information to let you
                   inspect or modify the referred object.
@@ -976,6 +1216,8 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+            required:
+            - datacenter
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
@@ -1043,6 +1285,100 @@ spec:
     subresources:
       status: {}
 ---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: vmwaremachines.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: VMwareMachine
+    listKind: VMwareMachineList
+    plural: vmwaremachines
+    singular: vmwaremachine
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: VMwareMachine is the Schema for the vmwaremachines API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VMwareMachineSpec defines the desired state of VMwareMachine
+            properties:
+              targetFlavorId:
+                description: TargetFlavorId is the flavor to be used to create the
+                  target VM on openstack
+                type: string
+              vms:
+                description: VMInfo is the info of the VMs in the VMwareMachine
+                properties:
+                  cpu:
+                    type: integer
+                  datastores:
+                    items:
+                      type: string
+                    type: array
+                  disks:
+                    items:
+                      type: string
+                    type: array
+                  ipAddress:
+                    type: string
+                  memory:
+                    type: integer
+                  name:
+                    type: string
+                  networks:
+                    items:
+                      type: string
+                    type: array
+                  osType:
+                    type: string
+                  vmState:
+                    type: string
+                required:
+                - name
+                type: object
+            type: object
+          status:
+            description: VMwareMachineStatus defines the observed state of VMwareMachine
+            properties:
+              migrated:
+                default: false
+                description: Migrated flag to indicate if the VMs have been migrated
+                type: boolean
+              powerState:
+                description: PowerState is the state of the VMs in the VMware
+                type: string
+            required:
+            - migrated
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1092,6 +1428,106 @@ rules:
   verbs:
   - create
   - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-clustermigration-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - clustermigrations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - clustermigrations/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-clustermigration-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - clustermigrations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - clustermigrations/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-esximigration-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - esximigrations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - esximigrations/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-esximigration-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - esximigrations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - esximigrations/status
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1152,16 +1588,20 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations
+  - esximigrations
   - migrationplans
   - migrations
   - migrationtemplates
   - networkmappings
   - openstackcreds
+  - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
   - vmwareclusters
   - vmwarecreds
   - vmwarehosts
+  - vmwaremachines
   verbs:
   - create
   - delete
@@ -1173,10 +1613,13 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/finalizers
+  - esximigrations/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
+  - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
@@ -1185,14 +1628,18 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - clustermigrations/status
+  - esximigrations/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
+  - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwaremachines/status
   verbs:
   - get
   - patch
@@ -1454,6 +1901,56 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: migration
+  name: migration-rollingmigrationplan-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - rollingmigrationplans
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - rollingmigrationplans/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-rollingmigrationplan-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - rollingmigrationplans
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - rollingmigrationplans/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
   name: migration-storagemapping-editor-role
 rules:
 - apiGroups:
@@ -1695,6 +2192,56 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - vmwarehosts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-vmwaremachine-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwaremachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwaremachines/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-vmwaremachine-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwaremachines
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - vmwaremachines/status
   verbs:
   - get
 ---

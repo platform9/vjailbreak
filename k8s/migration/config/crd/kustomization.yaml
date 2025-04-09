@@ -13,6 +13,9 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_vmwaremachines.yaml
 - bases/vjailbreak.k8s.pf9.io_vmwareclusters.yaml
 - bases/vjailbreak.k8s.pf9.io_vmwarehosts.yaml
+- bases/vjailbreak.k8s.pf9.io_rollingmigrationplans.yaml
+- bases/vjailbreak.k8s.pf9.io_esximigrations.yaml
+- bases/vjailbreak.k8s.pf9.io_clustermigrations.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
@@ -33,6 +36,9 @@ patches:
 #- path: patches/cainjection_in_vmwaremachines.yaml
 #- path: patches/cainjection_in_vmwareclusters.yaml
 #- path: patches/cainjection_in_vmwarehosts.yaml
+#- path: patches/cainjection_in_rollingmigrationplans.yaml
+#- path: patches/cainjection_in_esximigrations.yaml
+#- path: patches/cainjection_in_clustermigrations.yaml
 # +kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section

@@ -102,6 +102,28 @@ resources:
   domain: k8s.pf9.io
   group: vjailbreak
   kind: VMwareHost
+  controller: true
+  domain: k8s.pf9.io
+  group: vjailbreak
+  kind: RollingMigrationPlan
+  path: github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8s.pf9.io
+  group: vjailbreak
+  kind: ESXIMigration
+  path: github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8s.pf9.io
+  group: vjailbreak
+  kind: ClusterMigration
   path: github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1
   version: v1alpha1
 version: "3"

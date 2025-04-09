@@ -18,6 +18,9 @@ spec:
     - jsonPath: .status.storageMappingValidationStatus
       name: Status
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -44,14 +47,19 @@ spec:
             description: StorageMappingSpec defines the desired state of StorageMapping
             properties:
               storages:
-                description: Storages is a list of storage mappings
+                description: Storages is a list of storage mappings between source
+                  and target environments
                 items:
-                  description: Storage defines the mapping between source and destination
-                    storage
+                  description: Storage represents a mapping between source and target
+                    storage types
                   properties:
                     source:
+                      description: Source is the name of the source storage type in
+                        VMware
                       type: string
                     target:
+                      description: Target is the name of the target storage type in
+                        OpenStack
                       type: string
                   required:
                   - source
@@ -65,8 +73,12 @@ spec:
             description: StorageMappingStatus defines the observed state of StorageMapping
             properties:
               storageMappingValidationMessage:
+                description: StoragemappingValidationMessage provides detailed validation
+                  information
                 type: string
               storageMappingValidationStatus:
+                description: StoragemappingValidationStatus indicates the validation
+                  status of the storage mapping
                 type: string
             type: object
         type: object

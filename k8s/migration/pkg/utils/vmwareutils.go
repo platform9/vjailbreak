@@ -25,7 +25,7 @@ type VMwareHostInfo struct {
 // It contains information about a VMware cluster and its associated hosts.
 type VMwareClusterInfo struct {
 	// Name is the unique identifier of the cluster
-	Name  string
+	Name string
 	// Hosts is a list of ESXi hosts that are part of this cluster
 	Hosts []VMwareHostInfo
 }

@@ -21,15 +21,12 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,6 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
@@ -98,87 +97,30 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress:   metricsAddr,
-			SecureServing: secureMetrics,
-			TLSOpts:       tlsOpts,
-		},
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "9cf7a6b4.k8s.pf9.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
-	})
+	// create manager
+	mgr, err := GetManager(metricsAddr, secureMetrics, tlsOpts, webhookServer, probeAddr, enableLeaderElection)
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
 	}
 
-	if err = (&controller.MigrationReconciler{
+	if err = SetupControllers(mgr); err != nil {
+		setupLog.Error(err, "unable to set up controllers")
+		os.Exit(1)
+	}
+
+	if err = (&controller.ESXIMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Migration")
+		setupLog.Error(err, "unable to create controller", "controller", "ESXIMigration")
 		os.Exit(1)
 	}
-	if err = (&controller.OpenstackCredsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Local:  local,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
-		os.Exit(1)
-	}
-	if err = (&controller.VMwareCredsReconciler{
+	if err = (&controller.ClusterMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
-		os.Exit(1)
-	}
-	if err = (&controller.StorageMappingReconciler{
-		BaseReconciler: controller.BaseReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-		},
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
-		os.Exit(1)
-	}
-	if err = (&controller.NetworkMappingReconciler{
-		BaseReconciler: controller.BaseReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-		},
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
-		os.Exit(1)
-	}
-	if err = (&controller.MigrationPlanReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
-		os.Exit(1)
-	}
-	if err = (&controller.VjailbreakNodeReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Local:  local,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterMigration")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
@@ -199,21 +141,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a channel to signal when cache is ready
-	cacheSyncCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Start the manager in a goroutine
-	go func() {
-		setupLog.Info("starting manager")
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			handleStartupError(err, "problem running manager")
-		}
-	}()
-
-	// Wait for cache to sync
-	if !mgr.GetCache().WaitForCacheSync(cacheSyncCtx) {
-		handleStartupError(fmt.Errorf("timeout waiting for cache to sync"), "")
+	setupLog.Info("starting manager")
+	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
 	}
 
 	// Now that cache is synced, we can create master node entry
@@ -223,4 +154,96 @@ func main() {
 
 	// Block forever
 	select {}
+}
+
+func GetManager(metricsAddr string,
+	secureMetrics bool,
+	tlsOpts []func(*tls.Config),
+	webhookServer webhook.Server,
+	probeAddr string,
+	enableLeaderElection bool) (ctrl.Manager, error) {
+	return ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress:   metricsAddr,
+			SecureServing: secureMetrics,
+			TLSOpts:       tlsOpts,
+		},
+		WebhookServer:          webhookServer,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "9cf7a6b4.k8s.pf9.io",
+	})
+}
+
+func SetupControllers(mgr ctrl.Manager) error {
+	if err := (&controller.MigrationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Migration")
+		return err
+	}
+	if err := (&controller.OpenstackCredsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
+		return err
+	}
+	if err := (&controller.VMwareCredsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
+		return err
+	}
+	if err := (&controller.StorageMappingReconciler{
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
+		return err
+	}
+	if err := (&controller.NetworkMappingReconciler{
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
+		return err
+	}
+	if err := (&controller.MigrationPlanReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
+		return err
+	}
+	if err := (&controller.MigrationTemplateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
+		return err
+	}
+	if err := (&controller.VjailbreakNodeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
+		return err
+	}
+	if err := (&controller.RollingMigrationPlanReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RollingMigrationPlan")
+		return err
+	}
+
+	return nil
 }

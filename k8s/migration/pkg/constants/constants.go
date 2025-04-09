@@ -27,11 +27,23 @@ const (
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
+	// RollingMigrationPlanControllerName is the name of the rolling migration plan controller
+	RollingMigrationPlanControllerName = "rollingmigrationplan-controller"
+
+	// ESXIMigrationControllerName is the name of the ESXi migration controller
+	ESXIMigrationControllerName = "esximigration-controller"
+
+	// ClusterMigrationControllerName is the name of the cluster migration controller
+	ClusterMigrationControllerName = "clustermigration-controller"
+
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+
+	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
+	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
 
 	// VMwareClusterLabel is the label for vmware cluster
 	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vmware-cluster"
@@ -47,6 +59,12 @@ const (
 
 	// OpenstackCredsFinalizer is the finalizer for openstack credentials
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ClusterMigrationFinalizer is the finalizer for cluster migration
+	ClusterMigrationFinalizer = "clustermigration.k8s.pf9.io/finalizer"
+
+	// ESXIMigrationFinalizer is the finalizer for ESXi migration
+	ESXIMigrationFinalizer = "esximigration.k8s.pf9.io/finalizer"
 
 	// VMwareCredsFinalizer is the finalizer for vmware credentials
 	VMwareCredsFinalizer = "vmwarecreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
@@ -101,6 +119,24 @@ const (
 
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
+
+	// RollingMigrationPlanPhaseWaiting is the phase for waiting
+	RollingMigrationPlanPhaseWaiting vjailbreakv1alpha1.RollingMigrationPlanPhase = "Waiting"
+	// RollingMigrationPlanPhaseRunning is the phase for running
+	RollingMigrationPlanPhaseRunning vjailbreakv1alpha1.RollingMigrationPlanPhase = "Running"
+	// RollingMigrationPlanPhaseFailed is the phase for failed
+	RollingMigrationPlanPhaseFailed vjailbreakv1alpha1.RollingMigrationPlanPhase = "Failed"
+	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
+	RollingMigrationPlanPhaseSucceeded vjailbreakv1alpha1.RollingMigrationPlanPhase = "Succeeded"
+
+	// ClusterMigrationPhaseWaiting is the phase for waiting
+	ClusterMigrationPhaseWaiting vjailbreakv1alpha1.ClusterMigrationPhase = "Waiting"
+	// ClusterMigrationPhaseRunning is the phase for running
+	ClusterMigrationPhaseRunning vjailbreakv1alpha1.ClusterMigrationPhase = "Running"
+	// ClusterMigrationPhaseFailed is the phase for failed
+	ClusterMigrationPhaseFailed vjailbreakv1alpha1.ClusterMigrationPhase = "Failed"
+	// ClusterMigrationPhaseSucceeded is the phase for succeeded
+	ClusterMigrationPhaseSucceeded vjailbreakv1alpha1.ClusterMigrationPhase = "Succeeded"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
