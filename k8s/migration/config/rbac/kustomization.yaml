@@ -19,6 +19,12 @@ resources:
 - vmwarehost_viewer_role.yaml
 - vmwarecluster_editor_role.yaml
 - vmwarecluster_viewer_role.yaml
+- clustermigration_editor_role.yaml
+- clustermigration_viewer_role.yaml
+- esximigration_editor_role.yaml
+- esximigration_viewer_role.yaml
+- rollingmigrationplan_editor_role.yaml
+- rollingmigrationplan_viewer_role.yaml
 - vjailbreaknode_editor_role.yaml
 - vjailbreaknode_viewer_role.yaml
 - migrationtemplate_editor_role.yaml
