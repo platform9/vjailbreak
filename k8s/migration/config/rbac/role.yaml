@@ -66,6 +66,7 @@ rules:
   - storagemappings
   - vjailbreaknodes
   - vmwarecreds
+  - vmwaremachines
   verbs:
   - create
   - delete
@@ -97,6 +98,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwaremachines/status
   verbs:
   - get
   - patch

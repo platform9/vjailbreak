@@ -17,20 +17,31 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+type OpenstackInfo struct {
+	VolumeTypes []string `json:"volumeTypes,omitempty"`
+	Networks    []string `json:"networks,omitempty"`
+}
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+
+	// Flavors is the list of available flavors in openstack
+	Flavors []flavors.Flavor `json:"flavors,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
-	OpenStackValidationStatus  string `json:"openstackValidationStatus,omitempty"`
-	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
+	// Openstack is the Openstack configuration for the openstackcreds
+	Openstack                  OpenstackInfo `json:"openstack,omitempty"`
+	OpenStackValidationStatus  string        `json:"openstackValidationStatus,omitempty"`
+	OpenStackValidationMessage string        `json:"openstackValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

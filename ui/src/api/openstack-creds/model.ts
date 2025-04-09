@@ -63,6 +63,14 @@ export interface FSpec {
   "f:OS_USERNAME": Empty
 }
 
+export interface OpenstackFlavor {
+  id: string
+  name: string
+  vcpus: number
+  ram: number
+  disk: number
+}
+
 export interface OpenstackCredsSpec {
   // For credentials using secretRef (new approach)
   secretRef?: {
@@ -76,6 +84,7 @@ export interface OpenstackCredsSpec {
   OS_REGION_NAME?: string
   OS_TENANT_NAME?: string
   OS_INSECURE?: boolean
+  flavors?: OpenStackFlavor[]
 }
 
 export interface GetOpenstackCredsListMetadata {
@@ -86,6 +95,10 @@ export interface GetOpenstackCredsListMetadata {
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
+  openstack?: {
+    networks?: string[]
+    volumeTypes?: string[]
+  }
 }
 
 export interface OpenstackImage {
@@ -97,4 +110,16 @@ export interface OpenstackImage {
 
 export interface OpenstackImagesResponse {
   images: OpenstackImage[]
+}
+
+export interface OpenStackFlavor {
+  "OS-FLV-EXT-DATA:ephemeral"?: number
+  description?: string
+  disk: number
+  id: string
+  name: string
+  "os-flavor-access:is_public"?: boolean
+  ram: number
+  rxtx_factor?: number
+  vcpus: number
 }

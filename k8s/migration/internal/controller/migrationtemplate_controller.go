@@ -23,7 +23,6 @@ import (
 
 	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -81,26 +80,6 @@ func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{
 			RequeueAfter: time.Minute,
 		}, err
-	}
-
-	vminfo, err := utils.GetAllVMs(ctx, vmwcreds, migrationtemplate.Spec.Source.DataCenter)
-	if err != nil {
-		r.ctxlog.Error(err, "Failed to get info of all VMs")
-		return ctrl.Result{}, err
-	}
-
-	openstackinfo, err := utils.GetOpenstackInfo(ctx, openstackcreds)
-	if err != nil {
-		r.ctxlog.Error(err, "Failed to get info of Openstack")
-		return ctrl.Result{}, err
-	}
-
-	// Update the status of the MigrationTemplate CR
-	migrationtemplate.Status.VMWare = vminfo
-	migrationtemplate.Status.Openstack = *openstackinfo
-	if err := r.Status().Update(ctx, migrationtemplate); err != nil {
-		r.ctxlog.Error(err, "Failed to update MigrationTemplate status")
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil

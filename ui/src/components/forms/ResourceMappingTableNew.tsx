@@ -161,7 +161,7 @@ export default function ResourceMappingTable({
             {renderValues()}
             {showEmptyRow && (
               <TableRow sx={{ height: "60px" }}>
-                <TableCell width={400}>
+                <TableCell width={450}>
                   <FormControl
                     fullWidth
                     size="small"
@@ -183,7 +183,7 @@ export default function ResourceMappingTable({
                     </Select>
                   </FormControl>
                 </TableCell>
-                <TableCell width={400}>
+                <TableCell width={450}>
                   <FormControl
                     fullWidth
                     size="small"
