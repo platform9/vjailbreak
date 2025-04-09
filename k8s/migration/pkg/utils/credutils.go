@@ -594,7 +594,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
-
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
