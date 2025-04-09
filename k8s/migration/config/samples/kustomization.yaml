@@ -11,4 +11,7 @@ resources:
 - vjailbreak_v1alpha1_vmwaremachine.yaml
 - vjailbreak_v1alpha1_vmwarecluster.yaml
 - vjailbreak_v1alpha1_vmwarehost.yaml
+- vjailbreak_v1alpha1_rollingmigrationplan.yaml
+- vjailbreak_v1alpha1_esximigration.yaml
+- vjailbreak_v1alpha1_clustermigration.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

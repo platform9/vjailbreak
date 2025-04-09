@@ -62,7 +62,7 @@ docker-build-image: generate-manifests
 
 .PHONY: lint-check
 lint-check:
-	cd k8s/migration && golangci-lint run --path-prefix=k8s/migration -v
+	make -C k8s/migration/ lint
 
 .PHONY: build-image
 build-image: generate-manifests
