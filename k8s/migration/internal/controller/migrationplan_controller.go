@@ -737,7 +737,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 		}
 		if vmMachineObj == nil {
-			return fmt.Errorf("VM '%s' not found in VMwareMachine", vm)
+			return errors.Wrap(fmt.Errorf("VM '%s' not found in VMwareMachine", vm), "failed to find vmwaremachine")
 		}
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
