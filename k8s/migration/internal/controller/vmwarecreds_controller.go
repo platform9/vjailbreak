@@ -56,7 +56,7 @@ type VMwareCredsReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx)
 
 	// Get the VMwareCreds object
@@ -77,7 +77,13 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
+	// Always close the scope when exiting this function such that we can persist any vmwarecreds changes.
+	defer func() {
+		ctxlog.Info("Closing scope for VMWareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
+		if err := scope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
 	}
@@ -87,7 +93,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
 	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
@@ -108,6 +113,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
 
+	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
+
+	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
@@ -119,6 +128,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	return ctrl.Result{RequeueAfter: constants.VMwareCredsRequeueAfter}, nil
 }
 
+// nolint:unparam
 func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))

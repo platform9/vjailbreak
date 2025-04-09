@@ -623,10 +623,8 @@ func AppendUnique(slice []string, values ...string) []string {
 
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
-
 	var wg sync.WaitGroup
 	for i := range vminfo {
-		// Batch wise create or update 100 vms Parallely
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
