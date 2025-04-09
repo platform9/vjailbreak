@@ -22,31 +22,30 @@ import (
 
 // NetworkMappingSpec defines the desired state of NetworkMapping
 type NetworkMappingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Networks is the list of networks
+	// Networks is the list of network mappings between source and target environments
 	Networks []Network `json:"networks"`
 }
 
-// Network defines the mapping between source and destination networks
+// Network represents a mapping between source and target networks
 type Network struct {
+	// Source is the name of the source network in VMware
 	Source string `json:"source"`
+	// Target is the name of the target network in OpenStack
 	Target string `json:"target"`
 }
 
 // NetworkMappingStatus defines the observed state of NetworkMapping
 type NetworkMappingStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	NetworkmappingValidationStatus  string `json:"networkMappingValidationStatus,omitempty"`
+	// NetworkmappingValidationStatus indicates the validation status of the network mapping
+	NetworkmappingValidationStatus string `json:"networkMappingValidationStatus,omitempty"`
+	// NetworkmappingValidationMessage provides detailed validation information
 	NetworkmappingValidationMessage string `json:"networkMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.NetworkmappingValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.networkMappingValidationStatus"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // NetworkMapping is the Schema for the networkmappings API
 type NetworkMapping struct {
