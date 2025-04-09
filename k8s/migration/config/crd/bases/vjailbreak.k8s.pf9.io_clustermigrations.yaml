@@ -4,20 +4,30 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: vmwareclusters.vjailbreak.k8s.pf9.io
+  name: clustermigrations.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
   names:
-    kind: VMwareCluster
-    listKind: VMwareClusterList
-    plural: vmwareclusters
-    singular: vmwarecluster
+    kind: ClusterMigration
+    listKind: ClusterMigrationList
+    plural: clustermigrations
+    singular: clustermigration
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.currentESXI
+      name: Current ESXI
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareCluster is the Schema for the vmwareclusters API
+        description: ClusterMigration is the Schema for the clustermigrations API
         properties:
           apiVersion:
             description: |-
@@ -37,21 +47,35 @@ spec:
           metadata:
             type: object
           spec:
-            description: VMwareClusterSpec defines the desired state of VMwareCluster
+            description: ClusterMigrationSpec defines the desired state of ClusterMigration
             properties:
-              hosts:
+              esxiMigrationSequence:
                 items:
                   type: string
                 type: array
-              name:
-                type: string
+            required:
+            - esxiMigrationSequence
             type: object
           status:
-            description: VMwareClusterStatus defines the observed state of VMwareCluster
+            description: ClusterMigrationStatus defines the observed state of ClusterMigration
             properties:
-              phase:
-                description: VMwareClusterPhase represents the phase of a VMwareCluster
+              currentESXI:
                 type: string
+              message:
+                type: string
+              phase:
+                description: ClusterMigrationPhase represents the current phase of
+                  the cluster migration
+                enum:
+                - Pending
+                - Running
+                - Completed
+                - Failed
+                type: string
+            required:
+            - currentESXI
+            - message
+            - phase
             type: object
         type: object
     served: true
