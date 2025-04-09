@@ -121,7 +121,7 @@ func downloadFile(url, filePath string) error {
 }
 
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
-	// Convert the disk
+	// Step 1: Handle Windows driver injection
 	if ostype == "windows" {
 		filePath := "/home/fedora/virtio-win.iso"
 		log.Println("Downloading virtio windrivers")
@@ -133,7 +133,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		defer os.Remove(filePath)
 		os.Setenv("VIRTIO_WIN", filePath)
 	}
+
+	// Step 2: Set guestfs backend
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Step 3: Prepare virt-v2v args
 	args := []string{"--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
@@ -143,10 +147,9 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	} else {
 		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
 	}
-	cmd := exec.CommandContext(ctx,
-		"virt-v2v-in-place",
-		args...,
-	)
+
+	// Step 5: Run virt-v2v-in-place
+	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
