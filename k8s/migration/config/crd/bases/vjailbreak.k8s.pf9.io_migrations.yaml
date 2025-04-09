@@ -19,8 +19,11 @@ spec:
       name: Phase
       type: string
     - jsonPath: .status.agentName
-      name: AgentName
+      name: Agent Name
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -120,6 +123,18 @@ spec:
                 type: array
               phase:
                 description: Phase is the current phase of the migration
+                enum:
+                - Pending
+                - Validating
+                - AwaitingDataCopyStart
+                - CopyingBlocks
+                - CopyingChangedBlocks
+                - ConvertingDisk
+                - AwaitingCutOverStartTime
+                - AwaitingAdminCutOver
+                - Succeeded
+                - Failed
+                - Unknown
                 type: string
             required:
             - phase

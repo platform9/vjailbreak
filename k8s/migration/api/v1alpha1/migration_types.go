@@ -21,30 +21,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MigrationPhase represents the phase of a migration
+// MigrationPhase represents the current phase of the VM migration process
+// +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
 type MigrationPhase string
 
-// MigrationConditionType represents the type of a migration condition
+// MigrationConditionType represents the type of condition for a migration
 type MigrationConditionType string
 
 const (
-	// MigrationPhasePending indicates the migration is pending
+	// MigrationPhasePending indicates the migration is waiting to start
 	MigrationPhasePending MigrationPhase = "Pending"
-	// MigrationPhaseValidating indicates the migration is being validated
+	// MigrationPhaseValidating indicates the migration prerequisites are being validated
 	MigrationPhaseValidating MigrationPhase = "Validating"
-	// MigrationPhaseAwaitingDataCopyStart indicates the migration is awaiting data copy start
+	// MigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	MigrationPhaseAwaitingDataCopyStart MigrationPhase = "AwaitingDataCopyStart"
-	// MigrationPhaseCopying indicates data is being copied
+	// MigrationPhaseCopying indicates initial block copying is in progress
 	MigrationPhaseCopying MigrationPhase = "CopyingBlocks"
-	// MigrationPhaseCopyingChangedBlocks indicates changed blocks are being copied
+	// MigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress
 	MigrationPhaseCopyingChangedBlocks MigrationPhase = "CopyingChangedBlocks"
-	// MigrationPhaseConvertingDisk indicates the disk is being converted
+	// MigrationPhaseConvertingDisk indicates disk format conversion is in progress
 	MigrationPhaseConvertingDisk MigrationPhase = "ConvertingDisk"
-	// MigrationPhaseAwaitingCutOverStartTime indicates the migration is awaiting cutover start time
+	// MigrationPhaseAwaitingCutOverStartTime indicates waiting for scheduled cutover time
 	MigrationPhaseAwaitingCutOverStartTime MigrationPhase = "AwaitingCutOverStartTime"
-	// MigrationPhaseAwaitingAdminCutOver indicates the migration is awaiting admin cutover
+	// MigrationPhaseAwaitingAdminCutOver indicates waiting for admin to initiate cutover
 	MigrationPhaseAwaitingAdminCutOver MigrationPhase = "AwaitingAdminCutOver"
-	// MigrationPhaseSucceeded indicates the migration is succeeded
+	// MigrationPhaseSucceeded indicates the migration completed successfully
 	MigrationPhaseSucceeded MigrationPhase = "Succeeded"
 	// MigrationPhaseFailed indicates the migration has failed
 	MigrationPhaseFailed MigrationPhase = "Failed"
@@ -81,8 +82,9 @@ type MigrationStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
-// +kubebuilder:printcolumn:JSONPath=`.status.agentName`,name=AgentName,type=string
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Agent Name",type="string",JSONPath=".status.agentName"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Migration is the Schema for the migrations API
 type Migration struct {
