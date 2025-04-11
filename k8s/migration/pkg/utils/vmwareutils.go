@@ -34,7 +34,7 @@ type VMwareClusterInfo struct {
 func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
 	// Pre-allocate clusters slice with initial capacity
 	clusters := make([]VMwareClusterInfo, 0, 4)
-	vmwarecreds, err := GetVMwareCredentials(ctx, k3sclient, scope.VMwareCreds.Spec.SecretRef.Name)
+	vmwarecreds, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, scope.VMwareCreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vCenter credentials")
 	}
