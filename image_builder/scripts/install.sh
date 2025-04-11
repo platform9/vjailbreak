@@ -124,7 +124,7 @@ EOF
   log "Rsync daemon started successfully."
 
   # Create a config map from env file. 
-  kubectl create configmap pf9-env --from-file=/etc/pf9/env
+  kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
 
   log "Config map created successfully."
