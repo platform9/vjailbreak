@@ -120,7 +120,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 			}
 		}
-		openstackCredential, err := utils.GetOpenstackCredentials(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}

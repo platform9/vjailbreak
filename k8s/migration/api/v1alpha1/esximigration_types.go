@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,14 +32,22 @@ const (
 
 // ESXIMigrationSpec defines the desired state of ESXIMigration
 type ESXIMigrationSpec struct {
-	ESXIName string `json:"esxiName"`
+	// ESXiName is the name of the ESXi host to be migrated
+	ESXiName string `json:"esxiName"`
+	// OpenstackCredsRef is the reference to the OpenStack credentials
+	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
+	// VMwareCredsRef is the reference to the VMware credentials
+	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
 }
 
 // ESXIMigrationStatus defines the observed state of ESXIMigration
 type ESXIMigrationStatus struct {
-	VMs     []string           `json:"vms,omitempty"`
-	Phase   ESXIMigrationPhase `json:"phase,omitempty"`
-	Message string             `json:"message,omitempty"`
+	// VMs is the list of VMs present on the ESXi host
+	VMs []string `json:"vms,omitempty"`
+	// Phase is the current phase of the migration
+	Phase ESXIMigrationPhase `json:"phase,omitempty"`
+	// Message is the message associated with the current state of the migration
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
