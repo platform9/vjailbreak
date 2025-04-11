@@ -63,6 +63,11 @@ build {
     destination = "/tmp/rsyncd.conf"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/configs/env"
+    destination = "/tmp/env"
+  }
+
   provisioner "shell" {
     inline = [
       "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
@@ -74,9 +79,11 @@ build {
       "sudo mv /tmp/yamls /etc/pf9/yamls",
       "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
       "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
+      "sudo mv /tmp/env /etc/pf9/env",
       "sudo chmod +x /etc/pf9/install.sh",
       "sudo chown root:root /etc/pf9/k3s.env",
       "sudo chmod 644 /etc/pf9/k3s.env",
+      "sudo chmod 644 /etc/pf9/env",
       "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
   }
