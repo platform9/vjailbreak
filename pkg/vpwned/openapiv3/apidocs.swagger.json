@@ -1,0 +1,206 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "sdk/proto/v1/api.proto",
+    "description": "editor setting.\nTab size=4; Tabs as spaces; Clean up trailing whitespaces.",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Version"
+    },
+    {
+      "name": "BMListMachines"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/vpw/v1/bm_list_machines": {
+      "get": {
+        "operationId": "BMListMachines_BMListMachines",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiBMListMachinesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "apiKey",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "baseUrl",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "useInsecure",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "BMListMachines"
+        ]
+      }
+    },
+    "/vpw/v1/version": {
+      "get": {
+        "operationId": "Version_Version",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiVersionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "apiBMListMachinesResponse": {
+      "type": "object",
+      "properties": {
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMachineInfo"
+          }
+        }
+      }
+    },
+    "apiMachineInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "fqdn": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "powerState": {
+          "type": "string"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "cpuCount": {
+          "type": "string"
+        },
+        "cpuSpeed": {
+          "type": "string"
+        },
+        "bootDiskSize": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "statusMessage": {
+          "type": "string"
+        },
+        "statusAction": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "zone": {
+          "type": "string"
+        },
+        "pool": {
+          "type": "string"
+        },
+        "tagNames": {
+          "type": "string"
+        },
+        "vmHost": {
+          "type": "string"
+        },
+        "netboot": {
+          "type": "boolean"
+        },
+        "ephemeralDeploy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "apiVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

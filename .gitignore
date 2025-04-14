@@ -13,3 +13,4 @@ bin/*
 node_modules
 openstack.rc
 .qodo
+pkg/vpwned/vendor/*
