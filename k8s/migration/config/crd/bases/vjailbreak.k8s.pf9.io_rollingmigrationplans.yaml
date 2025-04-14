@@ -40,14 +40,85 @@ spec:
           spec:
             description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
             properties:
-              vcenterClusterSequence:
-                description: VCenterClusterSequence is the sequence of vCenter clusters
-                  to be migrated
+              bmConfigRef:
+                description: BMConfigRef is the reference to the BMC credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              clusterSequence:
+                description: ClusterSequence is the sequence of vCenter clusters to
+                  be migrated
                 items:
-                  type: string
+                  properties:
+                    clusterName:
+                      description: ClusterName is the name of the vCenter cluster
+                        to be migrated
+                      type: string
+                    vmSequence:
+                      description: VMSequence is the sequence of virtual machines
+                        to be migrated
+                      items:
+                        properties:
+                          esxiName:
+                            description: ESXiName is the name of the ESXi host where
+                              the virtual machine is located
+                            type: string
+                          vmName:
+                            description: VMName is the name of the virtual machine
+                              to be migrated
+                            type: string
+                        required:
+                        - esxiName
+                        - vmName
+                        type: object
+                      type: array
+                  required:
+                  - clusterName
+                  - vmSequence
+                  type: object
                 type: array
+              openstackCredsRef:
+                description: OpenstackCredsRef is the reference to the OpenStack credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: VMwareCredsRef is the reference to the VMware credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             required:
-            - vcenterClusterSequence
+            - bmConfigRef
+            - clusterSequence
+            - openstackCredsRef
+            - vmwareCredsRef
             type: object
           status:
             description: RollingMigrationPlanStatus defines the observed state of
@@ -57,8 +128,8 @@ spec:
                 description: CurrentCluster is the name of the current vCenter cluster
                   being migrated
                 type: string
-              currentESXI:
-                description: CurrentESXI is the name of the current ESXi host being
+              currentESXi:
+                description: CurrentESXi is the name of the current ESXi host being
                   migrated
                 type: string
               currentVM:

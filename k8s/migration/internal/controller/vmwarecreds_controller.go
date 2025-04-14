@@ -132,7 +132,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
 
-	return ctrl.Result{RequeueAfter: constants.VMwareCredsRequeueAfter}, nil
+	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
 // nolint:unparam

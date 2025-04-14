@@ -20,22 +20,34 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type BMCProviderName string
+
+const (
+	MAASProvider BMCProviderName = "MAAS"
+)
 
 // BMConfigSpec defines the desired state of BMConfig
 type BMConfigSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of BMConfig. Edit bmconfig_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// UserName is the username for the BM server
+	UserName string `json:"userName"`
+	// Password is the password for the BM server
+	Password string `json:"password"`
+	// APIKey is the API key for the BM server
+	APIKey string `json:"apiKey"`
+	// APIUrl is the API URL for the BM server
+	APIUrl string `json:"apiUrl"`
+	// Insecure is a boolean indicating whether to use insecure connection
+	Insecure bool `json:"insecure"`
+	// ProviderType is the BMC provider type
+	ProviderType BMCProviderName `json:"providerType"`
 }
 
 // BMConfigStatus defines the observed state of BMConfig
 type BMConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ValidationStatus is the status of the validation
+	ValidationStatus string `json:"validationStatus,omitempty"`
+	// ValidationMessage is the message associated with the validation
+	ValidationMessage string `json:"validationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

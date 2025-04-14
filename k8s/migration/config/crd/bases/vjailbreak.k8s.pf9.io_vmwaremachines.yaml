@@ -56,6 +56,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  esxiName:
+                    type: string
                   ipAddress:
                     type: string
                   memory:
