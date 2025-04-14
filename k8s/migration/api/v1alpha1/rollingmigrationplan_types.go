@@ -47,6 +47,9 @@ type RollingMigrationPlanSpec struct {
 
 	// OpenstackCredsRef is the reference to the OpenStack credentials
 	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
+
+	// BMConfigRef is the reference to the BMC credentials
+	BMConfigRef corev1.LocalObjectReference `json:"bmConfigRef"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan

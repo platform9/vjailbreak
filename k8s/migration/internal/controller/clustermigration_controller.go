@@ -65,10 +65,19 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: clusterMigration.Namespace, Name: clusterMigration.Spec.RollingMigrationPlanRef.Name}, rollingMigrationPlan); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
 	scope, err := scope.NewClusterMigrationScope(scope.ClusterMigrationScopeParams{
-		Logger:           ctxlog,
-		Client:           r.Client,
-		ClusterMigration: clusterMigration,
+		Logger:               ctxlog,
+		Client:               r.Client,
+		ClusterMigration:     clusterMigration,
+		RollingMigrationPlan: rollingMigrationPlan,
 	})
 	if err != nil {
 		return ctrl.Result{}, err
@@ -106,10 +115,10 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	for _, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
-		esxiMigration, err = utils.GetESXIMigration(ctx, r.Client, esxi)
+		esxiMigration, err = utils.GetESXIMigration(ctx, scope.Client, esxi)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if esxiMigration, err = utils.CreateESXIMigration(ctx, r.Client, esxi); err != nil {
+				if esxiMigration, err = utils.CreateESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to create esxi migration")
 				}
 			} else {

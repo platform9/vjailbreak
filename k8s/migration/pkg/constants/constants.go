@@ -36,14 +36,23 @@ const (
 	// ClusterMigrationControllerName is the name of the cluster migration controller
 	ClusterMigrationControllerName = "clustermigration-controller"
 
+	// BMConfigControllerName is the name of the BMConfig controller
+	BMConfigControllerName = "bmconfig-controller"
+
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
 
+	// IsPCDCredsLabel is the label for pcd credentials
+	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"
+
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
+
+	// BMConfigFinalizer is the finalizer for BMConfig
+	BMConfigFinalizer = "bmconfig.k8s.pf9.io/finalizer"
 
 	// VMwareClusterLabel is the label for vmware cluster
 	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vmware-cluster"
@@ -96,7 +105,9 @@ const (
 	// K3sTokenFileLocation is the location of the k3s token file
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 
-	VMwareCredsRequeueAfter = 1 * time.Minute
+	// CredsRequeueAfter is the time to requeue after
+	CredsRequeueAfter = 1 * time.Minute
+
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
 

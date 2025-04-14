@@ -26,6 +26,7 @@ type ESXIMigrationPhase string
 const (
 	ESXIMigrationPhaseWaiting   ESXIMigrationPhase = "Waiting"
 	ESXIMigrationPhaseRunning   ESXIMigrationPhase = "Running"
+	ESXIMigrationPhaseCordoned  ESXIMigrationPhase = "Cordoned"
 	ESXIMigrationPhaseFailed    ESXIMigrationPhase = "Failed"
 	ESXIMigrationPhaseSucceeded ESXIMigrationPhase = "Succeeded"
 )
@@ -38,6 +39,8 @@ type ESXIMigrationSpec struct {
 	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
 	// VMwareCredsRef is the reference to the VMware credentials
 	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
+	// RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+	RollingMigrationPlanRef corev1.LocalObjectReference `json:"rollingMigrationPlanRef"`
 }
 
 // ESXIMigrationStatus defines the observed state of ESXIMigration

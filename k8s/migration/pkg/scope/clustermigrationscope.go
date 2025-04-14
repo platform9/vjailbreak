@@ -13,9 +13,10 @@ import (
 
 // ClusterMigrationScopeParams defines the input parameters used to create a new Scope.
 type ClusterMigrationScopeParams struct {
-	Logger           logr.Logger
-	Client           client.Client
-	ClusterMigration *vjailbreakv1alpha1.ClusterMigration
+	Logger               logr.Logger
+	Client               client.Client
+	ClusterMigration     *vjailbreakv1alpha1.ClusterMigration
+	RollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan
 }
 
 // NewClusterMigrationScope creates a new ClusterMigrationScope from the supplied parameters.
@@ -26,17 +27,19 @@ func NewClusterMigrationScope(params ClusterMigrationScopeParams) (*ClusterMigra
 	}
 
 	return &ClusterMigrationScope{
-		Logger:           params.Logger,
-		Client:           params.Client,
-		ClusterMigration: params.ClusterMigration,
+		Logger:               params.Logger,
+		Client:               params.Client,
+		ClusterMigration:     params.ClusterMigration,
+		RollingMigrationPlan: params.RollingMigrationPlan,
 	}, nil
 }
 
 // ClusterMigrationScope defines the basic context for an actuator to operate upon.
 type ClusterMigrationScope struct {
 	logr.Logger
-	Client           client.Client
-	ClusterMigration *vjailbreakv1alpha1.ClusterMigration
+	Client               client.Client
+	ClusterMigration     *vjailbreakv1alpha1.ClusterMigration
+	RollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan
 }
 
 // Close closes the current scope persisting the ClusterMigration configuration and status.

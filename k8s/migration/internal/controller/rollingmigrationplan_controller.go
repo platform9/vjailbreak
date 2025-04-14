@@ -108,10 +108,10 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
 		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
-		clusterMigration, err = utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
+		clusterMigration, err = utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if clusterMigration, err = utils.CreateClusterMigration(ctx, r.Client, cluster); err != nil {
+				if clusterMigration, err = utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to create cluster migration")
 				}
 			} else {

@@ -18,13 +18,20 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 // BMConfigReconciler reconciles a BMConfig object
@@ -33,25 +40,82 @@ type BMConfigReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/finalizers,verbs=update
+func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	ctxlog := log.FromContext(ctx).WithName(constants.BMConfigControllerName)
+	ctxlog.Info(fmt.Sprintf("Reconciling BMConfig '%s'", req.Name))
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the BMConfig object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
-func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	bmConfig := &vjailbreakv1alpha1.BMConfig{}
+	if err := r.Get(ctx, req.NamespacedName, bmConfig); err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("Received ignorable event for a recently deleted bmconfig.")
+			return ctrl.Result{}, nil
+		}
+		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading bmconfig '%s' object", bmConfig.Name))
+		return ctrl.Result{}, err
+	}
 
-	// TODO(user): your logic here
+	scope, err := scope.NewBMConfigScope(scope.BMConfigScopeParams{
+		Logger:   ctxlog,
+		Client:   r.Client,
+		BMConfig: bmConfig,
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Always close the scope when exiting this function such that we can persist any BMConfig changes.
+	defer func() {
+		if err := scope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	if !bmConfig.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, scope)
+	}
+
+	return r.reconcileNormal(ctx, scope)
+}
+
+func (r *BMConfigReconciler) reconcileDelete(ctx context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
+	bmConfig := scope.BMConfig
+	controllerutil.RemoveFinalizer(bmConfig, constants.BMConfigFinalizer)
 
 	return ctrl.Result{}, nil
+}
+
+func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
+	bmConfig := scope.BMConfig
+	controllerutil.AddFinalizer(bmConfig, constants.BMConfigFinalizer)
+
+	// Initialize BMConfig
+	bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	err = bmProvider.Connect()
+	if err != nil {
+		bmConfig.Status.ValidationStatus = string(corev1.PodFailed)
+		bmConfig.Status.ValidationMessage = fmt.Sprintf("Error connecting to MAAS: %s", err)
+		if updateErr := r.Status().Update(ctx, bmConfig); err != nil {
+			return ctrl.Result{}, errors.Wrap(err,
+				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
+					bmConfig.Name)).Error())
+		}
+		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, err
+	}
+
+	bmConfig.Status.ValidationStatus = string(corev1.PodSucceeded)
+	bmConfig.Status.ValidationMessage = "Successfully connected to MAAS"
+	if updateErr := r.Status().Update(ctx, bmConfig); err != nil {
+		return ctrl.Result{}, errors.Wrap(err,
+			errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
+				bmConfig.Name)).Error())
+	}
+
+	// Validate BMConfig
+	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -49,6 +49,9 @@ type ClusterMigrationSpec struct {
 
 	// VMwareCredsRef is the reference to the VMware credentials
 	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
+
+	// RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+	RollingMigrationPlanRef corev1.LocalObjectReference `json:"rollingMigrationPlanRef"`
 }
 
 // ClusterMigrationStatus defines the observed state of ClusterMigration
