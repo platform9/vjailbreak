@@ -106,10 +106,10 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	for _, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
-		esxiMigration, err = utils.GetESXIMigration(ctx, esxi)
+		esxiMigration, err = utils.GetESXIMigration(ctx, r.Client, esxi)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if esxiMigration, err = utils.CreateESXIMigration(ctx, esxi); err != nil {
+				if esxiMigration, err = utils.CreateESXIMigration(ctx, r.Client, esxi); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to create esxi migration")
 				}
 			} else {
@@ -118,19 +118,22 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 		}
 
 		if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
-			clusterMigration.Status.Phase = constants.ClusterMigrationPhaseFailed
-			clusterMigration.Status.Message = esxiMigration.Status.Message
-			if err := r.Status().Update(ctx, clusterMigration); err != nil {
+			err = r.UpdateClusterMigrationStatus(ctx, scope, constants.ClusterMigrationPhaseFailed, esxiMigration.Status.Message, esxi)
+			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
 			}
 			return ctrl.Result{}, nil
 		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
 			continue
+		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseRunning {
+			err = r.UpdateClusterMigrationStatus(ctx, scope, constants.ClusterMigrationPhaseRunning, esxiMigration.Status.Message, esxi)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+			}
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		} else {
-			clusterMigration.Status.CurrentESXI = esxi
-			clusterMigration.Status.Message = esxiMigration.Status.Message
-			clusterMigration.Status.Phase = constants.ClusterMigrationPhaseRunning
-			if err := r.Status().Update(ctx, clusterMigration); err != nil {
+			err = r.UpdateClusterMigrationStatus(ctx, scope, constants.ClusterMigrationPhaseWaiting, esxiMigration.Status.Message, esxi)
+			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
 			}
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
@@ -148,4 +151,11 @@ func (r *ClusterMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.ClusterMigration{}).
 		Complete(r)
+}
+
+func (r *ClusterMigrationReconciler) UpdateClusterMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope, status vjailbreakv1alpha1.ClusterMigrationPhase, message, currentESXi string) error {
+	scope.ClusterMigration.Status.Phase = status
+	scope.ClusterMigration.Status.Message = message
+	scope.ClusterMigration.Status.CurrentESXi = currentESXi
+	return r.Status().Update(ctx, scope.ClusterMigration)
 }

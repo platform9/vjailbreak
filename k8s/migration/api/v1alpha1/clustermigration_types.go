@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -37,14 +38,27 @@ const (
 
 // ClusterMigrationSpec defines the desired state of ClusterMigration
 type ClusterMigrationSpec struct {
+	// ClusterName is the name of the vCenter cluster to be migrated
+	ClusterName string `json:"clusterName"`
+
+	// ESXIMigrationSequence is the sequence of ESXi hosts to be migrated
 	ESXIMigrationSequence []string `json:"esxiMigrationSequence"`
+
+	// OpenstackCredsRef is the reference to the OpenStack credentials
+	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
+
+	// VMwareCredsRef is the reference to the VMware credentials
+	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
 }
 
 // ClusterMigrationStatus defines the observed state of ClusterMigration
 type ClusterMigrationStatus struct {
-	CurrentESXI string                `json:"currentESXI"`
-	Phase       ClusterMigrationPhase `json:"phase"`
-	Message     string                `json:"message"`
+	// CurrentESXi is the name of the current ESXi host being migrated
+	CurrentESXi string `json:"currentESXi"`
+	// Phase is the current phase of the migration
+	Phase ClusterMigrationPhase `json:"phase"`
+	// Message is the message associated with the current state of the migration
+	Message string `json:"message"`
 }
 
 // +kubebuilder:object:root=true

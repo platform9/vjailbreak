@@ -30,12 +30,13 @@ type VMInfo struct {
 	OSType     string   `json:"osType,omitempty"`
 	CPU        int      `json:"cpu,omitempty"`
 	Memory     int      `json:"memory,omitempty"`
+	ESXiName   string   `json:"esxiName,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMInfo is the info of the VMs in the VMwareMachine
-	VMs VMInfo `json:"vms,omitempty"`
+	VMInfo VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
