@@ -689,6 +689,12 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 		}
 
+		// Get the host name
+		host := mo.HostSystem{}
+		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name"}, &host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host name: %w", err)
+		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:        vmProps.Config.Name,
 			Datastores:  datastores,
