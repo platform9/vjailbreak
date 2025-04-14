@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,9 +27,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -102,10 +105,32 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, esxiMigra
 		return ctrl.Result{}, nil
 	}
 
-	// TODO(vPwned): put esxi cordoning logic here
-	log.Info("Cordoned ESXI", "ESXIName", esxiMigration.Spec.ESXIName)
+	inMaintenance, err := utils.CheckESXiInMaintenanceMode(ctx, r.Client, esxiMigration.Spec.ESXiName, esxiMigration.Spec.VMwareCredsRef)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to check ESXi maintenance mode")
+	}
+	if inMaintenance {
+		log.Info("ESXi is already in maintenance mode")
+		vmCount, err := utils.CountVMsOnESXi(ctx, r.Client, esxiMigration.Spec.ESXiName, esxiMigration.Spec.VMwareCredsRef)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
+		}
+		if vmCount == 0 {
+			// TODO(vPwned): Convert to PCD host
+			log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", esxiMigration.Spec.ESXiName)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
 
-	return ctrl.Result{}, nil
+	err = utils.PutESXiInMaintenanceMode(ctx, r.Client, esxiMigration.Spec.ESXiName, esxiMigration.Spec.VMwareCredsRef)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
+	}
+
+	log.Info("Cordoned ESXI", "ESXiName", esxiMigration.Spec.ESXiName)
+
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, esxiMigration *vjailbreakv1alpha1.ESXIMigration) (ctrl.Result, error) {

@@ -68,8 +68,24 @@ const (
 	trueString = "true" // Define at package level
 )
 
-// GetVMwareCredentials retrieves vCenter credentials from a secret
-func GetVMwareCredentials(ctx context.Context, k3sclient client.Client, secretName string) (VMwareCredentials, error) {
+func GetVMwareCredentials(ctx context.Context, k3sclient client.Client, credsName string) (VMwareCredentials, error) {
+	creds := vjailbreakv1alpha1.VMwareCreds{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
+		return VMwareCredentials{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
+	}
+	return GetVMwareCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+}
+
+func GetOpenstackCredentials(ctx context.Context, k3sclient client.Client, credsName string) (OpenStackCredentials, error) {
+	creds := vjailbreakv1alpha1.OpenstackCreds{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
+		return OpenStackCredentials{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
+	}
+	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+}
+
+// GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
+func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (VMwareCredentials, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
@@ -111,8 +127,8 @@ func GetVMwareCredentials(ctx context.Context, k3sclient client.Client, secretNa
 	}, nil
 }
 
-// GetOpenstackCredentials retrieves and checks the secret
-func GetOpenstackCredentials(ctx context.Context, k3sclient client.Client, secretName string) (OpenStackCredentials, error) {
+// GetOpenstackCredentialsFromSecret retrieves and checks the secret
+func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (OpenStackCredentials, error) {
 	secret := &corev1.Secret{}
 	if err := k3sclient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
 		return OpenStackCredentials{}, errors.Wrap(err, "failed to get secret")
@@ -315,7 +331,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 		return nil, errors.New("openstackcreds cannot be nil")
 	}
 
-	openstackCredential, err := GetOpenstackCredentials(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -355,7 +371,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 // ValidateAndGetProviderClient is a function to get provider client
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
-	openstackCredential, err := GetOpenstackCredentials(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	ctxlog := ctrllog.Log
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
@@ -411,7 +427,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := GetVMwareCredentials(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	VMwareCredentials, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
@@ -624,6 +640,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			OSType:     vmProps.Guest.GuestFamily,
 			CPU:        int(vmProps.Config.Hardware.NumCPU),
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:   host.Name,
 		})
 	}
 	return vminfo, nil
@@ -694,10 +711,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
-				Labels:    map[string]string{label: "true"},
+				Labels:    map[string]string{label: "true", constants.ESXiNameLabel: vminfo.ESXiName},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-				VMs: *vminfo,
+				VMInfo: *vminfo,
 			},
 		}
 		init = true
