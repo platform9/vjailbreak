@@ -48,6 +48,9 @@ const (
 	// VMwareClusterLabel is the label for vmware cluster
 	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vmware-cluster"
 
+	// ESXiNameLabel is the label for ESXi name
+	ESXiNameLabel = "vjailbreak.k8s.pf9.io/esxi-name"
+
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"
 

@@ -119,7 +119,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
 			}
 		}
-		openstackCredential, err := utils.GetOpenstackCredentials(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
@@ -164,9 +164,9 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		for i := range vmwaremachineList.Items {
 			vmwaremachine := &vmwaremachineList.Items[i]
 			// Get the cpu and memory of the vmwaremachine object
-			cpu := vmwaremachine.Spec.VMs.CPU
-			memory := vmwaremachine.Spec.VMs.Memory
-			computeClient, err := utils.GetOpenStackClients(context.TODO(), scope.OpenstackCreds)
+			cpu := vmwaremachine.Spec.VMInfo.CPU
+			memory := vmwaremachine.Spec.VMInfo.Memory
+			computeClient, err := utils.GetOpenStackClients(context.TODO(), r.Client, scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
 			}
