@@ -11,3 +11,4 @@ v2v-helper/manager
 node_modules
 openstack.rc
 .qodo
+pkg/vpwned/vendor/*
