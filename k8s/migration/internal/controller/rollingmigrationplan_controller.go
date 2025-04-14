@@ -105,13 +105,13 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, nil
 	}
 	// execute rolling migration plan
-	for _, cluster := range scope.RollingMigrationPlan.Spec.VCenterClusterSequence {
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
 		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
-		clusterMigration, err = utils.GetClusterMigration(ctx, cluster)
+		clusterMigration, err = utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if clusterMigration, err = utils.CreateClusterMigration(ctx, cluster); err != nil {
+				if clusterMigration, err = utils.CreateClusterMigration(ctx, r.Client, cluster); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to create cluster migration")
 				}
 			} else {
@@ -120,20 +120,22 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		}
 		if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseFailed {
 			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
-			migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseFailed
-			migrationPlan.Status.Message = clusterMigration.Status.Message
-			if err := r.Status().Update(ctx, migrationPlan); err != nil {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return ctrl.Result{}, nil
 		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseSucceeded {
 			continue
 		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseRunning {
-			migrationPlan.Status.CurrentCluster = cluster
-			migrationPlan.Status.CurrentESXI = clusterMigration.Status.CurrentESXI
-			migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseRunning
-
-			if err := r.Status().Update(ctx, migrationPlan); err != nil {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		} else {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
@@ -144,6 +146,8 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 }
 
 func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, scope *scope.RollingMigrationPlanScope) (ctrl.Result, error) {
+
+	controllerutil.RemoveFinalizer(scope.RollingMigrationPlan, constants.RollingMigrationPlanFinalizer)
 	return ctrl.Result{}, nil
 }
 
@@ -152,4 +156,12 @@ func (r *RollingMigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.RollingMigrationPlan{}).
 		Complete(r)
+}
+
+func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx context.Context, scope *scope.RollingMigrationPlanScope, status vjailbreakv1alpha1.RollingMigrationPlanPhase, message, currentCluster, currentESXi string) error {
+	scope.RollingMigrationPlan.Status.Phase = status
+	scope.RollingMigrationPlan.Status.Message = message
+	scope.RollingMigrationPlan.Status.CurrentCluster = currentCluster
+	scope.RollingMigrationPlan.Status.CurrentESXi = currentESXi
+	return r.Status().Update(ctx, scope.RollingMigrationPlan)
 }
