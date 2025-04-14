@@ -1,0 +1,86 @@
+syntax = "proto3";
+// editor setting.
+// Tab size=4; Tabs as spaces; Clean up trailing whitespaces.
+package api;
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "service/api";
+option java_package = "io.grpc.pf9.api";
+option java_outer_classname = "pf9";
+option java_multiple_files = true;
+
+enum PowerStatus {
+    POWERED_OFF = 0;
+    POWERED_ON = 1;
+    POWERING_OFF = 2;
+    POWERING_ON = 3;
+    POWER_STATE_UNKNOWN = 99;
+}
+
+enum BootDevice {
+    HDD = 0;
+    USB = 1;
+    CDROM = 2;
+    PXE = 3;
+    BOOT_DEVICE_UNKNOWN = 99;
+}
+
+message MachineInfo{
+    string id = 1;
+    string fqdn = 2;
+    string os = 3;
+    string power_state = 4;
+    string hostname = 5;
+    string architecture = 6;
+    string memory = 7;
+    string cpu_count = 8;
+    string cpu_speed = 9;
+    string boot_disk_size = 10;
+    string status = 11;
+    string status_message = 12;
+    string status_action = 13;
+    string description = 14;
+    string domain = 15;
+    string zone = 16;
+    string pool = 17;
+    string tag_names = 18;
+    string vm_host = 19;
+    bool netboot = 20;
+    bool ephemeral_deploy = 21;
+};
+
+service Version {
+    rpc Version(VersionRequest) returns (VersionResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/version"
+        };
+    }
+}
+
+message VersionRequest {
+}
+
+message VersionResponse {
+    string version = 1;
+}
+
+
+service BMListMachines {
+    rpc BMListMachines(BMListMachinesRequest) returns (BMListMachinesResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/bm_list_machines"
+        };
+    }
+}
+
+message BMListMachinesRequest {
+    string api_key = 1;
+    string base_url = 2;
+    bool use_insecure = 3;
+}
+
+message BMListMachinesResponse {
+    repeated MachineInfo machines = 1;
+}
