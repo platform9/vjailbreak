@@ -17,23 +17,44 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type RollingMigrationPlanPhase string
 
+type VMSequenceInfo struct {
+	// VMName is the name of the virtual machine to be migrated
+	VMName string `json:"vmName"`
+	// ESXiName is the name of the ESXi host where the virtual machine is located
+	ESXiName string `json:"esxiName"`
+}
+
+type ClusterMigrationInfo struct {
+	// ClusterName is the name of the vCenter cluster to be migrated
+	ClusterName string `json:"clusterName"`
+	// VMSequence is the sequence of virtual machines to be migrated
+	VMSequence []VMSequenceInfo `json:"vmSequence"`
+}
+
 // RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
 type RollingMigrationPlanSpec struct {
-	// VCenterClusterSequence is the sequence of vCenter clusters to be migrated
-	VCenterClusterSequence []string `json:"vcenterClusterSequence"`
+	// ClusterSequence is the sequence of vCenter clusters to be migrated
+	ClusterSequence []ClusterMigrationInfo `json:"clusterSequence"`
+
+	// VMwareCredsRef is the reference to the VMware credentials
+	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
+
+	// OpenstackCredsRef is the reference to the OpenStack credentials
+	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan
 type RollingMigrationPlanStatus struct {
 	// Phase is the current phase of the migration
 	Phase RollingMigrationPlanPhase `json:"phase,omitempty"`
-	// CurrentESXI is the name of the current ESXi host being migrated
-	CurrentESXI string `json:"currentESXI,omitempty"`
+	// CurrentESXi is the name of the current ESXi host being migrated
+	CurrentESXi string `json:"currentESXi,omitempty"`
 	// CurrentCluster is the name of the current vCenter cluster being migrated
 	CurrentCluster string `json:"currentCluster,omitempty"`
 	// CurrentVM is the name of the current virtual machine being migrated

@@ -261,7 +261,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	vminfo := &vmMachine.Spec.VMs
+	vminfo := &vmMachine.Spec.VMInfo
 
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmname), Namespace: migrationplan.Namespace}, migrationobj)
@@ -571,7 +571,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, fmt.Errorf("failed to get OpenStack clients: %w", err)
 			}
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
+			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, computeClient.ComputeClient)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
@@ -763,7 +763,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	for _, vm := range parallelvms {
 		vmMachineObj = nil
 		for i := range vmMachines.Items {
-			if vmMachines.Items[i].Spec.VMs.Name == vm {
+			if vmMachines.Items[i].Spec.VMInfo.Name == vm {
 				ctxlog.Info(fmt.Sprintf("Found VMwareMachineobject '%v'", vmMachines.Items[i]))
 				vmMachineObj = &vmMachines.Items[i]
 				break
