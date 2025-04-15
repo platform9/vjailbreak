@@ -36,6 +36,8 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 			RollingMigrationPlanRef: corev1.LocalObjectReference{
 				Name: rollingMigrationPlan.Name,
 			},
+			OpenstackCredsRef: rollingMigrationPlan.Spec.OpenstackCredsRef,
+			VMwareCredsRef:    rollingMigrationPlan.Spec.VMwareCredsRef,
 		},
 	}
 	controllerutil.SetOwnerReference(rollingMigrationPlan, clusterMigration, k8sClient.Scheme())
@@ -77,6 +79,8 @@ func CreateESXIMigration(ctx context.Context, k8sClient client.Client, esxi stri
 			RollingMigrationPlanRef: corev1.LocalObjectReference{
 				Name: rollingMigrationPlan.Name,
 			},
+			OpenstackCredsRef: rollingMigrationPlan.Spec.OpenstackCredsRef,
+			VMwareCredsRef:    rollingMigrationPlan.Spec.VMwareCredsRef,
 		},
 	}
 	controllerutil.SetOwnerReference(rollingMigrationPlan, esxiMigration, k8sClient.Scheme())

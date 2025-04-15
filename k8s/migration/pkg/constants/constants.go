@@ -60,6 +60,9 @@ const (
 	// ESXiNameLabel is the label for ESXi name
 	ESXiNameLabel = "vjailbreak.k8s.pf9.io/esxi-name"
 
+	// ClusterNameLabel is the label for cluster name
+	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
+
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"
 
@@ -128,24 +131,6 @@ const (
 
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
-
-	// RollingMigrationPlanPhaseWaiting is the phase for waiting
-	RollingMigrationPlanPhaseWaiting vjailbreakv1alpha1.RollingMigrationPlanPhase = "Waiting"
-	// RollingMigrationPlanPhaseRunning is the phase for running
-	RollingMigrationPlanPhaseRunning vjailbreakv1alpha1.RollingMigrationPlanPhase = "Running"
-	// RollingMigrationPlanPhaseFailed is the phase for failed
-	RollingMigrationPlanPhaseFailed vjailbreakv1alpha1.RollingMigrationPlanPhase = "Failed"
-	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
-	RollingMigrationPlanPhaseSucceeded vjailbreakv1alpha1.RollingMigrationPlanPhase = "Succeeded"
-
-	// ClusterMigrationPhaseWaiting is the phase for waiting
-	ClusterMigrationPhaseWaiting vjailbreakv1alpha1.ClusterMigrationPhase = "Waiting"
-	// ClusterMigrationPhaseRunning is the phase for running
-	ClusterMigrationPhaseRunning vjailbreakv1alpha1.ClusterMigrationPhase = "Running"
-	// ClusterMigrationPhaseFailed is the phase for failed
-	ClusterMigrationPhaseFailed vjailbreakv1alpha1.ClusterMigrationPhase = "Failed"
-	// ClusterMigrationPhaseSucceeded is the phase for succeeded
-	ClusterMigrationPhaseSucceeded vjailbreakv1alpha1.ClusterMigrationPhase = "Succeeded"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization

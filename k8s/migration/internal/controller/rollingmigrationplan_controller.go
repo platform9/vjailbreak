@@ -96,14 +96,30 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	var clusterMigration *vjailbreakv1alpha1.ClusterMigration
 	var err error
 	if migrationPlan.Status.Phase == "" {
-		migrationPlan.Status.Phase = constants.RollingMigrationPlanPhaseWaiting
-	} else if migrationPlan.Status.Phase == constants.RollingMigrationPlanPhaseSucceeded {
+		migrationPlan.Status.Phase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
+	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded {
 		log.Info("RollingMigrationPlan already succeeded")
 		return ctrl.Result{}, nil
-	} else if migrationPlan.Status.Phase == constants.RollingMigrationPlanPhaseFailed {
+	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed {
 		log.Info("RollingMigrationPlan already failed")
 		return ctrl.Result{}, nil
 	}
+
+	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
+	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		for j := range cluster.VMSequence {
+			vm := &vjailbreakv1alpha1.VMwareMachine{}
+			err = r.Get(ctx, client.ObjectKey{
+				Name:      cluster.VMSequence[j].VMName,
+				Namespace: scope.Namespace(),
+			}, vm)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting VMInfo for VM '%s'", cluster.VMSequence[j].VMName))
+			}
+			scope.RollingMigrationPlan.Spec.ClusterSequence[i].VMSequence[j].ESXiName = vm.Spec.VMInfo.ESXiName
+		}
+	}
+
 	// execute rolling migration plan
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
@@ -118,23 +134,23 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 				return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
 			}
 		}
-		if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseFailed {
+		if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseFailed {
 			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return ctrl.Result{}, nil
-		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseSucceeded {
+		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded {
 			continue
-		} else if clusterMigration.Status.Phase == constants.ClusterMigrationPhaseRunning {
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseRunning {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		} else {
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, constants.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
@@ -146,6 +162,39 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 }
 
 func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, scope *scope.RollingMigrationPlanScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("Reconciling deletion", "rollingmigrationplan", scope.RollingMigrationPlan.Name, "namespace", scope.RollingMigrationPlan.Namespace)
+
+	// Delete all ClusterMigrations
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		clusterMigration, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			log.Error(err, "Failed to get ClusterMigration", "cluster", cluster)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
+		}
+		if err := r.Delete(ctx, clusterMigration); err != nil {
+			log.Error(err, "Failed to delete ClusterMigration", "cluster", cluster)
+			return ctrl.Result{}, errors.Wrap(err, "failed to delete cluster migration")
+		}
+	}
+
+	// Wait for all ClusterMigrations to be deleted
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		_, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			log.Error(err, "Failed to get ClusterMigration", "cluster", cluster)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
+		} else {
+			log.Info("ClusterMigration not deleted", "cluster", cluster)
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
 
 	controllerutil.RemoveFinalizer(scope.RollingMigrationPlan, constants.RollingMigrationPlanFinalizer)
 	return ctrl.Result{}, nil

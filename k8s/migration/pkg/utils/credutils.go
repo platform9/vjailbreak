@@ -21,6 +21,10 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -614,23 +618,38 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
-		// Get the host name
+		// Get the host name and parent (cluster) information
 		host := mo.HostSystem{}
-		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name"}, &host)
+		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get host name: %w", err)
 		}
+
+		// Get the cluster name from the host's parent
+		var clusterName string
+		if host.Parent != nil {
+			var cluster mo.ClusterComputeResource
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+			if err != nil {
+				// Log the error but don't fail - some hosts might not be in a cluster
+				fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+			} else {
+				clusterName = cluster.Name
+			}
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:       vmProps.Config.Name,
-			Datastores: datastores,
-			Disks:      disks,
-			Networks:   networks,
-			IPAddress:  vmProps.Guest.IpAddress,
-			VMState:    vmProps.Guest.GuestState,
-			OSType:     vmProps.Guest.GuestFamily,
-			CPU:        int(vmProps.Config.Hardware.NumCPU),
-			Memory:     int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:   host.Name,
+			Name:        vmProps.Config.Name,
+			Datastores:  datastores,
+			Disks:       disks,
+			Networks:    networks,
+			IPAddress:   vmProps.Guest.IpAddress,
+			VMState:     vmProps.Guest.GuestState,
+			OSType:      vmProps.Guest.GuestFamily,
+			CPU:         int(vmProps.Config.Hardware.NumCPU),
+			Memory:      int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:    host.Name,
+			ClusterName: clusterName,
 		})
 	}
 
@@ -702,7 +721,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
-				Labels:    map[string]string{label: "true", constants.ESXiNameLabel: vminfo.ESXiName},
+				Labels: map[string]string{
+					label: "true", constants.ESXiNameLabel: vminfo.ESXiName,
+					constants.ClusterNameLabel: vminfo.ClusterName,
+				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMInfo: *vminfo,
