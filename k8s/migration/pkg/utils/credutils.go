@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -395,11 +394,11 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
 		}
 		// Logging the certificate
-		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
-		ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: caCert.Raw,
-		})))
+		// ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
+		// ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
+		// 	Type:  "CERTIFICATE",
+		// 	Bytes: caCert.Raw,
+		// })))
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
 		caCertPool, err := x509.SystemCertPool()
 		if err != nil {
@@ -617,23 +616,38 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
-		// Get the host name
+		// Get the host name and parent (cluster) information
 		host := mo.HostSystem{}
-		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name"}, &host)
+		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get host name: %w", err)
 		}
+
+		// Get the cluster name from the host's parent
+		var clusterName string
+		if host.Parent != nil {
+			var cluster mo.ClusterComputeResource
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+			if err != nil {
+				// Log the error but don't fail - some hosts might not be in a cluster
+				fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+			} else {
+				clusterName = cluster.Name
+			}
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:       vmProps.Config.Name,
-			Datastores: datastores,
-			Disks:      disks,
-			Networks:   networks,
-			IPAddress:  vmProps.Guest.IpAddress,
-			VMState:    vmProps.Guest.GuestState,
-			OSType:     vmProps.Guest.GuestFamily,
-			CPU:        int(vmProps.Config.Hardware.NumCPU),
-			Memory:     int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:   host.Name,
+			Name:        vmProps.Config.Name,
+			Datastores:  datastores,
+			Disks:       disks,
+			Networks:    networks,
+			IPAddress:   vmProps.Guest.IpAddress,
+			VMState:     vmProps.Guest.GuestState,
+			OSType:      vmProps.Guest.GuestFamily,
+			CPU:         int(vmProps.Config.Hardware.NumCPU),
+			Memory:      int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:    host.Name,
+			ClusterName: clusterName,
 		})
 	}
 
@@ -706,7 +720,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
-				Labels:    map[string]string{label: "true", constants.ESXiNameLabel: vminfo.ESXiName},
+				Labels: map[string]string{
+					label: "true", constants.ESXiNameLabel: vminfo.ESXiName,
+					constants.ClusterNameLabel: vminfo.ClusterName,
+				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMInfo: *vminfo,

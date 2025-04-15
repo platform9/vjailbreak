@@ -21,16 +21,17 @@ import (
 )
 
 type VMInfo struct {
-	Name       string   `json:"name"`
-	Datastores []string `json:"datastores,omitempty"`
-	Disks      []string `json:"disks,omitempty"`
-	Networks   []string `json:"networks,omitempty"`
-	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmState,omitempty"`
-	OSType     string   `json:"osType,omitempty"`
-	CPU        int      `json:"cpu,omitempty"`
-	Memory     int      `json:"memory,omitempty"`
-	ESXiName   string   `json:"esxiName,omitempty"`
+	Name        string   `json:"name"`
+	Datastores  []string `json:"datastores,omitempty"`
+	Disks       []string `json:"disks,omitempty"`
+	Networks    []string `json:"networks,omitempty"`
+	IPAddress   string   `json:"ipAddress,omitempty"`
+	VMState     string   `json:"vmState,omitempty"`
+	OSType      string   `json:"osType,omitempty"`
+	CPU         int      `json:"cpu,omitempty"`
+	Memory      int      `json:"memory,omitempty"`
+	ESXiName    string   `json:"esxiName,omitempty"`
+	ClusterName string   `json:"clusterName,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

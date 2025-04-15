@@ -46,6 +46,8 @@ spec:
               vms:
                 description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
+                  clusterName:
+                    type: string
                   cpu:
                     type: integer
                   datastores:

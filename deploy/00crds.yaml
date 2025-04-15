@@ -1021,7 +1021,6 @@ spec:
                               to be migrated
                             type: string
                         required:
-                        - esxiName
                         - vmName
                         type: object
                       type: array
@@ -1592,6 +1591,8 @@ spec:
               vms:
                 description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
+                  clusterName:
+                    type: string
                   cpu:
                     type: integer
                   datastores:
@@ -1900,6 +1901,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs
   - clustermigrations
   - esximigrations
   - migrationplans
@@ -1925,6 +1927,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - migrationplans/finalizers
@@ -1940,6 +1943,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
   - migrationplans/status

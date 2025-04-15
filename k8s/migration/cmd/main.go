@@ -18,9 +18,9 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -148,14 +148,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
+	// Create a single ctx from signal handler to be reused
+	ctx := ctrl.SetupSignalHandler()
 
+	setupLog.Info("starting manager")
+	// Start the manager's cache first
+	go func() {
+		if err = mgr.Start(ctx); err != nil {
+			setupLog.Error(err, "problem running manager")
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for cache to sync before using the client
+	if ok := mgr.GetCache().WaitForCacheSync(ctx); !ok {
+		handleStartupError(fmt.Errorf("failed to wait for caches to sync"), "Failed to sync cache")
+	}
+	
 	// Now that cache is synced, we can create master node entry
-	if err = utils.CheckAndCreateMasterNodeEntry(context.Background(), mgr.GetClient(), local); err != nil {
+	if err = utils.CheckAndCreateMasterNodeEntry(ctx, mgr.GetClient(), local); err != nil {
 		handleStartupError(err, "Problem creating master node entry")
 	}
 

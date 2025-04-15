@@ -30,8 +30,8 @@ const (
 	ClusterMigrationPhasePending ClusterMigrationPhase = "Pending"
 	// ClusterMigrationPhaseRunning indicates the migration is in progress
 	ClusterMigrationPhaseRunning ClusterMigrationPhase = "Running"
-	// ClusterMigrationPhaseCompleted indicates the migration has completed successfully
-	ClusterMigrationPhaseCompleted ClusterMigrationPhase = "Completed"
+	// ClusterMigrationPhaseSucceeded indicates the migration has completed successfully
+	ClusterMigrationPhaseSucceeded ClusterMigrationPhase = "Succeeded"
 	// ClusterMigrationPhaseFailed indicates the migration has failed
 	ClusterMigrationPhaseFailed ClusterMigrationPhase = "Failed"
 )

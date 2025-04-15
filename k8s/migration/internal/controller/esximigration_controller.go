@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,26 +55,25 @@ type ESXIMigrationReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.ESXIMigrationControllerName)
-	ctxlog.Info(fmt.Sprintf("Reconciling ESXIMigration '%s'", req.Name))
+	ctxlog.Info("Starting reconciliation", "esximigration", req.NamespacedName)
 
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
 	if err := r.Get(ctx, req.NamespacedName, esxiMigration); err != nil {
 		if apierrors.IsNotFound(err) {
-			ctxlog.Info("Received ignorable event for a recently deleted esxi migration.")
+			ctxlog.Info("Resource not found, likely deleted", "esximigration", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading esxi migration '%s' object", esxiMigration.Name))
+		ctxlog.Error(err, "Failed to get ESXIMigration resource", "esximigration", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 
 	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}, rollingMigrationPlan); err != nil {
+	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
+	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
 		if apierrors.IsNotFound(err) {
-			ctxlog.Info("Received ignorable event for a recently deleted rolling migration plan.")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 		}
-		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading rolling migration plan '%s' object", esxiMigration.Spec.RollingMigrationPlanRef.Name))
-		return ctrl.Result{}, err
+		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 	}
 
 	scope, err := scope.NewESXIMigrationScope(scope.ESXIMigrationScopeParams{
@@ -85,28 +83,32 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		RollingMigrationPlan: rollingMigrationPlan,
 	})
 	if err != nil {
-		return ctrl.Result{}, err
+		ctxlog.Error(err, "Failed to create ESXIMigrationScope")
+		return ctrl.Result{}, errors.Wrap(err, "failed to create ESXIMigrationScope")
 	}
-
 	// Always close the scope when exiting this function such that we can persist any ESXIMigration changes.
 	defer func() {
 		if err := scope.Close(); err != nil && reterr == nil {
+			ctxlog.Error(err, "Failed to close ESXIMigrationScope")
 			reterr = err
 		}
 	}()
 
 	if !esxiMigration.ObjectMeta.DeletionTimestamp.IsZero() {
+		ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
 
+	ctxlog.Info("Reconciling normal state", "esximigration", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
 func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	log.Info(fmt.Sprintf("Reconciling ESXIMigration '%s'", scope.ESXIMigration.Name))
+	log := scope.Logger
+	log.Info("Starting normal reconciliation", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 	controllerutil.AddFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
 	if scope.ESXIMigration.Status.Phase == "" {
+		log.Info("Initializing ESXIMigration phase", "newPhase", vjailbreakv1alpha1.ESXIMigrationPhaseWaiting)
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaiting
 	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
 		log.Info("ESXIMigration already succeeded")
@@ -117,59 +119,79 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	}
 
 	bmConfig := &vjailbreakv1alpha1.BMConfig{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: scope.ESXIMigration.Namespace, Name: scope.RollingMigrationPlan.Spec.BMConfigRef.Name}, bmConfig); err != nil {
+	bmConfigKey := client.ObjectKey{Namespace: scope.ESXIMigration.Namespace, Name: scope.RollingMigrationPlan.Spec.BMConfigRef.Name}
+	if err := r.Get(ctx, bmConfigKey, bmConfig); err != nil {
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, errors.Wrap(err, "failed to get BMConfig")
 		}
-		return ctrl.Result{}, err
+		log.Error(err, "Failed to get BMConfig", "bmconfig", bmConfigKey)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get BMConfig")
 	}
 
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
+		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
 		bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
 		if err != nil {
-			return ctrl.Result{}, err
+			log.Error(err, "Failed to initialize BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
+			return ctrl.Result{}, errors.Wrap(err, "failed to initialize BM Provisioner")
 		}
 
 		// TODO(vPwned): Convert to PCD host
+		log.Info("Converting ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		err = utils.ConvertESXiToPCDHost(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, bmProvider)
 		if err != nil {
+			log.Error(err, "Failed to convert ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to convert ESXi to PCD host")
 		}
+		log.Info("Successfully converted ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
+			log.Error(err, "Failed to update ESXIMigration status")
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
+		log.Info("Successfully updated ESXIMigration status to succeeded")
 		return ctrl.Result{}, nil
 	}
 
+	log.Info("Checking if ESXi is in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	inMaintenance, err := utils.CheckESXiInMaintenanceMode(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
+		log.Error(err, "Failed to check ESXi maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to check ESXi maintenance mode")
 	}
+	log.Info("ESXi maintenance mode check complete", "esxiName", scope.ESXIMigration.Spec.ESXiName, "inMaintenance", inMaintenance)
 	if inMaintenance {
-		log.Info("ESXi is already in maintenance mode")
+		log.Info("ESXi is already in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		vmCount, err := utils.CountVMsOnESXi(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 		if err != nil {
+			log.Error(err, "Failed to count VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
 		}
+		log.Info("VM count completed", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
 		if vmCount == 0 {
 			// TODO(vPwned): Convert to PCD host
 			log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
 
 			return ctrl.Result{}, nil
 		}
+		log.Info("Updating ESXIMigration status to cordoned", "previousPhase", scope.ESXIMigration.Status.Phase)
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
+			log.Error(err, "Failed to update ESXIMigration status")
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
+		log.Info("Successfully updated ESXIMigration status to cordoned")
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	} else {
+		log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 		if err != nil {
+			log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
 		}
+		log.Info("Successfully put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	}
 
 	log.Info("Cordoned ESXI", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
@@ -179,7 +201,9 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.Info(fmt.Sprintf("Reconciling ESXIMigration '%s'", scope.ESXIMigration.Name))
+	log.Info("Reconciling deletion", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
+
+	controllerutil.RemoveFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
 	return ctrl.Result{}, nil
 }
 
