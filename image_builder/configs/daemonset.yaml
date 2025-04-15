@@ -20,6 +20,8 @@ spec:
           image: alpine:latest
           securityContext:
             privileged: true
+            runAsUser: 0
+            runAsGroup: 0
           ports:
             - containerPort: 873
           volumeMounts:
@@ -71,3 +73,7 @@ spec:
           hostPath:
             path: /home/ubuntu/vmware-vix-disklib-distrib
             type: DirectoryOrCreate
+        - name: env
+          hostPath:
+            type: Directory
+            path: /etc/pf9/env
