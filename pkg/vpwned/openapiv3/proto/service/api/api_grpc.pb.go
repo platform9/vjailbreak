@@ -124,6 +124,414 @@ var Version_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	ListVMs_ListVMs_FullMethodName = "/api.ListVMs/ListVMs"
+)
+
+// ListVMsClient is the client API for ListVMs service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ListVMsClient interface {
+	ListVMs(ctx context.Context, in *ListVMsRequest, opts ...grpc.CallOption) (*ListVMsResponse, error)
+}
+
+type listVMsClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewListVMsClient(cc grpc.ClientConnInterface) ListVMsClient {
+	return &listVMsClient{cc}
+}
+
+func (c *listVMsClient) ListVMs(ctx context.Context, in *ListVMsRequest, opts ...grpc.CallOption) (*ListVMsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListVMsResponse)
+	err := c.cc.Invoke(ctx, ListVMs_ListVMs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListVMsServer is the server API for ListVMs service.
+// All implementations must embed UnimplementedListVMsServer
+// for forward compatibility.
+type ListVMsServer interface {
+	ListVMs(context.Context, *ListVMsRequest) (*ListVMsResponse, error)
+	mustEmbedUnimplementedListVMsServer()
+}
+
+// UnimplementedListVMsServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedListVMsServer struct{}
+
+func (UnimplementedListVMsServer) ListVMs(context.Context, *ListVMsRequest) (*ListVMsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListVMs not implemented")
+}
+func (UnimplementedListVMsServer) mustEmbedUnimplementedListVMsServer() {}
+func (UnimplementedListVMsServer) testEmbeddedByValue()                 {}
+
+// UnsafeListVMsServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ListVMsServer will
+// result in compilation errors.
+type UnsafeListVMsServer interface {
+	mustEmbedUnimplementedListVMsServer()
+}
+
+func RegisterListVMsServer(s grpc.ServiceRegistrar, srv ListVMsServer) {
+	// If the following call pancis, it indicates UnimplementedListVMsServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ListVMs_ServiceDesc, srv)
+}
+
+func _ListVMs_ListVMs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListVMsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ListVMsServer).ListVMs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ListVMs_ListVMs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ListVMsServer).ListVMs(ctx, req.(*ListVMsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ListVMs_ServiceDesc is the grpc.ServiceDesc for ListVMs service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ListVMs_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.ListVMs",
+	HandlerType: (*ListVMsServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListVMs",
+			Handler:    _ListVMs_ListVMs_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	GetVM_GetVM_FullMethodName = "/api.GetVM/GetVM"
+)
+
+// GetVMClient is the client API for GetVM service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type GetVMClient interface {
+	GetVM(ctx context.Context, in *GetVMRequest, opts ...grpc.CallOption) (*GetVMResponse, error)
+}
+
+type getVMClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewGetVMClient(cc grpc.ClientConnInterface) GetVMClient {
+	return &getVMClient{cc}
+}
+
+func (c *getVMClient) GetVM(ctx context.Context, in *GetVMRequest, opts ...grpc.CallOption) (*GetVMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVMResponse)
+	err := c.cc.Invoke(ctx, GetVM_GetVM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetVMServer is the server API for GetVM service.
+// All implementations must embed UnimplementedGetVMServer
+// for forward compatibility.
+type GetVMServer interface {
+	GetVM(context.Context, *GetVMRequest) (*GetVMResponse, error)
+	mustEmbedUnimplementedGetVMServer()
+}
+
+// UnimplementedGetVMServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedGetVMServer struct{}
+
+func (UnimplementedGetVMServer) GetVM(context.Context, *GetVMRequest) (*GetVMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVM not implemented")
+}
+func (UnimplementedGetVMServer) mustEmbedUnimplementedGetVMServer() {}
+func (UnimplementedGetVMServer) testEmbeddedByValue()               {}
+
+// UnsafeGetVMServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GetVMServer will
+// result in compilation errors.
+type UnsafeGetVMServer interface {
+	mustEmbedUnimplementedGetVMServer()
+}
+
+func RegisterGetVMServer(s grpc.ServiceRegistrar, srv GetVMServer) {
+	// If the following call pancis, it indicates UnimplementedGetVMServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&GetVM_ServiceDesc, srv)
+}
+
+func _GetVM_GetVM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GetVMServer).GetVM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GetVM_GetVM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GetVMServer).GetVM(ctx, req.(*GetVMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// GetVM_ServiceDesc is the grpc.ServiceDesc for GetVM service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var GetVM_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.GetVM",
+	HandlerType: (*GetVMServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetVM",
+			Handler:    _GetVM_GetVM_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	ReclaimVM_ReclaimVM_FullMethodName = "/api.ReclaimVM/ReclaimVM"
+)
+
+// ReclaimVMClient is the client API for ReclaimVM service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ReclaimVMClient interface {
+	ReclaimVM(ctx context.Context, in *ReclaimVMRequest, opts ...grpc.CallOption) (*ReclaimVMResponse, error)
+}
+
+type reclaimVMClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewReclaimVMClient(cc grpc.ClientConnInterface) ReclaimVMClient {
+	return &reclaimVMClient{cc}
+}
+
+func (c *reclaimVMClient) ReclaimVM(ctx context.Context, in *ReclaimVMRequest, opts ...grpc.CallOption) (*ReclaimVMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReclaimVMResponse)
+	err := c.cc.Invoke(ctx, ReclaimVM_ReclaimVM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ReclaimVMServer is the server API for ReclaimVM service.
+// All implementations must embed UnimplementedReclaimVMServer
+// for forward compatibility.
+type ReclaimVMServer interface {
+	ReclaimVM(context.Context, *ReclaimVMRequest) (*ReclaimVMResponse, error)
+	mustEmbedUnimplementedReclaimVMServer()
+}
+
+// UnimplementedReclaimVMServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedReclaimVMServer struct{}
+
+func (UnimplementedReclaimVMServer) ReclaimVM(context.Context, *ReclaimVMRequest) (*ReclaimVMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReclaimVM not implemented")
+}
+func (UnimplementedReclaimVMServer) mustEmbedUnimplementedReclaimVMServer() {}
+func (UnimplementedReclaimVMServer) testEmbeddedByValue()                   {}
+
+// UnsafeReclaimVMServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ReclaimVMServer will
+// result in compilation errors.
+type UnsafeReclaimVMServer interface {
+	mustEmbedUnimplementedReclaimVMServer()
+}
+
+func RegisterReclaimVMServer(s grpc.ServiceRegistrar, srv ReclaimVMServer) {
+	// If the following call pancis, it indicates UnimplementedReclaimVMServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ReclaimVM_ServiceDesc, srv)
+}
+
+func _ReclaimVM_ReclaimVM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReclaimVMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReclaimVMServer).ReclaimVM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReclaimVM_ReclaimVM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReclaimVMServer).ReclaimVM(ctx, req.(*ReclaimVMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ReclaimVM_ServiceDesc is the grpc.ServiceDesc for ReclaimVM service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ReclaimVM_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.ReclaimVM",
+	HandlerType: (*ReclaimVMServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ReclaimVM",
+			Handler:    _ReclaimVM_ReclaimVM_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	CordonHost_CordonHost_FullMethodName = "/api.CordonHost/CordonHost"
+)
+
+// CordonHostClient is the client API for CordonHost service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type CordonHostClient interface {
+	CordonHost(ctx context.Context, in *CordonHostRequest, opts ...grpc.CallOption) (*CordonHostResponse, error)
+}
+
+type cordonHostClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCordonHostClient(cc grpc.ClientConnInterface) CordonHostClient {
+	return &cordonHostClient{cc}
+}
+
+func (c *cordonHostClient) CordonHost(ctx context.Context, in *CordonHostRequest, opts ...grpc.CallOption) (*CordonHostResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CordonHostResponse)
+	err := c.cc.Invoke(ctx, CordonHost_CordonHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CordonHostServer is the server API for CordonHost service.
+// All implementations must embed UnimplementedCordonHostServer
+// for forward compatibility.
+type CordonHostServer interface {
+	CordonHost(context.Context, *CordonHostRequest) (*CordonHostResponse, error)
+	mustEmbedUnimplementedCordonHostServer()
+}
+
+// UnimplementedCordonHostServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedCordonHostServer struct{}
+
+func (UnimplementedCordonHostServer) CordonHost(context.Context, *CordonHostRequest) (*CordonHostResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CordonHost not implemented")
+}
+func (UnimplementedCordonHostServer) mustEmbedUnimplementedCordonHostServer() {}
+func (UnimplementedCordonHostServer) testEmbeddedByValue()                    {}
+
+// UnsafeCordonHostServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CordonHostServer will
+// result in compilation errors.
+type UnsafeCordonHostServer interface {
+	mustEmbedUnimplementedCordonHostServer()
+}
+
+func RegisterCordonHostServer(s grpc.ServiceRegistrar, srv CordonHostServer) {
+	// If the following call pancis, it indicates UnimplementedCordonHostServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&CordonHost_ServiceDesc, srv)
+}
+
+func _CordonHost_CordonHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CordonHostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CordonHostServer).CordonHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CordonHost_CordonHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CordonHostServer).CordonHost(ctx, req.(*CordonHostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// CordonHost_ServiceDesc is the grpc.ServiceDesc for CordonHost service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CordonHost_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.CordonHost",
+	HandlerType: (*CordonHostServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CordonHost",
+			Handler:    _CordonHost_CordonHost_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
 	BMListMachines_BMListMachines_FullMethodName = "/api.BMListMachines/BMListMachines"
 )
 
@@ -219,6 +627,414 @@ var BMListMachines_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BMListMachines",
 			Handler:    _BMListMachines_BMListMachines_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	GetResourceInfo_GetResourceInfo_FullMethodName = "/api.GetResourceInfo/GetResourceInfo"
+)
+
+// GetResourceInfoClient is the client API for GetResourceInfo service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type GetResourceInfoClient interface {
+	GetResourceInfo(ctx context.Context, in *GetResourceInfoRequest, opts ...grpc.CallOption) (*GetResourceInfoResponse, error)
+}
+
+type getResourceInfoClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewGetResourceInfoClient(cc grpc.ClientConnInterface) GetResourceInfoClient {
+	return &getResourceInfoClient{cc}
+}
+
+func (c *getResourceInfoClient) GetResourceInfo(ctx context.Context, in *GetResourceInfoRequest, opts ...grpc.CallOption) (*GetResourceInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetResourceInfoResponse)
+	err := c.cc.Invoke(ctx, GetResourceInfo_GetResourceInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetResourceInfoServer is the server API for GetResourceInfo service.
+// All implementations must embed UnimplementedGetResourceInfoServer
+// for forward compatibility.
+type GetResourceInfoServer interface {
+	GetResourceInfo(context.Context, *GetResourceInfoRequest) (*GetResourceInfoResponse, error)
+	mustEmbedUnimplementedGetResourceInfoServer()
+}
+
+// UnimplementedGetResourceInfoServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedGetResourceInfoServer struct{}
+
+func (UnimplementedGetResourceInfoServer) GetResourceInfo(context.Context, *GetResourceInfoRequest) (*GetResourceInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResourceInfo not implemented")
+}
+func (UnimplementedGetResourceInfoServer) mustEmbedUnimplementedGetResourceInfoServer() {}
+func (UnimplementedGetResourceInfoServer) testEmbeddedByValue()                         {}
+
+// UnsafeGetResourceInfoServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GetResourceInfoServer will
+// result in compilation errors.
+type UnsafeGetResourceInfoServer interface {
+	mustEmbedUnimplementedGetResourceInfoServer()
+}
+
+func RegisterGetResourceInfoServer(s grpc.ServiceRegistrar, srv GetResourceInfoServer) {
+	// If the following call pancis, it indicates UnimplementedGetResourceInfoServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&GetResourceInfo_ServiceDesc, srv)
+}
+
+func _GetResourceInfo_GetResourceInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResourceInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GetResourceInfoServer).GetResourceInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GetResourceInfo_GetResourceInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GetResourceInfoServer).GetResourceInfo(ctx, req.(*GetResourceInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// GetResourceInfo_ServiceDesc is the grpc.ServiceDesc for GetResourceInfo service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var GetResourceInfo_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.GetResourceInfo",
+	HandlerType: (*GetResourceInfoServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetResourceInfo",
+			Handler:    _GetResourceInfo_GetResourceInfo_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	SetResourcePower_SetResourcePower_FullMethodName = "/api.SetResourcePower/SetResourcePower"
+)
+
+// SetResourcePowerClient is the client API for SetResourcePower service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SetResourcePowerClient interface {
+	SetResourcePower(ctx context.Context, in *SetResourcePowerRequest, opts ...grpc.CallOption) (*SetResourcePowerResponse, error)
+}
+
+type setResourcePowerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSetResourcePowerClient(cc grpc.ClientConnInterface) SetResourcePowerClient {
+	return &setResourcePowerClient{cc}
+}
+
+func (c *setResourcePowerClient) SetResourcePower(ctx context.Context, in *SetResourcePowerRequest, opts ...grpc.CallOption) (*SetResourcePowerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetResourcePowerResponse)
+	err := c.cc.Invoke(ctx, SetResourcePower_SetResourcePower_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetResourcePowerServer is the server API for SetResourcePower service.
+// All implementations must embed UnimplementedSetResourcePowerServer
+// for forward compatibility.
+type SetResourcePowerServer interface {
+	SetResourcePower(context.Context, *SetResourcePowerRequest) (*SetResourcePowerResponse, error)
+	mustEmbedUnimplementedSetResourcePowerServer()
+}
+
+// UnimplementedSetResourcePowerServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSetResourcePowerServer struct{}
+
+func (UnimplementedSetResourcePowerServer) SetResourcePower(context.Context, *SetResourcePowerRequest) (*SetResourcePowerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetResourcePower not implemented")
+}
+func (UnimplementedSetResourcePowerServer) mustEmbedUnimplementedSetResourcePowerServer() {}
+func (UnimplementedSetResourcePowerServer) testEmbeddedByValue()                          {}
+
+// UnsafeSetResourcePowerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SetResourcePowerServer will
+// result in compilation errors.
+type UnsafeSetResourcePowerServer interface {
+	mustEmbedUnimplementedSetResourcePowerServer()
+}
+
+func RegisterSetResourcePowerServer(s grpc.ServiceRegistrar, srv SetResourcePowerServer) {
+	// If the following call pancis, it indicates UnimplementedSetResourcePowerServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SetResourcePower_ServiceDesc, srv)
+}
+
+func _SetResourcePower_SetResourcePower_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetResourcePowerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SetResourcePowerServer).SetResourcePower(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SetResourcePower_SetResourcePower_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SetResourcePowerServer).SetResourcePower(ctx, req.(*SetResourcePowerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SetResourcePower_ServiceDesc is the grpc.ServiceDesc for SetResourcePower service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SetResourcePower_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.SetResourcePower",
+	HandlerType: (*SetResourcePowerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SetResourcePower",
+			Handler:    _SetResourcePower_SetResourcePower_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	SetResourceBM2PXEBoot_SetResourceBM2PXEBoot_FullMethodName = "/api.SetResourceBM2PXEBoot/SetResourceBM2PXEBoot"
+)
+
+// SetResourceBM2PXEBootClient is the client API for SetResourceBM2PXEBoot service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SetResourceBM2PXEBootClient interface {
+	SetResourceBM2PXEBoot(ctx context.Context, in *SetResourceBM2PXEBootRequest, opts ...grpc.CallOption) (*SetResourceBM2PXEBootResponse, error)
+}
+
+type setResourceBM2PXEBootClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSetResourceBM2PXEBootClient(cc grpc.ClientConnInterface) SetResourceBM2PXEBootClient {
+	return &setResourceBM2PXEBootClient{cc}
+}
+
+func (c *setResourceBM2PXEBootClient) SetResourceBM2PXEBoot(ctx context.Context, in *SetResourceBM2PXEBootRequest, opts ...grpc.CallOption) (*SetResourceBM2PXEBootResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetResourceBM2PXEBootResponse)
+	err := c.cc.Invoke(ctx, SetResourceBM2PXEBoot_SetResourceBM2PXEBoot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetResourceBM2PXEBootServer is the server API for SetResourceBM2PXEBoot service.
+// All implementations must embed UnimplementedSetResourceBM2PXEBootServer
+// for forward compatibility.
+type SetResourceBM2PXEBootServer interface {
+	SetResourceBM2PXEBoot(context.Context, *SetResourceBM2PXEBootRequest) (*SetResourceBM2PXEBootResponse, error)
+	mustEmbedUnimplementedSetResourceBM2PXEBootServer()
+}
+
+// UnimplementedSetResourceBM2PXEBootServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSetResourceBM2PXEBootServer struct{}
+
+func (UnimplementedSetResourceBM2PXEBootServer) SetResourceBM2PXEBoot(context.Context, *SetResourceBM2PXEBootRequest) (*SetResourceBM2PXEBootResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetResourceBM2PXEBoot not implemented")
+}
+func (UnimplementedSetResourceBM2PXEBootServer) mustEmbedUnimplementedSetResourceBM2PXEBootServer() {}
+func (UnimplementedSetResourceBM2PXEBootServer) testEmbeddedByValue()                               {}
+
+// UnsafeSetResourceBM2PXEBootServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SetResourceBM2PXEBootServer will
+// result in compilation errors.
+type UnsafeSetResourceBM2PXEBootServer interface {
+	mustEmbedUnimplementedSetResourceBM2PXEBootServer()
+}
+
+func RegisterSetResourceBM2PXEBootServer(s grpc.ServiceRegistrar, srv SetResourceBM2PXEBootServer) {
+	// If the following call pancis, it indicates UnimplementedSetResourceBM2PXEBootServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SetResourceBM2PXEBoot_ServiceDesc, srv)
+}
+
+func _SetResourceBM2PXEBoot_SetResourceBM2PXEBoot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetResourceBM2PXEBootRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SetResourceBM2PXEBootServer).SetResourceBM2PXEBoot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SetResourceBM2PXEBoot_SetResourceBM2PXEBoot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SetResourceBM2PXEBootServer).SetResourceBM2PXEBoot(ctx, req.(*SetResourceBM2PXEBootRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SetResourceBM2PXEBoot_ServiceDesc is the grpc.ServiceDesc for SetResourceBM2PXEBoot service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SetResourceBM2PXEBoot_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.SetResourceBM2PXEBoot",
+	HandlerType: (*SetResourceBM2PXEBootServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SetResourceBM2PXEBoot",
+			Handler:    _SetResourceBM2PXEBoot_SetResourceBM2PXEBoot_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
+	WhoAmI_WhoAmI_FullMethodName = "/api.WhoAmI/WhoAmI"
+)
+
+// WhoAmIClient is the client API for WhoAmI service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type WhoAmIClient interface {
+	WhoAmI(ctx context.Context, in *WhoAmIRequest, opts ...grpc.CallOption) (*WhoAmIResponse, error)
+}
+
+type whoAmIClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWhoAmIClient(cc grpc.ClientConnInterface) WhoAmIClient {
+	return &whoAmIClient{cc}
+}
+
+func (c *whoAmIClient) WhoAmI(ctx context.Context, in *WhoAmIRequest, opts ...grpc.CallOption) (*WhoAmIResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WhoAmIResponse)
+	err := c.cc.Invoke(ctx, WhoAmI_WhoAmI_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WhoAmIServer is the server API for WhoAmI service.
+// All implementations must embed UnimplementedWhoAmIServer
+// for forward compatibility.
+type WhoAmIServer interface {
+	WhoAmI(context.Context, *WhoAmIRequest) (*WhoAmIResponse, error)
+	mustEmbedUnimplementedWhoAmIServer()
+}
+
+// UnimplementedWhoAmIServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedWhoAmIServer struct{}
+
+func (UnimplementedWhoAmIServer) WhoAmI(context.Context, *WhoAmIRequest) (*WhoAmIResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WhoAmI not implemented")
+}
+func (UnimplementedWhoAmIServer) mustEmbedUnimplementedWhoAmIServer() {}
+func (UnimplementedWhoAmIServer) testEmbeddedByValue()                {}
+
+// UnsafeWhoAmIServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WhoAmIServer will
+// result in compilation errors.
+type UnsafeWhoAmIServer interface {
+	mustEmbedUnimplementedWhoAmIServer()
+}
+
+func RegisterWhoAmIServer(s grpc.ServiceRegistrar, srv WhoAmIServer) {
+	// If the following call pancis, it indicates UnimplementedWhoAmIServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&WhoAmI_ServiceDesc, srv)
+}
+
+func _WhoAmI_WhoAmI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WhoAmIRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WhoAmIServer).WhoAmI(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WhoAmI_WhoAmI_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WhoAmIServer).WhoAmI(ctx, req.(*WhoAmIRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// WhoAmI_ServiceDesc is the grpc.ServiceDesc for WhoAmI service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var WhoAmI_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.WhoAmI",
+	HandlerType: (*WhoAmIServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "WhoAmI",
+			Handler:    _WhoAmI_WhoAmI_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

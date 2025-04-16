@@ -39,6 +39,8 @@ type BMCProvider interface {
 	ListResources(ctx context.Context) ([]api.MachineInfo, error)
 	// Set resource power
 	SetResourcePower(ctx context.Context, resourceID string, action api.PowerStatus) error
+	// Get Resource status
+	GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error)
 }
 
 type BMAccessInfo struct {
