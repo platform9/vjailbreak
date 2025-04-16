@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	gomaasclient "github.com/canonical/gomaasclient/client"
-	"github.com/canonical/gomaasclient/entity"
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -25,111 +22,9 @@ type MaasAccessInfo struct {
 	UseInsecure bool
 }
 
-// MaasClient represents a client for interacting with MaaS API
-type MaasClient struct {
-	BaseURL string
-	ApiKey  string
-	Client  *gomaasclient.Client
-}
-
-// NewMaasClient creates a new MaaS API client
-func NewMaasClient(accessInfo MaasAccessInfo) (*MaasClient, error) {
-	if !strings.Contains(accessInfo.BaseURL, "MAAS") {
-		return nil, errors.New("invalid base URL")
-	}
-	client := &MaasClient{
-		BaseURL: strings.TrimRight(accessInfo.BaseURL, "/"),
-		ApiKey:  accessInfo.APIKey,
-	}
-	c, err := gomaasclient.GetClient(client.BaseURL, client.ApiKey, "2.0")
-	if err != nil {
-		logrus.Errorf("Failed to create MaaS client: %v", err)
-		return nil, err
-	}
-	client.Client = c
-	return client, nil
-}
-
-// ListMachines retrieves a list of machines from MaaS
-func (m *MaasClient) ListMachines(ctx context.Context) ([]api.MachineInfo, error) {
-	if m.Client == nil {
-		return nil, errors.New("client not initialized")
-	}
-	machines, err := m.Client.Machines.Get(&entity.MachinesParams{})
-	if err != nil {
-		logrus.Errorf("Failed to list machines: %v", err)
-		return nil, err
-	}
-	var result []api.MachineInfo
-	result = make([]api.MachineInfo, len(machines))
-	for i, v := range machines {
-		result[i] = api.MachineInfo{
-			Id:              v.SystemID,
-			Fqdn:            v.FQDN,
-			Os:              v.OSystem,
-			PowerState:      v.PowerState,
-			Hostname:        v.Hostname,
-			Architecture:    v.Architecture,
-			Memory:          fmt.Sprintf("%d", v.Memory),
-			CpuCount:        fmt.Sprintf("%d", v.CPUCount),
-			CpuSpeed:        fmt.Sprintf("%d", v.CPUSpeed),
-			BootDiskSize:    fmt.Sprintf("%d", v.BootDisk.Size),
-			Status:          v.StatusName,
-			StatusMessage:   v.StatusMessage,
-			StatusAction:    v.StatusAction,
-			Description:     v.Description,
-			Domain:          v.Domain.Name,
-			Zone:            v.Zone.Name,
-			Pool:            v.Pool.Name,
-			TagNames:        strings.Join(v.TagNames, ","),
-			Netboot:         v.Netboot,
-			EphemeralDeploy: v.EphemeralDeploy,
-		}
-	}
-	return result, nil
-}
-
-// SetMachinePower changes the power state of a machine
-func (m *MaasClient) SetMachinePower(ctx context.Context, systemID string, action api.PowerStatus) error {
-	if m.Client == nil {
-		return errors.New("client not initialized")
-	}
-	_, err := m.Client.Machine.Get(systemID)
-	if err != nil {
-		logrus.Errorf("Failed to get machine: %v", err)
-		return err
-	}
-
-	// Determine the power action
-	var errs error
-	errs = nil
-	switch action {
-	case api.PowerStatus_POWERED_ON:
-		_, errs = m.Client.Machine.PowerOn(systemID, &entity.MachinePowerOnParams{})
-		logrus.Infof("Machine %s powered on", systemID)
-	case api.PowerStatus_POWERED_OFF:
-		_, errs = m.Client.Machine.PowerOff(systemID, &entity.MachinePowerOffParams{})
-		logrus.Infof("Machine %s powered off", systemID)
-	case api.PowerStatus_POWERING_OFF:
-		_, errs = m.Client.Machine.PowerOff(systemID, &entity.MachinePowerOffParams{})
-		logrus.Infof("Machine %s powering off", systemID)
-	case api.PowerStatus_POWERING_ON:
-		_, errs = m.Client.Machine.PowerOn(systemID, &entity.MachinePowerOnParams{})
-	default:
-		return fmt.Errorf("unsupported power action: %v", action)
-	}
-
-	if errs != nil {
-		logrus.Errorf("Failed to change power state: %v", errs)
-		return errs
-	}
-
-	return nil
-}
-
 // MaasProvider implements the Provider interface for MaaS
 type MaasProvider struct {
-	base.BaseProvider
+	base.UnimplementedBaseProvider
 	client *MaasClient
 }
 
@@ -159,10 +54,64 @@ func (p *MaasProvider) SetResourcePower(ctx context.Context, resourceID string, 
 	return p.client.SetMachinePower(ctx, resourceID, action)
 }
 
+// GetResourceInfo retrieves information about a machine
+func (p *MaasProvider) GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.MachineInfo{}, errors.New("client not initialized")
+	}
+	machine, err := p.client.Client.Machine.Get(resourceID)
+	if err != nil {
+		return api.MachineInfo{}, err
+	}
+	powerParams, err := p.client.Client.Machine.GetPowerParameters(resourceID)
+	if err != nil {
+		return api.MachineInfo{}, err
+	}
+	pw_val := ""
+	for k, v := range powerParams {
+		pw_val += fmt.Sprintf("%s=%s\n", k, v)
+	}
+	return api.MachineInfo{
+		Id:              machine.SystemID,
+		Fqdn:            machine.FQDN,
+		Os:              machine.OSystem,
+		PowerState:      machine.PowerState,
+		Hostname:        machine.Hostname,
+		Architecture:    machine.Architecture,
+		Memory:          fmt.Sprintf("%d", machine.Memory),
+		CpuCount:        fmt.Sprintf("%d", machine.CPUCount),
+		CpuSpeed:        fmt.Sprintf("%d", machine.CPUSpeed),
+		BootDiskSize:    fmt.Sprintf("%d", machine.BootDisk.Size),
+		Status:          machine.StatusName,
+		StatusMessage:   machine.StatusMessage,
+		StatusAction:    machine.StatusAction,
+		Description:     machine.Description,
+		Domain:          machine.Domain.Name,
+		Zone:            machine.Zone.Name,
+		Pool:            machine.Pool.Name,
+		TagNames:        strings.Join(machine.TagNames, ","),
+		Netboot:         machine.Netboot,
+		EphemeralDeploy: machine.EphemeralDeploy,
+		PowerType:       machine.PowerType,
+		PowerParams:     pw_val,
+	}, nil
+}
+
+func (p *MaasProvider) Disconnect() error {
+	if p.client == nil {
+		return nil
+	}
+	return nil
+}
+
+func (p *MaasProvider) SetResourceBM2PXEBoot(ctx context.Context, resourceID string) error {
+	return p.client.SetMachine2PXEBoot(ctx, resourceID)
+}
+
 func (p *MaasProvider) WhoAmI() string {
 	return MaasProviderName
 }
 
 func init() {
-	providers.RegisterProvider(MaasProviderName, &MaasProvider{BaseProvider: base.BaseProvider{}, client: nil})
+	providers.RegisterProvider(MaasProviderName, &MaasProvider{client: nil})
 }

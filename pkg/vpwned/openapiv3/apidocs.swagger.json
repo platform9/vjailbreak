@@ -10,7 +10,31 @@
       "name": "Version"
     },
     {
+      "name": "ListVMs"
+    },
+    {
+      "name": "GetVM"
+    },
+    {
+      "name": "ReclaimVM"
+    },
+    {
+      "name": "CordonHost"
+    },
+    {
       "name": "BMListMachines"
+    },
+    {
+      "name": "GetResourceInfo"
+    },
+    {
+      "name": "SetResourcePower"
+    },
+    {
+      "name": "SetResourceBM2PXEBoot"
+    },
+    {
+      "name": "WhoAmI"
     }
   ],
   "consumes": [
@@ -39,26 +63,364 @@
         },
         "parameters": [
           {
-            "name": "apiKey",
+            "name": "accessInfo.apiKey",
             "in": "query",
             "required": false,
             "type": "string"
           },
           {
-            "name": "baseUrl",
+            "name": "accessInfo.baseUrl",
             "in": "query",
             "required": false,
             "type": "string"
           },
           {
-            "name": "useInsecure",
+            "name": "accessInfo.useInsecure",
             "in": "query",
             "required": false,
             "type": "boolean"
+          },
+          {
+            "name": "accessInfo.username",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.password",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.maas",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.unknownProvider",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
           "BMListMachines"
+        ]
+      }
+    },
+    "/vpw/v1/cordon_host": {
+      "post": {
+        "operationId": "CordonHost_CordonHost",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCordonHostResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCordonHostRequest"
+            }
+          }
+        ],
+        "tags": [
+          "CordonHost"
+        ]
+      }
+    },
+    "/vpw/v1/get_resource_info": {
+      "get": {
+        "operationId": "GetResourceInfo_GetResourceInfo",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetResourceInfoResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accessInfo.apiKey",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.baseUrl",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.useInsecure",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "accessInfo.username",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.password",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.maas",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.unknownProvider",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GetResourceInfo"
+        ]
+      }
+    },
+    "/vpw/v1/get_vm": {
+      "get": {
+        "operationId": "GetVM_GetVM",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetVMResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accessInfo.hostnameOrIp",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.port",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.datacenter",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.username",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.password",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GetVM"
+        ]
+      }
+    },
+    "/vpw/v1/list_vms": {
+      "get": {
+        "operationId": "ListVMs_ListVMs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiListVMsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accessInfo.hostnameOrIp",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.port",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.datacenter",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.username",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.password",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ListVMs"
+        ]
+      }
+    },
+    "/vpw/v1/reclaim_vm": {
+      "post": {
+        "operationId": "ReclaimVM_ReclaimVM",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiReclaimVMResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiReclaimVMRequest"
+            }
+          }
+        ],
+        "tags": [
+          "ReclaimVM"
+        ]
+      }
+    },
+    "/vpw/v1/set_resource_bm2pxeboot": {
+      "post": {
+        "operationId": "SetResourceBM2PXEBoot_SetResourceBM2PXEBoot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiSetResourceBM2PXEBootResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiSetResourceBM2PXEBootRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SetResourceBM2PXEBoot"
+        ]
+      }
+    },
+    "/vpw/v1/set_resource_power": {
+      "post": {
+        "operationId": "SetResourcePower_SetResourcePower",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiSetResourcePowerResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiSetResourcePowerRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SetResourcePower"
         ]
       }
     },
@@ -83,6 +445,28 @@
           "Version"
         ]
       }
+    },
+    "/vpw/v1/who_am_i": {
+      "get": {
+        "operationId": "WhoAmI_WhoAmI",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiWhoAmIResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "WhoAmI"
+        ]
+      }
     }
   },
   "definitions": {
@@ -94,6 +478,94 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/apiMachineInfo"
+          }
+        }
+      }
+    },
+    "apiBMProvisionerAccessInfo": {
+      "type": "object",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "useInsecure": {
+          "type": "boolean"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "maas": {
+          "type": "string"
+        },
+        "unknownProvider": {
+          "type": "string"
+        }
+      },
+      "title": "BM Provisioner APIs"
+    },
+    "apiBootDevice": {
+      "type": "string",
+      "enum": [
+        "HDD",
+        "USB",
+        "CDROM",
+        "PXE",
+        "BOOT_DEVICE_UNKNOWN"
+      ],
+      "default": "HDD"
+    },
+    "apiCordonHostRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiVCenterAccessInfo"
+        },
+        "esxiName": {
+          "type": "string"
+        }
+      }
+    },
+    "apiCordonHostResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiGetResourceInfoResponse": {
+      "type": "object",
+      "properties": {
+        "machine": {
+          "$ref": "#/definitions/apiMachineInfo"
+        }
+      }
+    },
+    "apiGetVMResponse": {
+      "type": "object",
+      "properties": {
+        "vm": {
+          "$ref": "#/definitions/apiVMInfo"
+        }
+      }
+    },
+    "apiListVMsResponse": {
+      "type": "object",
+      "properties": {
+        "vms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiVMInfo"
           }
         }
       }
@@ -163,6 +635,150 @@
         },
         "ephemeralDeploy": {
           "type": "boolean"
+        },
+        "powerParams": {
+          "type": "string"
+        },
+        "powerType": {
+          "type": "string"
+        }
+      }
+    },
+    "apiPowerStatus": {
+      "type": "string",
+      "enum": [
+        "POWERED_OFF",
+        "POWERED_ON",
+        "POWERING_OFF",
+        "POWERING_ON",
+        "POWER_STATE_UNKNOWN"
+      ],
+      "default": "POWERED_OFF"
+    },
+    "apiReclaimVMRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiVCenterAccessInfo"
+        },
+        "name": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiReclaimVMResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiSetResourceBM2PXEBootRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiBMProvisionerAccessInfo"
+        },
+        "resourceId": {
+          "type": "string"
+        }
+      }
+    },
+    "apiSetResourceBM2PXEBootResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiSetResourcePowerRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiBMProvisionerAccessInfo"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "powerStatus": {
+          "$ref": "#/definitions/apiPowerStatus"
+        }
+      }
+    },
+    "apiSetResourcePowerResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiVCenterAccessInfo": {
+      "type": "object",
+      "properties": {
+        "hostnameOrIp": {
+          "type": "string"
+        },
+        "port": {
+          "type": "string"
+        },
+        "datacenter": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "title": "VCENTER APIs"
+    },
+    "apiVMInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "guestOs": {
+          "type": "string"
+        },
+        "powerStatus": {
+          "$ref": "#/definitions/apiPowerStatus"
+        },
+        "cpu": {
+          "type": "string",
+          "format": "int64"
+        },
+        "memory": {
+          "type": "string",
+          "format": "int64"
+        },
+        "ipv4Addr": {
+          "type": "string"
+        },
+        "ipv6Addr": {
+          "type": "string"
+        },
+        "bootDevice": {
+          "$ref": "#/definitions/apiBootDevice"
         }
       }
     },
@@ -170,6 +786,14 @@
       "type": "object",
       "properties": {
         "version": {
+          "type": "string"
+        }
+      }
+    },
+    "apiWhoAmIResponse": {
+      "type": "object",
+      "properties": {
+        "providerName": {
           "type": "string"
         }
       }

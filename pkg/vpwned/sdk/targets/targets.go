@@ -1,6 +1,7 @@
 package targets
 
 import (
+	"context"
 	"errors"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
@@ -27,9 +28,11 @@ type AccessInfo struct {
 }
 
 type Targets interface {
-	GetVM(a AccessInfo, name string) (VMInfo, error)
-	ListVMs(a AccessInfo) ([]VMInfo, error)
-	ReclaimVM(a AccessInfo, name string, args ...string) error
+	GetVM(ctx context.Context, a AccessInfo, name string) (VMInfo, error)
+	ListVMs(ctx context.Context, a AccessInfo) ([]VMInfo, error)
+	ReclaimVM(ctx context.Context, a AccessInfo, name string, args ...string) error
+	CordonHost(ctx context.Context, a AccessInfo, name string) error
+	UnCordonHost(ctx context.Context, a AccessInfo, name string) error
 }
 
 func RegisterTarget(name string, target Targets) {
