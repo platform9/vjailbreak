@@ -6,7 +6,7 @@ import (
 )
 
 type IronicProvider struct {
-	base.BaseProvider
+	base.UnimplementedBaseProvider
 }
 
 func init() {
