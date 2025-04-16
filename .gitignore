@@ -14,3 +14,4 @@ node_modules
 openstack.rc
 .qodo
 pkg/vpwned/vendor/*
+pkg/vpwned/bin/vpwctl

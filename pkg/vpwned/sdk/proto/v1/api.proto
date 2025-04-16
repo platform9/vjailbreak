@@ -49,6 +49,8 @@ message MachineInfo{
     string vm_host = 19;
     bool netboot = 20;
     bool ephemeral_deploy = 21;
+    string power_params = 22;
+    string power_type = 23;
 };
 
 service Version {
@@ -66,6 +68,111 @@ message VersionResponse {
     string version = 1;
 }
 
+// VCENTER APIs
+message VCenterAccessInfo {
+    string hostname_or_ip = 1;
+    string port = 2;
+    string datacenter = 3;
+    string username = 4;
+    string password = 5;
+}
+
+message VMInfo {
+    string name = 1;
+    string guest_os = 2;
+    PowerStatus power_status = 3;
+    int64 cpu = 4;
+    int64 memory = 5;
+    string ipv4_addr = 6;
+    string ipv6_addr = 7;
+    BootDevice boot_device = 8;
+}
+
+service ListVMs {
+    rpc ListVMs(ListVMsRequest) returns (ListVMsResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/list_vms"
+        };
+    }
+}
+
+message ListVMsRequest {
+    VCenterAccessInfo access_info = 1;
+}
+
+message ListVMsResponse {
+    repeated VMInfo vms = 1;
+}
+
+
+service GetVM {
+    rpc GetVM(GetVMRequest) returns (GetVMResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/get_vm"
+        };
+    }
+}
+
+message GetVMRequest {
+    VCenterAccessInfo access_info = 1;
+    string name = 2;
+}
+
+message GetVMResponse {
+    VMInfo vm = 1;
+}
+
+service ReclaimVM {
+    rpc ReclaimVM(ReclaimVMRequest) returns (ReclaimVMResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/reclaim_vm"
+            body: "*"
+        };
+    }
+}
+
+message ReclaimVMRequest {
+    VCenterAccessInfo access_info = 1;
+    string name = 2;
+    repeated string args = 3;
+}
+
+message ReclaimVMResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+service CordonHost {
+    rpc CordonHost(CordonHostRequest) returns (CordonHostResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/cordon_host"
+            body: "*"
+        };
+    }
+}
+
+message CordonHostRequest {
+    VCenterAccessInfo access_info = 1;
+    string esxi_name = 2;
+}
+
+message CordonHostResponse {
+    bool success = 1;
+    string message = 2;
+}   
+
+// BM Provisioner APIs
+message BMProvisionerAccessInfo {
+    string api_key = 1;
+    string base_url = 2;
+    bool use_insecure = 3;
+    string username = 4;
+    string password = 5;
+    oneof providers {
+        string maas = 6;
+        string unknown_provider = 99;
+    }
+}
 
 service BMListMachines {
     rpc BMListMachines(BMListMachinesRequest) returns (BMListMachinesResponse) {
@@ -76,11 +183,81 @@ service BMListMachines {
 }
 
 message BMListMachinesRequest {
-    string api_key = 1;
-    string base_url = 2;
-    bool use_insecure = 3;
+    BMProvisionerAccessInfo access_info = 1;
 }
 
 message BMListMachinesResponse {
     repeated MachineInfo machines = 1;
+}
+
+service GetResourceInfo {
+    rpc GetResourceInfo(GetResourceInfoRequest) returns (GetResourceInfoResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/get_resource_info"
+        };
+    }
+}
+
+message GetResourceInfoRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+}
+
+message GetResourceInfoResponse {
+    MachineInfo machine = 1;
+}
+
+service SetResourcePower {
+    rpc SetResourcePower(SetResourcePowerRequest) returns (SetResourcePowerResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/set_resource_power"
+            body: "*"
+        };
+    }
+}
+
+message SetResourcePowerRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+    PowerStatus power_status = 3;
+}
+
+message SetResourcePowerResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+service SetResourceBM2PXEBoot {
+    rpc SetResourceBM2PXEBoot(SetResourceBM2PXEBootRequest) returns (SetResourceBM2PXEBootResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/set_resource_bm2pxeboot"
+            body: "*"
+        };
+    }
+}
+
+message SetResourceBM2PXEBootRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+}
+
+message SetResourceBM2PXEBootResponse {
+    bool success = 1;
+    string message = 2;
+}   
+
+service WhoAmI {
+    rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/who_am_i"
+        };
+    }
+}
+
+message WhoAmIRequest {
+    
+}
+
+message WhoAmIResponse {
+    string provider_name = 1;
 }
