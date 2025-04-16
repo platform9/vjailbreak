@@ -1,62 +1,76 @@
 package base
 
 import (
+	"context"
 	"errors"
 
+	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 )
 
 const (
-	BaseProviderName = "base"
+	UnimplementedBaseProviderName = "base"
 )
 
-// BaseProvider is a base implementation of the BMCProvider interface
+// UnimplementedBaseProvider is a base implementation of the BMCProvider interface
 // that provides common functionality for all providers
 
-type BaseProvider struct {
+type UnimplementedBaseProvider struct {
 	providers.BMCProvider
 }
 
-func (p *BaseProvider) Connect(auth providers.BMAccessInfo) error {
+func (p *UnimplementedBaseProvider) Connect(auth providers.BMAccessInfo) error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) Disconnect() error {
+func (p *UnimplementedBaseProvider) Disconnect() error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) GetProviderBMStatus() (string, error) {
+func (p *UnimplementedBaseProvider) GetProviderBMStatus() (string, error) {
 	return "", errors.New("not implemented")
 }
 
-func (p *BaseProvider) IsBMReady() bool {
+func (p *UnimplementedBaseProvider) IsBMReady() bool {
 	return false
 }
 
-func (p *BaseProvider) IsBMRunning() bool {
+func (p *UnimplementedBaseProvider) IsBMRunning() bool {
 	return false
 }
 
-func (p *BaseProvider) StartBM() error {
+func (p *UnimplementedBaseProvider) StartBM() error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) StopBM() error {
+func (p *UnimplementedBaseProvider) StopBM() error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) SetBM2PXEBoot() error {
+func (p *UnimplementedBaseProvider) SetBM2PXEBoot() error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) ReclaimBM() error {
+func (p *UnimplementedBaseProvider) ReclaimBM() error {
 	return errors.New("not implemented")
 }
 
-func (p *BaseProvider) WhoAmI() string {
-	return BaseProviderName
+func (p *UnimplementedBaseProvider) WhoAmI() string {
+	return UnimplementedBaseProviderName
+}
+
+func (p *UnimplementedBaseProvider) ListResources(ctx context.Context) ([]api.MachineInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (p *UnimplementedBaseProvider) SetResourcePower(ctx context.Context, resourceID string, action api.PowerStatus) error {
+	return errors.New("not implemented")
+}
+
+func (p *UnimplementedBaseProvider) GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error) {
+	return api.MachineInfo{}, errors.New("not implemented")
 }
 
 func init() {
-	providers.RegisterProvider(BaseProviderName, &BaseProvider{})
+	providers.RegisterProvider(UnimplementedBaseProviderName, &UnimplementedBaseProvider{})
 }

@@ -71,8 +71,7 @@ func findBootDevice(devices []types.BaseVirtualMachineBootOptionsBootableDevice)
 	return "unknown"
 }
 
-func (v *Vcenter) connect(a VMCenterAccessInfo) (*govmomi.Client, *find.Finder, error) {
-	ctx := context.Background()
+func (v *Vcenter) connect(ctx context.Context, a VMCenterAccessInfo) (*govmomi.Client, *find.Finder, error) {
 	logrus.Info("Connecting to vCenter...")
 	// Parse vCenter URL
 	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", a.HostnameOrIP))
@@ -101,15 +100,14 @@ func (v *Vcenter) connect(a VMCenterAccessInfo) (*govmomi.Client, *find.Finder, 
 		}
 		finder.SetDatacenter(dc)
 	}
-
+	logrus.Info("Connected to vCenter")
 	return client, finder, nil
 }
 
-func (v *Vcenter) ListVMs(a VMCenterAccessInfo) ([]targets.VMInfo, error) {
-	ctx := context.Background()
+func (v *Vcenter) ListVMs(ctx context.Context, a VMCenterAccessInfo) ([]targets.VMInfo, error) {
 
 	// Connect to vCenter
-	client, _, err := v.connect(a)
+	client, _, err := v.connect(ctx, a)
 	if err != nil {
 		return nil, err
 	}
@@ -154,11 +152,9 @@ func (v *Vcenter) ListVMs(a VMCenterAccessInfo) ([]targets.VMInfo, error) {
 	return vmInfos, nil
 }
 
-func (v *Vcenter) GetVM(a VMCenterAccessInfo, name string) (targets.VMInfo, error) {
-	ctx := context.Background()
-
+func (v *Vcenter) GetVM(ctx context.Context, a VMCenterAccessInfo, name string) (targets.VMInfo, error) {
 	// Connect to vCenter
-	client, finder, err := v.connect(a)
+	client, finder, err := v.connect(ctx, a)
 	if err != nil {
 		return targets.VMInfo{}, err
 	}
@@ -184,11 +180,9 @@ func (v *Vcenter) GetVM(a VMCenterAccessInfo, name string) (targets.VMInfo, erro
 	return vmInfo, nil
 }
 
-func (v *Vcenter) ReclaimVM(a VMCenterAccessInfo, name string, args ...string) error {
-	ctx := context.Background()
-
+func (v *Vcenter) ReclaimVM(ctx context.Context, a VMCenterAccessInfo, name string, args ...string) error {
 	// Connect to vCenter
-	client, finder, err := v.connect(a)
+	client, finder, err := v.connect(ctx, a)
 	if err != nil {
 		return err
 	}
@@ -227,6 +221,62 @@ func (v *Vcenter) ReclaimVM(a VMCenterAccessInfo, name string, args ...string) e
 	// Wait for destroy to complete
 	if err := task.Wait(ctx); err != nil {
 		return fmt.Errorf("error waiting for VM destruction: %v", err)
+	}
+
+	return nil
+}
+
+func (v *Vcenter) CordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_name string) error {
+	// Connect to vCenter
+	client, finder, err := v.connect(ctx, a)
+	if err != nil {
+		return err
+	}
+	defer client.Logout(ctx)
+
+	// Find specific ESXi host
+	esxi, err := finder.HostSystem(ctx, esxi_name)
+	if err != nil {
+		return fmt.Errorf("ESXi host not found: %v", err)
+	}
+
+	// Enter maintenance mode
+	task, err := esxi.EnterMaintenanceMode(ctx, 0, true, &types.HostMaintenanceSpec{})
+	if err != nil {
+		return fmt.Errorf("failed to enter maintenance mode: %v", err)
+	}
+
+	// Wait for maintenance mode to complete
+	if err := task.Wait(ctx); err != nil {
+		return fmt.Errorf("error waiting for ESXi host maintenance mode: %v", err)
+	}
+
+	return nil
+}
+
+func (v *Vcenter) UnCordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_name string) error {
+	// Connect to vCenter
+	client, finder, err := v.connect(ctx, a)
+	if err != nil {
+		return err
+	}
+	defer client.Logout(ctx)
+
+	// Find specific ESXi host
+	esxi, err := finder.HostSystem(ctx, esxi_name)
+	if err != nil {
+		return fmt.Errorf("ESXi host not found: %v", err)
+	}
+
+	// Enter maintenance mode
+	task, err := esxi.ExitMaintenanceMode(ctx, 0)
+	if err != nil {
+		return fmt.Errorf("failed to exit maintenance mode: %v", err)
+	}
+
+	// Wait for maintenance mode to complete
+	if err := task.Wait(ctx); err != nil {
+		return fmt.Errorf("error waiting for ESXi host maintenance mode: %v", err)
 	}
 
 	return nil

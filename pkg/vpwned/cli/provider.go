@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
@@ -165,6 +166,46 @@ var listProviderResourcesCmd = &cobra.Command{
 	},
 }
 
+var getResourceInfoCMD = &cobra.Command{
+	Use:   "get_resource_info",
+	Short: "get provider resource info",
+	Long:  "get provider resource info",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id string
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+
+		logrus.Infof("Getting resource info")
+		res, err := currProvider.GetResourceInfo(context.Background(), resource_id)
+		if err != nil {
+			logrus.Error(err)
+		}
+		b, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			logrus.Errorf("Failed to marshal resource info: %v", err)
+			return
+		}
+		fmt.Println(string(b))
+	},
+}
+
 // var setProviderBootDeviceCmd = &cobra.Command{
 // 	Use:   "set_boot_device",
 // 	Short: "set provider boot device",
@@ -193,6 +234,8 @@ func init() {
 	//set paramters for setPower
 	setProviderPowerCmd.Flags().StringP("machine_id", "m", "", "Set the machine ID to use")
 	setProviderPowerCmd.Flags().StringP("action", "a", "", "Set the power state to use")
+	// get resource
+	getResourceInfoCMD.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
 	//add commands
-	providerCmd.AddCommand(listProvidersCmd, connectProviderCmd, setProviderPowerCmd, listProviderResourcesCmd)
+	providerCmd.AddCommand(listProvidersCmd, connectProviderCmd, setProviderPowerCmd, listProviderResourcesCmd, getResourceInfoCMD)
 }

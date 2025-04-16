@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/targets/vcenter"
@@ -45,10 +46,80 @@ var listVMsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		populateCredsFromCMD(cmd)
 		vcenter := vcenter.Vcenter{}
-		res, err := vcenter.ListVMs(Creds)
+		res, err := vcenter.ListVMs(context.Background(), Creds)
 		for k, v := range res {
 			fmt.Println(k, v)
 		}
+		if err != nil {
+			logrus.Error(err)
+		}
+	},
+}
+
+var getVMCmd = &cobra.Command{
+	Use:   "get",
+	Short: "get vcenter resource",
+	Long:  "get vcenter resource",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateCredsFromCMD(cmd)
+		var vm_name string
+		if val, err := cmd.Flags().GetString("vm_name"); err == nil {
+			vm_name = val
+		}
+		if vm_name == "" {
+			logrus.Error("vm_name is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		vcenter := vcenter.Vcenter{}
+		res, err := vcenter.GetVM(context.Background(), Creds, vm_name)
+		if err != nil {
+			logrus.Error(err)
+		}
+		fmt.Println(res)
+	},
+}
+
+var cordonESXIHostCmd = &cobra.Command{
+	Use:   "cordon",
+	Short: "cordon esxi host",
+	Long:  "cordon esxi host",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateCredsFromCMD(cmd)
+		var esxi_name string
+		if val, err := cmd.Flags().GetString("esxi_name"); err == nil {
+			esxi_name = val
+		}
+		if esxi_name == "" {
+			logrus.Error("esxi_name is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		vcenter := vcenter.Vcenter{}
+		err := vcenter.CordonHost(context.Background(), Creds, esxi_name)
+		if err != nil {
+			logrus.Error(err)
+		}
+	},
+}
+
+var unCordonESXIHostCmd = &cobra.Command{
+	Use:   "uncordon",
+	Short: "uncordon esxi host",
+	Long:  "uncordon esxi host",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateCredsFromCMD(cmd)
+		var esxi_name string
+		if val, err := cmd.Flags().GetString("esxi_name"); err == nil {
+			esxi_name = val
+		}
+		if esxi_name == "" {
+			logrus.Error("esxi_name is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		vcenter := vcenter.Vcenter{}
+		err := vcenter.UnCordonHost(context.Background(), Creds, esxi_name)
 		if err != nil {
 			logrus.Error(err)
 		}
@@ -62,5 +133,11 @@ func init() {
 	vcenterCmd.PersistentFlags().StringP("datacenter", "d", "", "Set the datacenter to target")
 	vcenterCmd.PersistentFlags().StringP("username", "U", "", "Set the username to use")
 	vcenterCmd.PersistentFlags().StringP("password", "P", "", "Set the password to use")
-	vcenterCmd.AddCommand(listVMsCmd)
+	//getVMCMD paramter
+	getVMCmd.PersistentFlags().StringP("vm_name", "v", "", "Set the vm name to use")
+	//Cordon Parameter
+	cordonESXIHostCmd.Flags().StringP("esxi_name", "e", "", "Set the esxi name to use")
+	//UnCordon Parameter
+	unCordonESXIHostCmd.Flags().StringP("esxi_name", "e", "", "Set the esxi name to use")
+	vcenterCmd.AddCommand(listVMsCmd, getVMCmd, cordonESXIHostCmd, unCordonESXIHostCmd)
 }
