@@ -168,7 +168,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 			log.Error(err, "Failed to count VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
 		}
-		log.Info("VM count completed", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
+		log.Info("Counted VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
 		if vmCount == 0 {
 			// TODO(vPwned): Convert to PCD host
 			log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)

@@ -7,6 +7,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -187,18 +188,20 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, es
 		return false, errors.Wrapf(err, "failed to find host %s", esxiName)
 	}
 
-	// Check host state
+	pc := property.DefaultCollector(c)
+
 	var hs mo.HostSystem
-	err = hostSystem.Properties(ctx, hostSystem.Reference(), []string{"runtime.connectionState"}, &hs)
+	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary"}, &hs)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get host properties")
 	}
+	// Check host state
 
-	if hs.Runtime.ConnectionState != "maintenanceMode" {
-		return false, errors.New("host is not in maintenance mode")
+	if hs.Summary.Runtime.InMaintenanceMode {
+		return true, nil
 	}
 
-	return true, nil
+	return false, nil
 }
 
 func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (int, error) {
