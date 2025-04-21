@@ -52,6 +52,8 @@ message MachineInfo{
     string power_params = 22;
     string power_type = 23;
     string bios_boot_method = 24;
+    string hardware_uuid = 25;
+    string mac_address = 26;
 };
 
 service Version {
@@ -127,6 +129,28 @@ service VCenter {
             body: "*"
         };
     }
+    rpc ListHosts(ListHostsRequest) returns (ListHostsResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/list_hosts"
+        };
+    }
+}
+
+message ListHostsRequest {
+    TargetAccessInfo access_info = 1;
+    Targets target = 2;
+}
+
+message ListHostsResponse {
+    repeated ListHostsResponseItem hosts = 1;
+}
+
+message ListHostsResponseItem {
+    string host = 1;
+    string ip = 2;
+    repeated string mac_address = 3;
+    string bios_uuid = 4;
+    string serial = 5;
 }
 
 message UnCordonHostRequest {

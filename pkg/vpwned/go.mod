@@ -13,6 +13,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/vmware/govmomi v0.49.0
+	go.uber.org/mock v0.5.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb
 	google.golang.org/grpc v1.71.1
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1

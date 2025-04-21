@@ -12,13 +12,14 @@ type targetVcenterGRPC struct {
 	api.UnimplementedVCenterServer
 }
 
-func (p *targetVcenterGRPC) populateCredsFromAccessInfo(accessInfo *api.TargetAccessInfo) targets.AccessInfo {
-	return targets.AccessInfo{
+func (p *targetVcenterGRPC) populateCredsFromAccessInfo(accessInfo *api.TargetAccessInfo) *targets.AccessInfo {
+	return &targets.AccessInfo{
 		Username:     accessInfo.Username,
 		Password:     accessInfo.Password,
 		HostnameOrIP: accessInfo.HostnameOrIp,
 		Port:         accessInfo.Port,
 		UseInsecure:  accessInfo.UseInsecure,
+		Datacenter:   accessInfo.Datacenter,
 	}
 }
 
@@ -37,14 +38,14 @@ func (p *targetVcenterGRPC) getTargetFromRequest(in *api.Targets) string {
 
 func (p *targetVcenterGRPC) ListVMs(ctx context.Context, in *api.ListVMsRequest) (*api.ListVMsResponse, error) {
 	retval := &api.ListVMsResponse{}
-	creds := p.populateCredsFromAccessInfo(in.AccessInfo)
+	//creds := p.populateCredsFromAccessInfo(in.AccessInfo)
 	target := p.getTargetFromRequest(in.Target)
 	logrus.Debugf("Trying to get target %s", target)
 	t, err := targets.GetTarget(target)
 	if err != nil {
 		return retval, err
 	}
-	vmList, err := t.ListVMs(ctx, creds)
+	vmList, err := t.ListVMs(ctx, *in.AccessInfo)
 	if err != nil {
 		return retval, err
 	}
@@ -69,14 +70,14 @@ func (p *targetVcenterGRPC) ListVMs(ctx context.Context, in *api.ListVMsRequest)
 
 func (p *targetVcenterGRPC) GetVM(ctx context.Context, in *api.GetVMRequest) (*api.GetVMResponse, error) {
 	retval := &api.GetVMResponse{}
-	creds := p.populateCredsFromAccessInfo(in.AccessInfo)
+	//creds := p.populateCredsFromAccessInfo(in.AccessInfo)
 	target := p.getTargetFromRequest(in.Target)
 	logrus.Debugf("Trying to get target %s", target)
 	t, err := targets.GetTarget(target)
 	if err != nil {
 		return retval, err
 	}
-	vm, err := t.GetVM(ctx, creds, in.GetName())
+	vm, err := t.GetVM(ctx, *in.AccessInfo, in.GetName())
 	if err != nil {
 		return retval, err
 	}
@@ -99,14 +100,14 @@ func (p *targetVcenterGRPC) GetVM(ctx context.Context, in *api.GetVMRequest) (*a
 
 func (p *targetVcenterGRPC) ReclaimVM(ctx context.Context, in *api.ReclaimVMRequest) (*api.ReclaimVMResponse, error) {
 	retval := &api.ReclaimVMResponse{}
-	creds := p.populateCredsFromAccessInfo(in.AccessInfo)
+	//creds := p.populateCredsFromAccessInfo(in.AccessInfo)
 	target := p.getTargetFromRequest(in.Target)
 	logrus.Debugf("Trying to get target %s", target)
 	t, err := targets.GetTarget(target)
 	if err != nil {
 		return retval, err
 	}
-	err = t.ReclaimVM(ctx, creds, in.GetName(), in.GetArgs()...)
+	err = t.ReclaimVM(ctx, *in.AccessInfo, in.GetName(), in.GetArgs()...)
 	if err != nil {
 		return retval, err
 	}
@@ -115,14 +116,14 @@ func (p *targetVcenterGRPC) ReclaimVM(ctx context.Context, in *api.ReclaimVMRequ
 
 func (p *targetVcenterGRPC) CordonHost(ctx context.Context, in *api.CordonHostRequest) (*api.CordonHostResponse, error) {
 	retval := &api.CordonHostResponse{}
-	creds := p.populateCredsFromAccessInfo(in.AccessInfo)
+	//creds := p.populateCredsFromAccessInfo(in.AccessInfo)
 	target := p.getTargetFromRequest(in.Target)
 	logrus.Debugf("Trying to get target %s", target)
 	t, err := targets.GetTarget(target)
 	if err != nil {
 		return retval, err
 	}
-	err = t.CordonHost(ctx, creds, in.GetEsxiName())
+	err = t.CordonHost(ctx, *in.AccessInfo, in.GetEsxiName())
 	if err != nil {
 		return retval, err
 	}
@@ -131,16 +132,30 @@ func (p *targetVcenterGRPC) CordonHost(ctx context.Context, in *api.CordonHostRe
 
 func (p *targetVcenterGRPC) UnCordonHost(ctx context.Context, in *api.UnCordonHostRequest) (*api.UnCordonHostResponse, error) {
 	retval := &api.UnCordonHostResponse{}
-	creds := p.populateCredsFromAccessInfo(in.AccessInfo)
+	//creds := p.populateCredsFromAccessInfo(in.AccessInfo)
 	target := p.getTargetFromRequest(in.Target)
 	logrus.Debugf("Trying to get target %s", target)
 	t, err := targets.GetTarget(target)
 	if err != nil {
 		return retval, err
 	}
-	err = t.UnCordonHost(ctx, creds, in.GetEsxiName())
+	err = t.UnCordonHost(ctx, *in.AccessInfo, in.GetEsxiName())
 	if err != nil {
 		return retval, err
 	}
 	return retval, nil
+}
+
+func (p *targetVcenterGRPC) ListHosts(ctx context.Context, in *api.ListHostsRequest) (*api.ListHostsResponse, error) {
+	target := p.getTargetFromRequest(in.Target)
+	logrus.Debugf("Trying to get target %s", target)
+	t, err := targets.GetTarget(target)
+	if err != nil {
+		return nil, err
+	}
+	hosts, err := t.ListHosts(ctx, *in.AccessInfo)
+	if err != nil {
+		return nil, err
+	}
+	return hosts, nil
 }
