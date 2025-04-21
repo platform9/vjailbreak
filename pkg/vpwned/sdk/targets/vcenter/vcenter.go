@@ -71,10 +71,10 @@ func findBootDevice(devices []types.BaseVirtualMachineBootOptionsBootableDevice)
 	return "unknown"
 }
 
-func (v *Vcenter) connect(ctx context.Context, a VMCenterAccessInfo) (*govmomi.Client, *find.Finder, error) {
+func (v *Vcenter) connect(ctx context.Context, a api.TargetAccessInfo) (*govmomi.Client, *find.Finder, error) {
 	logrus.Info("Connecting to vCenter...")
 	// Parse vCenter URL
-	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", a.HostnameOrIP))
+	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", a.HostnameOrIp))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse vCenter URL: %v", err)
 	}
@@ -104,7 +104,7 @@ func (v *Vcenter) connect(ctx context.Context, a VMCenterAccessInfo) (*govmomi.C
 	return client, finder, nil
 }
 
-func (v *Vcenter) ListVMs(ctx context.Context, a VMCenterAccessInfo) ([]targets.VMInfo, error) {
+func (v *Vcenter) ListVMs(ctx context.Context, a api.TargetAccessInfo) ([]targets.VMInfo, error) {
 
 	// Connect to vCenter
 	client, _, err := v.connect(ctx, a)
@@ -152,7 +152,7 @@ func (v *Vcenter) ListVMs(ctx context.Context, a VMCenterAccessInfo) ([]targets.
 	return vmInfos, nil
 }
 
-func (v *Vcenter) GetVM(ctx context.Context, a VMCenterAccessInfo, name string) (targets.VMInfo, error) {
+func (v *Vcenter) GetVM(ctx context.Context, a api.TargetAccessInfo, name string) (targets.VMInfo, error) {
 	// Connect to vCenter
 	client, finder, err := v.connect(ctx, a)
 	if err != nil {
@@ -180,7 +180,7 @@ func (v *Vcenter) GetVM(ctx context.Context, a VMCenterAccessInfo, name string) 
 	return vmInfo, nil
 }
 
-func (v *Vcenter) ReclaimVM(ctx context.Context, a VMCenterAccessInfo, name string, args ...string) error {
+func (v *Vcenter) ReclaimVM(ctx context.Context, a api.TargetAccessInfo, name string, args ...string) error {
 	// Connect to vCenter
 	client, finder, err := v.connect(ctx, a)
 	if err != nil {
@@ -226,7 +226,7 @@ func (v *Vcenter) ReclaimVM(ctx context.Context, a VMCenterAccessInfo, name stri
 	return nil
 }
 
-func (v *Vcenter) CordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_name string) error {
+func (v *Vcenter) CordonHost(ctx context.Context, a api.TargetAccessInfo, esxi_name string) error {
 	// Connect to vCenter
 	client, finder, err := v.connect(ctx, a)
 	if err != nil {
@@ -254,7 +254,7 @@ func (v *Vcenter) CordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_nam
 	return nil
 }
 
-func (v *Vcenter) UnCordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_name string) error {
+func (v *Vcenter) UnCordonHost(ctx context.Context, a api.TargetAccessInfo, esxi_name string) error {
 	// Connect to vCenter
 	client, finder, err := v.connect(ctx, a)
 	if err != nil {
@@ -280,4 +280,83 @@ func (v *Vcenter) UnCordonHost(ctx context.Context, a VMCenterAccessInfo, esxi_n
 	}
 
 	return nil
+}
+
+func (v *Vcenter) ListHosts(ctx context.Context, a api.TargetAccessInfo) (*api.ListHostsResponse, error) {
+	// Connect to vCenter
+	client, finder, err := v.connect(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Logout(ctx)
+
+	if a.Datacenter != "" {
+		// Set datacenter
+		dc, err := finder.Datacenter(ctx, a.Datacenter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find datacenter %s: %v", a.Datacenter, err)
+		}
+		finder.SetDatacenter(dc)
+	}
+
+	// Create container view of all virtual machines
+	m := view.NewManager(client.Client)
+	var hosts []mo.HostSystem
+	containerView, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container view: %v", err)
+	}
+	defer containerView.Destroy(ctx)
+
+	// Retrieve all hosts with necessary properties
+	// Include network configuration to get IP addresses
+	err = containerView.Retrieve(ctx, []string{"HostSystem"}, []string{
+		"name",
+		"parent",
+		"hardware.systemInfo",
+		"config.network",
+		"summary.managementServerIp",
+	}, &hosts)
+	if err != nil {
+		logrus.Fatalf("Failed to retrieve host information: %s", err)
+	}
+
+	// Extract host names and IP addresses
+	hostNames := make([]*api.ListHostsResponseItem, 0, len(hosts))
+	for _, host := range hosts {
+		// First check if management IP is available in summary
+		ip := host.Summary.ManagementServerIp
+
+		// If no IP in summary, try to get from network configuration
+		if ip == "" && host.Config != nil && host.Config.Network != nil {
+			// Check virtual NICs for management network IP
+			for _, vnic := range host.Config.Network.Vnic {
+				if vnic.Spec.Ip != nil && vnic.Spec.Ip.IpAddress != "" {
+					ip = vnic.Spec.Ip.IpAddress
+					break
+				}
+			}
+		}
+		var macAddresses []string
+		if host.Config != nil && host.Config.Network != nil {
+			for _, pnic := range host.Config.Network.Pnic {
+				macAddresses = append(macAddresses, pnic.Mac)
+			}
+		}
+
+		hostNames = append(hostNames, &api.ListHostsResponseItem{
+			Host:       host.Name,
+			Ip:         ip,
+			BiosUuid:   host.Hardware.SystemInfo.Uuid,
+			Serial:     host.Hardware.SystemInfo.SerialNumber,
+			MacAddress: macAddresses,
+		})
+	}
+	logrus.Debugf("returned %d hosts as response", len(hostNames))
+
+	return &api.ListHostsResponse{Hosts: hostNames}, nil
+}
+
+func init() {
+	targets.RegisterTarget("vcenter", &Vcenter{})
 }
