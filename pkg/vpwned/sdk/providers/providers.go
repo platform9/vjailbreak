@@ -3,8 +3,10 @@ package providers
 import (
 	"context"
 	"errors"
+	"strings"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	"github.com/bougou/go-ipmi"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 )
 
 var providers map[string]BMCProvider = make(map[string]BMCProvider)
@@ -29,10 +31,10 @@ type BMCProvider interface {
 	//Stop the BM
 	StopBM() error
 	//Set to PXE boot on next reboot
-	SetBM2PXEBoot() error
+	SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error
 	//Reclaim functions
 	//Reclaim the VM such that we erase and resuse the VM as a PCD Host
-	ReclaimBM() error
+	ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) error
 	// Identify the provider
 	WhoAmI() string
 	// List resources
@@ -41,6 +43,8 @@ type BMCProvider interface {
 	SetResourcePower(ctx context.Context, resourceID string, action api.PowerStatus) error
 	// Get Resource status
 	GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error)
+	// List Boot Sources
+	ListBootSource(ctx context.Context, req api.ListBootSourceRequest) ([]api.BootsourceSelections, error)
 }
 
 type BMAccessInfo struct {
@@ -49,14 +53,15 @@ type BMAccessInfo struct {
 	APIKey      string
 	BaseURL     string
 	UseInsecure bool
+	Provider    string
 }
 
 func RegisterProvider(name string, provider BMCProvider) {
-	providers[name] = provider
+	providers[strings.ToLower(name)] = provider
 }
 
 func DeleteProvider(name string) {
-	delete(providers, name)
+	delete(providers, strings.ToLower(name))
 }
 
 func GetProviders() []string {
@@ -68,7 +73,7 @@ func GetProviders() []string {
 }
 
 func GetProvider(name string) (BMCProvider, error) {
-	provider, ok := providers[name]
+	provider, ok := providers[strings.ToLower(name)]
 	if !ok {
 		return nil, errors.New("provider not found")
 	}
