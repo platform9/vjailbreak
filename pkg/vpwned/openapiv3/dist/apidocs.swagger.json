@@ -343,6 +343,84 @@
         ]
       }
     },
+    "/vpw/v1/list_hosts": {
+      "get": {
+        "operationId": "VCenter_ListHosts",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiListHostsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accessInfo.hostnameOrIp",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.port",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.datacenter",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.username",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.password",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "accessInfo.useInsecure",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "target.vcenter",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "target.pcd",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "target.unknown",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "VCenter"
+        ]
+      }
+    },
     "/vpw/v1/list_vms": {
       "get": {
         "operationId": "VCenter_ListVMs",
@@ -770,6 +848,41 @@
         }
       }
     },
+    "apiListHostsResponse": {
+      "type": "object",
+      "properties": {
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiListHostsResponseItem"
+          }
+        }
+      }
+    },
+    "apiListHostsResponseItem": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "macAddress": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "biosUuid": {
+          "type": "string"
+        },
+        "serial": {
+          "type": "string"
+        }
+      }
+    },
     "apiListVMsResponse": {
       "type": "object",
       "properties": {
@@ -855,6 +968,12 @@
           "type": "string"
         },
         "biosBootMethod": {
+          "type": "string"
+        },
+        "hardwareUuid": {
+          "type": "string"
+        },
+        "macAddress": {
           "type": "string"
         }
       }
