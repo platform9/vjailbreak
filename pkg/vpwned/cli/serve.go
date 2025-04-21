@@ -60,7 +60,7 @@ func initCfg() {
 	}
 
 	Config.ParseConfig()
-	logrus.Infof("Config Parsed as: %+v", Config)
+	logrus.Debugf("Config Parsed as: %+v", Config)
 }
 
 func init() {
@@ -82,6 +82,7 @@ func init() {
 	serverCmd.PersistentFlags().StringP("host", "i", "0.0.0.0", "Set the IP-Address to listen on")
 	serverCmd.PersistentFlags().StringP("port", "g", "3000", "Set the gRPC port to open")
 	serverCmd.PersistentFlags().StringP("api_port", "r", "3001", "Set the REST API port to open")
+	logrus.SetLevel(Config.logLevel)
 }
 
 func serve() {

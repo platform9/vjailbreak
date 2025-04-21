@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	"github.com/bougou/go-ipmi"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 )
 
@@ -47,11 +48,11 @@ func (p *UnimplementedBaseProvider) StopBM() error {
 	return errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) SetBM2PXEBoot() error {
+func (p *UnimplementedBaseProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error {
 	return errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) ReclaimBM() error {
+func (p *UnimplementedBaseProvider) ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) error {
 	return errors.New("not implemented")
 }
 
@@ -69,6 +70,10 @@ func (p *UnimplementedBaseProvider) SetResourcePower(ctx context.Context, resour
 
 func (p *UnimplementedBaseProvider) GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error) {
 	return api.MachineInfo{}, errors.New("not implemented")
+}
+
+func (p *UnimplementedBaseProvider) ListBootSource(ctx context.Context, req api.ListBootSourceRequest) ([]api.BootsourceSelections, error) {
+	return nil, errors.New("not implemented")
 }
 
 func init() {

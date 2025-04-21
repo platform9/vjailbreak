@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/targets"
 	"github.com/sirupsen/logrus"
 	"github.com/vmware/govmomi"

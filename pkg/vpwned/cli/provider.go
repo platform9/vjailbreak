@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	"github.com/bougou/go-ipmi"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -33,7 +35,7 @@ func populateBMCredsFromCMD(cmd *cobra.Command) {
 }
 
 func initProvider(name string) {
-	logrus.Info("initializing provider: ", name)
+	logrus.Debug("initializing provider: ", name)
 	cp, err := providers.GetProvider(name)
 	if err != nil {
 		logrus.Error(err)
@@ -206,23 +208,140 @@ var getResourceInfoCMD = &cobra.Command{
 	},
 }
 
-// var setProviderBootDeviceCmd = &cobra.Command{
-// 	Use:   "set_boot_device",
-// 	Short: "set provider boot device",
-// 	Long:  "set provider boot device",
-// 	Run: func(cmd *cobra.Command, args []string) {
-// 		populateBMCredsFromCMD(cmd)
-// 		if currProvider == nil {
-// 			logrus.Error("provider not found")
-// 			fmt.Println(cmd.UsageString())
-// 			return
-// 		}
-// 		err := currProvider.SetProviderBootDevice(creds)
-// 		if err != nil {
-// 			logrus.Error(err)
-// 		}
-// 	},
-// }
+var listBootSourceCmd = &cobra.Command{
+	Use:   "list_boot_source",
+	Short: "list provider boot source",
+	Long:  "list provider boot source",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+
+		logrus.Infof("Listing boot sources")
+		res, err := currProvider.ListBootSource(context.Background(), api.ListBootSourceRequest{
+			AccessInfo: &api.BMProvisionerAccessInfo{
+				BaseUrl:     creds.BaseURL,
+				ApiKey:      creds.APIKey,
+				UseInsecure: creds.UseInsecure,
+			},
+		})
+		if err != nil {
+			logrus.Error(err)
+		}
+		b, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			logrus.Errorf("Failed to marshal boot source info: %v", err)
+			return
+		}
+		fmt.Println(string(b))
+	},
+}
+
+var reclaimBMCmd = &cobra.Command{
+	Use:   "reclaim",
+	Short: "reclaim provider resource",
+	Long:  "reclaim provider resource",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id, user_data string
+		erase_disk := false
+		boot_source_id := int32(0)
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if val, err := cmd.Flags().GetBool("erase_disk"); err == nil {
+			erase_disk = val
+		}
+		if val, err := cmd.Flags().GetString("user_data"); err == nil {
+			user_data = val
+		}
+		if val, err := cmd.Flags().GetInt("boot_source_id"); err == nil {
+			boot_source_id = int32(val)
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+
+		logrus.Infof("Reclaiming resource %s", resource_id)
+		err = currProvider.ReclaimBM(context.Background(), api.ReclaimBMRequest{
+			AccessInfo: &api.BMProvisionerAccessInfo{
+				BaseUrl:     creds.BaseURL,
+				ApiKey:      creds.APIKey,
+				UseInsecure: creds.UseInsecure,
+			},
+			ResourceId: resource_id,
+			EraseDisk:  erase_disk,
+			UserData:   user_data,
+			BootSource: &api.BootsourceSelections{
+				BootSourceID: boot_source_id,
+			},
+		})
+		if err != nil {
+			logrus.Error(err)
+		}
+	},
+}
+
+var setProviderBootDeviceCmd = &cobra.Command{
+	Use:   "set_boot_to_pxe",
+	Short: "set provider boot device to pxe",
+	Long:  "set provider boot device to pxe",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id string
+		power_cycle := false
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if val, err := cmd.Flags().GetBool("power_cycle"); err == nil {
+			power_cycle = val
+		}
+		var ipmi_interface ipmi.Interface
+		if val, err := cmd.Flags().GetString("ipmi_interface"); err == nil {
+			ipmi_interface = ipmi.Interface(strings.ToLower(val))
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+		err = currProvider.SetBM2PXEBoot(context.Background(), resource_id, power_cycle, ipmi_interface)
+		if err != nil {
+			logrus.Error(err)
+		}
+		logrus.Infof("Set boot device to PXE for resource %s", resource_id)
+	},
+}
 
 func init() {
 	rootCmd.AddCommand(providerCmd)
@@ -236,6 +355,17 @@ func init() {
 	setProviderPowerCmd.Flags().StringP("action", "a", "", "Set the power state to use")
 	// get resource
 	getResourceInfoCMD.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	// set boot device to PXE for BM
+	setProviderBootDeviceCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	setProviderBootDeviceCmd.Flags().BoolP("power_cycle", "p", false, "Set the power cycle to use")
+	setProviderBootDeviceCmd.Flags().StringP("ipmi_interface", "n", "lanplus", "Set the IPMI interface to use")
+	// reclaim cmd
+	reclaimBMCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	reclaimBMCmd.Flags().StringP("user_data", "d", "", "Set the user data to use")
+	reclaimBMCmd.Flags().BoolP("erase_disk", "e", false, "Set the erase disk to use")
+	reclaimBMCmd.Flags().IntP("boot_source_id", "s", 0, "Set the boot source ID to use")
 	//add commands
-	providerCmd.AddCommand(listProvidersCmd, connectProviderCmd, setProviderPowerCmd, listProviderResourcesCmd, getResourceInfoCMD)
+	providerCmd.AddCommand(listBootSourceCmd, listProvidersCmd, connectProviderCmd,
+		setProviderPowerCmd, listProviderResourcesCmd, getResourceInfoCMD,
+		reclaimBMCmd, setProviderBootDeviceCmd)
 }
