@@ -31,6 +31,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
+	"github.com/mitchellh/go-homedir"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -762,18 +763,42 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
 
-		// VDDK files check
-		vddkExpectedDir := "/home/ubuntu/vmware-vix-disklib-distrib"
+		vddkExpectedDir, err := getVDDKDirectory()
+		if err != nil {
+			ctxlog.Error(err, "Failed to determine VDDK path")
+			return fmt.Errorf("VDDK_MISSING")
+		}
+
+		// Check if directory exists and is non-empty
 		files, err := os.ReadDir(vddkExpectedDir)
-		if os.IsNotExist(err) || len(files) == 0 {
-			ctxlog.Info("VDDK directory missing or empty, skipping Job creation. Will retry in 30s.")
+		if err != nil {
+			if os.IsNotExist(err) {
+				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.")
+			} else {
+				ctxlog.Error(err, "Error reading VDDK directory")
+			}
 
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
 				Type:               "VDDKCheck",
 				Status:             corev1.ConditionFalse,
-				Reason:             "VDDKDirectoryMissingOrEmpty",
-				Message:            "Expected VDDK directory is empty. Upload files to proceed.",
+				Reason:             "VDDKDirectoryMissing",
+				Message:            "VDDK directory not found. Please create and upload the required files.",
+				LastTransitionTime: metav1.Now(),
+			})
+			_ = r.Status().Update(ctx, migrationobj)
+			return fmt.Errorf("VDDK_MISSING")
+		}
+
+		if len(files) == 0 {
+			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.")
+
+			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
+				Type:               "VDDKCheck",
+				Status:             corev1.ConditionFalse,
+				Reason:             "VDDKDirectoryEmpty",
+				Message:            "VDDK directory is empty. Please upload the required files.",
 				LastTransitionTime: metav1.Now(),
 			})
 			_ = r.Status().Update(ctx, migrationobj)
@@ -807,4 +832,12 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
 		Complete(r)
+}
+
+func getVDDKDirectory() (string, error) {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return fmt.Sprintf("%s/vmware-vix-disklib-distrib", homeDir), nil
 }
