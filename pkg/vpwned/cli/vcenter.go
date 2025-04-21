@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/targets/vcenter"
+	"github.com/platform9/vjailbreak/pkg/vpwned/utils/tableprinter"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-var Creds = vcenter.VMCenterAccessInfo{}
+var Creds = service.TargetAccessInfo{}
 
 func populateCredsFromCMD(cmd *cobra.Command) {
 	if val, err := cmd.Flags().GetString("host"); err == nil {
-		Creds.HostnameOrIP = val
+		Creds.HostnameOrIp = val
 	}
 	if val, err := cmd.Flags().GetString("port"); err == nil {
 		Creds.Port = val
@@ -126,6 +128,21 @@ var unCordonESXIHostCmd = &cobra.Command{
 	},
 }
 
+var listHostsCmd = &cobra.Command{
+	Use:   "list_hosts",
+	Short: "list hosts",
+	Long:  "list hosts",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateCredsFromCMD(cmd)
+		vcenter := vcenter.Vcenter{}
+		res, err := vcenter.ListHosts(context.Background(), Creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+		tableprinter.PrintAsTable(res.Hosts)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(vcenterCmd)
 	vcenterCmd.PersistentFlags().StringP("host", "H", "", "Set the IP-Address or hostname where vcenter is running")
@@ -139,5 +156,7 @@ func init() {
 	cordonESXIHostCmd.Flags().StringP("esxi_name", "e", "", "Set the esxi name to use")
 	//UnCordon Parameter
 	unCordonESXIHostCmd.Flags().StringP("esxi_name", "e", "", "Set the esxi name to use")
-	vcenterCmd.AddCommand(listVMsCmd, getVMCmd, cordonESXIHostCmd, unCordonESXIHostCmd)
+	//List Hosts Parameter
+	listHostsCmd.Flags().StringP("datacenter", "d", "", "Set the datacenter to use")
+	vcenterCmd.AddCommand(listVMsCmd, getVMCmd, cordonESXIHostCmd, unCordonESXIHostCmd, listHostsCmd)
 }

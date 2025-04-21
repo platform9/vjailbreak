@@ -3,6 +3,7 @@ package targets
 import (
 	"context"
 	"errors"
+	"strings"
 
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 )
@@ -26,22 +27,24 @@ type AccessInfo struct {
 	HostnameOrIP string
 	Port         string
 	UseInsecure  bool
+	Datacenter   string
 }
 
 type Targets interface {
-	GetVM(ctx context.Context, a AccessInfo, name string) (VMInfo, error)
-	ListVMs(ctx context.Context, a AccessInfo) ([]VMInfo, error)
-	ReclaimVM(ctx context.Context, a AccessInfo, name string, args ...string) error
-	CordonHost(ctx context.Context, a AccessInfo, name string) error
-	UnCordonHost(ctx context.Context, a AccessInfo, name string) error
+	GetVM(ctx context.Context, a api.TargetAccessInfo, name string) (VMInfo, error)
+	ListVMs(ctx context.Context, a api.TargetAccessInfo) ([]VMInfo, error)
+	ReclaimVM(ctx context.Context, a api.TargetAccessInfo, name string, args ...string) error
+	CordonHost(ctx context.Context, a api.TargetAccessInfo, name string) error
+	UnCordonHost(ctx context.Context, a api.TargetAccessInfo, name string) error
+	ListHosts(ctx context.Context, a api.TargetAccessInfo) (*api.ListHostsResponse, error)
 }
 
 func RegisterTarget(name string, target Targets) {
-	targets[name] = target
+	targets[strings.ToLower(name)] = target
 }
 
 func DeleteTarget(name string) {
-	delete(targets, name)
+	delete(targets, strings.ToLower(name))
 }
 
 func GetTargets() []string {
@@ -53,7 +56,7 @@ func GetTargets() []string {
 }
 
 func GetTarget(name string) (Targets, error) {
-	target, ok := targets[name]
+	target, ok := targets[strings.ToLower(name)]
 	if !ok {
 		return nil, errors.New("target not found")
 	}

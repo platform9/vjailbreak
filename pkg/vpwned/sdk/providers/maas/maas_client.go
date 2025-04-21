@@ -74,6 +74,8 @@ func (m *MaasClient) ListMachines(ctx context.Context) ([]api.MachineInfo, error
 			EphemeralDeploy: v.EphemeralDeploy,
 			PowerType:       v.PowerType,
 			BiosBootMethod:  v.BiosBootMethod,
+			HardwareUuid:    v.HardwareUUID,
+			MacAddress:      v.BootInterface.MACAddress,
 		}
 	}
 	return result, nil
@@ -161,6 +163,12 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		return err
 	}
 
+	//Call PXE boot again to deploy the machine
+	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, con_interface)
+	if err != nil {
+		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+		return err
+	}
 	// Deploy the machine again
 	logrus.Infof("%s Deploying machine %s", ctx, systemID)
 	_, err = m.Client.Machine.Deploy(systemID, &entity.MachineDeployParams{

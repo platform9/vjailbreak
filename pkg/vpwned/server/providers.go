@@ -80,6 +80,9 @@ func (p *providersGRPC) ListMachines(ctx context.Context, in *api.BMListMachines
 			EphemeralDeploy: i.EphemeralDeploy,
 			PowerParams:     i.PowerParams,
 			PowerType:       i.PowerType,
+			BiosBootMethod:  i.BiosBootMethod,
+			HardwareUuid:    i.HardwareUuid,
+			MacAddress:      i.MacAddress,
 		})
 	}
 	return retval, nil
@@ -125,6 +128,9 @@ func (p *providersGRPC) GetResourceInfo(ctx context.Context, in *api.GetResource
 			EphemeralDeploy: info.EphemeralDeploy,
 			PowerParams:     info.PowerParams,
 			PowerType:       info.PowerType,
+			BiosBootMethod:  info.BiosBootMethod,
+			HardwareUuid:    info.HardwareUuid,
+			MacAddress:      info.MacAddress,
 		},
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
+	"github.com/platform9/vjailbreak/pkg/vpwned/utils/tableprinter"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -162,9 +163,7 @@ var listProviderResourcesCmd = &cobra.Command{
 		if err != nil {
 			logrus.Error(err)
 		}
-		for k, v := range res {
-			fmt.Println(k, v.Id, v.Fqdn, v.PowerState, v.Hostname)
-		}
+		tableprinter.PrintAsTable(res, "Id", "Fqdn", "PowerState", "Hostname", "Status", "MacAddress", "HardwareUuid")
 	},
 }
 
@@ -199,12 +198,7 @@ var getResourceInfoCMD = &cobra.Command{
 		if err != nil {
 			logrus.Error(err)
 		}
-		b, err := json.MarshalIndent(res, "", "  ")
-		if err != nil {
-			logrus.Errorf("Failed to marshal resource info: %v", err)
-			return
-		}
-		fmt.Println(string(b))
+		tableprinter.PrintAsTable(res)
 	},
 }
 
