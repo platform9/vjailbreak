@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 )
 
 var targets map[string]Targets = make(map[string]Targets)
@@ -25,6 +25,7 @@ type AccessInfo struct {
 	Password     string
 	HostnameOrIP string
 	Port         string
+	UseInsecure  bool
 }
 
 type Targets interface {

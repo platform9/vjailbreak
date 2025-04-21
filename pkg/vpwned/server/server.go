@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3"
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -61,7 +61,8 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 	//Register all services here
 	//TODO: Register proto servers here.
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
-	api.RegisterBMListMachinesServer(grpcServer, &providersGRPC{})
+	api.RegisterVCenterServer(grpcServer, &targetVcenterGRPC{})
+	api.RegisterBMProviderServer(grpcServer, &providersGRPC{})
 
 	reflection.Register(grpcServer)
 	connection, err := net.Listen(network, port)
@@ -100,7 +101,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	mux := http.NewServeMux()
 	//TODO: Move this path to a direct path in the /tmp or a path in the container
 	// or take it via config or env variable
-	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/proto/service/v1/"))
+	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/dist/"))
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -108,11 +109,15 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	}
 
 	if err := api.RegisterVersionHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
-		logrus.Errorf("cannot start handler for pub version")
+		logrus.Errorf("cannot start handler for version")
 	}
 	// Register MachineInfo service
-	if err := api.RegisterBMListMachinesHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
-		logrus.Errorf("cannot start handler for pub machine info")
+	if err := api.RegisterBMProviderHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
+		logrus.Errorf("cannot start handler for BMProvider")
+	}
+	// Register VCenter service
+	if err := api.RegisterVCenterHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
+		logrus.Errorf("cannot start handler for VCenter")
 	}
 
 	mux.Handle("/", APILogger(gatewayMuxer))
