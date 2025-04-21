@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 
-	api "github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	version "github.com/platform9/vjailbreak/pkg/vpwned/version"
 )
 

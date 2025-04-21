@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/server"
 	"github.com/spf13/cobra"
 )
