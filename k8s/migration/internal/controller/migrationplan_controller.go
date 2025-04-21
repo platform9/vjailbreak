@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -184,6 +185,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
 		if err != nil {
+			if strings.Contains(err.Error(), "VDDK_MISSING") {
+				r.ctxlog.Info("Requeuing due to missing VDDK files.")
+				return ctrl.Result{RequeueAfter: 20 * time.Second}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
@@ -756,6 +761,25 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
+
+		// VDDK files check
+		vddkExpectedDir := "/home/ubuntu/vmware-vix-disklib-distrib"
+		files, err := os.ReadDir(vddkExpectedDir)
+		if os.IsNotExist(err) || len(files) == 0 {
+			ctxlog.Info("VDDK directory missing or empty, skipping Job creation. Will retry in 30s.")
+
+			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
+				Type:               "VDDKCheck",
+				Status:             corev1.ConditionFalse,
+				Reason:             "VDDKDirectoryMissingOrEmpty",
+				Message:            "Expected VDDK directory is empty. Upload files to proceed.",
+				LastTransitionTime: metav1.Now(),
+			})
+			_ = r.Status().Update(ctx, migrationobj)
+			return fmt.Errorf("VDDK_MISSING")
+		}
+
 		err = r.CreateJob(ctx,
 			migrationplan,
 			migrationobj,
