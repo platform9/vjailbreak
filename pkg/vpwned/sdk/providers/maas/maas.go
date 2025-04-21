@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3/proto/service/api"
+	ipmi "github.com/bougou/go-ipmi"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
 )
@@ -94,7 +95,23 @@ func (p *MaasProvider) GetResourceInfo(ctx context.Context, resourceID string) (
 		EphemeralDeploy: machine.EphemeralDeploy,
 		PowerType:       machine.PowerType,
 		PowerParams:     pw_val,
+		BiosBootMethod:  machine.BiosBootMethod,
 	}, nil
+}
+
+func (p *MaasProvider) ListBootSource(ctx context.Context, req api.ListBootSourceRequest) ([]api.BootsourceSelections, error) {
+	var err error
+	if p.client == nil || p.client.Client == nil {
+		err = p.Connect(providers.BMAccessInfo{
+			BaseURL:     req.AccessInfo.BaseUrl,
+			APIKey:      req.AccessInfo.ApiKey,
+			UseInsecure: req.AccessInfo.UseInsecure,
+		})
+		if err != nil {
+			return nil, errors.Join(err, errors.New("List Boot Source Failed"))
+		}
+	}
+	return p.client.ListBootSource(ctx)
 }
 
 func (p *MaasProvider) Disconnect() error {
@@ -104,8 +121,24 @@ func (p *MaasProvider) Disconnect() error {
 	return nil
 }
 
-func (p *MaasProvider) SetResourceBM2PXEBoot(ctx context.Context, resourceID string) error {
-	return p.client.SetMachine2PXEBoot(ctx, resourceID)
+func (p *MaasProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error {
+	return p.client.SetMachine2PXEBoot(ctx, resourceID, power_cycle, ipmi_interface)
+}
+
+func (p *MaasProvider) ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) error {
+	var err error
+	if p.client == nil || p.client.Client == nil {
+		err = p.Connect(providers.BMAccessInfo{
+			BaseURL:     req.AccessInfo.BaseUrl,
+			APIKey:      req.AccessInfo.ApiKey,
+			UseInsecure: req.AccessInfo.UseInsecure,
+		})
+		if err != nil {
+			return errors.Join(err, errors.New("Reclaim VM Failed"))
+		}
+	}
+	//Steps to reclain the host.
+	return p.client.Reclaim(ctx, req)
 }
 
 func (p *MaasProvider) WhoAmI() string {
