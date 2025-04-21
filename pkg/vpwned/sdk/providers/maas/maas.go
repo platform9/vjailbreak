@@ -96,6 +96,8 @@ func (p *MaasProvider) GetResourceInfo(ctx context.Context, resourceID string) (
 		PowerType:       machine.PowerType,
 		PowerParams:     pw_val,
 		BiosBootMethod:  machine.BiosBootMethod,
+		HardwareUuid:    machine.HardwareUUID,
+		MacAddress:      machine.BootInterface.MACAddress,
 	}, nil
 }
 

@@ -85,3 +85,8 @@ proto:
 	--openapiv2_out ./openapiv3/dist --openapiv2_opt logtostderr=true,allow_merge=true \
 	$(PROTOC_FILES)
 	go generate github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service
+
+mockgen:
+	go install go.uber.org/mock/mockgen@latest
+	mockgen -destination=api/mock/mock_bmc.go -package=mock ./sdk/providers BMCProvider
+	mockgen -destination=api/mock/mock_target.go -package=mock ./sdk/targets Targets

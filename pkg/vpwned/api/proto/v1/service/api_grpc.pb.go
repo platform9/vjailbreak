@@ -129,6 +129,7 @@ const (
 	VCenter_ReclaimVM_FullMethodName    = "/api.VCenter/ReclaimVM"
 	VCenter_CordonHost_FullMethodName   = "/api.VCenter/CordonHost"
 	VCenter_UnCordonHost_FullMethodName = "/api.VCenter/UnCordonHost"
+	VCenter_ListHosts_FullMethodName    = "/api.VCenter/ListHosts"
 )
 
 // VCenterClient is the client API for VCenter service.
@@ -140,6 +141,7 @@ type VCenterClient interface {
 	ReclaimVM(ctx context.Context, in *ReclaimVMRequest, opts ...grpc.CallOption) (*ReclaimVMResponse, error)
 	CordonHost(ctx context.Context, in *CordonHostRequest, opts ...grpc.CallOption) (*CordonHostResponse, error)
 	UnCordonHost(ctx context.Context, in *UnCordonHostRequest, opts ...grpc.CallOption) (*UnCordonHostResponse, error)
+	ListHosts(ctx context.Context, in *ListHostsRequest, opts ...grpc.CallOption) (*ListHostsResponse, error)
 }
 
 type vCenterClient struct {
@@ -200,6 +202,16 @@ func (c *vCenterClient) UnCordonHost(ctx context.Context, in *UnCordonHostReques
 	return out, nil
 }
 
+func (c *vCenterClient) ListHosts(ctx context.Context, in *ListHostsRequest, opts ...grpc.CallOption) (*ListHostsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListHostsResponse)
+	err := c.cc.Invoke(ctx, VCenter_ListHosts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VCenterServer is the server API for VCenter service.
 // All implementations must embed UnimplementedVCenterServer
 // for forward compatibility.
@@ -209,6 +221,7 @@ type VCenterServer interface {
 	ReclaimVM(context.Context, *ReclaimVMRequest) (*ReclaimVMResponse, error)
 	CordonHost(context.Context, *CordonHostRequest) (*CordonHostResponse, error)
 	UnCordonHost(context.Context, *UnCordonHostRequest) (*UnCordonHostResponse, error)
+	ListHosts(context.Context, *ListHostsRequest) (*ListHostsResponse, error)
 	mustEmbedUnimplementedVCenterServer()
 }
 
@@ -233,6 +246,9 @@ func (UnimplementedVCenterServer) CordonHost(context.Context, *CordonHostRequest
 }
 func (UnimplementedVCenterServer) UnCordonHost(context.Context, *UnCordonHostRequest) (*UnCordonHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnCordonHost not implemented")
+}
+func (UnimplementedVCenterServer) ListHosts(context.Context, *ListHostsRequest) (*ListHostsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListHosts not implemented")
 }
 func (UnimplementedVCenterServer) mustEmbedUnimplementedVCenterServer() {}
 func (UnimplementedVCenterServer) testEmbeddedByValue()                 {}
@@ -345,6 +361,24 @@ func _VCenter_UnCordonHost_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VCenter_ListHosts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListHostsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VCenterServer).ListHosts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VCenter_ListHosts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VCenterServer).ListHosts(ctx, req.(*ListHostsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VCenter_ServiceDesc is the grpc.ServiceDesc for VCenter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -371,6 +405,10 @@ var VCenter_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnCordonHost",
 			Handler:    _VCenter_UnCordonHost_Handler,
+		},
+		{
+			MethodName: "ListHosts",
+			Handler:    _VCenter_ListHosts_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
