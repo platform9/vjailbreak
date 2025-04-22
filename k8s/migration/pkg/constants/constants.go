@@ -63,6 +63,12 @@ const (
 	// ClusterNameLabel is the label for cluster name
 	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
 
+	// UserDataSecretKey is the key for user data secret
+	UserDataSecretKey = "user-data"
+
+	// CloudInitConfigKey is the key for cloud init config
+	CloudInitConfigKey = "cloud-init-config"
+
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"
 
@@ -135,7 +141,7 @@ const (
 
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
-	CloudInitScript = `#cloud-config
+	K3sCloudInitScript = `#cloud-config
 password: %s
 chpasswd: { expire: False }
 write_files:
@@ -174,4 +180,35 @@ runcmd:
 
 	// MigrationJobTTL is the TTL for migration job
 	MigrationJobTTL int32 = 300
+
+	// PCDCloudInitScript contains the cloud-init script for PCD onboarding
+	PCDCloudInitScript = `#cloud-config
+
+# Run the cloud-init script on boot
+runcmd:
+  - echo "Validating prerequisites..."
+  - for cmd in curl cloud-ctl; do
+      if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Error: Required command '$cmd' is not installed. Please install it and retry." >&2
+        exit 1
+      fi
+    done
+  - echo "All prerequisites met. Proceeding with setup."
+  
+  - echo "Downloading and executing cloud-ctl setup script..."
+  - curl -s https://cloud-ctl.s3.us-west-1.amazonaws.com/cloud-ctl-setup | bash
+  - echo "Cloud-ctl setup script executed successfully."
+
+  - echo "Configuring cloud-ctl..."
+  - cloud-ctl config set \
+      -u https://cloud-region1.platform9.io \
+      -e admin@airctl.localnet \
+      -r Region1 \
+      -t service \
+      -p 'xyz'
+  - echo "Cloud-ctl configuration set successfully."
+
+  - echo "Preparing the node..."
+  - cloud-ctl prep-node
+  - echo "Node preparation complete. Setup finished successfully."`
 )

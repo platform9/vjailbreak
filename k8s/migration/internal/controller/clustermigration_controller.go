@@ -81,7 +81,6 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	ctxlog.V(1).Info("Retrieved RollingMigrationPlan", "rollingMigrationPlan", rollingMigrationPlanKey, "resourceVersion", rollingMigrationPlan.ResourceVersion)
 
-	ctxlog.V(1).Info("Creating ClusterMigrationScope")
 	scope, err := scope.NewClusterMigrationScope(scope.ClusterMigrationScopeParams{
 		Logger:               ctxlog,
 		Client:               r.Client,
@@ -92,11 +91,9 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		ctxlog.Error(err, "Failed to create ClusterMigrationScope")
 		return ctrl.Result{}, err
 	}
-	ctxlog.V(1).Info("Created ClusterMigrationScope successfully")
 
 	// Always close the scope when exiting this function such that we can persist any ClusterMigration changes.
 	defer func() {
-		ctxlog.V(1).Info("Closing ClusterMigrationScope")
 		if err := scope.Close(); err != nil && reterr == nil {
 			ctxlog.Error(err, "Failed to close ClusterMigrationScope")
 			reterr = err
@@ -116,10 +113,14 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	log := scope.Logger
 	clusterMigration := scope.ClusterMigration
 	log.Info("Starting normal reconciliation", "clustermigration", clusterMigration.Name, "namespace", clusterMigration.Namespace)
-	log.V(1).Info("Adding finalizer", "finalizer", constants.ClusterMigrationFinalizer)
-	controllerutil.AddFinalizer(clusterMigration, constants.ClusterMigrationFinalizer)
+
 	var esxiMigration *vjailbreakv1alpha1.ESXIMigration
 	var err error
+	controllerutil.AddFinalizer(clusterMigration, constants.ClusterMigrationFinalizer)
+	if err := scope.Close(); err != nil {
+		log.Error(err, "Failed to close ClusterMigrationScope")
+		return ctrl.Result{}, errors.Wrap(err, "failed to close cluster migration scope")
+	}
 	if clusterMigration.Status.Phase == "" {
 		log.Info("Initializing ClusterMigration phase", "newPhase", vjailbreakv1alpha1.ClusterMigrationPhasePending)
 		clusterMigration.Status.Phase = vjailbreakv1alpha1.ClusterMigrationPhasePending
@@ -147,7 +148,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 				return ctrl.Result{}, errors.Wrap(err, "failed to get esxi migration")
 			}
 		}
-		log.V(1).Info("Retrieved ESXIMigration", "esxiName", esxi, "esximigration", esxiMigration.Name, "phase", esxiMigration.Status.Phase)
+		log.Info("Retrieved ESXIMigration", "esxiName", esxi, "esximigration", esxiMigration.Name, "phase", esxiMigration.Status.Phase)
 
 		if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
 			log.Info("ESXIMigration failed, updating ClusterMigration status", "esxiName", esxi, "message", esxiMigration.Status.Message)
@@ -209,14 +210,9 @@ func (r *ClusterMigrationReconciler) reconcileDelete(ctx context.Context, scope 
 	// Wait for all ESXIMigrations to be deleted
 	for _, esxi := range scope.ClusterMigration.Spec.ESXIMigrationSequence {
 		_, err := utils.GetESXIMigration(ctx, r.Client, esxi)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			log.Error(err, "Failed to get ESXIMigration", "esxiName", esxi)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get esxi migration")
-		} else {
-			log.Info("ESXIMigration not deleted", "esxiName", esxi)
+		if err == nil {
+			// ESXIMigration still exists, requeue
+			log.Info("ESXIMigration still exists, requeuing", "esxiName", esxi)
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 	}

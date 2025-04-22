@@ -24,11 +24,13 @@ import (
 type ESXIMigrationPhase string
 
 const (
-	ESXIMigrationPhaseWaiting   ESXIMigrationPhase = "Waiting"
-	ESXIMigrationPhaseRunning   ESXIMigrationPhase = "Running"
-	ESXIMigrationPhaseCordoned  ESXIMigrationPhase = "Cordoned"
-	ESXIMigrationPhaseFailed    ESXIMigrationPhase = "Failed"
-	ESXIMigrationPhaseSucceeded ESXIMigrationPhase = "Succeeded"
+	ESXIMigrationPhaseWaiting             ESXIMigrationPhase = "Waiting"
+	ESXIMigrationPhaseRunning             ESXIMigrationPhase = "Running"
+	ESXIMigrationPhaseCordoned            ESXIMigrationPhase = "Cordoned"
+	ESXIMigrationPhaseConvertingToPCDHost ESXIMigrationPhase = "ConvertingToPCDHost"
+	ESXIMigrationPhaseAssigningRole       ESXIMigrationPhase = "AssigningRole"
+	ESXIMigrationPhaseFailed              ESXIMigrationPhase = "Failed"
+	ESXIMigrationPhaseSucceeded           ESXIMigrationPhase = "Succeeded"
 )
 
 // ESXIMigrationSpec defines the desired state of ESXIMigration

@@ -54,6 +54,20 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              cloudInitConfigRef:
+                description: CloudInitConfigRef is the reference to the cloud-init
+                  configuration
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               clusterSequence:
                 description: ClusterSequence is the sequence of vCenter clusters to
                   be migrated

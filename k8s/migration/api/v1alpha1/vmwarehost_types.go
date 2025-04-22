@@ -22,7 +22,8 @@ import (
 
 // VMwareHostSpec defines the desired state of VMwareHost
 type VMwareHostSpec struct {
-	Name string `json:"name,omitempty"`
+	Name         string `json:"name,omitempty"`
+	HardwareUUID string `json:"hardwareUuid,omitempty"`
 }
 
 // VMwareHostStatus defines the observed state of VMwareHost

@@ -8,13 +8,12 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/vim25/mo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	"github.com/vmware/govmomi/vim25/mo"
 )
 
 func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluster vjailbreakv1alpha1.ClusterMigrationInfo, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
@@ -167,41 +166,50 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxi
 }
 
 func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (bool, error) {
+
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get vmware credentials")
 	}
 
-	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwarecreds)
+	hs, err := GetESXiSummary(ctx, k8sClient, esxiName, vmwarecreds)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to validate vCenter connection")
+		return false, errors.Wrap(err, "failed to get ESXi summary")
 	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to find datacenter")
-	}
-	finder.SetDatacenter(dc)
-	hostSystem, err := finder.HostSystem(ctx, esxiName)
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to find host %s", esxiName)
-	}
-
-	pc := property.DefaultCollector(c)
-
-	var hs mo.HostSystem
-	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary"}, &hs)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get host properties")
-	}
-	// Check host state
 
 	if hs.Summary.Runtime.InMaintenanceMode {
 		return true, nil
 	}
 
 	return false, nil
+}
+
+func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) (mo.HostSystem, error) {
+
+	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwareCreds)
+	if err != nil {
+		return mo.HostSystem{}, errors.Wrap(err, "failed to validate vCenter connection")
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, vmwareCreds.Spec.DataCenter)
+	if err != nil {
+		return mo.HostSystem{}, errors.Wrap(err, "failed to find datacenter")
+	}
+	finder.SetDatacenter(dc)
+	hostSystem, err := finder.HostSystem(ctx, esxiName)
+	if err != nil {
+		return mo.HostSystem{}, errors.Wrapf(err, "failed to find host %s", esxiName)
+	}
+
+	pc := property.DefaultCollector(c)
+
+	var hs mo.HostSystem
+	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary", "config", "hardware"}, &hs)
+	if err != nil {
+		return mo.HostSystem{}, errors.Wrap(err, "failed to get host properties")
+	}
+	return hs, nil
 }
 
 func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (int, error) {
@@ -234,4 +242,44 @@ func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName strin
 	}
 
 	return len(host.Vm), nil
+}
+
+// deepMerge performs a deep merge of src into dst
+// src values override dst values when there's a conflict
+func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
+	for key, srcVal := range src {
+		dstVal, exists := dst[key]
+
+		// If the key doesn't exist in dst, just set it
+		if !exists {
+			dst[key] = srcVal
+			continue
+		}
+
+		// If both values are maps, recursively merge them
+		srcMap, srcIsMap := srcVal.(map[string]interface{})
+		dstMap, dstIsMap := dstVal.(map[string]interface{})
+
+		if srcIsMap && dstIsMap {
+			dst[key] = deepMerge(dstMap, srcMap)
+			continue
+		}
+
+		// For lists/arrays, we need special handling
+		srcSlice, srcIsSlice := srcVal.([]interface{})
+		dstSlice, dstIsSlice := dstVal.([]interface{})
+
+		if srcIsSlice && dstIsSlice {
+			// Simple merge: just append elements from src to dst
+			// Another option could be to replace, or do a merge based on specific rules
+			combined := append(dstSlice, srcSlice...)
+			dst[key] = combined
+			continue
+		}
+
+		// In all other cases (primitive types, or type mismatch), src overwrites dst
+		dst[key] = srcVal
+	}
+
+	return dst
 }

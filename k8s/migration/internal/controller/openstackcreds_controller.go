@@ -154,12 +154,10 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
-		ctxlog.Info("Successfully updated OpenstackCreds spec with flavors")
 
 		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
 		// Update the status of the OpenstackCreds object
-		ctxlog.Info("Updating status to succeeded", "openstackcreds", scope.OpenstackCreds.Name)
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Succeeded"
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 
 		// update the status field openstackInfo
@@ -169,17 +167,15 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
 		}
-		ctxlog.V(1).Info("Successfully got OpenStack info")
 		scope.OpenstackCreds.Status.Openstack = *openstackinfo
 		ctxlog.Info("Updating OpenstackCreds status with info", "openstackcreds", scope.OpenstackCreds.Name)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
-		ctxlog.Info("Successfully updated OpenstackCreds status with info")
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	ctxlog.Info("Requeuing for flavor updates", "requeueAfter", "10s")
+	ctxlog.Info("Requeuing for flavor updates", "requeueAfter", "1 minute")
 	return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 }
 

@@ -744,6 +744,9 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			// Set the new label
 			vmwvm.Labels[label] = "true"
 
+			// update vminfo in case the VM has been moved by vMotion
+			vmwvm.Spec.VMInfo = *vminfo
+
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)

@@ -31,6 +31,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -108,7 +109,6 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	log.Info("Starting normal reconciliation", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 	controllerutil.AddFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
 	if scope.ESXIMigration.Status.Phase == "" {
-		log.Info("Initializing ESXIMigration phase", "newPhase", vjailbreakv1alpha1.ESXIMigrationPhaseWaiting)
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaiting
 	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
 		log.Info("ESXIMigration already succeeded")
@@ -128,39 +128,39 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return ctrl.Result{}, errors.Wrap(err, "failed to get BMConfig")
 	}
 
+	// if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseConvertingToPCDHost {
+	// 	log.Info("ESXIMigration is in converting to PCD host phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
+	// 	bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
+	// 	if err != nil {
+	// 		log.Error(err, "Failed to initialize BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
+	// 		return ctrl.Result{}, errors.Wrap(err, "failed to initialize BM Provisioner")
+	// 	}
+	// }
+
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
-		bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
+		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
 		if err != nil {
-			log.Error(err, "Failed to initialize BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
-			return ctrl.Result{}, errors.Wrap(err, "failed to initialize BM Provisioner")
+			return ctrl.Result{}, err
 		}
-
-		// TODO(vPwned): Convert to PCD host
-		log.Info("Converting ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		err = utils.ConvertESXiToPCDHost(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, bmProvider)
+		err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
 		if err != nil {
-			log.Error(err, "Failed to convert ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to convert ESXi to PCD host")
+			return ctrl.Result{}, err
 		}
-		log.Info("Successfully converted ESXi to PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
-			log.Error(err, "Failed to update ESXIMigration status")
+			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
-		log.Info("Successfully updated ESXIMigration status to succeeded")
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("Checking if ESXi is in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	inMaintenance, err := utils.CheckESXiInMaintenanceMode(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
 		log.Error(err, "Failed to check ESXi maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to check ESXi maintenance mode")
 	}
-	log.Info("ESXi maintenance mode check complete", "esxiName", scope.ESXIMigration.Spec.ESXiName, "inMaintenance", inMaintenance)
 	if inMaintenance {
 		log.Info("ESXi is already in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		vmCount, err := utils.CountVMsOnESXi(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
@@ -169,13 +169,12 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 			return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
 		}
 		log.Info("Counted VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
-		if vmCount == 0 {
-			// TODO(vPwned): Convert to PCD host
-			log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-
-			return ctrl.Result{}, nil
+		if vmCount != 0 {
+			log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
+			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 		}
-		log.Info("Updating ESXIMigration status to cordoned", "previousPhase", scope.ESXIMigration.Status.Phase)
+		log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
+		// TODO(vPwned): Convert to PCD host
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
@@ -183,7 +182,6 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
 		log.Info("Successfully updated ESXIMigration status to cordoned")
-		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	} else {
 		log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
@@ -191,12 +189,8 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 			log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
 		}
-		log.Info("Successfully put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	}
-
-	log.Info("Cordoned ESXI", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
 func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {

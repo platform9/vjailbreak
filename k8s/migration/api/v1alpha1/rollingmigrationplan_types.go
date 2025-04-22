@@ -61,6 +61,9 @@ type RollingMigrationPlanSpec struct {
 
 	// BMConfigRef is the reference to the BMC credentials
 	BMConfigRef corev1.LocalObjectReference `json:"bmConfigRef"`
+
+	// CloudInitConfigRef is the reference to the cloud-init configuration
+	CloudInitConfigRef *corev1.SecretReference `json:"cloudInitConfigRef,omitempty"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan

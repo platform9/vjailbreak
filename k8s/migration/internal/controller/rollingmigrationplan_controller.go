@@ -92,9 +92,23 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	log := scope.Logger
 	migrationPlan := scope.RollingMigrationPlan
 	log.Info(fmt.Sprintf("Reconciling RollingMigrationPlan '%s'", migrationPlan.Name))
-	controllerutil.AddFinalizer(migrationPlan, constants.RollingMigrationPlanFinalizer)
 	var clusterMigration *vjailbreakv1alpha1.ClusterMigration
 	var err error
+
+	controllerutil.AddFinalizer(migrationPlan, constants.RollingMigrationPlanFinalizer)
+	if err := scope.Close(); err != nil {
+		log.Error(err, "Failed to close RollingMigrationPlanScope")
+		return ctrl.Result{}, errors.Wrap(err, "failed to close rolling migration plan scope")
+	}
+
+	// validate environment is PCD
+	if isPCD, err := utils.ValidateOpenstackIsPCD(ctx, r.Client, migrationPlan); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to validate environment")
+	} else if !isPCD {
+		log.Info("OpenStack environment is not PCD, skipping rolling migration plan")
+		return ctrl.Result{}, nil
+	}
+
 	if migrationPlan.Status.Phase == "" {
 		migrationPlan.Status.Phase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
 	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded {
@@ -103,6 +117,14 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed {
 		log.Info("RollingMigrationPlan already failed")
 		return ctrl.Result{}, nil
+	}
+
+	if migrationPlan.Spec.CloudInitConfigRef == nil {
+		log.Info("CloudInitConfigRef is not set")
+		err = utils.MergeCloudInitAndCreateSecret(ctx, scope)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to merge cloud-init config and create secret")
+		}
 	}
 
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
@@ -184,14 +206,9 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 	// Wait for all ClusterMigrations to be deleted
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		_, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			log.Error(err, "Failed to get ClusterMigration", "cluster", cluster)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
-		} else {
-			log.Info("ClusterMigration not deleted", "cluster", cluster)
+		if err == nil {
+			// ClusterMigration still exists, requeue
+			log.Info("ClusterMigration still exists, requeuing", "cluster", cluster)
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 	}

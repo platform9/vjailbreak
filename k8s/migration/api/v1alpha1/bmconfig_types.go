@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,17 +30,21 @@ const (
 // BMConfigSpec defines the desired state of BMConfig
 type BMConfigSpec struct {
 	// UserName is the username for the BM server
-	UserName string `json:"userName"`
+	UserName string `json:"userName,omitempty"`
 	// Password is the password for the BM server
-	Password string `json:"password"`
+	Password string `json:"password,omitempty"`
 	// APIKey is the API key for the BM server
 	APIKey string `json:"apiKey"`
 	// APIUrl is the API URL for the BM server
 	APIUrl string `json:"apiUrl"`
 	// Insecure is a boolean indicating whether to use insecure connection
-	Insecure bool `json:"insecure"`
+	//+kubebuilder:default=false
+	Insecure bool `json:"insecure,omitempty"`
 	// ProviderType is the BMC provider type
+	//+kubebuilder:default="MAAS"
 	ProviderType BMCProviderName `json:"providerType"`
+	// UserDataSecretRef is the reference to the secret containing user data for the BMC
+	UserDataSecretRef corev1.SecretReference `json:"userDataSecretRef,omitempty"`
 }
 
 // BMConfigStatus defines the observed state of BMConfig

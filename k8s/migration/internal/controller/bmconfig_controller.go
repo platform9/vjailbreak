@@ -24,7 +24,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -89,35 +89,43 @@ func (r *BMConfigReconciler) reconcileDelete(ctx context.Context, scope *scope.B
 }
 
 func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx).WithName(constants.BMConfigControllerName)
 	bmConfig := scope.BMConfig
 	controllerutil.AddFinalizer(bmConfig, constants.BMConfigFinalizer)
 
-	// Initialize BMConfig
-	bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
+	provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	err = bmProvider.Connect()
+	err = provider.Connect(providers.BMAccessInfo{
+		Username:    bmConfig.Spec.UserName,
+		Password:    bmConfig.Spec.Password,
+		APIKey:      bmConfig.Spec.APIKey,
+		BaseURL:     bmConfig.Spec.APIUrl,
+		UseInsecure: bmConfig.Spec.Insecure,
+	})
 	if err != nil {
 		bmConfig.Status.ValidationStatus = string(corev1.PodFailed)
 		bmConfig.Status.ValidationMessage = fmt.Sprintf("Error connecting to MAAS: %s", err)
-		if updateErr := r.Status().Update(ctx, bmConfig); err != nil {
+		if updateErr := r.Status().Update(ctx, bmConfig); updateErr != nil {
 			return ctrl.Result{}, errors.Wrap(err,
 				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
 					bmConfig.Name)).Error())
 		}
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, err
 	}
+	defer provider.Disconnect()
 
 	bmConfig.Status.ValidationStatus = string(corev1.PodSucceeded)
 	bmConfig.Status.ValidationMessage = "Successfully connected to MAAS"
-	if updateErr := r.Status().Update(ctx, bmConfig); err != nil {
+	if updateErr := r.Status().Update(ctx, bmConfig); updateErr != nil {
 		return ctrl.Result{}, errors.Wrap(err,
 			errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
 				bmConfig.Name)).Error())
 	}
 
+	ctxlog.Info("Successfully connected to MAAS", "bmconfig", bmConfig.Name)
 	// Validate BMConfig
 	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }
