@@ -10,6 +10,7 @@ import (
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -123,7 +124,7 @@ func (p *MaasProvider) Disconnect() error {
 	return nil
 }
 
-func (p *MaasProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error {
+func (p *MaasProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface *api.IpmiType) error {
 	return p.client.SetMachine2PXEBoot(ctx, resourceID, power_cycle, ipmi_interface)
 }
 
@@ -145,6 +146,112 @@ func (p *MaasProvider) ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) 
 
 func (p *MaasProvider) WhoAmI() string {
 	return MaasProviderName
+}
+
+func (p *MaasProvider) DeployMachine(ctx context.Context, req api.DeployMachineRequest) (api.DeployMachineResponse, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.DeployMachineResponse{}, errors.New("client not initialized")
+	}
+	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
+	if err != nil {
+		return api.DeployMachineResponse{}, errors.Join(err, errors.New("Deploy Machine Failed"))
+	}
+	logrus.Debugf("machine found")
+	err = p.client.DeployMachine(ctx, m, req.UserData, req.OsReleaseName)
+	if err != nil {
+		return api.DeployMachineResponse{}, errors.Join(err, errors.New("Deploy Machine Failed"))
+	}
+	return api.DeployMachineResponse{Success: true}, nil
+}
+
+func (p *MaasProvider) IsBMReady(ctx context.Context, req api.IsBMReadyRequest) (api.IsBMReadyResponse, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.IsBMReadyResponse{}, errors.New("client not initialized")
+	}
+	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
+	if err != nil {
+		return api.IsBMReadyResponse{}, errors.Join(err, errors.New("IsBMReady Failed"))
+	}
+	return api.IsBMReadyResponse{IsReady: m.StatusName == "Ready"}, nil
+}
+
+func (p *MaasProvider) IsBMRunning(ctx context.Context, req api.IsBMRunningRequest) (api.IsBMRunningResponse, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.IsBMRunningResponse{}, errors.New("client not initialized")
+	}
+	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
+	if err != nil {
+		return api.IsBMRunningResponse{}, errors.Join(err, errors.New("IsBMRunning Failed"))
+	}
+	return api.IsBMRunningResponse{IsRunning: m.StatusName == "Running"}, nil
+}
+
+func (p *MaasProvider) StartBM(ctx context.Context, req api.StartBMRequest) (api.StartBMResponse, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.StartBMResponse{}, errors.New("client not initialized")
+	}
+	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
+	if err != nil {
+		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+	}
+	powerParams, err := p.client.GetPowerParameters(ctx, m.SystemID)
+	if err != nil {
+		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+	}
+	host := powerParams["power_address"]
+	username := powerParams["power_user"]
+	password := powerParams["power_pass"]
+	if host == nil || username == nil || password == nil {
+		return api.StartBMResponse{}, errors.New("failed to get power parameters")
+	}
+	config, err := p.client.GetIPMIClient(ctx, host.(string), username.(string), password.(string), req.IpmiInterface)
+	if err != nil {
+		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+	}
+	err = config.Connect(ctx)
+	if err != nil {
+		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+	}
+	defer config.Close(ctx)
+	_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
+	if err != nil {
+		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+	}
+	return api.StartBMResponse{Success: true}, nil
+}
+
+func (p *MaasProvider) StopBM(ctx context.Context, req api.StopBMRequest) (api.StopBMResponse, error) {
+	if p.client == nil || p.client.Client == nil {
+		return api.StopBMResponse{}, errors.New("client not initialized")
+	}
+	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
+	if err != nil {
+		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+	}
+	powerParams, err := p.client.GetPowerParameters(ctx, m.SystemID)
+	if err != nil {
+		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+	}
+	host := powerParams["power_address"]
+	username := powerParams["power_user"]
+	password := powerParams["power_pass"]
+	if host == nil || username == nil || password == nil {
+		return api.StopBMResponse{}, errors.New("failed to get power parameters")
+	}
+	config, err := p.client.GetIPMIClient(ctx, host.(string), username.(string), password.(string), req.IpmiInterface)
+	if err != nil {
+		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+	}
+	err = config.Connect(ctx)
+	if err != nil {
+		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+	}
+	defer config.Close(ctx)
+	_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerDown)
+	if err != nil {
+		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+	}
+	return api.StopBMResponse{Success: true}, nil
 }
 
 func init() {

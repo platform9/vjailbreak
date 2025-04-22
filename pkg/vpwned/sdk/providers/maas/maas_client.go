@@ -114,6 +114,60 @@ func (m *MaasClient) SetMachinePower(ctx context.Context, systemID string, actio
 	return nil
 }
 
+func (m *MaasClient) GetMachineFromID(ctx context.Context, systemID string) (*entity.Machine, error) {
+	if m.Client == nil {
+		return nil, errors.New("client not initialized")
+	}
+	return m.Client.Machine.Get(systemID)
+}
+
+func (m *MaasClient) GetIPMIInterface(ctx context.Context, req *api.IpmiType) (ipmi.Interface, error) {
+	con_interface := ipmi.InterfaceLanplus
+	switch req.IpmiInterface.(type) {
+	case *api.IpmiType_Lan:
+		con_interface = ipmi.InterfaceLan
+	case *api.IpmiType_Lanplus:
+		con_interface = ipmi.InterfaceLanplus
+	case *api.IpmiType_OpenIpmi:
+		con_interface = ipmi.InterfaceOpen
+	case *api.IpmiType_Tool:
+		con_interface = ipmi.InterfaceTool
+	}
+	return con_interface, nil
+}
+
+func (m *MaasClient) ReleaseMachine(ctx context.Context, machine *entity.Machine, eraseDisk bool) error {
+	if m.Client == nil {
+		return errors.New("release: client not initialized")
+	}
+	_, err := m.Client.Machine.Release(machine.SystemID, &entity.MachineReleaseParams{
+		Comment: "vJailbreak: Releasing machine for re-deployment",
+		Erase:   eraseDisk,
+	})
+	if err != nil {
+		logrus.Errorf("Failed to release machine: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (m *MaasClient) DeployMachine(ctx context.Context, machine *entity.Machine, cloudInitScript, OSRelease string) error {
+	if m.Client == nil {
+		return errors.New("deploy: client not initialized")
+	}
+	logrus.Debugf("Deploying machine %s with cloud-init script %s and OS release %s", machine.Hostname, cloudInitScript, OSRelease)
+	_, err := m.Client.Machine.Deploy(machine.SystemID, &entity.MachineDeployParams{
+		Comment:      "vJailbreak: Deploying machine with cloud-init script",
+		UserData:     cloudInitScript,
+		DistroSeries: OSRelease,
+	})
+	if err != nil {
+		logrus.Errorf("Failed to deploy machine: %v", err)
+		return err
+	}
+	return nil
+}
+
 // Reclaim does the following:
 // Take a cloud_init script that will be passed for deploying
 // by default we will not erase disk, but an option is provided for the same.
@@ -135,39 +189,47 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		return err
 	}
 	con_interface := ipmi.InterfaceLanplus
-	switch req.IpmiInterface.(type) {
-	case *api.ReclaimBMRequest_Lan:
+	switch req.IpmiInterface.IpmiInterface.(type) {
+	case *api.IpmiType_Lan:
 		con_interface = ipmi.InterfaceLan
-	case *api.ReclaimBMRequest_Lanplus:
+	case *api.IpmiType_Lanplus:
 		con_interface = ipmi.InterfaceLanplus
-	case *api.ReclaimBMRequest_OpenIpmi:
+	case *api.IpmiType_OpenIpmi:
 		con_interface = ipmi.InterfaceOpen
-	case *api.ReclaimBMRequest_Tool:
+	case *api.IpmiType_Tool:
 		con_interface = ipmi.InterfaceTool
 	}
-	//Set machine to PXE Boot
-	logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
-	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, con_interface)
-	if err != nil {
-		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-		return err
+	if !req.ManualPowerControl {
+		//Set machine to PXE Boot
+		logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
+		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+		if err != nil {
+			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+			return err
+		}
 	}
-	// Release the machine
-	logrus.Infof("%s Releasing machine %s", ctx, systemID)
-	_, err = m.Client.Machine.Release(systemID, &entity.MachineReleaseParams{
-		Comment: "vJailbreak: Releasing machine for re-deployment",
-		Erase:   eraseDisk,
-	})
-	if err != nil {
-		logrus.Errorf("%s Failed to release machine: %v", ctx, err)
-		return err
+	//check if machine is already released
+	if strings.EqualFold(machine.StatusName, "Ready") || strings.EqualFold(machine.StatusName, "Releasing") || strings.EqualFold(machine.StatusName, "released") {
+		logrus.Infof("%s Machine %s is already %s", ctx, systemID, machine.StatusName)
+	} else {
+		// Release the machine
+		logrus.Infof("%s Releasing machine %s", ctx, systemID)
+		_, err = m.Client.Machine.Release(systemID, &entity.MachineReleaseParams{
+			Comment: "vJailbreak: Releasing machine for re-deployment",
+			Erase:   eraseDisk,
+		})
+		if err != nil {
+			logrus.Errorf("%s Failed to release machine: %v", ctx, err)
+			return err
+		}
 	}
-
-	//Call PXE boot again to deploy the machine
-	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, con_interface)
-	if err != nil {
-		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-		return err
+	if !req.ManualPowerControl {
+		//Call PXE boot again to deploy the machine
+		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+		if err != nil {
+			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+			return err
+		}
 	}
 	// Deploy the machine again
 	logrus.Infof("%s Deploying machine %s", ctx, systemID)
@@ -234,12 +296,47 @@ func (m *MaasClient) ListBootSource(ctx context.Context) ([]api.BootsourceSelect
 	return bootSourcesList, nil
 }
 
+func (m *MaasClient) GetPowerParameters(ctx context.Context, systemID string) (map[string]interface{}, error) {
+	if m.Client == nil {
+		return nil, errors.New("client not initialized")
+	}
+	powerParams, err := m.Client.Machine.GetPowerParameters(systemID)
+	if err != nil {
+		logrus.Errorf("Failed to get power parameters: %v", err)
+		return nil, err
+	}
+	return powerParams, nil
+}
+
+func (m *MaasClient) GetIPMIClient(ctx context.Context, host, username, password string, req *api.IpmiType) (*ipmi.Client, error) {
+	// Configure IPMI connection
+	con_interface := ipmi.InterfaceLanplus
+	switch req.IpmiInterface.(type) {
+	case *api.IpmiType_Lan:
+		con_interface = ipmi.InterfaceLan
+	case *api.IpmiType_Lanplus:
+		con_interface = ipmi.InterfaceLanplus
+	case *api.IpmiType_OpenIpmi:
+		con_interface = ipmi.InterfaceOpen
+	case *api.IpmiType_Tool:
+		con_interface = ipmi.InterfaceTool
+	}
+	config, err := ipmi.NewClient(host, 623, username, password)
+	if err != nil {
+		logrus.Errorf("Failed to create IPMI client: %v", err)
+		return nil, err
+	}
+	config.WithInterface(con_interface)
+	return config, nil
+
+}
+
 // TODO:
 // Check if we can get PowerState Options and if they are IPMI
 // we should try using goipmi to set the bootdev to PXE
 // this would trigger MaaS to boot an ephemeral image on next reboot for this host
 // then we can move to Deploy state for the host.
-func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, power_cycle bool, ipmi_interface ipmi.Interface) error {
+func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, power_cycle bool, ipmi_interface *api.IpmiType) error {
 	if m.Client == nil {
 		return errors.New("client not initialized")
 	}
@@ -253,8 +350,7 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 		return errors.New("machine does not support IPMI power type")
 	}
 
-	// Extract IPMI connection details from machine's power parameters
-	powerParams, err := m.Client.Machine.GetPowerParameters(systemID)
+	powerParams, err := m.GetPowerParameters(ctx, systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get power parameters: %v", err)
 		return err
@@ -266,14 +362,12 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 		logrus.Errorf("Failed to get power parameters: %v", err)
 		return errors.New("failed to get power parameters")
 	}
-	// Configure IPMI connection
-	config, err := ipmi.NewClient(host.(string), 623, username.(string), password.(string))
+
+	config, err := m.GetIPMIClient(ctx, host.(string), username.(string), password.(string), ipmi_interface)
 	if err != nil {
 		logrus.Errorf("Failed to create IPMI client: %v", err)
 		return err
 	}
-	config.WithInterface(ipmi_interface)
-
 	// Open IPMI connection
 	err = config.Connect(ctx)
 	if err != nil {

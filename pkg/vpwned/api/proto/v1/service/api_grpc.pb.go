@@ -423,6 +423,7 @@ const (
 	BMProvider_WhoAmI_FullMethodName                = "/api.BMProvider/WhoAmI"
 	BMProvider_ListBootSource_FullMethodName        = "/api.BMProvider/ListBootSource"
 	BMProvider_ReclaimBMHost_FullMethodName         = "/api.BMProvider/ReclaimBMHost"
+	BMProvider_DeployMachine_FullMethodName         = "/api.BMProvider/DeployMachine"
 )
 
 // BMProviderClient is the client API for BMProvider service.
@@ -436,6 +437,7 @@ type BMProviderClient interface {
 	WhoAmI(ctx context.Context, in *WhoAmIRequest, opts ...grpc.CallOption) (*WhoAmIResponse, error)
 	ListBootSource(ctx context.Context, in *ListBootSourceRequest, opts ...grpc.CallOption) (*ListBootSourceResponse, error)
 	ReclaimBMHost(ctx context.Context, in *ReclaimBMRequest, opts ...grpc.CallOption) (*ReclaimBMResponse, error)
+	DeployMachine(ctx context.Context, in *DeployMachineRequest, opts ...grpc.CallOption) (*DeployMachineResponse, error)
 }
 
 type bMProviderClient struct {
@@ -516,6 +518,16 @@ func (c *bMProviderClient) ReclaimBMHost(ctx context.Context, in *ReclaimBMReque
 	return out, nil
 }
 
+func (c *bMProviderClient) DeployMachine(ctx context.Context, in *DeployMachineRequest, opts ...grpc.CallOption) (*DeployMachineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeployMachineResponse)
+	err := c.cc.Invoke(ctx, BMProvider_DeployMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BMProviderServer is the server API for BMProvider service.
 // All implementations must embed UnimplementedBMProviderServer
 // for forward compatibility.
@@ -527,6 +539,7 @@ type BMProviderServer interface {
 	WhoAmI(context.Context, *WhoAmIRequest) (*WhoAmIResponse, error)
 	ListBootSource(context.Context, *ListBootSourceRequest) (*ListBootSourceResponse, error)
 	ReclaimBMHost(context.Context, *ReclaimBMRequest) (*ReclaimBMResponse, error)
+	DeployMachine(context.Context, *DeployMachineRequest) (*DeployMachineResponse, error)
 	mustEmbedUnimplementedBMProviderServer()
 }
 
@@ -557,6 +570,9 @@ func (UnimplementedBMProviderServer) ListBootSource(context.Context, *ListBootSo
 }
 func (UnimplementedBMProviderServer) ReclaimBMHost(context.Context, *ReclaimBMRequest) (*ReclaimBMResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReclaimBMHost not implemented")
+}
+func (UnimplementedBMProviderServer) DeployMachine(context.Context, *DeployMachineRequest) (*DeployMachineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeployMachine not implemented")
 }
 func (UnimplementedBMProviderServer) mustEmbedUnimplementedBMProviderServer() {}
 func (UnimplementedBMProviderServer) testEmbeddedByValue()                    {}
@@ -705,6 +721,24 @@ func _BMProvider_ReclaimBMHost_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BMProvider_DeployMachine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeployMachineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BMProviderServer).DeployMachine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BMProvider_DeployMachine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BMProviderServer).DeployMachine(ctx, req.(*DeployMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BMProvider_ServiceDesc is the grpc.ServiceDesc for BMProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -739,6 +773,10 @@ var BMProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReclaimBMHost",
 			Handler:    _BMProvider_ReclaimBMHost_Handler,
+		},
+		{
+			MethodName: "DeployMachine",
+			Handler:    _BMProvider_DeployMachine_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
