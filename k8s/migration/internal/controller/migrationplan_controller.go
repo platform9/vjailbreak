@@ -765,8 +765,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
 
-		if err := r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		if vddkErr := r.validateVDDKPresence(ctx, migrationobj, ctxlog); vddkErr != nil {
+			return vddkErr
 		}
 
 		err = r.CreateJob(ctx,
@@ -798,7 +798,11 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MigrationPlanReconciler) validateVDDKPresence(ctx context.Context, migrationobj *vjailbreakv1alpha1.Migration, logger logr.Logger) error {
+func (r *MigrationPlanReconciler) validateVDDKPresence(
+	ctx context.Context,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	logger logr.Logger,
+) error {
 	currentUser, userErr := user.Current()
 	whoami := "unknown"
 	if userErr == nil {
