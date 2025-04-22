@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -49,6 +48,8 @@ import (
 	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
+
+const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -188,7 +189,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
-				return ctrl.Result{RequeueAfter: 20 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 			return ctrl.Result{}, err
 		}
@@ -762,27 +763,22 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
-		vddkExpectedDir, err := getVDDKDirectory(r.ctxlog)
-		if err != nil {
-			ctxlog.Error(err, "Failed to determine VDDK path")
-			return fmt.Errorf("VDDK_MISSING")
-		}
 
-		// Check if directory exists and is non-empty
+		//VDDK
+		vddkExpectedDir := VDDKDirectory
 		files, err := os.ReadDir(vddkExpectedDir)
 		if err != nil {
 			if os.IsNotExist(err) {
-				ctxlog.Error(err, "VDDK directory does not exist. Please verify the path and permissions.")
+				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.")
 			} else {
-				ctxlog.Error(err, "Unexpected error while reading VDDK directory")
+				ctxlog.Error(err, "Error reading VDDK directory")
 			}
-
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			setCondition := corev1.PodCondition{
 				Type:               "VDDKCheck",
 				Status:             corev1.ConditionFalse,
 				Reason:             "VDDKDirectoryMissing",
-				Message:            "VDDK directory not found. Please upload the required files.",
+				Message:            err.Error(),
 				LastTransitionTime: metav1.Now(),
 			}
 			newConditions := []corev1.PodCondition{}
@@ -793,16 +789,14 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 			newConditions = append(newConditions, setCondition)
 			migrationobj.Status.Conditions = newConditions
-
-			_ = r.Status().Update(ctx, migrationobj)
-
-			_ = r.Status().Update(ctx, migrationobj)
-			return fmt.Errorf("VDDK_MISSING")
+			if err := r.Status().Update(ctx, migrationobj); err != nil {
+				return errors.Wrap(err, "failed to update migration status")
+			}
+			return errors.Wrap(err, "VDDK_MISSING")
 		}
 
 		if len(files) == 0 {
 			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.")
-
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
 				Type:               "VDDKCheck",
@@ -811,8 +805,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				Message:            "VDDK directory is empty. Please upload the required files.",
 				LastTransitionTime: metav1.Now(),
 			})
-			_ = r.Status().Update(ctx, migrationobj)
-			return fmt.Errorf("VDDK_MISSING")
+			if err := r.Status().Update(ctx, migrationobj); err != nil {
+				return errors.Wrap(err, "failed to update migration status")
+			}
+			return errors.New("VDDK_MISSING")
 		}
 
 		err = r.CreateJob(ctx,
@@ -842,16 +838,4 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
 		Complete(r)
-}
-
-func getVDDKDirectory(logger logr.Logger) (string, error) {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return "", fmt.Errorf("could not determine home directory: %w", err)
-	}
-
-	vddkPath := fmt.Sprintf("%s/vmware-vix-disklib-distrib", homeDir)
-	logger.Info("Checking VDDK path", "resolvedPath", vddkPath)
-
-	return vddkPath, nil
 }
