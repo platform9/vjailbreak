@@ -371,12 +371,6 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		if certerr != nil {
 			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
 		}
-		// Logging the certificate
-		// ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
-		// ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
-		// 	Type:  "CERTIFICATE",
-		// 	Bytes: caCert.Raw,
-		// })))
 		ctxlog.Info("Trusting certificate for OpenStack endpoint", "authURL", openstackCredential.AuthURL)
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
 		caCertPool, _ := x509.SystemCertPool()
