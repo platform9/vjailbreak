@@ -708,7 +708,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	return openstackvolumetypes, nil
 }
 
-//nolint:funlen // function is long but refactoring is deferred
+//nolint:gocyclo // complexity is acknowledged for now
 func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
