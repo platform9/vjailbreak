@@ -825,7 +825,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			Type:               "VDDKCheck",
 			Status:             corev1.ConditionFalse,
 			Reason:             "VDDKDirectoryMissing",
-			Message:            errors.Wrap(err, "error reading VDDK directory").Error(),
+			Message:            "VDDK directory is missing. Please create and upload the required files.",
 			LastTransitionTime: metav1.Now(),
 		}
 
@@ -842,7 +842,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			return errors.Wrap(updateErr, "failed to update migration status after missing VDDK dir")
 		}
 
-		return errors.Wrapf(err, "VDDK_MISSING: directory could not be read by user '%s'", whoami)
+		return errors.Wrapf(err, "VDDK_MISSING: directory could not be read")
 	}
 
 	if len(files) == 0 {
@@ -863,7 +863,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			return errors.Wrap(updateErr, "failed to update migration status after empty VDDK dir")
 		}
 
-		return errors.Wrapf(errors.New("VDDK_MISSING"), "directory is empty for user '%s'", whoami)
+		return errors.Wrapf(errors.New("VDDK_MISSING"), "vddk directory is empty")
 	}
 
 	return nil
