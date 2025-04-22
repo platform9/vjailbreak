@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"reflect"
 	"strconv"
 	"strings"
@@ -764,16 +765,25 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
 
-		//VDDK
+		// VDDK
 		vddkExpectedDir := VDDKDirectory
+
+		currentUser, userErr := user.Current()
+		whoami := "unknown"
+		if userErr == nil {
+			whoami = currentUser.Username
+		}
+
 		files, err := os.ReadDir(vddkExpectedDir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.",
 					"path", vddkExpectedDir,
-					"reason", err.Error())
+					"reason", err.Error(),
+					"whoami", whoami,
+				)
 			} else {
-				ctxlog.Error(err, "Error reading VDDK directory", "path", vddkExpectedDir)
+				ctxlog.Error(err, "Error reading VDDK directory")
 			}
 
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
@@ -797,11 +807,14 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 			}
 
-			return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
+			return errors.Wrapf(err, "VDDK_MISSING: directory could not be read by user '%s'", whoami)
 		}
 
 		if len(files) == 0 {
-			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.", "path", vddkExpectedDir)
+			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.",
+				"path", vddkExpectedDir,
+				"whoami", whoami,
+			)
 
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
@@ -816,7 +829,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
 			}
 
-			return errors.Wrap(errors.New("VDDK_MISSING"), "directory is empty")
+			return errors.Wrapf(errors.New("VDDK_MISSING"), "directory is empty for user '%s'", whoami)
 		}
 
 		err = r.CreateJob(ctx,
