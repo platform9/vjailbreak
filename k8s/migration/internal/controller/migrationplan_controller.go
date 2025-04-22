@@ -708,6 +708,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	return openstackvolumetypes, nil
 }
 
+//nolint:gocyclo
 func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
@@ -803,8 +804,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			newConditions = append(newConditions, setCondition)
 			migrationobj.Status.Conditions = newConditions
 
-			if err := r.Status().Update(ctx, migrationobj); err != nil {
-				return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
+			if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
+				return errors.Wrap(updateErr, "failed to update migration status after missing VDDK dir")
 			}
 
 			return errors.Wrapf(err, "VDDK_MISSING: directory could not be read by user '%s'", whoami)
@@ -825,8 +826,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				LastTransitionTime: metav1.Now(),
 			})
 
-			if err := r.Status().Update(ctx, migrationobj); err != nil {
-				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
+			if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
+				return errors.Wrap(updateErr, "failed to update migration status after empty VDDK dir")
 			}
 
 			return errors.Wrapf(errors.New("VDDK_MISSING"), "directory is empty for user '%s'", whoami)
