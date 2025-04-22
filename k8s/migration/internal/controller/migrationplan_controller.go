@@ -769,16 +769,19 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		files, err := os.ReadDir(vddkExpectedDir)
 		if err != nil {
 			if os.IsNotExist(err) {
-				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.")
+				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.",
+					"path", vddkExpectedDir,
+					"reason", err.Error())
 			} else {
-				ctxlog.Error(err, "Error reading VDDK directory")
+				ctxlog.Error(err, "Error reading VDDK directory", "path", vddkExpectedDir)
 			}
+
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			setCondition := corev1.PodCondition{
 				Type:               "VDDKCheck",
 				Status:             corev1.ConditionFalse,
 				Reason:             "VDDKDirectoryMissing",
-				Message:            err.Error(),
+				Message:            errors.Wrap(err, "error reading VDDK directory").Error(),
 				LastTransitionTime: metav1.Now(),
 			}
 			newConditions := []corev1.PodCondition{}
@@ -789,14 +792,17 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 			newConditions = append(newConditions, setCondition)
 			migrationobj.Status.Conditions = newConditions
+
 			if err := r.Status().Update(ctx, migrationobj); err != nil {
-				return errors.Wrap(err, "failed to update migration status")
+				return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 			}
-			return errors.Wrap(err, "VDDK_MISSING")
+
+			return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
 		}
 
 		if len(files) == 0 {
-			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.")
+			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.", "path", vddkExpectedDir)
+
 			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
 				Type:               "VDDKCheck",
@@ -805,10 +811,12 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				Message:            "VDDK directory is empty. Please upload the required files.",
 				LastTransitionTime: metav1.Now(),
 			})
+
 			if err := r.Status().Update(ctx, migrationobj); err != nil {
-				return errors.Wrap(err, "failed to update migration status")
+				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
 			}
-			return errors.New("VDDK_MISSING")
+
+			return errors.Wrap(errors.New("VDDK_MISSING"), "directory is empty")
 		}
 
 		err = r.CreateJob(ctx,
