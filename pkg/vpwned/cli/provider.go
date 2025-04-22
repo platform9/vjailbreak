@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/platform9/vjailbreak/pkg/vpwned/utils/tableprinter"
@@ -156,12 +155,14 @@ var listProviderResourcesCmd = &cobra.Command{
 		err := currProvider.Connect(creds)
 		if err != nil {
 			logrus.Error(err)
+			return
 		}
 
 		logrus.Infof("Listing resources")
 		res, err := currProvider.ListResources(context.Background())
 		if err != nil {
 			logrus.Error(err)
+			return
 		}
 		tableprinter.PrintAsTable(res, "Id", "Fqdn", "PowerState", "Hostname", "Status", "MacAddress", "HardwareUuid")
 	},
@@ -197,8 +198,9 @@ var getResourceInfoCMD = &cobra.Command{
 		res, err := currProvider.GetResourceInfo(context.Background(), resource_id)
 		if err != nil {
 			logrus.Error(err)
+			return
 		}
-		tableprinter.PrintAsTable(res)
+		fmt.Printf("%+v\n", res)
 	},
 }
 
@@ -248,6 +250,7 @@ var reclaimBMCmd = &cobra.Command{
 		initProvider(cmd.Parent().Use)
 		var resource_id, user_data string
 		erase_disk := false
+		manual_power_control := false
 		boot_source_id := int32(0)
 		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
 			resource_id = val
@@ -259,6 +262,9 @@ var reclaimBMCmd = &cobra.Command{
 		}
 		if val, err := cmd.Flags().GetBool("erase_disk"); err == nil {
 			erase_disk = val
+		}
+		if val, err := cmd.Flags().GetBool("manual_power_control"); err == nil {
+			manual_power_control = val
 		}
 		if val, err := cmd.Flags().GetString("user_data"); err == nil {
 			user_data = val
@@ -283,9 +289,10 @@ var reclaimBMCmd = &cobra.Command{
 				ApiKey:      creds.APIKey,
 				UseInsecure: creds.UseInsecure,
 			},
-			ResourceId: resource_id,
-			EraseDisk:  erase_disk,
-			UserData:   user_data,
+			ResourceId:         resource_id,
+			EraseDisk:          erase_disk,
+			UserData:           user_data,
+			ManualPowerControl: manual_power_control,
 			BootSource: &api.BootsourceSelections{
 				BootSourceID: boot_source_id,
 			},
@@ -316,9 +323,18 @@ var setProviderBootDeviceCmd = &cobra.Command{
 		if val, err := cmd.Flags().GetBool("power_cycle"); err == nil {
 			power_cycle = val
 		}
-		var ipmi_interface ipmi.Interface
+		var ipmi_interface *api.IpmiType
 		if val, err := cmd.Flags().GetString("ipmi_interface"); err == nil {
-			ipmi_interface = ipmi.Interface(strings.ToLower(val))
+			switch strings.ToLower(val) {
+			case "lan":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lan{}}
+			case "lanplus":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+			case "openipmi":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_OpenIpmi{}}
+			case "tool":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Tool{}}
+			}
 		}
 		if currProvider == nil {
 			logrus.Error("provider not found")
@@ -334,6 +350,160 @@ var setProviderBootDeviceCmd = &cobra.Command{
 			logrus.Error(err)
 		}
 		logrus.Infof("Set boot device to PXE for resource %s", resource_id)
+	},
+}
+
+var deployBMCmd = &cobra.Command{
+	Use:   "deploy",
+	Short: "deploy provider resource",
+	Long:  "deploy provider resource",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id, user_data string
+		boot_source_id := "jammy"
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if val, err := cmd.Flags().GetString("user_data"); err == nil {
+			user_data = val
+		}
+		if val, err := cmd.Flags().GetString("release_name"); err == nil {
+			boot_source_id = val
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+		_, err = currProvider.DeployMachine(context.Background(), api.DeployMachineRequest{
+			AccessInfo: &api.BMProvisionerAccessInfo{
+				BaseUrl:     creds.BaseURL,
+				ApiKey:      creds.APIKey,
+				UseInsecure: creds.UseInsecure,
+			},
+			ResourceId:    resource_id,
+			UserData:      user_data,
+			OsReleaseName: boot_source_id,
+		})
+		if err != nil {
+			logrus.Error(err)
+		}
+	},
+}
+
+var stopBMCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "stop provider resource",
+	Long:  "stop provider resource",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id string
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+		var ipmi_interface *api.IpmiType
+		if val, err := cmd.Flags().GetString("ipmi_interface"); err == nil {
+			switch strings.ToLower(val) {
+			case "lan":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lan{}}
+			case "lanplus":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+			case "openipmi":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_OpenIpmi{}}
+			case "tool":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Tool{}}
+			}
+		}
+		_, err = currProvider.StopBM(context.Background(), api.StopBMRequest{
+			AccessInfo: &api.BMProvisionerAccessInfo{
+				BaseUrl:     creds.BaseURL,
+				ApiKey:      creds.APIKey,
+				UseInsecure: creds.UseInsecure,
+			},
+			ResourceId:    resource_id,
+			IpmiInterface: ipmi_interface,
+		})
+		if err != nil {
+			logrus.Error(err)
+		}
+	},
+}
+
+var startBMCmd = &cobra.Command{
+	Use:   "start",
+	Short: "start provider resource",
+	Long:  "start provider resource",
+	Run: func(cmd *cobra.Command, args []string) {
+		populateBMCredsFromCMD(cmd)
+		initProvider(cmd.Parent().Use)
+		var resource_id string
+		if val, err := cmd.Flags().GetString("resource_id"); err == nil {
+			resource_id = val
+		}
+		if resource_id == "" {
+			logrus.Error("resource_id is required")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		if currProvider == nil {
+			logrus.Error("provider not found")
+			fmt.Println(cmd.UsageString())
+			return
+		}
+		err := currProvider.Connect(creds)
+		if err != nil {
+			logrus.Error(err)
+		}
+		var ipmi_interface *api.IpmiType
+		if val, err := cmd.Flags().GetString("ipmi_interface"); err == nil {
+			switch strings.ToLower(val) {
+			case "lan":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lan{}}
+			case "lanplus":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+			case "openipmi":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_OpenIpmi{}}
+			case "tool":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Tool{}}
+			}
+		}
+		_, err = currProvider.StartBM(context.Background(), api.StartBMRequest{
+			AccessInfo: &api.BMProvisionerAccessInfo{
+				BaseUrl:     creds.BaseURL,
+				ApiKey:      creds.APIKey,
+				UseInsecure: creds.UseInsecure,
+			},
+			ResourceId:    resource_id,
+			IpmiInterface: ipmi_interface,
+		})
+		if err != nil {
+			logrus.Error(err)
+		}
 	},
 }
 
@@ -358,8 +528,19 @@ func init() {
 	reclaimBMCmd.Flags().StringP("user_data", "d", "", "Set the user data to use")
 	reclaimBMCmd.Flags().BoolP("erase_disk", "e", false, "Set the erase disk to use")
 	reclaimBMCmd.Flags().IntP("boot_source_id", "s", 0, "Set the boot source ID to use")
+	reclaimBMCmd.Flags().BoolP("manual_power_control", "m", false, "Set the manual power control to use")
+	//deployBMCmd
+	deployBMCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	deployBMCmd.Flags().StringP("user_data", "d", "", "Set the user data to use")
+	deployBMCmd.Flags().StringP("os_release_name", "o", "", "Set the OS release name to use")
+	//startBMCmd
+	startBMCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	startBMCmd.Flags().StringP("ipmi_interface", "n", "lanplus", "Set the IPMI interface to use")
+	//stopBMCmd
+	stopBMCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
+	stopBMCmd.Flags().StringP("ipmi_interface", "n", "lanplus", "Set the IPMI interface to use")
 	//add commands
 	providerCmd.AddCommand(listBootSourceCmd, listProvidersCmd, connectProviderCmd,
 		setProviderPowerCmd, listProviderResourcesCmd, getResourceInfoCMD,
-		reclaimBMCmd, setProviderBootDeviceCmd)
+		reclaimBMCmd, setProviderBootDeviceCmd, deployBMCmd, startBMCmd, stopBMCmd)
 }

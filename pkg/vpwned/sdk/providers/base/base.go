@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 )
@@ -32,23 +31,23 @@ func (p *UnimplementedBaseProvider) GetProviderBMStatus() (string, error) {
 	return "", errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) IsBMReady() bool {
-	return false
+func (p *UnimplementedBaseProvider) IsBMReady(ctx context.Context, req api.IsBMReadyRequest) (api.IsBMReadyResponse, error) {
+	return api.IsBMReadyResponse{}, errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) IsBMRunning() bool {
-	return false
+func (p *UnimplementedBaseProvider) IsBMRunning(ctx context.Context, req api.IsBMRunningRequest) (api.IsBMRunningResponse, error) {
+	return api.IsBMRunningResponse{}, errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) StartBM() error {
-	return errors.New("not implemented")
+func (p *UnimplementedBaseProvider) StartBM(ctx context.Context, req api.StartBMRequest) (api.StartBMResponse, error) {
+	return api.StartBMResponse{}, errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) StopBM() error {
-	return errors.New("not implemented")
+func (p *UnimplementedBaseProvider) StopBM(ctx context.Context, req api.StopBMRequest) (api.StopBMResponse, error) {
+	return api.StopBMResponse{}, errors.New("not implemented")
 }
 
-func (p *UnimplementedBaseProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error {
+func (p *UnimplementedBaseProvider) SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface *api.IpmiType) error {
 	return errors.New("not implemented")
 }
 
@@ -74,6 +73,10 @@ func (p *UnimplementedBaseProvider) GetResourceInfo(ctx context.Context, resourc
 
 func (p *UnimplementedBaseProvider) ListBootSource(ctx context.Context, req api.ListBootSourceRequest) ([]api.BootsourceSelections, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (p *UnimplementedBaseProvider) DeployMachine(ctx context.Context, req api.DeployMachineRequest) (api.DeployMachineResponse, error) {
+	return api.DeployMachineResponse{}, errors.New("not implemented")
 }
 
 func init() {
