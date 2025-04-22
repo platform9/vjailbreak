@@ -121,6 +121,38 @@
         ]
       }
     },
+    "/vpw/v1/deploy_machine": {
+      "post": {
+        "operationId": "BMProvider_DeployMachine",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiDeployMachineResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiDeployMachineRequest"
+            }
+          }
+        ],
+        "tags": [
+          "BMProvider"
+        ]
+      }
+    },
     "/vpw/v1/get_resource_info": {
       "get": {
         "operationId": "BMProvider_GetResourceInfo",
@@ -820,6 +852,34 @@
         }
       }
     },
+    "apiDeployMachineRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiBMProvisionerAccessInfo"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "userData": {
+          "type": "string"
+        },
+        "osReleaseName": {
+          "type": "string"
+        }
+      }
+    },
+    "apiDeployMachineResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiGetResourceInfoResponse": {
       "type": "object",
       "properties": {
@@ -1010,17 +1070,11 @@
         "powerCycle": {
           "type": "boolean"
         },
-        "lan": {
-          "type": "string"
+        "manualPowerControl": {
+          "type": "boolean"
         },
-        "lanplus": {
-          "type": "string"
-        },
-        "openIpmi": {
-          "type": "string"
-        },
-        "tool": {
-          "type": "string"
+        "ipmiInterface": {
+          "$ref": "#/definitions/apiipmi_type"
         }
       }
     },
@@ -1234,6 +1288,23 @@
       "type": "object",
       "properties": {
         "providerName": {
+          "type": "string"
+        }
+      }
+    },
+    "apiipmi_type": {
+      "type": "object",
+      "properties": {
+        "lan": {
+          "type": "string"
+        },
+        "lanplus": {
+          "type": "string"
+        },
+        "openIpmi": {
+          "type": "string"
+        },
+        "tool": {
           "type": "string"
         }
       }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/sirupsen/logrus"
@@ -164,18 +163,18 @@ func (p *providersGRPC) SetResourceBM2PXEBoot(ctx context.Context, in *api.SetRe
 		return retval, err
 	}
 	defer provider.Disconnect()
-	con_interface := ipmi.InterfaceLanplus
+	var ipmi_interface *api.IpmiType
 	switch in.IpmiInterface.(type) {
 	case *api.SetResourceBM2PXEBootRequest_Lan:
-		con_interface = ipmi.InterfaceLan
+		ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lan{}}
 	case *api.SetResourceBM2PXEBootRequest_Lanplus:
-		con_interface = ipmi.InterfaceLanplus
+		ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
 	case *api.SetResourceBM2PXEBootRequest_OpenIpmi:
-		con_interface = ipmi.InterfaceOpen
+		ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_OpenIpmi{}}
 	case *api.SetResourceBM2PXEBootRequest_Tool:
-		con_interface = ipmi.InterfaceTool
+		ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Tool{}}
 	}
-	err = provider.SetBM2PXEBoot(ctx, in.ResourceId, in.PowerCycle, con_interface)
+	err = provider.SetBM2PXEBoot(ctx, in.ResourceId, in.PowerCycle, ipmi_interface)
 	if err != nil {
 		return retval, err
 	}
@@ -221,6 +220,44 @@ func (p *providersGRPC) ReclaimBM(ctx context.Context, in *api.ReclaimBMRequest)
 	}
 	defer provider.Disconnect()
 	err = provider.ReclaimBM(ctx, *in)
+	if err != nil {
+		return retval, err
+	}
+	return retval, nil
+}
+
+func (p *providersGRPC) StartBM(ctx context.Context, in *api.StartBMRequest) (*api.StartBMResponse, error) {
+	retval := &api.StartBMResponse{}
+	p.populateCredsFromAccessInfo(in.AccessInfo)
+	provider, err := providers.GetProvider(p.Creds.Provider)
+	if err != nil {
+		return retval, errors.New("unknown provider")
+	}
+	err = provider.Connect(p.Creds)
+	if err != nil {
+		return retval, err
+	}
+	defer provider.Disconnect()
+	_, err = provider.StartBM(ctx, *in)
+	if err != nil {
+		return retval, err
+	}
+	return retval, nil
+}
+
+func (p *providersGRPC) StopBM(ctx context.Context, in *api.StopBMRequest) (*api.StopBMResponse, error) {
+	retval := &api.StopBMResponse{}
+	p.populateCredsFromAccessInfo(in.AccessInfo)
+	provider, err := providers.GetProvider(p.Creds.Provider)
+	if err != nil {
+		return retval, errors.New("unknown provider")
+	}
+	err = provider.Connect(p.Creds)
+	if err != nil {
+		return retval, err
+	}
+	defer provider.Disconnect()
+	_, err = provider.StopBM(ctx, *in)
 	if err != nil {
 		return retval, err
 	}

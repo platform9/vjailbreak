@@ -258,6 +258,12 @@ service BMProvider {
             body: "*"
         };
     }
+    rpc DeployMachine(DeployMachineRequest) returns (DeployMachineResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/deploy_machine"
+            body: "*"
+        };
+    }
 }
 
 message BaseBMGetRequest {
@@ -335,7 +341,14 @@ message ListBootSourceRequest {
 message ListBootSourceResponse {
     repeated BootsourceSelections boot_source_selections = 1;
 }
-
+message ipmi_type {
+    oneof ipmi_interface {
+        string lan = 1;
+        string lanplus = 2;
+        string open_ipmi = 3;
+        string tool = 4;
+    };
+}
 message ReclaimBMRequest {
     BMProvisionerAccessInfo access_info = 1;
     string resource_id = 2;
@@ -343,15 +356,63 @@ message ReclaimBMRequest {
     bool erase_disk = 4;
     BootsourceSelections boot_source = 5;
     bool power_cycle = 6;
-    oneof ipmi_interface {
-        string lan = 7;
-        string lanplus = 8;
-        string open_ipmi = 9;
-        string tool = 10;
-    };
+    bool manual_power_control = 7;
+    ipmi_type ipmi_interface = 8;
 }
 
 message ReclaimBMResponse {
     bool success = 1;
     string message = 2;
+}
+
+message DeployMachineRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+    string user_data = 3;
+    string os_release_name = 4;
+}
+
+message DeployMachineResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message StartBMRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+    ipmi_type ipmi_interface = 3;
+}
+
+message StartBMResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message StopBMRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+   ipmi_type ipmi_interface = 3;
+}
+
+message StopBMResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message IsBMReadyRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+}
+
+message IsBMReadyResponse {
+    bool is_ready = 1;
+}
+
+message IsBMRunningRequest {
+    BMProvisionerAccessInfo access_info = 1;
+    string resource_id = 2;
+}
+
+message IsBMRunningResponse {
+    bool is_running = 1;
 }
