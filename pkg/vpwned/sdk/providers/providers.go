@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 )
 
@@ -17,21 +16,21 @@ type BMCProvider interface {
 	Connect(accessInfo BMAccessInfo) error
 	//a function to disconnect from the underlying provider
 	Disconnect() error
-	//return the current status in the underlying BM provisioner
-	GetProviderBMStatus() (string, error)
 	// a function to check if the BM is in ready state
 	// this state could be a combination of different states in the
 	// underlying BM provisioner
-	IsBMReady() bool
+	IsBMReady(ctx context.Context, req api.IsBMReadyRequest) (api.IsBMReadyResponse, error)
 	// a function to check if the BM is in running state
-	IsBMRunning() bool
+	IsBMRunning(ctx context.Context, req api.IsBMRunningRequest) (api.IsBMRunningResponse, error)
 	//Power Functions
 	//start the BM
-	StartBM() error
+	StartBM(ctx context.Context, req api.StartBMRequest) (api.StartBMResponse, error)
 	//Stop the BM
-	StopBM() error
+	StopBM(ctx context.Context, req api.StopBMRequest) (api.StopBMResponse, error)
+	//Deploy Machine
+	DeployMachine(ctx context.Context, req api.DeployMachineRequest) (api.DeployMachineResponse, error)
 	//Set to PXE boot on next reboot
-	SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface ipmi.Interface) error
+	SetBM2PXEBoot(ctx context.Context, resourceID string, power_cycle bool, ipmi_interface *api.IpmiType) error
 	//Reclaim functions
 	//Reclaim the VM such that we erase and resuse the VM as a PCD Host
 	ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) error
