@@ -708,7 +708,6 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	return openstackvolumetypes, nil
 }
 
-//nolint:gocyclo // complexity is acknowledged for now
 func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
@@ -766,71 +765,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
 
-		// VDDK
-		vddkExpectedDir := VDDKDirectory
-
-		currentUser, userErr := user.Current()
-		whoami := "unknown"
-		if userErr == nil {
-			whoami = currentUser.Username
-		}
-
-		files, err := os.ReadDir(vddkExpectedDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				ctxlog.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.",
-					"path", vddkExpectedDir,
-					"reason", err.Error(),
-					"whoami", whoami,
-				)
-			} else {
-				ctxlog.Error(err, "Error reading VDDK directory")
-			}
-
-			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
-			setCondition := corev1.PodCondition{
-				Type:               "VDDKCheck",
-				Status:             corev1.ConditionFalse,
-				Reason:             "VDDKDirectoryMissing",
-				Message:            errors.Wrap(err, "error reading VDDK directory").Error(),
-				LastTransitionTime: metav1.Now(),
-			}
-			newConditions := []corev1.PodCondition{}
-			for _, c := range migrationobj.Status.Conditions {
-				if c.Type != "VDDKCheck" {
-					newConditions = append(newConditions, c)
-				}
-			}
-			newConditions = append(newConditions, setCondition)
-			migrationobj.Status.Conditions = newConditions
-
-			if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
-				return errors.Wrap(updateErr, "failed to update migration status after missing VDDK dir")
-			}
-
-			return errors.Wrapf(err, "VDDK_MISSING: directory could not be read by user '%s'", whoami)
-		}
-
-		if len(files) == 0 {
-			ctxlog.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.",
-				"path", vddkExpectedDir,
-				"whoami", whoami,
-			)
-
-			migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
-			migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
-				Type:               "VDDKCheck",
-				Status:             corev1.ConditionFalse,
-				Reason:             "VDDKDirectoryEmpty",
-				Message:            "VDDK directory is empty. Please upload the required files.",
-				LastTransitionTime: metav1.Now(),
-			})
-
-			if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
-				return errors.Wrap(updateErr, "failed to update migration status after empty VDDK dir")
-			}
-
-			return errors.Wrapf(errors.New("VDDK_MISSING"), "directory is empty for user '%s'", whoami)
+		if err := r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+			return err
 		}
 
 		err = r.CreateJob(ctx,
@@ -860,4 +796,71 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
 		Complete(r)
+}
+
+func (r *MigrationPlanReconciler) validateVDDKPresence(ctx context.Context, migrationobj *vjailbreakv1alpha1.Migration, logger logr.Logger) error {
+	currentUser, userErr := user.Current()
+	whoami := "unknown"
+	if userErr == nil {
+		whoami = currentUser.Username
+	}
+
+	files, err := os.ReadDir(VDDKDirectory)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.",
+				"path", VDDKDirectory,
+				"reason", err.Error(),
+				"whoami", whoami)
+		} else {
+			logger.Error(err, "Error reading VDDK directory", "path", VDDKDirectory)
+		}
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		setCondition := corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryMissing",
+			Message:            errors.Wrap(err, "error reading VDDK directory").Error(),
+			LastTransitionTime: metav1.Now(),
+		}
+
+		newConditions := []corev1.PodCondition{}
+		for _, c := range migrationobj.Status.Conditions {
+			if c.Type != "VDDKCheck" {
+				newConditions = append(newConditions, c)
+			}
+		}
+		newConditions = append(newConditions, setCondition)
+		migrationobj.Status.Conditions = newConditions
+
+		if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
+			return errors.Wrap(updateErr, "failed to update migration status after missing VDDK dir")
+		}
+
+		return errors.Wrapf(err, "VDDK_MISSING: directory could not be read by user '%s'", whoami)
+	}
+
+	if len(files) == 0 {
+		logger.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.",
+			"path", VDDKDirectory,
+			"whoami", whoami)
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryEmpty",
+			Message:            "VDDK directory is empty. Please upload the required files.",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
+			return errors.Wrap(updateErr, "failed to update migration status after empty VDDK dir")
+		}
+
+		return errors.Wrapf(errors.New("VDDK_MISSING"), "directory is empty for user '%s'", whoami)
+	}
+
+	return nil
 }
