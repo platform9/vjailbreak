@@ -123,6 +123,9 @@ func (m *MaasClient) GetMachineFromID(ctx context.Context, systemID string) (*en
 
 func (m *MaasClient) GetIPMIInterface(ctx context.Context, req *api.IpmiType) (ipmi.Interface, error) {
 	con_interface := ipmi.InterfaceLanplus
+	if req == nil {
+		return con_interface, nil
+	}
 	switch req.IpmiInterface.(type) {
 	case *api.IpmiType_Lan:
 		con_interface = ipmi.InterfaceLan
@@ -189,6 +192,9 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		return err
 	}
 	con_interface := ipmi.InterfaceLanplus
+	if req.IpmiInterface == nil {
+		return errors.New("reclaim: missing IPMI interface")
+	}
 	switch req.IpmiInterface.IpmiInterface.(type) {
 	case *api.IpmiType_Lan:
 		con_interface = ipmi.InterfaceLan
@@ -234,6 +240,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	// Deploy the machine again
 	logrus.Infof("%s Deploying machine %s", ctx, systemID)
 	_, err = m.Client.Machine.Deploy(systemID, &entity.MachineDeployParams{
+		Comment:      "vJailbreak: Deploying machine with cloud-init script",
 		UserData:     cloudInitScript,
 		DistroSeries: bootSource.Release,
 	})
