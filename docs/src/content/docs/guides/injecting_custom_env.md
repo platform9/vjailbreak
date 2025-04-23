@@ -1,7 +1,7 @@
 ---
 title: "v2v-helper Environment Variable Injection via ConfigMap"
+description: "Enabling environment variable injection for the v2v-helper pod using a Kubernetes ConfigMap"
 ---
-## Summary
 
 This update enables environment variable injection for the `v2v-helper` pod using a Kubernetes ConfigMap. Multiple components, including the DaemonSet configuration, installation script, and Packer build file, have been enhanced to support this new environment injection mechanism. The `migration-controller` now references the created ConfigMap, ensuring a consistent and manageable configuration workflow.
 
