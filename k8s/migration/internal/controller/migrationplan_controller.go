@@ -803,22 +803,15 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	migrationobj *vjailbreakv1alpha1.Migration,
 	logger logr.Logger,
 ) error {
-	currentUser, userErr := user.Current()
+	currentUser, err := user.Current()
 	whoami := "unknown"
-	if userErr == nil {
+	if err == nil {
 		whoami = currentUser.Username
 	}
 
 	files, err := os.ReadDir(VDDKDirectory)
 	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Info("VDDK directory does not exist, skipping Job creation. Will retry in 30s.",
-				"path", VDDKDirectory,
-				"reason", err.Error(),
-				"whoami", whoami)
-		} else {
-			logger.Error(err, "Error reading VDDK directory", "path", VDDKDirectory)
-		}
+		logger.Error(err, "VDDK directory could not be read")
 
 		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
 		setCondition := corev1.PodCondition{
@@ -838,8 +831,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		newConditions = append(newConditions, setCondition)
 		migrationobj.Status.Conditions = newConditions
 
-		if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
-			return errors.Wrap(updateErr, "failed to update migration status after missing VDDK dir")
+		if err := r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 		}
 
 		return errors.Wrapf(err, "VDDK_MISSING: directory could not be read")
@@ -859,8 +852,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			LastTransitionTime: metav1.Now(),
 		})
 
-		if updateErr := r.Status().Update(ctx, migrationobj); updateErr != nil {
-			return errors.Wrap(updateErr, "failed to update migration status after empty VDDK dir")
+		if err := r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
 		}
 
 		return errors.Wrapf(errors.New("VDDK_MISSING"), "vddk directory is empty")
