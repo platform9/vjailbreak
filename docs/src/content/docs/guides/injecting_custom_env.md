@@ -1,5 +1,6 @@
-# v2v-helper Environment Variable Injection via ConfigMap
-
+---
+title: "v2v-helper Environment Variable Injection via ConfigMap"
+---
 ## Summary
 
 This update enables environment variable injection for the `v2v-helper` pod using a Kubernetes ConfigMap. Multiple components, including the DaemonSet configuration, installation script, and Packer build file, have been enhanced to support this new environment injection mechanism. The `migration-controller` now references the created ConfigMap, ensuring a consistent and manageable configuration workflow.
@@ -18,14 +19,21 @@ This update enables environment variable injection for the `v2v-helper` pod usin
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n <namespace>
 
 
-## What to do when you need to inject custom environment variables after the vjailbreak VM is provisioned
+## Injecting Environment Variables Post-Provisioning
 
-1. **Create a new ConfigMap**
+If you would like to inject environment variables after the vjailbreak VM has been provisioned, follow these steps:
+1. **Delete the existing ConfigMap**
+
+   ```bash
+   kubectl delete configmap pf9-env -n <namespace>
+   ```
+
+2. **Create a new ConfigMap**
 
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n <namespace>
    ```
-2. **Trigger a new migration for the envs to be reflected in the pod**
+3. **Trigger a new migration for the envs to be reflected in the pod**
 
     Trigger via UI or via api. 
 
