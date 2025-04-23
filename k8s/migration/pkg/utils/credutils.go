@@ -28,11 +28,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -88,7 +86,7 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
-	if err := k3sclient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
 		return VMwareCredentials{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
 	}
 
@@ -129,7 +127,7 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 // GetOpenstackCredentialsFromSecret retrieves and checks the secret
 func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (OpenStackCredentials, error) {
 	secret := &corev1.Secret{}
-	if err := k3sclient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
 		return OpenStackCredentials{}, errors.Wrap(err, "failed to get secret")
 	}
 
@@ -784,7 +782,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	ctxlog := log.FromContext(ctx)
+	ctxlog := ctrllog.FromContext(ctx)
 
 	// Fixed logging with proper string keys
 	ctxlog.Info("Checking flavor requirements",

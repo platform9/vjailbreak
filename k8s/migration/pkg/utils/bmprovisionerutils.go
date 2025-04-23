@@ -49,13 +49,9 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		return errors.Wrap(err, "failed to get ESXi summary")
 	}
 
-	fmt.Println("******************* ESXi hardware MAC", "ESXi MAC", hs.Config.Network.Pnic[0].Mac)
-
 	for i := 0; i < len(resources); i++ {
-		// ctxlog.Info("******************* ESXi hardware UUID", "ESXi UUID", hs.Hardware.SystemInfo.Uuid, "MAAS UUID", resources[i].HardwareUuid, "Name", resources[i].Hostname)
-		PrettyPrint(resources[i])
 		if resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
-			ctxlog.Info("******************* Found matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
+			ctxlog.Info("Found a matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
 			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id)
 			if err != nil {
 				return errors.Wrap(err, "failed to reclaim ESXi")
@@ -135,7 +131,6 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 }
 
 func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
-	log := scope.Logger
 	// Get BMConfig for the rolling migration plan
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
@@ -152,26 +147,19 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	if _, ok := userDataSecret.Data[constants.UserDataSecretKey]; !ok {
 		return errors.New("user data secret is empty")
 	}
-	// userData, err := base64.StdEncoding.DecodeString(string(userDataSecret.Data[constants.UserDataSecretKey]))
-	// if err != nil {
-	// 	return errors.Wrap(err, "failed to decode user data")
-	// }
+
 	userData := string(userDataSecret.Data[constants.UserDataSecretKey])
-	log.Info("****************** user data", "user data", userData)
 
 	cloudInit, err := generatePCDOnboardingCloudInit(ctx, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate cloud init for BMConfig")
 	}
 
-	log.Info("****************** Cloud init", "cloud init", cloudInit)
 	// merge cloud init and user data
 	mergedCloudInit, err := MergeCloudInit(userData, cloudInit)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge cloud init and user data")
 	}
-
-	fmt.Println("****************** merged cloud init:", mergedCloudInit)
 
 	finalCloudInitSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
