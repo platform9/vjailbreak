@@ -40,13 +40,20 @@ If you would like to inject environment variables after the vjailbreak VM has be
    ```bash
    kubectl delete configmap pf9-env -n migration-system
    ```
+2. **Populate the `/etc/pf9/env` file with whatever env variables needed**
 
-2. **Create a new ConfigMap**
+   ```bash
+   echo "http_proxy=http://<proxy-server>:<proxy-port>" >> /etc/pf9/env
+   echo "https_proxy=http://<proxy-server>:<proxy-port>" >> /etc/pf9/env
+   echo "no_proxy=localhost,127.0.0.1" >> /etc/pf9/env
+   ```
+
+3. **Create a new ConfigMap**
 
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n migration-system
    ```
-3. **Trigger a new migration for the envs to be reflected in the pod**
+4. **Trigger a new migration for the envs to be reflected in the pod**
 
     Trigger via UI or via api. 
 
