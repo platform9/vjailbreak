@@ -272,6 +272,19 @@ var reclaimBMCmd = &cobra.Command{
 		if val, err := cmd.Flags().GetInt("boot_source_id"); err == nil {
 			boot_source_id = int32(val)
 		}
+		var ipmi_interface *api.IpmiType
+		if val, err := cmd.Flags().GetString("ipmi_interface"); err == nil {
+			switch strings.ToLower(val) {
+			case "lan":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lan{}}
+			case "lanplus":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+			case "openipmi":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_OpenIpmi{}}
+			case "tool":
+				ipmi_interface = &api.IpmiType{IpmiInterface: &api.IpmiType_Tool{}}
+			}
+		}
 		if currProvider == nil {
 			logrus.Error("provider not found")
 			fmt.Println(cmd.UsageString())
@@ -296,6 +309,7 @@ var reclaimBMCmd = &cobra.Command{
 			BootSource: &api.BootsourceSelections{
 				BootSourceID: boot_source_id,
 			},
+			IpmiInterface: ipmi_interface,
 		})
 		if err != nil {
 			logrus.Error(err)
@@ -529,6 +543,7 @@ func init() {
 	reclaimBMCmd.Flags().BoolP("erase_disk", "e", false, "Set the erase disk to use")
 	reclaimBMCmd.Flags().IntP("boot_source_id", "s", 0, "Set the boot source ID to use")
 	reclaimBMCmd.Flags().BoolP("manual_power_control", "m", false, "Set the manual power control to use")
+	reclaimBMCmd.Flags().StringP("ipmi_interface", "n", "lanplus", "Set the IPMI interface to use")
 	//deployBMCmd
 	deployBMCmd.Flags().StringP("resource_id", "r", "", "Set the resource ID to use")
 	deployBMCmd.Flags().StringP("user_data", "d", "", "Set the user data to use")
