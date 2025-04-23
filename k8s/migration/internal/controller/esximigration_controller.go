@@ -128,15 +128,6 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return ctrl.Result{}, errors.Wrap(err, "failed to get BMConfig")
 	}
 
-	// if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseConvertingToPCDHost {
-	// 	log.Info("ESXIMigration is in converting to PCD host phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
-	// 	bmProvider, err := utils.InitBMProvisioner(ctx, bmConfig.Spec.ProviderType)
-	// 	if err != nil {
-	// 		log.Error(err, "Failed to initialize BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
-	// 		return ctrl.Result{}, errors.Wrap(err, "failed to initialize BM Provisioner")
-	// 	}
-	// }
-
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
 		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))

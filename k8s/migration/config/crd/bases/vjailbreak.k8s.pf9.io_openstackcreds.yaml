@@ -156,8 +156,12 @@ spec:
                     type: array
                 type: object
               openstackValidationMessage:
+                description: OpenStackValidationMessage is the message associated
+                  with the OpenStack validation
                 type: string
               openstackValidationStatus:
+                description: OpenStackValidationStatus is the status of the OpenStack
+                  validation
                 type: string
             type: object
         type: object

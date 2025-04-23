@@ -44,10 +44,11 @@ spec:
             description: VMwareCredsSpec defines the desired state of VMwareCreds
             properties:
               datacenter:
+                description: DataCenter is the datacenter for the virtual machine
                 type: string
               secretRef:
-                description: ObjectReference contains enough information to let you
-                  inspect or modify the referred object.
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  VMware credentials
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -96,8 +97,11 @@ spec:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
             properties:
               vmwareValidationMessage:
+                description: VMwareValidationMessage is the message associated with
+                  the VMware validation
                 type: string
               vmwareValidationStatus:
+                description: VMwareValidationStatus is the status of the VMware validation
                 type: string
             type: object
         type: object

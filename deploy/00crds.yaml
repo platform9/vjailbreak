@@ -401,18 +401,22 @@ spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
               advancedOptions:
-                description: AdvancedOptions defines advanced configuration options
-                  for the migration
+                description: AdvancedOptions is a list of advanced options for the
+                  migration
                 properties:
                   granularNetworks:
+                    description: GranularNetworks is a list of networks to be migrated
                     items:
                       type: string
                     type: array
                   granularPorts:
+                    description: GranularPorts is a list of ports to be migrated
                     items:
                       type: string
                     type: array
                   granularVolumeTypes:
+                    description: GranularVolumeTypes is a list of volume types to
+                      be migrated
                     items:
                       type: string
                     type: array
@@ -421,8 +425,8 @@ spec:
                 default: echo "Add your startup script here!"
                 type: string
               migrationStrategy:
-                description: MigrationPlanStrategy defines the strategy for executing
-                  a migration plan
+                description: MigrationStrategy is the strategy to be used for the
+                  migration
                 properties:
                   adminInitiatedCutOver:
                     default: false
@@ -451,10 +455,14 @@ spec:
                 - type
                 type: object
               migrationTemplate:
+                description: MigrationTemplate is the template to be used for the
+                  migration
                 type: string
               retry:
+                description: Retry the migration if it fails
                 type: boolean
               virtualMachines:
+                description: VirtualMachines is a list of virtual machines to be migrated
                 items:
                   items:
                     type: string
@@ -469,8 +477,10 @@ spec:
             description: MigrationPlanStatus defines the observed state of MigrationPlan
             properties:
               migrationMessage:
+                description: MigrationMessage is the message associated with the migration
                 type: string
               migrationStatus:
+                description: MigrationStatus is the status of the migration
                 type: string
             required:
             - migrationMessage
@@ -663,33 +673,41 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
             properties:
               destination:
-                description: MigrationTemplateDestination defines the destination
-                  details for the migrationtemplate
+                description: Destination is the destination details for the virtual
+                  machine
                 properties:
                   openstackRef:
+                    description: OpenstackRef is the reference for the virtual machine
                     type: string
                 required:
                 - openstackRef
                 type: object
               networkMapping:
+                description: NetworkMapping is the network mapping for the virtual
+                  machine
                 type: string
               osType:
+                description: OSType is the OS type of the virtual machine
                 enum:
                 - windows
                 - linux
                 type: string
               source:
-                description: MigrationTemplateSource defines the source details for
-                  the migrationtemplate
+                description: Source is the source details for the virtual machine
                 properties:
                   vmwareRef:
+                    description: VMwareRef is the reference for the virtual machine
                     type: string
                 required:
                 - vmwareRef
                 type: object
               storageMapping:
+                description: StorageMapping is the storage mapping for the virtual
+                  machine
                 type: string
               virtioWinDriver:
+                description: VirtioWinDriver is the driver to be used for the virtual
+                  machine
                 type: string
             required:
             - destination
@@ -946,8 +964,12 @@ spec:
                     type: array
                 type: object
               openstackValidationMessage:
+                description: OpenStackValidationMessage is the message associated
+                  with the OpenStack validation
                 type: string
               openstackValidationStatus:
+                description: OpenStackValidationStatus is the status of the OpenStack
+                  validation
                 type: string
             type: object
         type: object
@@ -1393,17 +1415,19 @@ spec:
             description: VMwareClusterSpec defines the desired state of VMwareCluster
             properties:
               hosts:
+                description: Hosts is the list of hosts in the VMware cluster
                 items:
                   type: string
                 type: array
               name:
+                description: Name is the name of the VMware cluster
                 type: string
             type: object
           status:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
-                description: VMwareClusterPhase represents the phase of a VMwareCluster
+                description: Phase is the current phase of the VMwareCluster
                 type: string
             type: object
         type: object
@@ -1457,10 +1481,11 @@ spec:
             description: VMwareCredsSpec defines the desired state of VMwareCreds
             properties:
               datacenter:
+                description: DataCenter is the datacenter for the virtual machine
                 type: string
               secretRef:
-                description: ObjectReference contains enough information to let you
-                  inspect or modify the referred object.
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  VMware credentials
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -1509,8 +1534,11 @@ spec:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
             properties:
               vmwareValidationMessage:
+                description: VMwareValidationMessage is the message associated with
+                  the VMware validation
                 type: string
               vmwareValidationStatus:
+                description: VMwareValidationStatus is the status of the VMware validation
                 type: string
             type: object
         type: object
@@ -1560,8 +1588,10 @@ spec:
             description: VMwareHostSpec defines the desired state of VMwareHost
             properties:
               hardwareUuid:
+                description: Hardware UUID of the host
                 type: string
               name:
+                description: Name of the host
                 type: string
             type: object
           status:
@@ -1621,32 +1651,45 @@ spec:
                 description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
                   clusterName:
+                    description: ClusterName is the name of the cluster
                     type: string
                   cpu:
+                    description: CPU is the number of CPUs in the virtual machine
                     type: integer
                   datastores:
+                    description: Datastores is the list of datastores for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   disks:
+                    description: Disks is the list of disks for the virtual machine
                     items:
                       type: string
                     type: array
                   esxiName:
+                    description: ESXiName is the name of the ESXi host
                     type: string
                   ipAddress:
+                    description: IPAddress is the IP address of the virtual machine
                     type: string
                   memory:
+                    description: Memory is the amount of memory in the virtual machine
                     type: integer
                   name:
+                    description: Name is the name of the virtual machine
                     type: string
                   networks:
+                    description: Networks is the list of networks for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   osType:
+                    description: OSType is the OS type of the virtual machine
                     type: string
                   vmState:
+                    description: VMState is the state of the virtual machine
                     type: string
                 required:
                 - name

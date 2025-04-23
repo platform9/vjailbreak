@@ -47,32 +47,45 @@ spec:
                 description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
                   clusterName:
+                    description: ClusterName is the name of the cluster
                     type: string
                   cpu:
+                    description: CPU is the number of CPUs in the virtual machine
                     type: integer
                   datastores:
+                    description: Datastores is the list of datastores for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   disks:
+                    description: Disks is the list of disks for the virtual machine
                     items:
                       type: string
                     type: array
                   esxiName:
+                    description: ESXiName is the name of the ESXi host
                     type: string
                   ipAddress:
+                    description: IPAddress is the IP address of the virtual machine
                     type: string
                   memory:
+                    description: Memory is the amount of memory in the virtual machine
                     type: integer
                   name:
+                    description: Name is the name of the virtual machine
                     type: string
                   networks:
+                    description: Networks is the list of networks for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   osType:
+                    description: OSType is the OS type of the virtual machine
                     type: string
                   vmState:
+                    description: VMState is the state of the virtual machine
                     type: string
                 required:
                 - name
