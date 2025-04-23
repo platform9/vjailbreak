@@ -18,6 +18,14 @@ This update enables environment variable injection for the `v2v-helper` pod usin
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n <namespace>
 
+# Example
+   If you want proxy variables to be injected into the v2v-helper pod, you can add the following to the `/etc/pf9/env` file:
+   ```bash
+   http_proxy=http://<proxy-server>:<proxy-port>
+   https_proxy=http://<proxy-server>:<proxy-port>
+   no_proxy=localhost,127.0.0.1
+   ```
+   now this will be picked up by the v2v-helper pod and the proxy variables will be available in the pod and it would be respected by the v2v-helper pod.
 
 ## Injecting Environment Variables Post-Provisioning
 
