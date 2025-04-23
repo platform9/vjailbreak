@@ -771,7 +771,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
-
+		//nolint:gocritic // err is already declared above
 		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
 			return err
 		}
