@@ -379,6 +379,13 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 											},
 										},
 									},
+									{
+										ConfigMapRef: &corev1.ConfigMapEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "pf9-env",
+											},
+										},
+									},
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									{
