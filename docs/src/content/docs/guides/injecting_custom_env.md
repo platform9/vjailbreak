@@ -13,7 +13,7 @@ This update enables environment variable injection for the `v2v-helper` pod usin
 
 2. **ConfigMap creation from /etc/pf9/env**
 
-   A helper script or manual command reads `/etc/pf9/env` and creates a Kubernetes ConfigMap named `v2v-env-config`.
+   A helper script or manual command reads `/etc/pf9/env` and creates a Kubernetes ConfigMap named `pf9-env`.
    This is done while the vjailbreak VM is being provisioned.
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n <namespace>
