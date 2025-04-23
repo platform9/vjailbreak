@@ -871,7 +871,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		Type:               "VDDKCheck",
 		Status:             corev1.ConditionTrue,
 		Reason:             "VDDKDirectoryReady",
-		Message:            "VDDK directory is present and valid.",
+		Message:            "",
 		LastTransitionTime: metav1.Now(),
 	})
 	migrationobj.Status.Conditions = cleanedConditions
