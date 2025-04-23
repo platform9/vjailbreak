@@ -831,7 +831,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		newConditions = append(newConditions, setCondition)
 		migrationobj.Status.Conditions = newConditions
 
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
 			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 		}
 
@@ -852,7 +852,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			LastTransitionTime: metav1.Now(),
 		})
 
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
 			return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
 		}
 
@@ -877,7 +877,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	migrationobj.Status.Conditions = cleanedConditions
 	migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending // Or your next logical phase
 
-	if err := r.Status().Update(ctx, migrationobj); err != nil {
+	if err = r.Status().Update(ctx, migrationobj); err != nil {
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 	}
 
