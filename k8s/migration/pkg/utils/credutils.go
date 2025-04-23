@@ -44,10 +44,11 @@ type OpenStackClients struct {
 
 // VMwareCredentials holds the actual credentials after decoding
 type VMwareCredentials struct {
-	Host     string
-	Username string
-	Password string
-	Insecure bool
+	Host       string
+	Username   string
+	Password   string
+	Insecure   bool
+	Datacenter string
 }
 
 // OpenStackCredentials holds the actual credentials after decoding
@@ -87,6 +88,7 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	username := string(secret.Data["VCENTER_USERNAME"])
 	password := string(secret.Data["VCENTER_PASSWORD"])
 	insecureStr := string(secret.Data["VCENTER_INSECURE"])
+	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
@@ -97,14 +99,18 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	if password == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
+	if datacenter == "" {
+		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
 	return VMwareCredentials{
-		Host:     host,
-		Username: username,
-		Password: password,
-		Insecure: insecure,
+		Host:       host,
+		Username:   username,
+		Password:   password,
+		Insecure:   insecure,
+		Datacenter: datacenter,
 	}, nil
 }
 
@@ -436,6 +442,14 @@ func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 	if err != nil {
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}
+
+	// Check if the datacenter exists
+	finder := find.NewFinder(c, false)
+	_, err = finder.Datacenter(context.Background(), VMwareCredentials.Datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+
 	return c, nil
 }
 
