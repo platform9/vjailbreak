@@ -112,7 +112,7 @@ export default function OpenstackCredentialsDrawer({
                     OS_PASSWORD: rcFileValues.OS_PASSWORD,
                     OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
                     OS_TENANT_NAME: rcFileValues.OS_TENANT_NAME,
-                    OS_INSECURE: rcFileValues.OS_INSECURE === "true"
+                    OS_INSECURE: rcFileValues.OS_INSECURE?.toLowerCase() === "true"
                 }
             );
 

@@ -35,7 +35,7 @@ func main() {
 	var vCenterUserName = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
 	var vCenterPassword = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
 	var vCenterInsecure = strings.TrimSpace(os.Getenv("VCENTER_INSECURE")) == constants.TrueString
-	var openstackInsecure = strings.TrimSpace(os.Getenv("OS_INSECURE")) == constants.TrueString
+	var openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
 
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
