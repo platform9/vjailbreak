@@ -30,10 +30,10 @@ export interface Annotations {
 export type Empty = object
 
 export interface VMwareCredsSpec {
-  // For credentials using secretRef (new approach)
   secretRef?: {
     name: string
   }
+  datacenter?: string
 }
 
 export interface GetVmwareCredsListMetadata {

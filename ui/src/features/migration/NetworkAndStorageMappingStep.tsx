@@ -32,6 +32,7 @@ interface NetworkAndStorageMappingStepProps {
   onChange: (key: string) => (value: ResourceMap[]) => void
   networkMappingError?: string
   storageMappingError?: string
+  stepNumber?: string
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -43,6 +44,7 @@ export default function NetworkAndStorageMappingStep({
   onChange,
   networkMappingError,
   storageMappingError,
+  stepNumber = "3",
 }: NetworkAndStorageMappingStepProps) {
   // Filter out any mappings that don't match the available networks/storage
   const filteredNetworkMappings = useMemo(
@@ -98,7 +100,7 @@ export default function NetworkAndStorageMappingStep({
 
   return (
     <VmsSelectionStepContainer>
-      <Step stepNumber="3" label="Network and Storage Mapping" />
+      <Step stepNumber={stepNumber} label="Network and Storage Mapping" />
       <FieldsContainer>
         <FormControl error={!!networkMappingError}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
