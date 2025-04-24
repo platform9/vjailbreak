@@ -655,7 +655,6 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
-	ctxlog := log.FromContext(ctx)
 	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
@@ -690,17 +689,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				VMs: *vminfo,
 			},
 		}
-		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
 		init = true
 	} else {
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
-			ctxlog.Info("Adding new label to VMwareMachine",
-				"Name", vmwvmKey.Name,
-				"Label", label)
-
 			// Initialize labels map if needed
 			if vmwvm.Labels == nil {
 				vmwvm.Labels = make(map[string]string)
@@ -729,16 +723,13 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			PowerState: vminfo.VMState,
 			Migrated:   false,
 		}
-		ctxlog.Info("Creating new VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	} else {
 		// If the object is not new, update the status and persist migrated status.
 		currentMigratedStatus := vmwvm.Status.Migrated
 		if vmwvm.Status.PowerState != vminfo.VMState {
 			vmwvm.Status.PowerState = vminfo.VMState
-			ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name)
 		}
 		vmwvm.Status.Migrated = currentMigratedStatus
-		ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	}
 
 	// Update the status
