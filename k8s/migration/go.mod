@@ -12,10 +12,10 @@ require (
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250422084503-0e312b138a79
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250423112542-7e4f55440007
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250219180723-abba0e774f68
 	github.com/vmware/govmomi v0.49.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20250421163800-61c742ae3ef0
+	google.golang.org/genproto/googleapis/api v0.0.0-20250422160041-2d3770c4ea7f
 	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v3 v3.0.1
@@ -28,8 +28,8 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bougou/go-ipmi v0.7.4 // indirect
-	github.com/canonical/gomaasclient v0.9.0 // indirect
+	github.com/bougou/go-ipmi v0.7.5 // indirect
+	github.com/canonical/gomaasclient v0.10.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
@@ -89,7 +89,7 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250421163800-61c742ae3ef0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250422160041-2d3770c4ea7f // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect

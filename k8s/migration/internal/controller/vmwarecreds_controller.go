@@ -131,6 +131,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
 
+	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
+	}
+
 	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
@@ -139,9 +144,14 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
+	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s'", scope.Name()))
+	}
+
 	// Delete the associated secret
 	client := r.Client
-	err := client.Delete(ctx, &corev1.Secret{
+	err = client.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
 			Namespace: constants.NamespaceMigrationSystem,

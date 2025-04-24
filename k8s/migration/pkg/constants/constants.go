@@ -43,7 +43,7 @@ const (
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
 	// VMwareCredsLabel is the label for vmware credentials
-	VMwareCredsLabel = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
 
 	// IsPCDCredsLabel is the label for pcd credentials
 	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"

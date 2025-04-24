@@ -1,6 +1,5 @@
 #cloud-config
 
-# Run the cloud-init script on boot
 runcmd:
   - echo "Validating prerequisites..."
   - |
@@ -29,15 +28,3 @@ runcmd:
   - echo "Preparing the node..."
   - cloud-ctl prep-node
   - echo "Node preparation complete. Setup finished successfully."
-
-
-  #
-  # 	/*
-	# 	AuthURL:    fields["AuthURL"],
-	# 		DomainName: fields["DomainName"],
-	# 		Username:   fields["Username"],
-	# 		Password:   fields["Password"],
-	# 		RegionName: fields["RegionName"],
-	# 		TenantName: fields["TenantName"],
-	# 		Insecure:   insecure,
-	# */

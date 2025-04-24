@@ -287,7 +287,8 @@ func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollin
 		return false, errors.Wrap(err, "failed to get openstack credentials")
 	}
 	if _, ok := openstackCreds.Labels[constants.IsPCDCredsLabel]; !ok {
-		return false, errors.New("openstack credentials are not of type PCD")
+		return false, nil
+
 	}
 	return true, nil
 }
