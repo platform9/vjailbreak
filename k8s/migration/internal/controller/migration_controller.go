@@ -128,7 +128,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(pod.Status.Phase) != string(corev1.PodSucceeded) {
+	if string(pod.Status.Phase) != string(corev1.PodSucceeded) && string(pod.Status.Phase) != string(corev1.PodFailed) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
