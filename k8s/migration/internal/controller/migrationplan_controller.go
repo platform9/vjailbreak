@@ -868,8 +868,13 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 
 	// Clear previous VDDKCheck condition if directory is valid
 	cleanedConditions := []corev1.PodCondition{}
+	for _, c := range migrationobj.Status.Conditions {
+		if c.Type != "VDDKCheck" {
+			cleanedConditions = append(cleanedConditions, c)
+		}
+	}
+
 	migrationobj.Status.Conditions = cleanedConditions
-	migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending // Or your next logical phase
 
 	if err = r.Status().Update(ctx, migrationobj); err != nil {
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
