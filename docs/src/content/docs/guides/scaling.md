@@ -4,7 +4,12 @@ description: You can scale up vJailbreak to perform more parallel migrations
 ---
 
 vJailbreak can be scaled to perform multiple migrations in parallel by deploying additional `agents`, enabling greater efficiency and workload distribution.
-Additional agents can be created in the Agents tab of the vJailbreak dashboard using the "Scale Up" button. You will need to choose the destination OpenStack credentials, the size of the agent VM(s), and the number of agent nodes up to a maximum of 5.
+
+Additional agents can be created in the Agents tab of the vJailbreak dashboard using the "Scale Up" button. You will need to choose the destination OpenStack credentials, the size of the agent VM(s), and the number of agent nodes up to a maximum of 5 per scale up. Additional agent nodes can be scaled up in batches of 5, providing the flexibility to change agent VM sizes to help with throttling network traffic.
+
+:::caution
+It is entirely possible to fully saturate a 10Gb network with many parallel migrations!
+:::
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
