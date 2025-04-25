@@ -23,6 +23,10 @@ import (
 
 type BMCProviderName string
 
+type BootSource struct {
+	Release string `json:"release"`
+}
+
 const (
 	MAASProvider BMCProviderName = "MAAS"
 )
@@ -45,6 +49,9 @@ type BMConfigSpec struct {
 	ProviderType BMCProviderName `json:"providerType"`
 	// UserDataSecretRef is the reference to the secret containing user data for the BMC
 	UserDataSecretRef corev1.SecretReference `json:"userDataSecretRef,omitempty"`
+	// BootSource is the boot source for the BMC
+	//+kubebuilder:default="jammy"
+	BootSource BootSource `json:"bootSource,omitempty"`
 }
 
 // BMConfigStatus defines the observed state of BMConfig

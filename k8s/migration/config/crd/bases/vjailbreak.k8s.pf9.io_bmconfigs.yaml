@@ -45,6 +45,15 @@ spec:
               apiUrl:
                 description: APIUrl is the API URL for the BM server
                 type: string
+              bootSource:
+                default: jammy
+                description: BootSource is the boot source for the BMC
+                properties:
+                  release:
+                    type: string
+                required:
+                - release
+                type: object
               insecure:
                 default: false
                 description: Insecure is a boolean indicating whether to use insecure

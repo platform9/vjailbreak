@@ -54,6 +54,11 @@ func ConvertESXiToPCDHost(ctx context.Context,
 			ctxlog.Info("Found a matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
 			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id)
 			if err != nil {
+				scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+				updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
+				if updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update ESXi migration status")
+				}
 				return errors.Wrap(err, "failed to reclaim ESXi")
 			}
 			break
@@ -81,6 +86,12 @@ func PrettyPrint(v interface{}) {
 
 func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvider providers.BMCProvider, resourceId string) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
+	// Get BMConfig for the rolling migration plan
+	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get BMConfig for rolling migration plan")
+	}
+	// Get cloud init secret from rolling migration plan
 	secret, err := GetCloudInitSecretFromRollingMigrationPlan(ctx, scope.Client, rollingMigrationPlan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cloud init secret from rolling migration plan")
@@ -88,14 +99,23 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	if _, ok := secret.Data[constants.CloudInitConfigKey]; !ok {
 		return errors.New("cloud init secret is empty")
 	}
+
 	cloudInit := string(secret.Data[constants.CloudInitConfigKey])
 	err = bmProvider.ReclaimBM(ctx, service.ReclaimBMRequest{
+		AccessInfo: &service.BMProvisionerAccessInfo{
+			BaseUrl:     bmConfig.Spec.APIUrl,
+			ApiKey:      bmConfig.Spec.APIKey,
+			UseInsecure: bmConfig.Spec.Insecure,
+		},
 		UserData:   cloudInit,
 		ResourceId: resourceId,
 		PowerCycle: true,
+		BootSource: &service.BootsourceSelections{
+			Release: bmConfig.Spec.BootSource.Release,
+		},
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to reclaim ESXi")
+		return errors.Wrap(err, "failed to reclaim BM")
 	}
 	return nil
 }

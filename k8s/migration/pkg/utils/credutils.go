@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -750,22 +751,20 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		}
 		init = true
 	} else {
-		// Check if label already exists with same value
-		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
-			// Initialize labels map if needed
-			if vmwvm.Labels == nil {
-				vmwvm.Labels = make(map[string]string)
-			}
+		// Initialize labels map if needed
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
+		}
+		// Set the new label
+		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
-			// Set the new label
-			vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
-
+		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) {
 			// update vminfo in case the VM has been moved by vMotion
 			vmwvm.Spec.VMInfo = *vminfo
 
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)
+				return fmt.Errorf("failed to update VMwareMachine: %w", err)
 			}
 		}
 	}
