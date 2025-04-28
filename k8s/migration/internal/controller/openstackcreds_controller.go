@@ -89,8 +89,10 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}()
 
 	if !openstackcreds.DeletionTimestamp.IsZero() {
+		ctxlog.Info("Resource is being deleted, reconciling deletion", "openstackcreds", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
+	ctxlog.Info("Reconciling normal state", "openstackcreds", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
@@ -126,6 +128,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		} else {
 			ctxlog.Info("Successfully updated master node image ID")
 		}
+		ctxlog.Info("Getting OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
@@ -149,6 +152,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 
 		// update the status field openstackInfo
+		ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
 		openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
@@ -195,7 +199,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: constants.OpenstackCredsRequeueAfter}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
