@@ -456,10 +456,10 @@ runcmd:
                                                 value={formData.os}
                                                 onChange={handleSelectChange}
                                                 displayEmpty
-                                                disabled={bootSources.length === 0}
+                                                disabled={bootSources?.length === 0}
                                             >
                                                 <MenuItem value="" disabled>Select an OS</MenuItem>
-                                                {bootSources.map((source) => (
+                                                {bootSources?.map((source) => (
                                                     <MenuItem
                                                         key={`${source.OS} (${source.Release})`}
                                                         value={source.Release}
