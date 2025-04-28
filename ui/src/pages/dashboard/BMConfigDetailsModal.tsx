@@ -15,7 +15,7 @@ import {
     Tooltip
 } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { BMConfig } from '../../api/bmconfig/model';
 import { getBMConfig } from '../../api/bmconfig/bmconfig';
