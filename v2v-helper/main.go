@@ -45,9 +45,25 @@ func main() {
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
 
+	// Create reporter
+	ValidationReporter, err := reporter.NewReporter()
+
+	// make channels
+	EventReporter := make(chan string)
+
+	if err != nil {
+		log.Fatalf("Failed to migrate VM: Failed to create reporter: %v", err)
+	}
+	defer func() {
+		close(EventReporter)
+	}()
+	ValidationReporter.UpdatePodEvents(ctx, EventReporter)
+
 	// Validate vCenter and Openstack connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
+		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
+		close(EventReporter)
 		log.Fatalf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
 	}
 	log.Printf("Connected to vCenter: %s\n", vCenterURL)
@@ -55,6 +71,8 @@ func main() {
 	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
+		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
+		close(EventReporter)
 		log.Fatalf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
 	}
 	log.Println("Connected to OpenStack")
@@ -62,6 +80,8 @@ func main() {
 	// Get thumbprint
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
+		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
+		close(EventReporter)
 		log.Fatalf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
 	}
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
@@ -69,6 +89,8 @@ func main() {
 	// Retrieve the source VM
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
 	if err != nil {
+		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to get source VM: %v", err)
+		close(EventReporter)
 		log.Fatalf("Failed to migrate VM: Failed to get source VM: %v", err)
 	}
 
