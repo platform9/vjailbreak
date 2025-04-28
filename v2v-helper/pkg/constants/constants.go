@@ -40,4 +40,5 @@ systemctl enable --now serial-getty@ttyS0.service`
 	EventMessageCopyingDisk                        = "Copying disk"
 	EventMessageMigrationConnectionFailedvCenter   = "Failed to connect to vCenter"
 	EventMessageMigrationConnectionFailedOpenStack = "Failed to connect to OpenStack"
+	EventMessageMigrationFailedGeneral             = "Failed to migrate VM"
 )

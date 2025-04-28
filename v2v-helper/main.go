@@ -18,6 +18,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 func main() {
@@ -131,13 +132,17 @@ func main() {
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
-		// Power on the VM
+		// Check if VM is powered off only then power it on
+		if vmops.VMPowerState() != types.VirtualMachinePowerStatePoweredOff {
+			handleFatalError("Failed to migrate VM:", err)
+		}
 		poweronerr := vmops.VMPowerOn()
 		if poweronerr != nil {
 			log.Printf("Failed to power on VM after migration failure: %s\n", poweronerr)
-			handleFatalError("Failed to migrate VM", err)
+			handleFatalError("Failed to migrate VM: Failed to power on VM after migration failure", poweronerr)
 		}
 		log.Printf("VM powered on after migration failure\n")
+		handleFatalError("Failed to migrate VM:", err)
 	}
 
 }

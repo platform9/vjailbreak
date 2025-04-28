@@ -373,3 +373,8 @@ func (vmops *VMOps) VMPowerOn() error {
 	}
 	return nil
 }
+
+func (vmops *VMOps) VMPowerState() types.VirtualMachinePowerState {
+	currstate, _ := vmops.VMObj.PowerState(vmops.ctx)
+	return currstate
+}
