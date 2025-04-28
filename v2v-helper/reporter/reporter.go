@@ -187,13 +187,13 @@ func (r *Reporter) UpdateProgress(progress string) error {
 	return nil
 }
 
-func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
+func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackChan chan<- string) {
 	go func() {
+		defer close(ackChan) // Close ack channel when done
 		for {
 			select {
 			case msg, ok := <-ch:
 				if !ok {
-					// Channel closed, exit the goroutine
 					return
 				}
 				if err := r.UpdateProgress(msg); err != nil {
@@ -204,9 +204,9 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
 						log.Println(err)
 					}
 				}
+				ackChan <- "ack" // Send ack on separate channel
 
 			case <-ctx.Done():
-				// Context cancelled, exit the goroutine
 				return
 			}
 		}

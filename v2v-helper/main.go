@@ -30,6 +30,7 @@ func main() {
 	// Create EventReporter channel early
 	eventReporterChan := make(chan string)
 	podLabelWatcher := make(chan string)
+	ackChan := make(chan string)
 	inPod := reporter.IsRunningInPod()
 
 	// Initialize the reporter earlier
@@ -37,7 +38,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to migrate VM: Failed to create reporter: %v", err)
 	}
-	eventReporter.UpdatePodEvents(ctx, eventReporterChan)
+
+	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
 	eventReporter.WatchPodLabels(ctx, podLabelWatcher)
 
 	// Helper function to handle errors consistently and clean up resources
@@ -45,6 +47,7 @@ func main() {
 		errorMsg := fmt.Sprintf("%s: %v", msg, err)
 		if inPod {
 			eventReporterChan <- errorMsg
+			<-ackChan
 		}
 		// Cancel context to signal goroutines to exit
 		cancel()
