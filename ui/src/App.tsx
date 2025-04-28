@@ -4,6 +4,7 @@ import { Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
+import RollingMigrationFormDrawer from "./features/migration/RollingMigrationForm"
 import { useMigrationsQuery } from "./hooks/api/useMigrationsQuery"
 import Dashboard from "./pages/dashboard/Dashboard"
 import Onboarding from "./pages/onboarding/Onboarding"
@@ -30,6 +31,7 @@ function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
+  const [migrationType, setMigrationType] = useState('standard')
 
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()
@@ -47,12 +49,23 @@ function App() {
   const hideAppbar =
     location.pathname === "/onboarding" || location.pathname === "/"
 
+  const handleOpenMigrationForm = (open, type = 'standard') => {
+    setOpenMigrationForm(open);
+    setMigrationType(type);
+  };
+
   return (
     <AppFrame>
-      <AppBar setOpenMigrationForm={setOpenMigrationForm} hide={hideAppbar} />
+      <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
       <AppContent>
-        {openMigrationForm && (
+        {openMigrationForm && migrationType === 'standard' && (
           <MigrationFormDrawer
+            open
+            onClose={() => setOpenMigrationForm(false)}
+          />
+        )}
+        {openMigrationForm && migrationType === 'rolling' && (
+          <RollingMigrationFormDrawer
             open
             onClose={() => setOpenMigrationForm(false)}
           />

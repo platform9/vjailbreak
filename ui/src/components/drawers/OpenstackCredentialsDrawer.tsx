@@ -4,12 +4,11 @@ import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
 import Footer from "src/components/forms/Footer";
 import { createOpenstackCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers";
-import axios from "axios";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
 import { THREE_SECONDS } from "src/constants";
 import { useInterval } from "src/hooks/useInterval";
 import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds";
-import { TextField, FormControl, FormLabel, CircularProgress } from "@mui/material";
+import { TextField, FormControl, FormLabel, CircularProgress, Switch, FormControlLabel } from "@mui/material";
 import { isValidName } from "src/utils";
 import CheckIcon from "@mui/icons-material/Check";
 import OpenstackRCFileUploader, { OpenstackRCFileUploaderRef } from "src/components/forms/OpenstackRCFileUpload";
@@ -30,6 +29,7 @@ export default function OpenstackCredentialsDrawer({
     const [credNameError, setCredNameError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null);
+    const [isPcd, setIsPcd] = useState(false);
     const rcFileUploaderRef = useRef<OpenstackRCFileUploaderRef>(null);
 
     // Fetch credentials list for the form
@@ -57,6 +57,7 @@ export default function OpenstackCredentialsDrawer({
         setError(null);
         setCredNameError(null);
         setSubmitting(false);
+        setIsPcd(false);
 
         onClose();
     }, [createdCredentialName, onClose]);
@@ -103,6 +104,7 @@ export default function OpenstackCredentialsDrawer({
         setValidatingOpenstackCreds(true);
 
         try {
+            // Use the new helper function that encapsulates the entire flow
             const response = await createOpenstackCredsWithSecretFlow(
                 credentialName,
                 {
@@ -113,21 +115,28 @@ export default function OpenstackCredentialsDrawer({
                     OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
                     OS_TENANT_NAME: rcFileValues.OS_TENANT_NAME,
                     OS_INSECURE: rcFileValues.OS_INSECURE?.toLowerCase() === "true"
-                }
+                },
+                isPcd
             );
 
             setCreatedCredentialName(response.metadata.name);
 
-        } catch (error) {
+        } catch (error: unknown) {
             console.error("Error creating OpenStack credentials:", error);
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
-            setError(
-                "Error creating OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error)
-            );
+
+            // Handle different error types
+            const errorMessage = error instanceof Error
+                ? error.message
+                : (typeof error === 'object' && error !== null && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'message' in error.response.data)
+                    ? String(error.response.data.message)
+                    : String(error);
+
+            setError("Error creating OpenStack credentials: " + errorMessage);
             setSubmitting(false);
         }
-    }, [credentialName, rcFileValues, isValidCredentialName, submitting]);
+    }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
 
     // Use the custom hook for keyboard events
     useKeyboardSubmit({
@@ -223,6 +232,18 @@ export default function OpenstackCredentialsDrawer({
                             onChange={handleRCFileChange}
                             openstackCredsError={error || ""}
                             size="small"
+                        />
+
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={isPcd}
+                                    onChange={(e) => setIsPcd(e.target.checked)}
+                                    color="primary"
+                                />
+                            }
+                            label="Is PCD credential"
+                            sx={{ mt: 2 }}
                         />
 
                         {/* OpenStack Validation Status */}
