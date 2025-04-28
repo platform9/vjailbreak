@@ -303,6 +303,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					// 11. Copy Changed Blocks over
 					done = false
 					migobj.logMessage("Copying changed blocks")
+					migobj.logMessage(fmt.Sprintf("Copy %d/20 completed", incrementalCopyCount))
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
