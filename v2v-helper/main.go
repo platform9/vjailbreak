@@ -22,6 +22,10 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+	}()
+
 	client, err := utils.GetInclusterClient()
 	if err != nil {
 		log.Fatalf("Failed to get in-cluster client: %v", err)
@@ -103,26 +107,28 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to migrate VM: Failed to create reporter: %v", err)
 	}
+	defer func() {
+		close(migrationobj.EventReporter)
+		close(migrationobj.PodLabelWatcher)
+	}()
 	eventReporter.UpdatePodEvents(ctx, migrationobj.EventReporter)
 	eventReporter.WatchPodLabels(ctx, migrationobj.PodLabelWatcher)
 
 	err = migrationobj.MigrateVM(ctx)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to migrate VM: %s\n", err)
-		cancel()
 		if migrationobj.InPod {
 			migrationobj.EventReporter <- msg
 		}
-		log.Fatalf(msg)
-
+		close(migrationobj.EventReporter)
+		log.Print(msg)
+		log.Print("Powering on source VM since the migration failed")
 		// Power on the VM
 		poweronerr := vmops.VMPowerOn()
 		if poweronerr != nil {
 			log.Fatalf("Failed to power on VM after migration failure: %s\n", poweronerr)
 		}
-
 		log.Printf("VM powered on after migration failure\n")
 	}
 
-	cancel()
 }

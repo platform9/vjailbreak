@@ -832,23 +832,27 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
+		err = migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
 		return errors.Wrap(err, "failed to create target instance")
 	}
 
 	return nil
 }
 
-func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
+func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
+		return err
 	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
+		return err
 	}
 	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
+		return err
 	}
+	return nil
 }
