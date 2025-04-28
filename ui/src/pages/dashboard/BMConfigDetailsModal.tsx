@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import React from 'react';
 import {
     Box,
     Typography,
@@ -224,19 +225,18 @@ export default function MaasConfigDetailsModal({
                                     Cloud-init (YAML)
                                 </Typography>
                                 <CodeEditorContainer>
-                                    <SyntaxHighlighter
-                                        language="yaml"
-                                        style={mode === 'dark' ? oneDark : oneLight}
-                                        showLineNumbers
-                                        wrapLongLines
-                                        customStyle={{
+                                    {React.createElement(SyntaxHighlighter, {
+                                        language: "yaml",
+                                        style: mode === 'dark' ? oneDark : oneLight,
+                                        showLineNumbers: true,
+                                        wrapLongLines: true,
+                                        customStyle: {
                                             margin: 0,
                                             maxHeight: '100%',
                                             backgroundColor: 'transparent'
-                                        }}
-                                    >
-                                        {cloudInit}
-                                    </SyntaxHighlighter>
+                                        },
+                                        children: cloudInit
+                                    })}
                                 </CodeEditorContainer>
                             </Section>
                         )}

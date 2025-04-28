@@ -1,5 +1,6 @@
 import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormLabel } from "@mui/material"
 import { useState, useMemo, useEffect } from "react"
+import React from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
 import Footer from "../../components/forms/Footer"
 import Header from "../../components/forms/Header"
@@ -1373,17 +1374,16 @@ export default function RollingMigrationFormDrawer({
                                         User data is stored in a secret: {selectedMaasConfig.spec.userDataSecretRef.name}
                                     </Typography>
                                     <CodeEditorContainer>
-                                        <SyntaxHighlighter
-                                            language="yaml"
-                                            style={oneLight}
-                                            showLineNumbers
-                                            wrapLongLines
-                                            customStyle={{
+                                        {React.createElement(SyntaxHighlighter, {
+                                            language: "yaml",
+                                            style: oneLight,
+                                            showLineNumbers: true,
+                                            wrapLongLines: true,
+                                            customStyle: {
                                                 margin: 0,
                                                 maxHeight: '100%',
-                                            }}
-                                        >
-                                            {`# Cloud-init configuration is stored in Kubernetes Secret: 
+                                            },
+                                            children: `# Cloud-init configuration is stored in Kubernetes Secret: 
 # ${selectedMaasConfig.spec.userDataSecretRef.name}
 # in namespace: ${selectedMaasConfig.spec.userDataSecretRef.namespace || VJAILBREAK_DEFAULT_NAMESPACE}
 
@@ -1394,8 +1394,8 @@ export default function RollingMigrationFormDrawer({
 # - network configuration
 # - and other system setup parameters
 
-# This will be used when provisioning ESXi hosts in the bare metal environment.`}
-                                        </SyntaxHighlighter>
+# This will be used when provisioning ESXi hosts in the bare metal environment.`
+                                        })}
                                     </CodeEditorContainer>
                                 </ConfigSection>
                             )}
