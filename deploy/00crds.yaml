@@ -12,6 +12,112 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: bmconfigs.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: BMConfig
+    listKind: BMConfigList
+    plural: bmconfigs
+    singular: bmconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BMConfig is the Schema for the bmconfigs API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BMConfigSpec defines the desired state of BMConfig
+            properties:
+              apiKey:
+                description: APIKey is the API key for the BM server
+                type: string
+              apiUrl:
+                description: APIUrl is the API URL for the BM server
+                type: string
+              bootSource:
+                default: jammy
+                description: BootSource is the boot source for the BMC
+                properties:
+                  release:
+                    type: string
+                required:
+                - release
+                type: object
+              insecure:
+                default: false
+                description: Insecure is a boolean indicating whether to use insecure
+                  connection
+                type: boolean
+              password:
+                description: Password is the password for the BM server
+                type: string
+              providerType:
+                default: MAAS
+                description: ProviderType is the BMC provider type
+                type: string
+              userDataSecretRef:
+                description: UserDataSecretRef is the reference to the secret containing
+                  user data for the BMC
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              userName:
+                description: UserName is the username for the BM server
+                type: string
+            required:
+            - apiKey
+            - apiUrl
+            - providerType
+            type: object
+          status:
+            description: BMConfigStatus defines the observed state of BMConfig
+            properties:
+              validationMessage:
+                description: ValidationMessage is the message associated with the
+                  validation
+                type: string
+              validationStatus:
+                description: ValidationStatus is the status of the validation
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: clustermigrations.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -57,23 +163,78 @@ spec:
           spec:
             description: ClusterMigrationSpec defines the desired state of ClusterMigration
             properties:
+              clusterName:
+                description: ClusterName is the name of the vCenter cluster to be
+                  migrated
+                type: string
               esxiMigrationSequence:
+                description: ESXIMigrationSequence is the sequence of ESXi hosts to
+                  be migrated
                 items:
                   type: string
                 type: array
+              openstackCredsRef:
+                description: OpenstackCredsRef is the reference to the OpenStack credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              rollingMigrationPlanRef:
+                description: RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: VMwareCredsRef is the reference to the VMware credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             required:
+            - clusterName
             - esxiMigrationSequence
+            - openstackCredsRef
+            - rollingMigrationPlanRef
+            - vmwareCredsRef
             type: object
           status:
             description: ClusterMigrationStatus defines the observed state of ClusterMigration
             properties:
-              currentESXI:
+              currentESXi:
+                description: CurrentESXi is the name of the current ESXi host being
+                  migrated
                 type: string
               message:
+                description: Message is the message associated with the current state
+                  of the migration
                 type: string
               phase:
-                description: ClusterMigrationPhase represents the current phase of
-                  the cluster migration
+                description: Phase is the current phase of the migration
                 enum:
                 - Pending
                 - Running
@@ -81,7 +242,7 @@ spec:
                 - Failed
                 type: string
             required:
-            - currentESXI
+            - currentESXi
             - message
             - phase
             type: object
@@ -132,18 +293,68 @@ spec:
             description: ESXIMigrationSpec defines the desired state of ESXIMigration
             properties:
               esxiName:
+                description: ESXiName is the name of the ESXi host to be migrated
                 type: string
+              openstackCredsRef:
+                description: OpenstackCredsRef is the reference to the OpenStack credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              rollingMigrationPlanRef:
+                description: RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: VMwareCredsRef is the reference to the VMware credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             required:
             - esxiName
+            - openstackCredsRef
+            - rollingMigrationPlanRef
+            - vmwareCredsRef
             type: object
           status:
             description: ESXIMigrationStatus defines the observed state of ESXIMigration
             properties:
               message:
+                description: Message is the message associated with the current state
+                  of the migration
                 type: string
               phase:
+                description: Phase is the current phase of the migration
                 type: string
               vms:
+                description: VMs is the list of VMs present on the ESXi host
                 items:
                   type: string
                 type: array
@@ -199,18 +410,22 @@ spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
               advancedOptions:
-                description: AdvancedOptions defines advanced configuration options
-                  for the migration
+                description: AdvancedOptions is a list of advanced options for the
+                  migration
                 properties:
                   granularNetworks:
+                    description: GranularNetworks is a list of networks to be migrated
                     items:
                       type: string
                     type: array
                   granularPorts:
+                    description: GranularPorts is a list of ports to be migrated
                     items:
                       type: string
                     type: array
                   granularVolumeTypes:
+                    description: GranularVolumeTypes is a list of volume types to
+                      be migrated
                     items:
                       type: string
                     type: array
@@ -219,8 +434,8 @@ spec:
                 default: echo "Add your startup script here!"
                 type: string
               migrationStrategy:
-                description: MigrationPlanStrategy defines the strategy for executing
-                  a migration plan
+                description: MigrationStrategy is the strategy to be used for the
+                  migration
                 properties:
                   adminInitiatedCutOver:
                     default: false
@@ -249,10 +464,14 @@ spec:
                 - type
                 type: object
               migrationTemplate:
+                description: MigrationTemplate is the template to be used for the
+                  migration
                 type: string
               retry:
+                description: Retry the migration if it fails
                 type: boolean
               virtualMachines:
+                description: VirtualMachines is a list of virtual machines to be migrated
                 items:
                   items:
                     type: string
@@ -267,8 +486,10 @@ spec:
             description: MigrationPlanStatus defines the observed state of MigrationPlan
             properties:
               migrationMessage:
+                description: MigrationMessage is the message associated with the migration
                 type: string
               migrationStatus:
+                description: MigrationStatus is the status of the migration
                 type: string
             required:
             - migrationMessage
@@ -467,33 +688,41 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
             properties:
               destination:
-                description: MigrationTemplateDestination defines the destination
-                  details for the migrationtemplate
+                description: Destination is the destination details for the virtual
+                  machine
                 properties:
                   openstackRef:
+                    description: OpenstackRef is the reference for the virtual machine
                     type: string
                 required:
                 - openstackRef
                 type: object
               networkMapping:
+                description: NetworkMapping is the network mapping for the virtual
+                  machine
                 type: string
               osType:
+                description: OSType is the OS type of the virtual machine
                 enum:
                 - windows
                 - linux
                 type: string
               source:
-                description: MigrationTemplateSource defines the source details for
-                  the migrationtemplate
+                description: Source is the source details for the virtual machine
                 properties:
                   vmwareRef:
+                    description: VMwareRef is the reference for the virtual machine
                     type: string
                 required:
                 - vmwareRef
                 type: object
               storageMapping:
+                description: StorageMapping is the storage mapping for the virtual
+                  machine
                 type: string
               virtioWinDriver:
+                description: VirtioWinDriver is the driver to be used for the virtual
+                  machine
                 type: string
             required:
             - destination
@@ -750,8 +979,12 @@ spec:
                     type: array
                 type: object
               openstackValidationMessage:
+                description: OpenStackValidationMessage is the message associated
+                  with the OpenStack validation
                 type: string
               openstackValidationStatus:
+                description: OpenStackValidationStatus is the status of the OpenStack
+                  validation
                 type: string
             type: object
         type: object
@@ -801,14 +1034,98 @@ spec:
           spec:
             description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
             properties:
-              vcenterClusterSequence:
-                description: VCenterClusterSequence is the sequence of vCenter clusters
-                  to be migrated
+              bmConfigRef:
+                description: BMConfigRef is the reference to the BMC credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              cloudInitConfigRef:
+                description: CloudInitConfigRef is the reference to the cloud-init
+                  configuration
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              clusterSequence:
+                description: ClusterSequence is the sequence of vCenter clusters to
+                  be migrated
                 items:
-                  type: string
+                  properties:
+                    clusterName:
+                      description: ClusterName is the name of the vCenter cluster
+                        to be migrated
+                      type: string
+                    vmSequence:
+                      description: VMSequence is the sequence of virtual machines
+                        to be migrated
+                      items:
+                        properties:
+                          esxiName:
+                            description: ESXiName is the name of the ESXi host where
+                              the virtual machine is located
+                            type: string
+                          vmName:
+                            description: VMName is the name of the virtual machine
+                              to be migrated
+                            type: string
+                        required:
+                        - vmName
+                        type: object
+                      type: array
+                  required:
+                  - clusterName
+                  - vmSequence
+                  type: object
                 type: array
+              openstackCredsRef:
+                description: OpenstackCredsRef is the reference to the OpenStack credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: VMwareCredsRef is the reference to the VMware credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             required:
-            - vcenterClusterSequence
+            - bmConfigRef
+            - clusterSequence
+            - openstackCredsRef
+            - vmwareCredsRef
             type: object
           status:
             description: RollingMigrationPlanStatus defines the observed state of
@@ -818,8 +1135,8 @@ spec:
                 description: CurrentCluster is the name of the current vCenter cluster
                   being migrated
                 type: string
-              currentESXI:
-                description: CurrentESXI is the name of the current ESXi host being
+              currentESXi:
+                description: CurrentESXi is the name of the current ESXi host being
                   migrated
                 type: string
               currentVM:
@@ -1113,17 +1430,19 @@ spec:
             description: VMwareClusterSpec defines the desired state of VMwareCluster
             properties:
               hosts:
+                description: Hosts is the list of hosts in the VMware cluster
                 items:
                   type: string
                 type: array
               name:
+                description: Name is the name of the VMware cluster
                 type: string
             type: object
           status:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
-                description: VMwareClusterPhase represents the phase of a VMwareCluster
+                description: Phase is the current phase of the VMwareCluster
                 type: string
             type: object
         type: object
@@ -1177,10 +1496,11 @@ spec:
             description: VMwareCredsSpec defines the desired state of VMwareCreds
             properties:
               datacenter:
+                description: DataCenter is the datacenter for the virtual machine
                 type: string
               secretRef:
-                description: ObjectReference contains enough information to let you
-                  inspect or modify the referred object.
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  VMware credentials
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -1229,8 +1549,11 @@ spec:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
             properties:
               vmwareValidationMessage:
+                description: VMwareValidationMessage is the message associated with
+                  the VMware validation
                 type: string
               vmwareValidationStatus:
+                description: VMwareValidationStatus is the status of the VMware validation
                 type: string
             type: object
         type: object
@@ -1279,7 +1602,11 @@ spec:
           spec:
             description: VMwareHostSpec defines the desired state of VMwareHost
             properties:
+              hardwareUuid:
+                description: Hardware UUID of the host
+                type: string
               name:
+                description: Name of the host
                 type: string
             type: object
           status:
@@ -1338,29 +1665,46 @@ spec:
               vms:
                 description: VMInfo is the info of the VMs in the VMwareMachine
                 properties:
+                  clusterName:
+                    description: ClusterName is the name of the cluster
+                    type: string
                   cpu:
+                    description: CPU is the number of CPUs in the virtual machine
                     type: integer
                   datastores:
+                    description: Datastores is the list of datastores for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   disks:
+                    description: Disks is the list of disks for the virtual machine
                     items:
                       type: string
                     type: array
+                  esxiName:
+                    description: ESXiName is the name of the ESXi host
+                    type: string
                   ipAddress:
+                    description: IPAddress is the IP address of the virtual machine
                     type: string
                   memory:
+                    description: Memory is the amount of memory in the virtual machine
                     type: integer
                   name:
+                    description: Name is the name of the virtual machine
                     type: string
                   networks:
+                    description: Networks is the list of networks for the virtual
+                      machine
                     items:
                       type: string
                     type: array
                   osType:
+                    description: OSType is the OS type of the virtual machine
                     type: string
                   vmState:
+                    description: VMState is the state of the virtual machine
                     type: string
                 required:
                 - name
@@ -1434,6 +1778,56 @@ rules:
   verbs:
   - create
   - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-bmconfig-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-bmconfig-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs/status
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1594,6 +1988,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs
   - clustermigrations
   - esximigrations
   - migrationplans
@@ -1619,6 +2014,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - migrationplans/finalizers
@@ -1634,6 +2030,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
   - migrationplans/status

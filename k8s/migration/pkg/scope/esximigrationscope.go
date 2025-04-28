@@ -13,9 +13,10 @@ import (
 
 // ESXIMigrationScopeParams defines the input parameters used to create a new Scope.
 type ESXIMigrationScopeParams struct {
-	Logger        logr.Logger
-	Client        client.Client
-	ESXIMigration *vjailbreakv1alpha1.ESXIMigration
+	Logger               logr.Logger
+	Client               client.Client
+	ESXIMigration        *vjailbreakv1alpha1.ESXIMigration
+	RollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan
 }
 
 // NewESXIMigrationScope creates a new ESXIMigrationScope from the supplied parameters.
@@ -26,17 +27,19 @@ func NewESXIMigrationScope(params ESXIMigrationScopeParams) (*ESXIMigrationScope
 	}
 
 	return &ESXIMigrationScope{
-		Logger:        params.Logger,
-		Client:        params.Client,
-		ESXIMigration: params.ESXIMigration,
+		Logger:               params.Logger,
+		Client:               params.Client,
+		ESXIMigration:        params.ESXIMigration,
+		RollingMigrationPlan: params.RollingMigrationPlan,
 	}, nil
 }
 
 // ESXIMigrationScope defines the basic context for an actuator to operate upon.
 type ESXIMigrationScope struct {
 	logr.Logger
-	Client        client.Client
-	ESXIMigration *vjailbreakv1alpha1.ESXIMigration
+	Client               client.Client
+	ESXIMigration        *vjailbreakv1alpha1.ESXIMigration
+	RollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan
 }
 
 // Close closes the current scope persisting the ESXIMigration configuration and status.

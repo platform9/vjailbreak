@@ -108,7 +108,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 
 // UpdateMasterNodeImageID updates the image ID of the master node
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
-	var openstackuuid, imageID string
+	var imageID string
 	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials for master")
@@ -132,7 +132,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 		imageID = "fake-image-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
-		imageID, err = GetImageIDFromVM(ctx, k3sclient, openstackuuid, openstackcreds)
+		imageID, err = GetImageIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
 		}
@@ -240,7 +240,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		FlavorRef: vjNode.Spec.OpenstackFlavorID,
 		ImageRef:  imageID,
 		Networks:  networkIDs,
-		UserData: []byte(fmt.Sprintf(constants.CloudInitScript,
+		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
 			token[:12], constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
 			token)),

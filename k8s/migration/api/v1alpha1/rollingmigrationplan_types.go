@@ -23,11 +23,22 @@ import (
 
 type RollingMigrationPlanPhase string
 
+const (
+	// RollingMigrationPlanPhaseWaiting is the phase for waiting
+	RollingMigrationPlanPhaseWaiting RollingMigrationPlanPhase = "Waiting"
+	// RollingMigrationPlanPhaseRunning is the phase for running
+	RollingMigrationPlanPhaseRunning RollingMigrationPlanPhase = "Running"
+	// RollingMigrationPlanPhaseFailed is the phase for failed
+	RollingMigrationPlanPhaseFailed RollingMigrationPlanPhase = "Failed"
+	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
+	RollingMigrationPlanPhaseSucceeded RollingMigrationPlanPhase = "Succeeded"
+)
+
 type VMSequenceInfo struct {
 	// VMName is the name of the virtual machine to be migrated
 	VMName string `json:"vmName"`
 	// ESXiName is the name of the ESXi host where the virtual machine is located
-	ESXiName string `json:"esxiName"`
+	ESXiName string `json:"esxiName,omitempty"`
 }
 
 type ClusterMigrationInfo struct {
@@ -47,6 +58,12 @@ type RollingMigrationPlanSpec struct {
 
 	// OpenstackCredsRef is the reference to the OpenStack credentials
 	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
+
+	// BMConfigRef is the reference to the BMC credentials
+	BMConfigRef corev1.LocalObjectReference `json:"bmConfigRef"`
+
+	// CloudInitConfigRef is the reference to the cloud-init configuration
+	CloudInitConfigRef *corev1.SecretReference `json:"cloudInitConfigRef,omitempty"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan
