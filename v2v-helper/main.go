@@ -59,7 +59,7 @@ func main() {
 
 	migrationparams, err := utils.GetMigrationParams(ctx, client)
 	if err != nil {
-		handleFatalError("Failed to migrate VM: Failed to get migration parameters", err)
+		handleFatalError("Failed to get migration parameters", err)
 	}
 	var vCenterURL = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
 	var vCenterUserName = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
@@ -74,14 +74,14 @@ func main() {
 	// Validate vCenter and Openstack connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
-		handleFatalError("Failed to migrate VM: Failed to validate vCenter connection", err)
+		handleFatalError("Failed to connect to vCenter", err)
 	}
 	log.Printf("Connected to vCenter: %s\n", vCenterURL)
 
 	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
-		handleFatalError("Failed to migrate VM: Failed to validate OpenStack connection", err)
+		handleFatalError("Failed to connect to OpenStack", err)
 	}
 	log.Println("Connected to OpenStack successfully")
 
