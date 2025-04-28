@@ -149,8 +149,8 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		clusterMigration, err = utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				if clusterMigration, err = utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to create cluster migration")
+				if _, createErr := utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); createErr != nil {
+					return ctrl.Result{}, errors.Wrap(createErr, "failed to create cluster migration")
 				}
 			} else {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")

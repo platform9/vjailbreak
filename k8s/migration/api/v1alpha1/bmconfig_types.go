@@ -24,6 +24,7 @@ import (
 type BMCProviderName string
 
 type BootSource struct {
+	//+kubebuilder:default="jammy"
 	Release string `json:"release"`
 }
 
@@ -50,7 +51,6 @@ type BMConfigSpec struct {
 	// UserDataSecretRef is the reference to the secret containing user data for the BMC
 	UserDataSecretRef corev1.SecretReference `json:"userDataSecretRef,omitempty"`
 	// BootSource is the boot source for the BMC
-	//+kubebuilder:default="jammy"
 	BootSource BootSource `json:"bootSource,omitempty"`
 }
 

@@ -15,7 +15,7 @@ export const getVMwareHosts = async (
   let labelSelector = ""
 
   if (vmwareCredName) {
-    labelSelector += `vmwarecreds.k8s.pf9.io=${vmwareCredName}`
+    labelSelector += `vjailbreak.k8s.pf9.io/vmwarecreds=${vmwareCredName}`
   }
 
   if (clusterName) {

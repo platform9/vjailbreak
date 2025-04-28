@@ -54,10 +54,10 @@ spec:
                 description: APIUrl is the API URL for the BM server
                 type: string
               bootSource:
-                default: jammy
                 description: BootSource is the boot source for the BMC
                 properties:
                   release:
+                    default: jammy
                     type: string
                 required:
                 - release
