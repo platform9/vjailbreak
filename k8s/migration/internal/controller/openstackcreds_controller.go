@@ -92,6 +92,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "openstackcreds", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
+	ctxlog.Info("Reconciling normal state", "openstackcreds", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
