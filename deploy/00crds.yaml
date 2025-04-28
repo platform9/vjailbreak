@@ -53,6 +53,15 @@ spec:
               apiUrl:
                 description: APIUrl is the API URL for the BM server
                 type: string
+              bootSource:
+                default: jammy
+                description: BootSource is the boot source for the BMC
+                properties:
+                  release:
+                    type: string
+                required:
+                - release
+                type: object
               insecure:
                 default: false
                 description: Insecure is a boolean indicating whether to use insecure
@@ -2719,14 +2728,11 @@ spec:
           requests:
             cpu: 200m
             memory: 256Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
         volumeMounts:
         - mountPath: /etc/pf9/k3s
           name: master-token
+        - mountPath: /home/ubuntu
+          name: vddk
       hostNetwork: true
       securityContext:
         runAsGroup: 0
@@ -2738,3 +2744,7 @@ spec:
           path: /var/lib/rancher/k3s/server
           type: Directory
         name: master-token
+      - hostPath:
+          path: /home/ubuntu
+          type: Directory
+        name: vddk

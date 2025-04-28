@@ -59,7 +59,6 @@ type OpenstackCredsReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
-	ctxlog.Info("Starting reconciliation", "openstackcreds", req.NamespacedName)
 	// Get the OpenstackCreds object
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if err := r.Get(ctx, req.NamespacedName, openstackcreds); err != nil {
@@ -105,7 +104,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
-	ctxlog.Info("OpenstackCreds CR is being created or updated", "openstackcreds", scope.OpenstackCreds.Name)
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		// Update the status of the OpenstackCreds object
 		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -136,7 +134,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
-		ctxlog.V(1).Info("Successfully retrieved OpenStack credentials from secret")
 
 		ctxlog.Info("Getting flavors for OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
@@ -144,12 +141,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
 		}
-		ctxlog.Info("Successfully got flavors", "openstackcreds", scope.OpenstackCreds.Name, "flavorCount", len(flavors))
-		ctxlog.V(1).Info("Setting flavors for OpenstackCreds", "flavorCount", len(flavors))
 		scope.OpenstackCreds.Spec.Flavors = flavors
-
-		// Update the spec field
-		ctxlog.Info("Updating OpenstackCreds spec with flavors", "openstackcreds", scope.OpenstackCreds.Name)
 		if err = r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err

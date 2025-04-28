@@ -18,12 +18,10 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -106,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = SetupControllers(mgr); err != nil {
+	if err = SetupControllers(mgr, local); err != nil {
 		setupLog.Error(err, "unable to set up controllers")
 		os.Exit(1)
 	}
@@ -114,7 +112,6 @@ func main() {
 	if err = (&controller.ESXIMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ESXIMigration")
 		os.Exit(1)
@@ -151,22 +148,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a channel to signal when cache is ready
-	cacheSyncCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Start the manager in a goroutine
-	go func() {
-		setupLog.Info("starting manager")
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			handleStartupError(err, "problem running manager")
-		}
-	}()
-
-	// Wait for cache to sync
-	if !mgr.GetCache().WaitForCacheSync(cacheSyncCtx) {
-		handleStartupError(fmt.Errorf("timeout waiting for cache to sync"), "")
-	}
+	// Create a single ctx from signal handler to be reused
+	ctx := ctrl.SetupSignalHandler()
 
 	setupLog.Info("starting manager")
 	// Start the manager's cache first
@@ -211,7 +194,7 @@ func GetManager(metricsAddr string,
 	})
 }
 
-func SetupControllers(mgr ctrl.Manager) error {
+func SetupControllers(mgr ctrl.Manager, local bool) error {
 	if err := (&controller.MigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -268,6 +251,7 @@ func SetupControllers(mgr ctrl.Manager) error {
 	if err := (&controller.VjailbreakNodeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
 		return err
