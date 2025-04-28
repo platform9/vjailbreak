@@ -116,6 +116,20 @@ export const createVMwareCredsSecret = async (
   return createSecret(name, secretData, namespace)
 }
 
+// Function to create BMConfig user-data secret
+export const createBmconfigSecret = async (
+  name: string,
+  cloudInit: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  // Prepare data for the secret
+  const secretData: SecretData = {
+    "user-data": cloudInit,
+  }
+
+  return createSecret(name, secretData, namespace)
+}
+
 // Function to get a Kubernetes secret
 export const getSecret = async (
   name: string,
@@ -161,3 +175,20 @@ export const getSecret = async (
   }
 }
 
+// Function to delete a Kubernetes secret
+export const deleteSecret = async (
+  name: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<void> => {
+  const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+
+  try {
+    await axios.del({
+      endpoint,
+    })
+    console.log(`Secret ${name} deleted successfully`)
+  } catch (error) {
+    console.error(`Error deleting secret ${name}:`, error)
+    throw error
+  }
+}

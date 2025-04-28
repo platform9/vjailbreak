@@ -13,6 +13,7 @@ import {
 import {
   deleteOpenstackCredentials,
   getOpenstackCredentialsList,
+  postOpenstackCredentials,
 } from "./openstack-creds/openstackCreds"
 import {
   deleteStorageMapping,
@@ -20,14 +21,12 @@ import {
 } from "./storage-mappings/storageMappings"
 import {
   deleteVmwareCredentials,
-  
   getVmwareCredentialsList,
 } from "./vmware-creds/vmwareCreds"
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
 } from "./secrets/secrets"
-import { createOpenstackCredsWithSecret } from "./openstack-creds/openstackCreds"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
 
@@ -106,13 +105,33 @@ export const createOpenstackCredsWithSecretFlow = async (
     OS_REGION_NAME?: string
     OS_INSECURE?: boolean
   },
+  isPcd: boolean = false,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const secretName = `${credName}-openstack-secret`
 
+  // First create the secret
   await createOpenstackCredsSecret(secretName, credentials, namespace)
 
-  return createOpenstackCredsWithSecret(credName, secretName, namespace)
+  // Then create the OpenStack credentials with the label
+  const credBody = {
+    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+    kind: "OpenstackCreds",
+    metadata: {
+      name: credName,
+      namespace,
+      labels: {
+        "vjailbreak.k8s.pf9.io/is-pcd": isPcd ? "true" : "false",
+      },
+    },
+    spec: {
+      secretRef: {
+        name: secretName,
+      },
+    },
+  }
+
+  return postOpenstackCredentials(credBody, namespace)
 }
 
 // Create VMware credentials with secret
@@ -139,7 +158,12 @@ export const createVMwareCredsWithSecretFlow = async (
     namespace
   )
 
-  return createVMwareCredsWithSecret(credName, secretName, namespace, credentials.VCENTER_DATACENTER)
+  return createVMwareCredsWithSecret(
+    credName,
+    secretName,
+    namespace,
+    credentials.VCENTER_DATACENTER
+  )
 }
 
 export const deleteVMwareCredsWithSecretFlow = async (
