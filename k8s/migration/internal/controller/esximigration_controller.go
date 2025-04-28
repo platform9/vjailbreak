@@ -68,10 +68,20 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
+	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+		}
+		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+	}
+
 	scope, err := scope.NewESXIMigrationScope(scope.ESXIMigrationScopeParams{
-		Logger:        ctxlog,
-		Client:        r.Client,
-		ESXIMigration: esxiMigration,
+		Logger:               ctxlog,
+		Client:               r.Client,
+		ESXIMigration:        esxiMigration,
+		RollingMigrationPlan: rollingMigrationPlan,
 	})
 	if err != nil {
 		ctxlog.Error(err, "Failed to create ESXIMigrationScope")
