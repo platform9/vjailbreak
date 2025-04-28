@@ -11,7 +11,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward"
 import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop"
 import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom"
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
 import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
