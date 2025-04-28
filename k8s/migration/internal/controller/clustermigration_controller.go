@@ -105,6 +105,7 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.reconcileDelete(ctx, scope)
 	}
 
+	ctxlog.Info("Reconciling normal state", "clustermigration", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
