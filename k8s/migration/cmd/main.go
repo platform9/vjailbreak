@@ -18,9 +18,9 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -104,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = SetupControllers(mgr); err != nil {
+	if err = SetupControllers(mgr, local); err != nil {
 		setupLog.Error(err, "unable to set up controllers")
 		os.Exit(1)
 	}
@@ -121,6 +121,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMigration")
+		os.Exit(1)
+	}
+	if err = (&controller.BMConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BMConfig")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
@@ -141,14 +148,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create a single ctx from signal handler to be reused
+	ctx := ctrl.SetupSignalHandler()
+
 	setupLog.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+	// Start the manager's cache first
+	go func() {
+		if err = mgr.Start(ctx); err != nil {
+			setupLog.Error(err, "problem running manager")
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for cache to sync before using the client
+	if ok := mgr.GetCache().WaitForCacheSync(ctx); !ok {
+		handleStartupError(fmt.Errorf("failed to wait for caches to sync"), "Failed to sync cache")
 	}
 
 	// Now that cache is synced, we can create master node entry
-	if err = utils.CheckAndCreateMasterNodeEntry(context.Background(), mgr.GetClient(), local); err != nil {
+	if err = utils.CheckAndCreateMasterNodeEntry(ctx, mgr.GetClient(), local); err != nil {
 		handleStartupError(err, "Problem creating master node entry")
 	}
 
@@ -176,7 +194,7 @@ func GetManager(metricsAddr string,
 	})
 }
 
-func SetupControllers(mgr ctrl.Manager) error {
+func SetupControllers(mgr ctrl.Manager, local bool) error {
 	if err := (&controller.MigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -233,6 +251,7 @@ func SetupControllers(mgr ctrl.Manager) error {
 	if err := (&controller.VjailbreakNodeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VjailbreakNode")
 		return err

@@ -193,7 +193,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	}
 	con_interface := ipmi.InterfaceLanplus
 	if req.IpmiInterface == nil {
-		return errors.New("reclaim: missing IPMI interface")
+		req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
 	}
 	switch req.IpmiInterface.IpmiInterface.(type) {
 	case *api.IpmiType_Lan:
@@ -408,9 +408,15 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 
 	//If machine is on, perform a power reset
 	if power_cycle && powerState.PowerIsOn {
-		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerCycle)
+		_, err = config.ChassisControl(ctx, ipmi.ChassisControlHardReset)
 		if err != nil {
 			logrus.Errorf("Failed to power cycle machine: %v", err)
+			return err
+		}
+	} else if !powerState.PowerIsOn {
+		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
+		if err != nil {
+			logrus.Errorf("Failed to power up machine: %v", err)
 			return err
 		}
 	}

@@ -46,25 +46,35 @@ type MigrationPlanStrategy struct {
 
 // AdvancedOptions defines advanced configuration options for the migration
 type AdvancedOptions struct {
+	// GranularVolumeTypes is a list of volume types to be migrated
 	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
-	GranularNetworks    []string `json:"granularNetworks,omitempty"`
-	GranularPorts       []string `json:"granularPorts,omitempty"`
+	// GranularNetworks is a list of networks to be migrated
+	GranularNetworks []string `json:"granularNetworks,omitempty"`
+	// GranularPorts is a list of ports to be migrated
+	GranularPorts []string `json:"granularPorts,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan
 type MigrationPlanSpec struct {
-	MigrationTemplate string                `json:"migrationTemplate"`
+	// MigrationTemplate is the template to be used for the migration
+	MigrationTemplate string `json:"migrationTemplate"`
+	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
-	Retry             bool                  `json:"retry,omitempty"`
-	VirtualMachines   [][]string            `json:"virtualMachines"`
-	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
+	// Retry the migration if it fails
+	Retry bool `json:"retry,omitempty"`
+	// VirtualMachines is a list of virtual machines to be migrated
+	VirtualMachines [][]string `json:"virtualMachines"`
+	// AdvancedOptions is a list of advanced options for the migration
+	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript string `json:"firstBootScript,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan
 type MigrationPlanStatus struct {
-	MigrationStatus  string `json:"migrationStatus"`
+	// MigrationStatus is the status of the migration
+	MigrationStatus string `json:"migrationStatus"`
+	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
 }
 

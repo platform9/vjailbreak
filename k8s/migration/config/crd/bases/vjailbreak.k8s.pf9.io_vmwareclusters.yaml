@@ -40,17 +40,19 @@ spec:
             description: VMwareClusterSpec defines the desired state of VMwareCluster
             properties:
               hosts:
+                description: Hosts is the list of hosts in the VMware cluster
                 items:
                   type: string
                 type: array
               name:
+                description: Name is the name of the VMware cluster
                 type: string
             type: object
           status:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
               phase:
-                description: VMwareClusterPhase represents the phase of a VMwareCluster
+                description: Phase is the current phase of the VMwareCluster
                 type: string
             type: object
         type: object
