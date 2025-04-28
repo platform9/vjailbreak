@@ -116,6 +116,20 @@ export const createVMwareCredsSecret = async (
   return createSecret(name, secretData, namespace)
 }
 
+// Function to create BMConfig user-data secret
+export const createBmconfigSecret = async (
+  name: string,
+  cloudInit: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  // Prepare data for the secret
+  const secretData: SecretData = {
+    "user-data": cloudInit,
+  }
+
+  return createSecret(name, secretData, namespace)
+}
+
 // Function to get a Kubernetes secret
 export const getSecret = async (
   name: string,

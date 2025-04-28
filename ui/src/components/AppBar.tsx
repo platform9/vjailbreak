@@ -4,19 +4,33 @@ import Box from "@mui/material/Box"
 import Button from "@mui/material/Button"
 import Toolbar from "@mui/material/Toolbar"
 import { cleanupAllResources } from "src/api/helpers"
-import ThemeToggle from "./ThemeToggle"
+import MenuItem from "@mui/material/MenuItem"
+import Menu from "@mui/material/Menu"
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import { useState } from "react"
 import { useThemeContext } from "src/theme/ThemeContext"
+import ThemeToggle from "./ThemeToggle"
 
 export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
   const { mode } = useThemeContext();
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const openGrafanaDashboard = () => {
     window.open(`https://${window.location.host}/grafana`, "_blank")
   }
 
-  const openMigrationForm = () => {
-    setOpenMigrationForm(true)
-  }
+  const handleMenuClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMigrationSelect = (type) => {
+    setOpenMigrationForm(true, type);
+    handleMenuClose();
+  };
 
   return (
     <Box sx={{ visibility: hide ? "hidden" : "visible" }}>
@@ -54,12 +68,25 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
             </Button>
             <Button
               size="large"
-              onClick={openMigrationForm}
+              onClick={handleMenuClick}
               color="primary"
               variant="contained"
+              endIcon={<KeyboardArrowDownIcon />}
             >
               Start Migration
             </Button>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+            >
+              <MenuItem onClick={() => handleMigrationSelect('standard')}>
+                Start Migration
+              </MenuItem>
+              <MenuItem onClick={() => handleMigrationSelect('rolling')}>
+                Start Rolling Migration
+              </MenuItem>
+            </Menu>
           </Box>
         </Toolbar>
       </AppBar>
