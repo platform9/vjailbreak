@@ -23,13 +23,17 @@ import (
 
 // VMwareCredsSpec defines the desired state of VMwareCreds
 type VMwareCredsSpec struct {
-	DataCenter string                 `json:"datacenter"`
-	SecretRef  corev1.ObjectReference `json:"secretRef,omitempty"`
+	// DataCenter is the datacenter for the virtual machine
+	DataCenter string `json:"datacenter"`
+	// SecretRef is the reference to the Kubernetes secret holding VMware credentials
+	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds
 type VMwareCredsStatus struct {
-	VMwareValidationStatus  string `json:"vmwareValidationStatus,omitempty"`
+	// VMwareValidationStatus is the status of the VMware validation
+	VMwareValidationStatus string `json:"vmwareValidationStatus,omitempty"`
+	// VMwareValidationMessage is the message associated with the VMware validation
 	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
 }
 

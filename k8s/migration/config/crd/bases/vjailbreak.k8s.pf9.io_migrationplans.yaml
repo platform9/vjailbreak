@@ -44,18 +44,22 @@ spec:
             description: MigrationPlanSpec defines the desired state of MigrationPlan
             properties:
               advancedOptions:
-                description: AdvancedOptions defines advanced configuration options
-                  for the migration
+                description: AdvancedOptions is a list of advanced options for the
+                  migration
                 properties:
                   granularNetworks:
+                    description: GranularNetworks is a list of networks to be migrated
                     items:
                       type: string
                     type: array
                   granularPorts:
+                    description: GranularPorts is a list of ports to be migrated
                     items:
                       type: string
                     type: array
                   granularVolumeTypes:
+                    description: GranularVolumeTypes is a list of volume types to
+                      be migrated
                     items:
                       type: string
                     type: array
@@ -64,8 +68,8 @@ spec:
                 default: echo "Add your startup script here!"
                 type: string
               migrationStrategy:
-                description: MigrationPlanStrategy defines the strategy for executing
-                  a migration plan
+                description: MigrationStrategy is the strategy to be used for the
+                  migration
                 properties:
                   adminInitiatedCutOver:
                     default: false
@@ -94,10 +98,14 @@ spec:
                 - type
                 type: object
               migrationTemplate:
+                description: MigrationTemplate is the template to be used for the
+                  migration
                 type: string
               retry:
+                description: Retry the migration if it fails
                 type: boolean
               virtualMachines:
+                description: VirtualMachines is a list of virtual machines to be migrated
                 items:
                   items:
                     type: string
@@ -112,8 +120,10 @@ spec:
             description: MigrationPlanStatus defines the observed state of MigrationPlan
             properties:
               migrationMessage:
+                description: MigrationMessage is the message associated with the migration
                 type: string
               migrationStatus:
+                description: MigrationStatus is the status of the migration
                 type: string
             required:
             - migrationMessage

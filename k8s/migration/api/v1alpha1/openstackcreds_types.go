@@ -39,9 +39,11 @@ type OpenstackCredsSpec struct {
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
 	// Openstack is the Openstack configuration for the openstackcreds
-	Openstack                  OpenstackInfo `json:"openstack,omitempty"`
-	OpenStackValidationStatus  string        `json:"openstackValidationStatus,omitempty"`
-	OpenStackValidationMessage string        `json:"openstackValidationMessage,omitempty"`
+	Openstack OpenstackInfo `json:"openstack,omitempty"`
+	// OpenStackValidationStatus is the status of the OpenStack validation
+	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
+	// OpenStackValidationMessage is the message associated with the OpenStack validation
+	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

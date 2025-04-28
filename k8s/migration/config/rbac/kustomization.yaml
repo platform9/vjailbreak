@@ -13,6 +13,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- bmconfig_editor_role.yaml
+- bmconfig_viewer_role.yaml
 - vmwaremachine_editor_role.yaml
 - vmwaremachine_viewer_role.yaml
 - vmwarehost_editor_role.yaml
