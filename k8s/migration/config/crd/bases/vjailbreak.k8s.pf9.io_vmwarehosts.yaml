@@ -39,7 +39,11 @@ spec:
           spec:
             description: VMwareHostSpec defines the desired state of VMwareHost
             properties:
+              hardwareUuid:
+                description: Hardware UUID of the host
+                type: string
               name:
+                description: Name of the host
                 type: string
             type: object
           status:

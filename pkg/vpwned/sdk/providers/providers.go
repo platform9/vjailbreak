@@ -44,6 +44,8 @@ type BMCProvider interface {
 	GetResourceInfo(ctx context.Context, resourceID string) (api.MachineInfo, error)
 	// List Boot Sources
 	ListBootSource(ctx context.Context, req api.ListBootSourceRequest) ([]api.BootsourceSelections, error)
+	// Get IPMI client
+	GetIPMIClient(ctx context.Context, host, username, password string, ipmi_interface *api.IpmiType) (*api.IpmiType, error)
 }
 
 type BMAccessInfo struct {

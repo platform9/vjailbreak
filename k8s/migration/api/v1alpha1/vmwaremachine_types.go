@@ -21,16 +21,28 @@ import (
 )
 
 type VMInfo struct {
-	Name       string   `json:"name"`
+	// Name is the name of the virtual machine
+	Name string `json:"name"`
+	// Datastores is the list of datastores for the virtual machine
 	Datastores []string `json:"datastores,omitempty"`
-	Disks      []string `json:"disks,omitempty"`
-	Networks   []string `json:"networks,omitempty"`
-	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmState,omitempty"`
-	OSType     string   `json:"osType,omitempty"`
-	CPU        int      `json:"cpu,omitempty"`
-	Memory     int      `json:"memory,omitempty"`
-	ESXiName   string   `json:"esxiName,omitempty"`
+	// Disks is the list of disks for the virtual machine
+	Disks []string `json:"disks,omitempty"`
+	// Networks is the list of networks for the virtual machine
+	Networks []string `json:"networks,omitempty"`
+	// IPAddress is the IP address of the virtual machine
+	IPAddress string `json:"ipAddress,omitempty"`
+	// VMState is the state of the virtual machine
+	VMState string `json:"vmState,omitempty"`
+	// OSType is the OS type of the virtual machine
+	OSType string `json:"osType,omitempty"`
+	// CPU is the number of CPUs in the virtual machine
+	CPU int `json:"cpu,omitempty"`
+	// Memory is the amount of memory in the virtual machine
+	Memory int `json:"memory,omitempty"`
+	// ESXiName is the name of the ESXi host
+	ESXiName string `json:"esxiName,omitempty"`
+	// ClusterName is the name of the cluster
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

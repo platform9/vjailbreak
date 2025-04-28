@@ -85,8 +85,8 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate # fmt vet ## Build manager binary.
+	CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "-X github.com/platform9/vjailbreak/k8s/migration/internal/controller.v2vimage=${V2V_IMG}" -o manager cmd/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -96,7 +96,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: build ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${CONTROLLER_IMG} .
 
 .PHONY: docker-push

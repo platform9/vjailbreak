@@ -2,8 +2,11 @@ artifacts/*
 image_builder/deploy/*
 k8s/migration/dist/*
 k8s/migration/vendor/*
+k8s/migration/manager
 v2v-helper/vendor/*
 v2v-helper/manager
+pkg/vpwned/vendor/*
+bin/*
 pkg/vpwned/vendor/*
 bin/*
 .vite

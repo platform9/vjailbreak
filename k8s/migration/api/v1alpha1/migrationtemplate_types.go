@@ -22,23 +22,31 @@ import (
 
 // MigrationTemplateSource defines the source details for the migrationtemplate
 type MigrationTemplateSource struct {
+	// VMwareRef is the reference for the virtual machine
 	VMwareRef string `json:"vmwareRef"`
 }
 
 // MigrationTemplateDestination defines the destination details for the migrationtemplate
 type MigrationTemplateDestination struct {
+	// OpenstackRef is the reference for the virtual machine
 	OpenstackRef string `json:"openstackRef"`
 }
 
 // MigrationTemplateSpec defines the desired state of MigrationTemplate
 type MigrationTemplateSpec struct {
+	// OSType is the OS type of the virtual machine
 	// +kubebuilder:validation:Enum=windows;linux
-	OSType          string                       `json:"osType,omitempty"`
-	VirtioWinDriver string                       `json:"virtioWinDriver,omitempty"`
-	NetworkMapping  string                       `json:"networkMapping"`
-	StorageMapping  string                       `json:"storageMapping"`
-	Source          MigrationTemplateSource      `json:"source"`
-	Destination     MigrationTemplateDestination `json:"destination"`
+	OSType string `json:"osType,omitempty"`
+	// VirtioWinDriver is the driver to be used for the virtual machine
+	VirtioWinDriver string `json:"virtioWinDriver,omitempty"`
+	// NetworkMapping is the network mapping for the virtual machine
+	NetworkMapping string `json:"networkMapping"`
+	// StorageMapping is the storage mapping for the virtual machine
+	StorageMapping string `json:"storageMapping"`
+	// Source is the source details for the virtual machine
+	Source MigrationTemplateSource `json:"source"`
+	// Destination is the destination details for the virtual machine
+	Destination MigrationTemplateDestination `json:"destination"`
 }
 
 // +kubebuilder:object:root=true

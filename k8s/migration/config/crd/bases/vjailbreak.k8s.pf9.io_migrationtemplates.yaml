@@ -40,33 +40,41 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
             properties:
               destination:
-                description: MigrationTemplateDestination defines the destination
-                  details for the migrationtemplate
+                description: Destination is the destination details for the virtual
+                  machine
                 properties:
                   openstackRef:
+                    description: OpenstackRef is the reference for the virtual machine
                     type: string
                 required:
                 - openstackRef
                 type: object
               networkMapping:
+                description: NetworkMapping is the network mapping for the virtual
+                  machine
                 type: string
               osType:
+                description: OSType is the OS type of the virtual machine
                 enum:
                 - windows
                 - linux
                 type: string
               source:
-                description: MigrationTemplateSource defines the source details for
-                  the migrationtemplate
+                description: Source is the source details for the virtual machine
                 properties:
                   vmwareRef:
+                    description: VMwareRef is the reference for the virtual machine
                     type: string
                 required:
                 - vmwareRef
                 type: object
               storageMapping:
+                description: StorageMapping is the storage mapping for the virtual
+                  machine
                 type: string
               virtioWinDriver:
+                description: VirtioWinDriver is the driver to be used for the virtual
+                  machine
                 type: string
             required:
             - destination
