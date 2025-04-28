@@ -36,20 +36,38 @@ const (
 	// ClusterMigrationControllerName is the name of the cluster migration controller
 	ClusterMigrationControllerName = "clustermigration-controller"
 
+	// BMConfigControllerName is the name of the BMConfig controller
+	BMConfigControllerName = "bmconfig-controller"
+
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
 	// VMwareCredsLabel is the label for vmware credentials
-	VMwareCredsLabel = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
+
+	// IsPCDCredsLabel is the label for pcd credentials
+	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
+
+	// BMConfigFinalizer is the finalizer for BMConfig
+	BMConfigFinalizer = "bmconfig.k8s.pf9.io/finalizer"
 
 	// VMwareClusterLabel is the label for vmware cluster
 	VMwareClusterLabel = "vjailbreak.k8s.pf9.io/vmware-cluster"
 
 	// ESXiNameLabel is the label for ESXi name
 	ESXiNameLabel = "vjailbreak.k8s.pf9.io/esxi-name"
+
+	// ClusterNameLabel is the label for cluster name
+	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
+
+	// UserDataSecretKey is the key for user data secret
+	UserDataSecretKey = "user-data"
+
+	// CloudInitConfigKey is the key for cloud init config
+	CloudInitConfigKey = "cloud-init-config"
 
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"
@@ -96,11 +114,8 @@ const (
 	// K3sTokenFileLocation is the location of the k3s token file
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 
-	// OpenstackCredsRequeueAfter is the requeue after time for openstack credentials
-	OpenstackCredsRequeueAfter = 1 * time.Minute
-
-	// VMwareCredsRequeueAfter is the requeue after time for vmware credentials
-	VMwareCredsRequeueAfter = 1 * time.Minute
+	// CredsRequeueAfter is the time to requeue after
+	CredsRequeueAfter = 1 * time.Minute
 
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
@@ -122,29 +137,11 @@ const (
 
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
-
-	// RollingMigrationPlanPhaseWaiting is the phase for waiting
-	RollingMigrationPlanPhaseWaiting vjailbreakv1alpha1.RollingMigrationPlanPhase = "Waiting"
-	// RollingMigrationPlanPhaseRunning is the phase for running
-	RollingMigrationPlanPhaseRunning vjailbreakv1alpha1.RollingMigrationPlanPhase = "Running"
-	// RollingMigrationPlanPhaseFailed is the phase for failed
-	RollingMigrationPlanPhaseFailed vjailbreakv1alpha1.RollingMigrationPlanPhase = "Failed"
-	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
-	RollingMigrationPlanPhaseSucceeded vjailbreakv1alpha1.RollingMigrationPlanPhase = "Succeeded"
-
-	// ClusterMigrationPhaseWaiting is the phase for waiting
-	ClusterMigrationPhaseWaiting vjailbreakv1alpha1.ClusterMigrationPhase = "Waiting"
-	// ClusterMigrationPhaseRunning is the phase for running
-	ClusterMigrationPhaseRunning vjailbreakv1alpha1.ClusterMigrationPhase = "Running"
-	// ClusterMigrationPhaseFailed is the phase for failed
-	ClusterMigrationPhaseFailed vjailbreakv1alpha1.ClusterMigrationPhase = "Failed"
-	// ClusterMigrationPhaseSucceeded is the phase for succeeded
-	ClusterMigrationPhaseSucceeded vjailbreakv1alpha1.ClusterMigrationPhase = "Succeeded"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
-	CloudInitScript = `#cloud-config
+	K3sCloudInitScript = `#cloud-config
 password: %s
 chpasswd: { expire: False }
 write_files:
@@ -184,4 +181,35 @@ runcmd:
 
 	// MigrationJobTTL is the TTL for migration job
 	MigrationJobTTL int32 = 300
+
+	// PCDCloudInitScript contains the cloud-init script for PCD onboarding
+	PCDCloudInitScript = `#cloud-config
+
+# Run the cloud-init script on boot
+runcmd:
+  - echo "Validating prerequisites..."
+  - for cmd in curl cloud-ctl; do
+      if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Error: Required command '$cmd' is not installed. Please install it and retry." >&2
+        exit 1
+      fi
+    done
+  - echo "All prerequisites met. Proceeding with setup."
+  
+  - echo "Downloading and executing cloud-ctl setup script..."
+  - curl -s https://cloud-ctl.s3.us-west-1.amazonaws.com/cloud-ctl-setup | bash
+  - echo "Cloud-ctl setup script executed successfully."
+
+  - echo "Configuring cloud-ctl..."
+  - cloud-ctl config set \
+      -u https://cloud-region1.platform9.io \
+      -e admin@airctl.localnet \
+      -r Region1 \
+      -t service \
+      -p 'xyz'
+  - echo "Cloud-ctl configuration set successfully."
+
+  - echo "Preparing the node..."
+  - cloud-ctl prep-node
+  - echo "Node preparation complete. Setup finished successfully."`
 )

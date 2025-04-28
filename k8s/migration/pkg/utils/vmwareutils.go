@@ -19,6 +19,8 @@ import (
 type VMwareHostInfo struct {
 	// Name is the fully qualified domain name or IP address of the host
 	Name string
+	// HardwareUUID is the unique identifier of the host
+	HardwareUUID string
 }
 
 // VMwareClusterInfo represents a cluster in a VMware environment.
@@ -66,7 +68,11 @@ func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, sco
 		}
 		var vmHosts []VMwareHostInfo
 		for _, host := range hosts {
-			vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name()})
+			hostSummary, err := GetESXiSummary(ctx, k3sclient, host.Name(), scope.VMwareCreds)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get ESXi summary")
+			}
+			vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name(), HardwareUUID: hostSummary.Summary.Hardware.Uuid})
 		}
 		clusters = append(clusters, VMwareClusterInfo{
 			Name:  clusterProperties.Name,
@@ -77,7 +83,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, sco
 }
 
 // createVMwareHost creates a VMware host resource in Kubernetes
-func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareHostInfo, clusterName, namespace string) (string, error) {
+func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareHostInfo, credName, clusterName, namespace string) (string, error) {
 	hostk8sName, err := ConvertToK8sName(host.Name)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert host name to k8s name")
@@ -89,10 +95,12 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 			Namespace: namespace,
 			Labels: map[string]string{
 				constants.VMwareClusterLabel: clusterName,
+				constants.VMwareCredsLabel:   credName,
 			},
 		},
 		Spec: vjailbreakv1alpha1.VMwareHostSpec{
-			Name: host.Name,
+			Name:         host.Name,
+			HardwareUUID: host.HardwareUUID,
 		},
 	}
 
@@ -105,7 +113,7 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 }
 
 // createVMwareCluster creates a VMware cluster resource in Kubernetes
-func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster VMwareClusterInfo, namespace string) error {
+func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster VMwareClusterInfo, scope *scope.VMwareCredsScope) error {
 	clusterk8sName, err := ConvertToK8sName(cluster.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
@@ -114,7 +122,10 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterk8sName,
-			Namespace: namespace,
+			Namespace: scope.Namespace(),
+			Labels: map[string]string{
+				constants.VMwareCredsLabel: scope.Name(),
+			},
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name:  cluster.Name,
@@ -124,7 +135,7 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 
 	// Create hosts and collect their k8s names
 	for _, host := range cluster.Hosts {
-		hostk8sName, err := createVMwareHost(ctx, k3sclient, host, cluster.Name, namespace)
+		hostk8sName, err := createVMwareHost(ctx, k3sclient, host, scope.Name(), cluster.Name, scope.Namespace())
 		if err != nil {
 			return err
 		}
@@ -148,7 +159,7 @@ func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, 
 	}
 
 	for _, cluster := range clusters {
-		if err := createVMwareCluster(ctx, k3sclient, cluster, scope.Namespace()); err != nil {
+		if err := createVMwareCluster(ctx, k3sclient, cluster, scope); err != nil {
 			return err
 		}
 	}

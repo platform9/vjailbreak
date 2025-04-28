@@ -49,23 +49,78 @@ spec:
           spec:
             description: ClusterMigrationSpec defines the desired state of ClusterMigration
             properties:
+              clusterName:
+                description: ClusterName is the name of the vCenter cluster to be
+                  migrated
+                type: string
               esxiMigrationSequence:
+                description: ESXIMigrationSequence is the sequence of ESXi hosts to
+                  be migrated
                 items:
                   type: string
                 type: array
+              openstackCredsRef:
+                description: OpenstackCredsRef is the reference to the OpenStack credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              rollingMigrationPlanRef:
+                description: RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: VMwareCredsRef is the reference to the VMware credentials
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             required:
+            - clusterName
             - esxiMigrationSequence
+            - openstackCredsRef
+            - rollingMigrationPlanRef
+            - vmwareCredsRef
             type: object
           status:
             description: ClusterMigrationStatus defines the observed state of ClusterMigration
             properties:
-              currentESXI:
+              currentESXi:
+                description: CurrentESXi is the name of the current ESXi host being
+                  migrated
                 type: string
               message:
+                description: Message is the message associated with the current state
+                  of the migration
                 type: string
               phase:
-                description: ClusterMigrationPhase represents the current phase of
-                  the cluster migration
+                description: Phase is the current phase of the migration
                 enum:
                 - Pending
                 - Running
@@ -73,7 +128,7 @@ spec:
                 - Failed
                 type: string
             required:
-            - currentESXI
+            - currentESXi
             - message
             - phase
             type: object

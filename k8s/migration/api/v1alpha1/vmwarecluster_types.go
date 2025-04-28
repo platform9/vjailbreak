@@ -36,12 +36,15 @@ const (
 
 // VMwareClusterSpec defines the desired state of VMwareCluster
 type VMwareClusterSpec struct {
-	Name  string   `json:"name,omitempty"`
+	// Name is the name of the VMware cluster
+	Name string `json:"name,omitempty"`
+	// Hosts is the list of hosts in the VMware cluster
 	Hosts []string `json:"hosts,omitempty"`
 }
 
 // VMwareClusterStatus defines the observed state of VMwareCluster
 type VMwareClusterStatus struct {
+	// Phase is the current phase of the VMwareCluster
 	Phase VMwareClusterPhase `json:"phase,omitempty"`
 }
 
