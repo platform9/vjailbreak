@@ -203,7 +203,8 @@ loop:
 			break loop
 		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationConnectionFailedvCenter) ||
-			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationConnectionFailedOpenStack):
+			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationConnectionFailedOpenStack) ||
+			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailedGeneral):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
 			// If none of the above phases matched
