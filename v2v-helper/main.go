@@ -63,8 +63,8 @@ func main() {
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
 		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
-		close(EventReporter)
-		log.Fatalf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
+		log.Printf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
+		return
 	}
 	log.Printf("Connected to vCenter: %s\n", vCenterURL)
 
@@ -72,8 +72,8 @@ func main() {
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
 		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
-		close(EventReporter)
-		log.Fatalf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
+		log.Printf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
+		return
 	}
 	log.Println("Connected to OpenStack")
 
@@ -81,8 +81,8 @@ func main() {
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
 		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
-		close(EventReporter)
-		log.Fatalf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
+		log.Printf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
+		return
 	}
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
 
@@ -90,8 +90,8 @@ func main() {
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
 	if err != nil {
 		EventReporter <- fmt.Sprintf("Failed to migrate VM: Failed to get source VM: %v", err)
-		close(EventReporter)
-		log.Fatalf("Failed to migrate VM: Failed to get source VM: %v", err)
+		log.Printf("Failed to migrate VM: Failed to get source VM: %v", err)
+		return
 	}
 
 	migrationobj := migrate.Migrate{
