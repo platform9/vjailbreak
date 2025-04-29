@@ -7,26 +7,38 @@ on:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
-  # pull-requests: read
 
 jobs:
-  golangci:
-    name: lint
+  lint:
+    name: Lint Go Code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        directory: ['k8s/migration', 'v2v-helper']
+      fail-fast: false  # Don't stop other jobs if one fails
+    
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: golangci-lint
+          cache: true
+      
+      - name: Restore go module cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ${{ matrix.directory }}/go.sum
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      
+      - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          working-directory: k8s/migration
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: v2v-helper
+          working-directory: ${{ matrix.directory }}
+          skip-build-cache: true
+          skip-pkg-cache: true
