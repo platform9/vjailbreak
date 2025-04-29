@@ -25,7 +25,8 @@ import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
 import { getBMConfigList, getBMConfig } from "src/api/bmconfig/bmconfig"
 import { BMConfig } from "src/api/bmconfig/model"
 import MaasConfigDetailsModal from "src/pages/dashboard/BMConfigDetailsModal"
-import { getOpenstackCredentialsList } from "src/api/openstack-creds/openstackCreds"
+import { getOpenstackCredentialsList, getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds"
+import { OpenstackCreds } from "src/api/openstack-creds/model"
 import NetworkAndStorageMappingStep, { ResourceMap } from "./NetworkAndStorageMappingStep"
 import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence } from "src/api/rolling-migration-plans"
 import DatacenterIcon from "@mui/icons-material/Storage"
@@ -377,6 +378,9 @@ export default function RollingMigrationFormDrawer({
     const [networkMappingError, setNetworkMappingError] = useState<string>("");
     const [storageMappingError, setStorageMappingError] = useState<string>("");
 
+    const [openstackCredData, setOpenstackCredData] = useState<OpenstackCreds | null>(null);
+    const [loadingOpenstackDetails, setLoadingOpenstackDetails] = useState(false);
+
     useEffect(() => {
         if (open) {
             fetchSourceData();
@@ -629,6 +633,26 @@ export default function RollingMigrationFormDrawer({
         const value = event.target.value;
         setDestinationPCD(value);
         setSelectedPcdCredName(value);
+
+        if (value) {
+            fetchOpenstackCredentialDetails(value);
+        } else {
+            setOpenstackCredData(null);
+        }
+    };
+
+    const fetchOpenstackCredentialDetails = async (credName) => {
+        if (!credName) return;
+
+        setLoadingOpenstackDetails(true);
+        try {
+            const response = await getOpenstackCredentials(credName);
+            setOpenstackCredData(response);
+        } catch (error) {
+            console.error("Failed to fetch OpenStack credential details:", error);
+        } finally {
+            setLoadingOpenstackDetails(false);
+        }
     };
 
     const findItemIndices = <T extends { id: string | number }>(items: T[], selectedIds: readonly (string | number)[]) => {
@@ -677,22 +701,18 @@ export default function RollingMigrationFormDrawer({
     }, [vmsWithAssignments, selectedVMs]);
 
     const openstackNetworks = useMemo(() => {
-        if (!destinationPCD) return [];
+        if (!openstackCredData) return [];
 
-        const selectedPcd = pcdData.find(item => item.credName === destinationPCD);
-
-        const networks = selectedPcd ? ["private", "public", "storage"] : [];
-        return networks;
-    }, [destinationPCD, pcdData]);
+        const networks = openstackCredData?.status?.openstack?.networks || [];
+        return networks.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    }, [openstackCredData]);
 
     const openstackVolumeTypes = useMemo(() => {
-        if (!destinationPCD) return [];
+        if (!openstackCredData) return [];
 
-        const selectedPcd = pcdData.find(item => item.credName === destinationPCD);
-
-        const volumeTypes = selectedPcd ? ["ceph", "local", "ssd"] : [];
-        return volumeTypes;
-    }, [destinationPCD, pcdData]);
+        const volumeTypes = openstackCredData?.status?.openstack?.volumeTypes || [];
+        return volumeTypes.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    }, [openstackCredData]);
 
     const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
         if (key === "networkMappings") {
@@ -1209,6 +1229,7 @@ export default function RollingMigrationFormDrawer({
                                     networkMappingError={networkMappingError}
                                     storageMappingError={storageMappingError}
                                     stepNumber="5"
+                                    loading={loadingOpenstackDetails}
                                 />
                             </>
                         ) : (

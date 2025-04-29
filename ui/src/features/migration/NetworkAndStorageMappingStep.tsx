@@ -33,6 +33,7 @@ interface NetworkAndStorageMappingStepProps {
   networkMappingError?: string
   storageMappingError?: string
   stepNumber?: string
+  loading?: boolean
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -45,6 +46,7 @@ export default function NetworkAndStorageMappingStep({
   networkMappingError,
   storageMappingError,
   stepNumber = "3",
+  loading = false,
 }: NetworkAndStorageMappingStepProps) {
   // Filter out any mappings that don't match the available networks/storage
   const filteredNetworkMappings = useMemo(
@@ -102,60 +104,68 @@ export default function NetworkAndStorageMappingStep({
     <VmsSelectionStepContainer>
       <Step stepNumber={stepNumber} label="Network and Storage Mapping" />
       <FieldsContainer>
-        <FormControl error={!!networkMappingError}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="subtitle2">Map Networks</Typography>
-            {networksFullyMapped ? (
-              <Typography variant="body2" color="success.main">All networks mapped ✓</Typography>
-            ) : (
-              <Typography variant="body2" color="warning.main">
-                {unmappedNetworks.length} of {vmwareNetworks.length} networks unmapped
-              </Typography>
-            )}
-          </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select source and target networks to automatically create mappings. All networks must be mapped to proceed.
+        {loading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading OpenStack networks and storage options...
           </Typography>
-          <ResourceMappingTable
-            sourceItems={vmwareNetworks}
-            targetItems={openstackNetworks}
-            sourceLabel="VMware Network"
-            targetLabel="OpenStack Network"
-            values={params.networkMappings || []}
-            onChange={(value) => onChange("networkMappings")(value)}
-            oneToManyMapping
-          />
-          {networkMappingError && (
-            <FormHelperText error>{networkMappingError}</FormHelperText>
-          )}
-        </FormControl>
-        <FormControl error={!!storageMappingError}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="subtitle2">Map Storage</Typography>
-            {storageFullyMapped ? (
-              <Typography variant="body2" color="success.main">All storage mapped ✓</Typography>
-            ) : (
-              <Typography variant="body2" color="warning.main">
-                {unmappedStorage.length} of {vmWareStorage.length} storage devices unmapped
+        ) : (
+          <>
+            <FormControl error={!!networkMappingError}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle2">Map Networks</Typography>
+                {networksFullyMapped ? (
+                  <Typography variant="body2" color="success.main">All networks mapped ✓</Typography>
+                ) : (
+                  <Typography variant="body2" color="warning.main">
+                    {unmappedNetworks.length} of {vmwareNetworks.length} networks unmapped
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select source and target networks to automatically create mappings. All networks must be mapped to proceed.
               </Typography>
-            )}
-          </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select source and target storage to automatically create mappings. All storage devices must be mapped to proceed.
-          </Typography>
-          <ResourceMappingTable
-            sourceItems={vmWareStorage}
-            targetItems={openstackStorage}
-            sourceLabel="VMware Datastore"
-            targetLabel="OpenStack VolumeType"
-            values={params.storageMappings || []}
-            onChange={(value) => onChange("storageMappings")(value)}
-            oneToManyMapping
-          />
-          {storageMappingError && (
-            <FormHelperText error>{storageMappingError}</FormHelperText>
-          )}
-        </FormControl>
+              <ResourceMappingTable
+                sourceItems={vmwareNetworks}
+                targetItems={openstackNetworks}
+                sourceLabel="VMware Network"
+                targetLabel="OpenStack Network"
+                values={params.networkMappings || []}
+                onChange={(value) => onChange("networkMappings")(value)}
+                oneToManyMapping
+              />
+              {networkMappingError && (
+                <FormHelperText error>{networkMappingError}</FormHelperText>
+              )}
+            </FormControl>
+            <FormControl error={!!storageMappingError}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle2">Map Storage</Typography>
+                {storageFullyMapped ? (
+                  <Typography variant="body2" color="success.main">All storage mapped ✓</Typography>
+                ) : (
+                  <Typography variant="body2" color="warning.main">
+                    {unmappedStorage.length} of {vmWareStorage.length} storage devices unmapped
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select source and target storage to automatically create mappings. All storage devices must be mapped to proceed.
+              </Typography>
+              <ResourceMappingTable
+                sourceItems={vmWareStorage}
+                targetItems={openstackStorage}
+                sourceLabel="VMware Datastore"
+                targetLabel="OpenStack VolumeType"
+                values={params.storageMappings || []}
+                onChange={(value) => onChange("storageMappings")(value)}
+                oneToManyMapping
+              />
+              {storageMappingError && (
+                <FormHelperText error>{storageMappingError}</FormHelperText>
+              )}
+            </FormControl>
+          </>
+        )}
       </FieldsContainer>
     </VmsSelectionStepContainer>
   )
