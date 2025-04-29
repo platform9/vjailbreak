@@ -131,7 +131,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) && string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -160,6 +161,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+//nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
 	events, err := r.GetEventsSorted(ctx, scope)
 	if err != nil {
