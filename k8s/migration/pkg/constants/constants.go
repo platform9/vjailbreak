@@ -67,6 +67,7 @@ runcmd:
 	MigrationConditionTypeDataCopy  corev1.PodConditionType = "DataCopy"
 	MigrationConditionTypeMigrating corev1.PodConditionType = "Migrating"
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
+	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,

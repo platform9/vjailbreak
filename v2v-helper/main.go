@@ -138,7 +138,7 @@ func main() {
 		// Try to power on the VM if migration failed
 		powerOnErr := vmops.VMPowerOn()
 		if powerOnErr != nil {
-			msg += fmt.Sprintf("\nAlso failed to power on VM after migration failure: %v", powerOnErr)
+			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
 		} else {
 			msg += "\nVM was powered on after migration failure"
 		}

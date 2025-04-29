@@ -115,6 +115,29 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
+func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "failed to")) {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeFailed, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeFailed,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			"Migration failed",
+			eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+	}
+	return existingConditions
+}
+
 func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	if initiateCutover {
 		if currentLabel != constants.StartCutOverYes {
