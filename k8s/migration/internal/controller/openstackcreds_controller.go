@@ -92,7 +92,6 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "openstackcreds", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
-	ctxlog.Info("Reconciling normal state", "openstackcreds", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
@@ -135,7 +134,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
-		ctxlog.Info("Getting flavors for OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
