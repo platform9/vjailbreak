@@ -24,3 +24,9 @@ jobs:
         with:
           version: latest
           working-directory: k8s/migration
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: v2v-helper
