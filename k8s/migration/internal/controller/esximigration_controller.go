@@ -68,25 +68,31 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
-	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
-	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
-		}
-		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
-	}
-
 	scope, err := scope.NewESXIMigrationScope(scope.ESXIMigrationScopeParams{
-		Logger:               ctxlog,
-		Client:               r.Client,
-		ESXIMigration:        esxiMigration,
-		RollingMigrationPlan: rollingMigrationPlan,
+		Logger:        ctxlog,
+		Client:        r.Client,
+		ESXIMigration: esxiMigration,
 	})
 	if err != nil {
 		ctxlog.Error(err, "Failed to create ESXIMigrationScope")
 		return ctrl.Result{}, errors.Wrap(err, "failed to create ESXIMigrationScope")
 	}
+
+	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
+	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
+		if apierrors.IsNotFound(err) {
+			if !esxiMigration.ObjectMeta.DeletionTimestamp.IsZero() {
+				ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
+				return r.reconcileDelete(ctx, scope)
+			}
+			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+		}
+		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+	}
+
+	scope.RollingMigrationPlan = rollingMigrationPlan
+
 	// Always close the scope when exiting this function such that we can persist any ESXIMigration changes.
 	defer func() {
 		if err := scope.Close(); err != nil && reterr == nil {
@@ -100,7 +106,6 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return r.reconcileDelete(ctx, scope)
 	}
 
-	ctxlog.Info("Reconciling normal state", "esximigration", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
@@ -185,7 +190,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 }
 
 func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := scope.Logger
 	log.Info("Reconciling deletion", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 
 	controllerutil.RemoveFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
