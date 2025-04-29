@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
@@ -552,16 +553,23 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
+	ctxlog := log.FromContext(ctx)
+
 	var vminfo []vjailbreakv1alpha1.VMInfo
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
+		diskInfo, err := GetVMDiskInfo(ctx, vm)
+		if err != nil {
+			ctxlog.Error(err, "failed to get disk info for vm", "vm", vm.Name())
+		}
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
 		var datastores []string
 		var networks []string
-		var disks []string
+		//var disks []string
+		var disks []vjailbreakv1alpha1.DiskInfo
 		var ds mo.Datastore
 		var dsref types.ManagedObjectReference
 		if vmProps.Config == nil {
@@ -591,7 +599,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 					return nil, fmt.Errorf("failed to get datastore: %w", err)
 				}
 				datastores = AppendUnique(datastores, ds.Name)
-				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
+				disks = append(disks, diskInfo...)
 			}
 		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
@@ -786,4 +794,84 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_vCPUs", cpu,
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
+}
+
+func GetVMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbreakv1alpha1.DiskInfo, error) {
+	var devices object.VirtualDeviceList
+	var props mo.VirtualMachine
+
+	err := vm.Properties(ctx, vm.Reference(), []string{"config.hardware.device"}, &props)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %v", err)
+	}
+
+	devices = props.Config.Hardware.Device
+	hostStorageInfo, err := GetHostStorageDeviceInfo(ctx, vm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM storage properties: %v", err)
+	}
+	var diskInfos []vjailbreakv1alpha1.DiskInfo
+
+	for _, device := range devices {
+		// Check if device is a virtual disk
+		if disk, ok := device.(*types.VirtualDisk); ok {
+			info := vjailbreakv1alpha1.DiskInfo{
+				DiskName: devices.Name(device),
+				DiskSize: disk.CapacityInBytes,
+			}
+
+			// Check backing type to determine if it's RDM or regular virtual disk
+			switch backing := disk.Backing.(type) {
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				info.DiskType = "rdm"
+				if backing.CompatibilityMode == string(types.VirtualDiskCompatibilityModePhysicalMode) {
+					info.DiskType = "physical"
+				} else {
+					info.DiskType = "virtual"
+				}
+				if hostStorageInfo != nil {
+					for _, scsiDisk := range hostStorageInfo.ScsiLun {
+						lunDetails := scsiDisk.GetScsiLun()
+						if backing.Uuid == lunDetails.Uuid {
+							info.LUN.DisplayName = lunDetails.DisplayName
+							info.LUN.UUID = lunDetails.Uuid
+							info.LUN.OperationalState = lunDetails.OperationalState
+
+						}
+					}
+				}
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				info.DiskType = string(backing.DiskMode)
+
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", backing)
+			}
+
+			diskInfos = append(diskInfos, info)
+		}
+	}
+
+	return diskInfos, nil
+}
+
+func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine) (*types.HostStorageDeviceInfo, error) {
+	// Get the host system that the VM is running on
+	hostSystem, err := vm.HostSystem(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host system: %v", err)
+	}
+
+	// Get the host config manager
+	var hostSystemMo mo.HostStorageSystem
+	err = hostSystem.Properties(ctx, hostSystem.Reference(), []string{"configManager"}, &hostSystemMo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host system properties: %v", err)
+	}
+
+	// Get the storage system
+	// Get storage device info
+	storageDeviceInfo := hostSystemMo.StorageDeviceInfo
+
+	return storageDeviceInfo, nil
 }

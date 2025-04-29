@@ -20,16 +20,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type LUNInfo struct {
+	// UUID is the unique identifier of the disk
+	UUID string `json:"uuid,omitempty"`
+	// DisplayName is the display name of the disk
+	DisplayName string `json:"displayName,omitempty"`
+	// OperationalState is the operational state of the disk
+	OperationalState []string `json:"operationalState,omitempty"`
+}
+
+type DiskInfo struct {
+	// DiskName is the name of the disk
+	DiskName string `json:"diskName,omitempty"`
+	// DiskSize is the size of the disk in GB
+	DiskSize int64 `json:"diskSize,omitempty"`
+	// DiskType is the type of the disk
+	DiskType string `json:"diskType,omitempty"`
+	// LUN contains additional information about the disk
+	LUN *LUNInfo `json:"lun,omitempty"`
+}
+
 type VMInfo struct {
-	Name       string   `json:"name"`
-	Datastores []string `json:"datastores,omitempty"`
-	Disks      []string `json:"disks,omitempty"`
-	Networks   []string `json:"networks,omitempty"`
-	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmState,omitempty"`
-	OSType     string   `json:"osType,omitempty"`
-	CPU        int      `json:"cpu,omitempty"`
-	Memory     int      `json:"memory,omitempty"`
+	Name       string     `json:"name"`
+	Datastores []string   `json:"datastores,omitempty"`
+	Disks      []DiskInfo `json:"disks,omitempty"`
+	Networks   []string   `json:"networks,omitempty"`
+	IPAddress  string     `json:"ipAddress,omitempty"`
+	VMState    string     `json:"vmState,omitempty"`
+	OSType     string     `json:"osType,omitempty"`
+	CPU        int        `json:"cpu,omitempty"`
+	Memory     int        `json:"memory,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
