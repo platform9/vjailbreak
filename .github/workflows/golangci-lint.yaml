@@ -15,16 +15,20 @@ jobs:
     strategy:
       matrix:
         directory: ['k8s/migration', 'v2v-helper']
-        exclude:
+        # Define the pkgconfig flag as part of the matrix
+        pkgconfig_required: [true, false]
+        include:
           - directory: 'k8s/migration'
-            skip_pkgconfig: true
+            pkgconfig_required: false
+          - directory: 'v2v-helper'
+            pkgconfig_required: true
       fail-fast: false
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install libnbd (v2v-helper only)
-        if: matrix.directory == 'v2v-helper' && !matrix.skip_pkgconfig
+      - name: Install libnbd (if required)
+        if: matrix.pkgconfig_required
         run: |
           sudo apt-get update
           sudo apt-get install -y libnbd-dev pkg-config
