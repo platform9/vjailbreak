@@ -15,10 +15,19 @@ jobs:
     strategy:
       matrix:
         directory: ['k8s/migration', 'v2v-helper']
-      fail-fast: false  # Don't stop other jobs if one fails
+        exclude:
+          - directory: 'k8s/migration'
+            skip_pkgconfig: true
+      fail-fast: false
     
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Install libnbd (v2v-helper only)
+        if: matrix.directory == 'v2v-helper' && !matrix.skip_pkgconfig
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnbd-dev pkg-config
       
       - uses: actions/setup-go@v5
         with:
@@ -42,3 +51,4 @@ jobs:
           working-directory: ${{ matrix.directory }}
           skip-build-cache: true
           skip-pkg-cache: true
+          timeout: 5m
