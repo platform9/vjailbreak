@@ -95,8 +95,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
 		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
 	}
-	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running nor Succeeded for migration %s", migration.Name)
+
+	// Check if the pod is in a valid state only then continue
+	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
+		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
@@ -129,7 +131,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(pod.Status.Phase) != string(corev1.PodSucceeded) && string(pod.Status.Phase) != string(corev1.PodFailed) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) && string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 

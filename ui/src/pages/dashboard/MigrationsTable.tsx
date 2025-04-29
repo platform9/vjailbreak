@@ -42,8 +42,21 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
     )[0];
 
     const message = latestCondition?.message || phase;
+    if (phase == Phase.Failed){
+        // Find the message which has failed
+        let failedCondition = "";
+        for (const condition of conditions || []) {
+            // check if the message has string Failed
+            if (condition.message.includes("Failed")) {
+                failedCondition = condition.message;
+                break;
+            }
+        }
 
-    if (phase === Phase.Failed || phase === Phase.Succeeded) {
+        return `${phase} - ${failedCondition}`;
+    }
+
+    if (phase === Phase.Succeeded) {
         return `${phase} - ${message}`;
     }
 
