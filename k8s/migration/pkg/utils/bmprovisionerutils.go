@@ -27,6 +27,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+type CloudInitParams struct {
+	AuthURL     string
+	Username    string
+	Password    string
+	RegionName  string
+	TenantName  string
+	Insecure    bool
+	DomainName  string
+	FQDN        string
+	KeystoneURL string
+}
+
 func ConvertESXiToPCDHost(ctx context.Context,
 	scope *scope.ESXIMigrationScope,
 	bmProvider providers.BMCProvider) error {
@@ -224,6 +236,20 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack credentials")
 	}
+	fqdn := strings.Split(openstackCreds.AuthURL, "/")[2]
+	authURL := strings.Split(openstackCreds.AuthURL, "/")[:3]
+	cloudInitParams := CloudInitParams{
+		AuthURL:     strings.Join(authURL, "/"),
+		Username:    openstackCreds.Username,
+		Password:    openstackCreds.Password,
+		RegionName:  openstackCreds.RegionName,
+		TenantName:  openstackCreds.TenantName,
+		Insecure:    openstackCreds.Insecure,
+		DomainName:  openstackCreds.DomainName,
+		FQDN:        fqdn,
+		KeystoneURL: openstackCreds.AuthURL,
+	}
+
 	// read cloud-init template
 	cloudInitTemplateStr, err := os.ReadFile("/pkg/scripts/cloud-init.tmpl.yaml")
 	if err != nil {
@@ -234,7 +260,7 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 		return "", errors.Wrap(err, "failed to parse cloud-init template")
 	}
 	var cloudInitBuffer bytes.Buffer
-	err = cloudInitTemplate.Execute(&cloudInitBuffer, openstackCreds)
+	err = cloudInitTemplate.Execute(&cloudInitBuffer, cloudInitParams)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to execute cloud-init template")
 	}

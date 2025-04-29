@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -27,7 +28,7 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	}
 	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterK8sName,
+			Name:      GenerateRollingMigrationObjectName(clusterK8sName, rollingMigrationPlan),
 			Namespace: constants.NamespaceMigrationSystem,
 		},
 		Spec: vjailbreakv1alpha1.ClusterMigrationSpec{
@@ -48,17 +49,25 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	return clusterMigration, nil
 }
 
-func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string) (*vjailbreakv1alpha1.ClusterMigration, error) {
+func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
+	clusterK8sName, err := ConvertToK8sName(clusterName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
 	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(clusterK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
 		return nil, err
 	}
 	return clusterMigration, nil
 }
 
-func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
+func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ESXIMigration, error) {
+	esxiK8sName, err := ConvertToK8sName(esxi)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
+	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: esxi, Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
 		return nil, err
 	}
 	return esxiMigration, nil
@@ -71,7 +80,7 @@ func CreateESXIMigration(ctx context.Context, k8sClient client.Client, esxi stri
 	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      esxiK8sName,
+			Name:      GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan),
 			Namespace: constants.NamespaceMigrationSystem,
 		},
 		Spec: vjailbreakv1alpha1.ESXIMigrationSpec{
@@ -99,9 +108,13 @@ func GetESXiSequenceFromVMSequence(ctx context.Context, vmSequence []vjailbreakv
 	return esxiSequence
 }
 
-func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, esxi string) error {
+func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) error {
+	esxiK8sName, err := ConvertToK8sName(esxi)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
+	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: esxi, Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
 		return errors.Wrap(err, "failed to get ESXi migration status")
 	}
 
@@ -112,7 +125,6 @@ func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, e
 	}
 
 	for _, vmName := range vmList.Items {
-		// TODO(vPwned): add VMs to ESXi migration status
 		esxiMigration.Status.VMs = append(esxiMigration.Status.VMs, vmName.Name)
 	}
 
@@ -282,4 +294,8 @@ func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	}
 
 	return dst
+}
+
+func GenerateRollingMigrationObjectName(objectName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) string {
+	return fmt.Sprintf("%s-%s", objectName, rollingMigrationPlan.Name)
 }

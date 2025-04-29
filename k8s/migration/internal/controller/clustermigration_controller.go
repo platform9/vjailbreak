@@ -105,7 +105,6 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.reconcileDelete(ctx, scope)
 	}
 
-	ctxlog.Info("Reconciling normal state", "clustermigration", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
 }
 
@@ -114,8 +113,6 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	clusterMigration := scope.ClusterMigration
 	log.Info("Starting normal reconciliation", "clustermigration", clusterMigration.Name, "namespace", clusterMigration.Namespace)
 
-	var esxiMigration *vjailbreakv1alpha1.ESXIMigration
-	var err error
 	controllerutil.AddFinalizer(clusterMigration, constants.ClusterMigrationFinalizer)
 	if err := scope.Close(); err != nil {
 		log.Error(err, "Failed to close ClusterMigrationScope")
@@ -133,8 +130,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	for _, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
-		log.Info("Processing ESXi in migration sequence", "esxiName", esxi)
-		esxiMigration, err = utils.GetESXIMigration(ctx, scope.Client, esxi)
+		esxiMigration, err := utils.GetESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Info("ESXIMigration not found, creating new one", "esxiName", esxi)
@@ -193,7 +189,7 @@ func (r *ClusterMigrationReconciler) reconcileDelete(ctx context.Context, scope 
 
 	// Delete all ESXIMigrations
 	for _, esxi := range scope.ClusterMigration.Spec.ESXIMigrationSequence {
-		esxiMigration, err := utils.GetESXIMigration(ctx, r.Client, esxi)
+		esxiMigration, err := utils.GetESXIMigration(ctx, r.Client, esxi, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -209,7 +205,7 @@ func (r *ClusterMigrationReconciler) reconcileDelete(ctx context.Context, scope 
 
 	// Wait for all ESXIMigrations to be deleted
 	for _, esxi := range scope.ClusterMigration.Spec.ESXIMigrationSequence {
-		_, err := utils.GetESXIMigration(ctx, r.Client, esxi)
+		_, err := utils.GetESXIMigration(ctx, r.Client, esxi, scope.RollingMigrationPlan)
 		if err == nil {
 			// ESXIMigration still exists, requeue
 			log.Info("ESXIMigration still exists, requeuing", "esxiName", esxi)

@@ -92,8 +92,6 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	log := scope.Logger
 	migrationPlan := scope.RollingMigrationPlan
 	log.Info(fmt.Sprintf("Reconciling RollingMigrationPlan '%s'", migrationPlan.Name))
-	var clusterMigration *vjailbreakv1alpha1.ClusterMigration
-	var err error
 
 	controllerutil.AddFinalizer(migrationPlan, constants.RollingMigrationPlanFinalizer)
 	if err := scope.Close(); err != nil {
@@ -121,7 +119,7 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 
 	if migrationPlan.Spec.CloudInitConfigRef == nil {
 		log.Info("CloudInitConfigRef is not set")
-		err = utils.MergeCloudInitAndCreateSecret(ctx, scope)
+		err := utils.MergeCloudInitAndCreateSecret(ctx, scope)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to merge cloud-init config and create secret")
 		}
@@ -130,9 +128,13 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for j := range cluster.VMSequence {
+			k8sVMName, err := utils.ConvertToK8sName(cluster.VMSequence[j].VMName)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to convert vm name to k8s name")
+			}
 			vm := &vjailbreakv1alpha1.VMwareMachine{}
 			err = r.Get(ctx, client.ObjectKey{
-				Name:      cluster.VMSequence[j].VMName,
+				Name:      k8sVMName,
 				Namespace: scope.Namespace(),
 			}, vm)
 			if err != nil {
@@ -146,12 +148,13 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
 		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
-		clusterMigration, err = utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName)
+		clusterMigration, err := utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				if _, createErr := utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); createErr != nil {
 					return ctrl.Result{}, errors.Wrap(createErr, "failed to create cluster migration")
 				}
+				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 			} else {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
 			}
@@ -189,7 +192,7 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 
 	// Delete all ClusterMigrations
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		clusterMigration, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
+		clusterMigration, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -205,7 +208,7 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 
 	// Wait for all ClusterMigrations to be deleted
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		_, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName)
+		_, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName, scope.RollingMigrationPlan)
 		if err == nil {
 			// ClusterMigration still exists, requeue
 			log.Info("ClusterMigration still exists, requeuing", "cluster", cluster)
