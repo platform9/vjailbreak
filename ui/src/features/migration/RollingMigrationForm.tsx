@@ -1,4 +1,4 @@
-import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormLabel } from "@mui/material"
+import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { useState, useMemo, useEffect } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
 import Footer from "../../components/forms/Footer"
@@ -29,9 +29,31 @@ import { getOpenstackCredentialsList, getOpenstackCredentials } from "src/api/op
 import { OpenstackCreds } from "src/api/openstack-creds/model"
 import NetworkAndStorageMappingStep, { ResourceMap } from "./NetworkAndStorageMappingStep"
 import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence } from "src/api/rolling-migration-plans"
-import DatacenterIcon from "@mui/icons-material/Storage"
-import ClusterIcon from "@mui/icons-material/HubOutlined"
-import VpnKeyIcon from "@mui/icons-material/VpnKey"
+import { getSecret } from "src/api/secrets/secrets"
+import vmwareLogo from "src/assets/vmware.jpeg"
+
+// Import CDS icons
+import "@cds/core/icon/register.js"
+import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon"
+
+// Register clarity icons
+ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
+
+// Create styled components for the image
+const VMwareLogoImg = styled('img')({
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    objectFit: 'contain'
+});
+
+// Style for Clarity icons
+const CdsIconWrapper = styled('div')({
+    marginRight: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+});
 
 const StyledDrawer = styled(Drawer)(() => ({
     "& .MuiDrawer-paper": {
@@ -47,19 +69,6 @@ interface PcdDataItem {
     credName: string;
 }
 
-const mockSecurityGroups = [
-    { id: "default", name: "default" },
-    { id: "web", name: "web" },
-    { id: "app", name: "app" },
-    { id: "db", name: "db" }
-];
-
-const mockTenants = [
-    { id: "service", name: "service" },
-    { id: "customer1", name: "customer1" },
-    { id: "customer2", name: "customer2" }
-];
-
 interface ESXHost {
     id: string;
     name: string;
@@ -74,12 +83,12 @@ interface VM {
     id: string;
     name: string;
     ip: string;
-    powerState: string;
-    sg: string;
-    tenant: string;
     esxHost: string;
     networks?: string[];
     datastores?: string[];
+    cpu?: number;
+    memory?: number;
+    powerState: string;
 }
 
 const esxColumns: GridColDef[] = [
@@ -87,10 +96,20 @@ const esxColumns: GridColDef[] = [
         field: "name",
         headerName: "ESX Name",
         flex: 1.5,
+        renderCell: (params) => (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CdsIconWrapper>
+                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                    {/* @ts-ignore */}
+                    <cds-icon shape="host" size="md" badge="info"></cds-icon>
+                </CdsIconWrapper>
+                {params.value}
+            </Box>
+        ),
     },
     {
         field: "ip",
-        headerName: "IP Address",
+        headerName: "Current IP",
         flex: 1,
         valueGetter: (value) => value || "—",
     },
@@ -131,25 +150,37 @@ const vmColumns: GridColDef[] = [
         flex: 1.5,
         renderCell: (params) => (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Tooltip title={params.row.powerState === "powered-on" ? "Running" : "Stopped"}>
-                    <Box
-                        sx={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            backgroundColor: params.row.powerState === "powered-on" ? 'success.main' : 'error.main',
-                            display: 'inline-block'
-                        }}
-                    />
+                <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
+                    <CdsIconWrapper>
+                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                        {/* @ts-ignore */}
+                        <cds-icon
+                            shape="vm"
+                            size="md"
+                            badge={params.row.powerState === "powered-on" ? "success" : "danger"}
+                        ></cds-icon>
+                    </CdsIconWrapper>
                 </Tooltip>
-                <Box sx={{ ml: 0.5 }}>{params.value}</Box>
+                <Box>{params.value}</Box>
             </Box>
         ),
     },
     {
         field: "ip",
-        headerName: "IP Address",
+        headerName: "Current IP",
         flex: 1,
+        valueGetter: (value) => value || "—",
+    },
+    {
+        field: "networks",
+        headerName: "Network Interface(s)",
+        flex: 1,
+        valueGetter: (value) => value || "—",
+    },
+    {
+        field: "memory",
+        headerName: "Memory (MB)",
+        flex: 0.8,
         valueGetter: (value) => value || "—",
     },
     {
@@ -159,52 +190,26 @@ const vmColumns: GridColDef[] = [
         valueGetter: (value) => value || "—",
     },
     {
-        field: "powerState",
-        headerName: "Power State",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "sg",
-        headerName: "SG",
-        flex: 0.7,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "tenant",
-        headerName: "Tenant",
-        flex: 1,
-        valueGetter: (value) => value || "—",
+        field: "auto-assign",
+        headerName: "Flavor",
+        flex: 0.8,
+        renderCell: () => (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2">auto-assign</Typography>
+            </Box>
+        ),
     },
 ];
 
 const paginationModel = { page: 0, pageSize: 5 };
 
 const CustomToolbarWithActions = (props) => {
-    const { rowSelectionModel, onAssignSG, onAssignTenant, onMoveUp, onMoveDown, onMoveToTop, onMoveToBottom, ...toolbarProps } = props;
+    const { rowSelectionModel, onMoveUp, onMoveDown, onMoveToTop, onMoveToBottom, ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
             {rowSelectionModel.length > 0 && (
                 <>
-                    <Button
-                        variant="text"
-                        color="primary"
-                        onClick={onAssignSG}
-                        size="small"
-                        sx={{ ml: 1 }}
-                    >
-                        Assign SG ({rowSelectionModel.length})
-                    </Button>
-                    <Button
-                        variant="text"
-                        color="primary"
-                        onClick={onAssignTenant}
-                        size="small"
-                        sx={{ ml: 1 }}
-                    >
-                        Assign Tenant ({rowSelectionModel.length})
-                    </Button>
                     <Tooltip title="Move to Top">
                         <Button
                             variant="text"
@@ -326,6 +331,7 @@ const CodeEditorContainer = styled(Box)(({ theme }) => ({
 interface SourceDataItem {
     credName: string;
     datacenter: string;
+    vcenterName: string;
     clusters: {
         id: string;
         name: string;
@@ -356,16 +362,10 @@ export default function RollingMigrationFormDrawer({
     const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([]);
 
     const [loadingHosts, setLoadingHosts] = useState(false);
-
     const [loadingVMs, setLoadingVMs] = useState(false);
 
     const [orderedESXHosts, setOrderedESXHosts] = useState<ESXHost[]>([]);
     const [vmsWithAssignments, setVmsWithAssignments] = useState<VM[]>([]);
-
-    const [sgDialogOpen, setSgDialogOpen] = useState(false);
-    const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
-    const [selectedSG, setSelectedSG] = useState("");
-    const [selectedTenant, setSelectedTenant] = useState("");
 
     const [maasConfigDialogOpen, setMaasConfigDialogOpen] = useState(false);
     const [maasConfigs, setMaasConfigs] = useState<BMConfig[]>([]);
@@ -399,9 +399,27 @@ export default function RollingMigrationFormDrawer({
                 setLoading(false);
                 return;
             }
+
             const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
                 const credName = cred.metadata.name;
                 const datacenter = cred.spec.datacenter || credName;
+
+                // Default vcenterName to credential name
+                let vcenterName = credName;
+
+                // If credential has a secretRef, fetch the secret to get VCENTER_HOST
+                if (cred.spec.secretRef?.name) {
+                    try {
+                        const secret = await getSecret(cred.spec.secretRef.name, VJAILBREAK_DEFAULT_NAMESPACE);
+                        if (secret && secret.data && secret.data.VCENTER_HOST) {
+                            // Use VCENTER_HOST as the vCenter name
+                            vcenterName = secret.data.VCENTER_HOST;
+                        }
+                    } catch (error) {
+                        console.error(`Failed to fetch secret for credential ${credName}:`, error);
+                        // Fall back to using credential name if secret fetch fails
+                    }
+                }
 
                 const clustersResponse = await getVMwareClusters(
                     VJAILBREAK_DEFAULT_NAMESPACE,
@@ -416,6 +434,7 @@ export default function RollingMigrationFormDrawer({
                 return {
                     credName,
                     datacenter,
+                    vcenterName,
                     clusters
                 };
             });
@@ -489,9 +508,6 @@ export default function RollingMigrationFormDrawer({
         if (sourceCluster) {
             fetchClusterHosts();
             fetchClusterVMs();
-        } else {
-            setOrderedESXHosts([]);
-            setVmsWithAssignments([]);
         }
     }, [sourceCluster]);
 
@@ -503,8 +519,8 @@ export default function RollingMigrationFormDrawer({
             const parts = sourceCluster.split(":");
             const credName = parts[0];
 
-            const sourceDataItem = sourceData.find(item => item.credName === credName);
-            const clusterObj = sourceDataItem?.clusters.find(cluster =>
+            const sourceItem = sourceData.find(item => item.credName === credName);
+            const clusterObj = sourceItem?.clusters.find(cluster =>
                 cluster.id === sourceCluster
             );
             const clusterName = clusterObj?.name;
@@ -548,8 +564,8 @@ export default function RollingMigrationFormDrawer({
             const parts = sourceCluster.split(":");
             const credName = parts[0];
 
-            const sourceDataItem = sourceData.find(item => item.credName === credName);
-            const clusterObj = sourceDataItem?.clusters.find(cluster =>
+            const sourceItem = sourceData.find(item => item.credName === credName);
+            const clusterObj = sourceItem?.clusters.find(cluster =>
                 cluster.id === sourceCluster
             );
             const clusterName = clusterObj?.name;
@@ -577,12 +593,12 @@ export default function RollingMigrationFormDrawer({
                     id: vm.metadata.name,
                     name: vm.spec.vms.name || vm.metadata.name,
                     ip: vm.spec.vms.ipAddress || "—",
-                    powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off",
-                    sg: "default",
-                    tenant: "service",
                     esxHost: esxiHost,
                     networks: vm.spec.vms.networks,
-                    datastores: vm.spec.vms.datastores
+                    datastores: vm.spec.vms.datastores,
+                    cpu: vm.spec.vms.cpu,
+                    memory: vm.spec.vms.memory,
+                    powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off"
                 };
             });
 
@@ -611,6 +627,67 @@ export default function RollingMigrationFormDrawer({
             setVmsWithAssignments(sortedVMs);
         }
     }, [orderedESXHosts]);
+
+    const handleVMMoveUp = () => {
+        if (selectedVMs.length === 0) return;
+
+        const newOrderedVMs = [...vmsWithAssignments];
+        const indices = findItemIndices(newOrderedVMs, selectedVMs);
+
+        for (const index of indices) {
+            if (index > 0) {
+                [newOrderedVMs[index - 1], newOrderedVMs[index]] =
+                    [newOrderedVMs[index], newOrderedVMs[index - 1]];
+            }
+        }
+
+        setVmsWithAssignments(newOrderedVMs);
+    };
+
+    const handleVMMoveDown = () => {
+        if (selectedVMs.length === 0) return;
+
+        const newOrderedVMs = [...vmsWithAssignments];
+        const indices = findItemIndices(newOrderedVMs, selectedVMs);
+
+        for (let i = indices.length - 1; i >= 0; i--) {
+            const index = indices[i];
+            if (index < newOrderedVMs.length - 1) {
+                [newOrderedVMs[index], newOrderedVMs[index + 1]] =
+                    [newOrderedVMs[index + 1], newOrderedVMs[index]];
+            }
+        }
+
+        setVmsWithAssignments(newOrderedVMs);
+    };
+
+    const handleVMMoveToTop = () => {
+        if (selectedVMs.length === 0) return;
+
+        const selectedItems = vmsWithAssignments.filter(item =>
+            selectedVMs.includes(item.id as string | number)
+        );
+
+        const remainingItems = vmsWithAssignments.filter(item =>
+            !selectedVMs.includes(item.id as string | number)
+        );
+
+        setVmsWithAssignments([...selectedItems, ...remainingItems]);
+    };
+
+    const handleVMMoveToBottom = () => {
+        if (selectedVMs.length === 0) return;
+
+        const selectedItems = vmsWithAssignments.filter(item =>
+            selectedVMs.includes(item.id as string | number)
+        );
+
+        const remainingItems = vmsWithAssignments.filter(item =>
+            !selectedVMs.includes(item.id as string | number)
+        );
+
+        setVmsWithAssignments([...remainingItems, ...selectedItems]);
+    };
 
     const handleCloseMaasConfig = () => {
         setMaasConfigDialogOpen(false);
@@ -751,8 +828,8 @@ export default function RollingMigrationFormDrawer({
             const parts = sourceCluster.split(":");
             const credName = parts[0];
 
-            const sourceDataItem = sourceData.find(item => item.credName === credName);
-            const clusterObj = sourceDataItem?.clusters.find(cluster =>
+            const sourceItem = sourceData.find(item => item.credName === credName);
+            const clusterObj = sourceItem?.clusters.find(cluster =>
                 cluster.id === sourceCluster
             );
             const clusterName = clusterObj?.name || "";
@@ -798,135 +875,6 @@ export default function RollingMigrationFormDrawer({
         } finally {
             setSubmitting(false);
         }
-    };
-
-    const handleVMMoveUp = () => {
-        if (selectedVMs.length === 0) return;
-
-        const newOrderedVMs = [...vmsWithAssignments];
-        const indices = findItemIndices(newOrderedVMs, selectedVMs);
-
-        for (const index of indices) {
-            if (index > 0) {
-                [newOrderedVMs[index - 1], newOrderedVMs[index]] =
-                    [newOrderedVMs[index], newOrderedVMs[index - 1]];
-            }
-        }
-
-        setVmsWithAssignments(newOrderedVMs);
-    };
-
-    const handleVMMoveDown = () => {
-        if (selectedVMs.length === 0) return;
-
-        const newOrderedVMs = [...vmsWithAssignments];
-        const indices = findItemIndices(newOrderedVMs, selectedVMs);
-
-        for (let i = indices.length - 1; i >= 0; i--) {
-            const index = indices[i];
-            if (index < newOrderedVMs.length - 1) {
-                [newOrderedVMs[index], newOrderedVMs[index + 1]] =
-                    [newOrderedVMs[index + 1], newOrderedVMs[index]];
-            }
-        }
-
-        setVmsWithAssignments(newOrderedVMs);
-    };
-
-    const handleVMMoveToTop = () => {
-        if (selectedVMs.length === 0) return;
-
-        const selectedItems = vmsWithAssignments.filter(item =>
-            selectedVMs.includes(item.id as string | number)
-        );
-
-        const remainingItems = vmsWithAssignments.filter(item =>
-            !selectedVMs.includes(item.id as string | number)
-        );
-
-        setVmsWithAssignments([...selectedItems, ...remainingItems]);
-    };
-
-    const handleVMMoveToBottom = () => {
-        if (selectedVMs.length === 0) return;
-
-        const selectedItems = vmsWithAssignments.filter(item =>
-            selectedVMs.includes(item.id as string | number)
-        );
-
-        const remainingItems = vmsWithAssignments.filter(item =>
-            !selectedVMs.includes(item.id as string | number)
-        );
-
-        setVmsWithAssignments([...remainingItems, ...selectedItems]);
-    };
-
-    const handleOpenSGDialog = () => {
-        if (selectedVMs.length === 0) return;
-        setSgDialogOpen(true);
-    };
-
-    const handleCloseSGDialog = () => {
-        setSgDialogOpen(false);
-        setSelectedSG("");
-    };
-
-    const handleSGChange = (event) => {
-        setSelectedSG(event.target.value);
-    };
-
-    const handleApplySG = () => {
-        if (!selectedSG) {
-            handleCloseSGDialog();
-            return;
-        }
-
-        const updatedVMs = vmsWithAssignments.map(vm => {
-            if (selectedVMs.includes(vm.id)) {
-                return {
-                    ...vm,
-                    sg: selectedSG
-                };
-            }
-            return vm;
-        });
-
-        setVmsWithAssignments(updatedVMs);
-        handleCloseSGDialog();
-    };
-
-    const handleOpenTenantDialog = () => {
-        if (selectedVMs.length === 0) return;
-        setTenantDialogOpen(true);
-    };
-
-    const handleCloseTenantDialog = () => {
-        setTenantDialogOpen(false);
-        setSelectedTenant("");
-    };
-
-    const handleTenantChange = (event) => {
-        setSelectedTenant(event.target.value);
-    };
-
-    const handleApplyTenant = () => {
-        if (!selectedTenant) {
-            handleCloseTenantDialog();
-            return;
-        }
-
-        const updatedVMs = vmsWithAssignments.map(vm => {
-            if (selectedVMs.includes(vm.id)) {
-                return {
-                    ...vm,
-                    tenant: selectedTenant
-                };
-            }
-            return vm;
-        });
-
-        setVmsWithAssignments(updatedVMs);
-        handleCloseTenantDialog();
     };
 
     const handleClose = () => {
@@ -1004,9 +952,13 @@ export default function RollingMigrationFormDrawer({
                                                 if (!selected) return <em>Select Cluster</em>;
                                                 const parts = selected.split(":");
                                                 const credName = parts[0];
-                                                const sourceDataItem = sourceData.find(item => item.credName === credName);
-                                                const cluster = sourceDataItem?.clusters.find(c => c.id === selected);
-                                                return `${sourceDataItem?.credName} - ${sourceDataItem?.datacenter || ""} - ${cluster?.name || ""}`;
+
+                                                // Find the vcenterName for this credential
+                                                const sourceItem = sourceData.find(item => item.credName === credName);
+                                                const vcenterName = sourceItem?.vcenterName || credName;
+
+                                                const cluster = sourceItem?.clusters.find(c => c.id === selected);
+                                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.name || ""}`;
                                             }}
                                             MenuProps={{
                                                 PaperProps: {
@@ -1025,23 +977,30 @@ export default function RollingMigrationFormDrawer({
                                             ) : (
                                                 Object.entries(
                                                     sourceData.reduce((acc, item) => {
-                                                        if (!acc[item.credName]) {
-                                                            acc[item.credName] = {};
+                                                        if (!acc[item.vcenterName]) {
+                                                            acc[item.vcenterName] = {
+                                                                credName: item.credName,
+                                                                datacenters: {}
+                                                            };
                                                         }
-                                                        acc[item.credName][item.datacenter] = item.clusters;
+                                                        acc[item.vcenterName].datacenters[item.datacenter] = item.clusters;
                                                         return acc;
-                                                    }, {} as Record<string, Record<string, { id: string; name: string }[]>>)
-                                                ).map(([credName, datacenters]) => [
-                                                    <ListSubheader key={credName} sx={{ fontWeight: 700 }}>
+                                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string }[]> }>)
+                                                ).map(([vcenterName, { credName, datacenters }]) => [
+                                                    <ListSubheader key={vcenterName} sx={{ fontWeight: 700 }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                            <VpnKeyIcon sx={{ mr: 1 }} />
-                                                            {credName}
+                                                            <VMwareLogoImg src={vmwareLogo} alt="VMware" />
+                                                            {vcenterName}
                                                         </Box>
                                                     </ListSubheader>,
                                                     ...Object.entries(datacenters).map(([datacenterName, clusters]) => [
                                                         <ListSubheader key={`${credName}-${datacenterName}`} sx={{ fontWeight: 600, pl: 4 }}>
                                                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                <DatacenterIcon sx={{ mr: 1 }} fontSize="small" />
+                                                                <CdsIconWrapper>
+                                                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                                    {/* @ts-ignore */}
+                                                                    <cds-icon shape="building" size="md" solid ></cds-icon>
+                                                                </CdsIconWrapper>
                                                                 {datacenterName}
                                                             </Box>
                                                         </ListSubheader>,
@@ -1052,7 +1011,11 @@ export default function RollingMigrationFormDrawer({
                                                                 sx={{ pl: 7 }}
                                                             >
                                                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <ClusterIcon sx={{ mr: 1 }} fontSize="small" />
+                                                                    <CdsIconWrapper>
+                                                                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                                        {/* @ts-ignore */}
+                                                                        <cds-icon shape="cluster" size="md" ></cds-icon>
+                                                                    </CdsIconWrapper>
                                                                     {cluster.name}
                                                                 </Box>
                                                             </MenuItem>
@@ -1182,8 +1145,6 @@ export default function RollingMigrationFormDrawer({
                                             <CustomToolbarWithActions
                                                 {...props}
                                                 rowSelectionModel={selectedVMs}
-                                                onAssignSG={handleOpenSGDialog}
-                                                onAssignTenant={handleOpenTenantDialog}
                                                 onMoveUp={handleVMMoveUp}
                                                 onMoveDown={handleVMMoveDown}
                                                 onMoveToTop={handleVMMoveToTop}
@@ -1247,94 +1208,6 @@ export default function RollingMigrationFormDrawer({
                 disableSubmit={isSubmitDisabled}
                 submitting={submitting}
             />
-
-            <Dialog
-                open={sgDialogOpen}
-                onClose={handleCloseSGDialog}
-                fullWidth
-                maxWidth="sm"
-            >
-                <DialogTitle>
-                    Assign Security Group to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ my: 2 }}>
-                        <FormLabel>Select Security Group</FormLabel>
-                        <Select
-                            fullWidth
-                            value={selectedSG}
-                            onChange={handleSGChange}
-                            size="small"
-                            sx={{ mt: 1 }}
-                            displayEmpty
-                        >
-                            <MenuItem value="">
-                                <em>Select a security group</em>
-                            </MenuItem>
-                            {mockSecurityGroups.map((sg) => (
-                                <MenuItem key={sg.id} value={sg.id}>
-                                    {sg.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseSGDialog}>Cancel</Button>
-                    <Button
-                        onClick={handleApplySG}
-                        variant="contained"
-                        color="primary"
-                        disabled={!selectedSG}
-                    >
-                        Apply to selected VMs
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog
-                open={tenantDialogOpen}
-                onClose={handleCloseTenantDialog}
-                fullWidth
-                maxWidth="sm"
-            >
-                <DialogTitle>
-                    Assign Tenant to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ my: 2 }}>
-                        <FormLabel>Select Tenant</FormLabel>
-                        <Select
-                            fullWidth
-                            value={selectedTenant}
-                            onChange={handleTenantChange}
-                            size="small"
-                            sx={{ mt: 1 }}
-                            displayEmpty
-                        >
-                            <MenuItem value="">
-                                <em>Select a tenant</em>
-                            </MenuItem>
-                            {mockTenants.map((tenant) => (
-                                <MenuItem key={tenant.id} value={tenant.id}>
-                                    {tenant.name}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseTenantDialog}>Cancel</Button>
-                    <Button
-                        onClick={handleApplyTenant}
-                        variant="contained"
-                        color="primary"
-                        disabled={!selectedTenant}
-                    >
-                        Apply to selected VMs
-                    </Button>
-                </DialogActions>
-            </Dialog>
 
             <MaasConfigDialog
                 open={maasConfigDialogOpen}
