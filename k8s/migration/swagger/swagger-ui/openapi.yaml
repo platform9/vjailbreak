@@ -1,0 +1,1041 @@
+openapi: 3.0.0
+info:
+  title: VJailbreak Custom APIs
+  version: v1
+paths:
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrationplans:
+    get:
+      summary: List MigrationPlan
+      operationId: listMigrationPlan
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create MigrationPlan
+      operationId: createMigrationPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/migrationplans"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrationplans/{name}:
+    get:
+      summary: Get MigrationPlan
+      operationId: getMigrationPlan
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete MigrationPlan
+      operationId: deleteMigrationPlan
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrations:
+    get:
+      summary: List Migration
+      operationId: listMigration
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create Migration
+      operationId: createMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/migrations"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrations/{name}:
+    get:
+      summary: Get Migration
+      operationId: getMigration
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete Migration
+      operationId: deleteMigration
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrationtemplates:
+    get:
+      summary: List MigrationTemplate
+      operationId: listMigrationTemplate
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create MigrationTemplate
+      operationId: createMigrationTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/migrationtemplates"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/migrationtemplates/{name}:
+    get:
+      summary: Get MigrationTemplate
+      operationId: getMigrationTemplate
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete MigrationTemplate
+      operationId: deleteMigrationTemplate
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/networkmappings:
+    get:
+      summary: List NetworkMapping
+      operationId: listNetworkMapping
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create NetworkMapping
+      operationId: createNetworkMapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/networkmappings"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/networkmappings/{name}:
+    get:
+      summary: Get NetworkMapping
+      operationId: getNetworkMapping
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete NetworkMapping
+      operationId: deleteNetworkMapping
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/openstackcreds:
+    get:
+      summary: List OpenstackCreds
+      operationId: listOpenstackCreds
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create OpenstackCreds
+      operationId: createOpenstackCreds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/openstackcreds"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/openstackcreds/{name}:
+    get:
+      summary: Get OpenstackCreds
+      operationId: getOpenstackCreds
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete OpenstackCreds
+      operationId: deleteOpenstackCreds
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/storagemappings:
+    get:
+      summary: List StorageMapping
+      operationId: listStorageMapping
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create StorageMapping
+      operationId: createStorageMapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/storagemappings"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/storagemappings/{name}:
+    get:
+      summary: Get StorageMapping
+      operationId: getStorageMapping
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete StorageMapping
+      operationId: deleteStorageMapping
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vjailbreaknodes:
+    get:
+      summary: List VjailbreakNode
+      operationId: listVjailbreakNode
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create VjailbreakNode
+      operationId: createVjailbreakNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/vjailbreaknodes"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vjailbreaknodes/{name}:
+    get:
+      summary: Get VjailbreakNode
+      operationId: getVjailbreakNode
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete VjailbreakNode
+      operationId: deleteVjailbreakNode
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vmwarecreds:
+    get:
+      summary: List VMwareCreds
+      operationId: listVMwareCreds
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create VMwareCreds
+      operationId: createVMwareCreds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/vmwarecreds"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vmwarecreds/{name}:
+    get:
+      summary: Get VMwareCreds
+      operationId: getVMwareCreds
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete VMwareCreds
+      operationId: deleteVMwareCreds
+      responses:
+        '204':
+          description: Deleted
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vmwaremachines:
+    get:
+      summary: List VMwareMachine
+      operationId: listVMwareMachine
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: Create VMwareMachine
+      operationId: createVMwareMachine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/vmwaremachines"
+      responses:
+        '201':
+          description: Created
+
+  /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/{namespace}/vmwaremachines/{name}:
+    get:
+      summary: Get VMwareMachine
+      operationId: getVMwareMachine
+      responses:
+        '200':
+          description: Found
+    delete:
+      summary: Delete VMwareMachine
+      operationId: deleteVMwareMachine
+      responses:
+        '204':
+          description: Deleted
+
+components:
+  schemas:
+    migrationplans:
+      description: MigrationPlan is the Schema for the migrationplans API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: MigrationPlanSpec defines the desired state of MigrationPlan
+          properties:
+            advancedOptions:
+              properties:
+                granularNetworks:
+                  items:
+                    type: string
+                  type: array
+                granularPorts:
+                  items:
+                    type: string
+                  type: array
+                granularVolumeTypes:
+                  items:
+                    type: string
+                  type: array
+              type: object
+            firstBootScript:
+              default: echo "Add your startup script here!"
+              type: string
+            migrationStrategy:
+              properties:
+                adminInitiatedCutOver:
+                  default: false
+                  type: boolean
+                dataCopyStart:
+                  format: date-time
+                  type: string
+                healthCheckPort:
+                  default: "443"
+                  type: string
+                performHealthChecks:
+                  default: false
+                  type: boolean
+                type:
+                  enum:
+                    - hot
+                    - cold
+                  type: string
+                vmCutoverEnd:
+                  format: date-time
+                  type: string
+                vmCutoverStart:
+                  format: date-time
+                  type: string
+              required:
+                - type
+              type: object
+            migrationTemplate:
+              type: string
+            retry:
+              type: boolean
+            virtualMachines:
+              items:
+                items:
+                  type: string
+                type: array
+              type: array
+          required:
+            - migrationStrategy
+            - migrationTemplate
+            - virtualMachines
+          type: object
+        status:
+          description: MigrationPlanStatus defines the observed state of MigrationPlan
+          properties:
+            migrationMessage:
+              type: string
+            migrationStatus:
+              type: string
+          required:
+            - migrationMessage
+            - migrationStatus
+          type: object
+      type: object
+    migrations:
+      description: Migration is the Schema for the migrations API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: Spec defines the desired state of Migration
+          properties:
+            initiateCutover:
+              description: InitiateCutover is the flag to initiate cutover
+              type: boolean
+            migrationPlan:
+              description: MigrationPlan is the name of the migration plan
+              type: string
+            podRef:
+              description: PodRef is the name of the pod
+              type: string
+            vmName:
+              description: VMName is the name of the VM getting migrated from VMWare to Openstack
+              type: string
+          required:
+            - initiateCutover
+            - migrationPlan
+            - podRef
+            - vmName
+          type: object
+        status:
+          description: Status defines the observed state of Migration
+          properties:
+            agentName:
+              description: AgentName is the name of the agent where migration is running
+              type: string
+            conditions:
+              description: Conditions is the list of conditions of the migration object pod
+              items:
+                description: PodCondition contains details for the current condition of this pod.
+                properties:
+                  lastProbeTime:
+                    description: Last time we probed the condition.
+                    format: date-time
+                    type: string
+                  lastTransitionTime:
+                    description: Last time the condition transitioned from one status to another.
+                    format: date-time
+                    type: string
+                  message:
+                    description: Human-readable message indicating details about last transition.
+                    type: string
+                  reason:
+                    description: Unique, one-word, CamelCase reason for the condition's last transition.
+                    type: string
+                  status:
+                    description: |-
+                      Status is the status of the condition.
+                      Can be True, False, Unknown.
+                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
+                    type: string
+                  type:
+                    description: |-
+                      Type is the type of the condition.
+                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
+                    type: string
+                required:
+                  - status
+                  - type
+                type: object
+              type: array
+            phase:
+              description: Phase is the current phase of the migration
+              type: string
+          required:
+            - phase
+          type: object
+      type: object
+    migrationtemplates:
+      description: MigrationTemplate is the Schema for the migrationtemplates API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: MigrationTemplateSpec defines the desired state of MigrationTemplate
+          properties:
+            destination:
+              description: MigrationTemplateDestination defines the destination details for the migrationtemplate
+              properties:
+                openstackRef:
+                  type: string
+              required:
+                - openstackRef
+              type: object
+            networkMapping:
+              type: string
+            osType:
+              enum:
+                - windows
+                - linux
+              type: string
+            source:
+              description: MigrationTemplateSource defines the source details for the migrationtemplate
+              properties:
+                vmwareRef:
+                  type: string
+              required:
+                - vmwareRef
+              type: object
+            storageMapping:
+              type: string
+            virtioWinDriver:
+              type: string
+          required:
+            - destination
+            - networkMapping
+            - source
+            - storageMapping
+          type: object
+      type: object
+    networkmappings:
+      description: NetworkMapping is the Schema for the networkmappings API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: NetworkMappingSpec defines the desired state of NetworkMapping
+          properties:
+            networks:
+              description: Networks is the list of networks
+              items:
+                properties:
+                  source:
+                    type: string
+                  target:
+                    type: string
+                required:
+                  - source
+                  - target
+                type: object
+              type: array
+          required:
+            - networks
+          type: object
+        status:
+          description: NetworkMappingStatus defines the observed state of NetworkMapping
+          properties:
+            networkMappingValidationMessage:
+              type: string
+            networkMappingValidationStatus:
+              type: string
+          type: object
+      type: object
+    openstackcreds:
+      description: OpenstackCreds is the Schema for the openstackcreds API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: OpenstackCredsSpec defines the desired state of OpenstackCreds
+          properties:
+            flavors:
+              description: Flavors is the list of available flavors in openstack
+              items:
+                description: |-
+                  Flavor represent (virtual) hardware configurations for server resources
+                  in a region.
+                properties:
+                  OS-FLV-EXT-DATA:ephemeral:
+                    description: Ephemeral is the amount of ephemeral disk space, measured in GB.
+                    type: integer
+                  description:
+                    description: |-
+                      Description is a free form description of the flavor. Limited to
+                      65535 characters in length. Only printable characters are allowed.
+                      New in version 2.55
+                    type: string
+                  disk:
+                    description: Disk is the amount of root disk, measured in GB.
+                    type: integer
+                  id:
+                    description: ID is the flavor's unique ID.
+                    type: string
+                  name:
+                    description: Name is the name of the flavor.
+                    type: string
+                  os-flavor-access:is_public:
+                    description: IsPublic indicates whether the flavor is public.
+                    type: boolean
+                  ram:
+                    description: RAM is the amount of memory, measured in MB.
+                    type: integer
+                  rxtx_factor:
+                    description: RxTxFactor describes bandwidth alterations of the flavor.
+                    type: number
+                  vcpus:
+                    description: VCPUs indicates how many (virtual) CPUs are available for this flavor.
+                    type: integer
+                required:
+                  - OS-FLV-EXT-DATA:ephemeral
+                  - description
+                  - disk
+                  - id
+                  - name
+                  - os-flavor-access:is_public
+                  - ram
+                  - rxtx_factor
+                  - vcpus
+                type: object
+              type: array
+            secretRef:
+              description: SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: |-
+                    If referring to a piece of an object instead of an entire object, this string
+                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]" (container with
+                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                    referencing a part of an object.
+                  type: string
+                kind:
+                  description: |-
+                    Kind of the referent.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                  type: string
+                name:
+                  description: |-
+                    Name of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  type: string
+                namespace:
+                  description: |-
+                    Namespace of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                  type: string
+                resourceVersion:
+                  description: |-
+                    Specific resourceVersion to which this reference is made, if any.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                  type: string
+                uid:
+                  description: |-
+                    UID of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                  type: string
+              type: object
+              x-kubernetes-map-type: atomic
+          type: object
+        status:
+          description: OpenstackCredsStatus defines the observed state of OpenstackCreds
+          properties:
+            openstack:
+              description: Openstack is the Openstack configuration for the openstackcreds
+              properties:
+                networks:
+                  items:
+                    type: string
+                  type: array
+                volumeTypes:
+                  items:
+                    type: string
+                  type: array
+              type: object
+            openstackValidationMessage:
+              type: string
+            openstackValidationStatus:
+              type: string
+          type: object
+      type: object
+    storagemappings:
+      description: StorageMapping is the Schema for the storagemappings API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: StorageMappingSpec defines the desired state of StorageMapping
+          properties:
+            storages:
+              description: Storages is a list of storage mappings
+              items:
+                properties:
+                  source:
+                    type: string
+                  target:
+                    type: string
+                required:
+                  - source
+                  - target
+                type: object
+              type: array
+          required:
+            - storages
+          type: object
+        status:
+          description: StorageMappingStatus defines the observed state of StorageMapping
+          properties:
+            storageMappingValidationMessage:
+              type: string
+            storageMappingValidationStatus:
+              type: string
+          type: object
+      type: object
+    vjailbreaknodes:
+      description: VjailbreakNode is the Schema for the vjailbreaknodes API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: Spec defines the desired state of VjailbreakNode
+          properties:
+            nodeRole:
+              description: NodeRole is the role assigned to the node
+              type: string
+            openstackCreds:
+              description: OpenstackCreds is the credentials for Openstack Environment
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: |-
+                    If referring to a piece of an object instead of an entire object, this string
+                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]" (container with
+                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                    referencing a part of an object.
+                  type: string
+                kind:
+                  description: |-
+                    Kind of the referent.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                  type: string
+                name:
+                  description: |-
+                    Name of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  type: string
+                namespace:
+                  description: |-
+                    Namespace of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                  type: string
+                resourceVersion:
+                  description: |-
+                    Specific resourceVersion to which this reference is made, if any.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                  type: string
+                uid:
+                  description: |-
+                    UID of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                  type: string
+              type: object
+              x-kubernetes-map-type: atomic
+            openstackFlavorID:
+              description: OpenstackFlavorID is the flavor of the VM
+              type: string
+            openstackImageID:
+              description: OpenstackImageID is the image of the VM
+              type: string
+          required:
+            - nodeRole
+            - openstackCreds
+            - openstackFlavorID
+            - openstackImageID
+          type: object
+        status:
+          description: Status defines the observed state of VjailbreakNode
+          properties:
+            activeMigrations:
+              description: ActiveMigrations is the list of active migrations happening on the node
+              items:
+                type: string
+              type: array
+            openstackUUID:
+              description: OpenstackUUID is the UUID of the VM in OpenStack
+              type: string
+            phase:
+              description: Phase is the current phase of the node
+              type: string
+            vmIP:
+              description: VMIP is the IP address of the VM
+              type: string
+          required:
+            - vmIP
+          type: object
+      type: object
+    vmwarecreds:
+      description: VMwareCreds is the Schema for the vmwarecreds API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: VMwareCredsSpec defines the desired state of VMwareCreds
+          properties:
+            datacenter:
+              type: string
+            secretRef:
+              description: ObjectReference contains enough information to let you inspect or modify the referred object.
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: |-
+                    If referring to a piece of an object instead of an entire object, this string
+                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]" (container with
+                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                    referencing a part of an object.
+                  type: string
+                kind:
+                  description: |-
+                    Kind of the referent.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                  type: string
+                name:
+                  description: |-
+                    Name of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  type: string
+                namespace:
+                  description: |-
+                    Namespace of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                  type: string
+                resourceVersion:
+                  description: |-
+                    Specific resourceVersion to which this reference is made, if any.
+                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                  type: string
+                uid:
+                  description: |-
+                    UID of the referent.
+                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                  type: string
+              type: object
+              x-kubernetes-map-type: atomic
+          required:
+            - datacenter
+          type: object
+        status:
+          description: VMwareCredsStatus defines the observed state of VMwareCreds
+          properties:
+            vmwareValidationMessage:
+              type: string
+            vmwareValidationStatus:
+              type: string
+          type: object
+      type: object
+    vmwaremachines:
+      description: VMwareMachine is the Schema for the vmwaremachines API
+      properties:
+        apiVersion:
+          description: |-
+            APIVersion defines the versioned schema of this representation of an object.
+            Servers should convert recognized schemas to the latest internal value, and
+            may reject unrecognized values.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+          type: string
+        kind:
+          description: |-
+            Kind is a string value representing the REST resource this object represents.
+            Servers may infer this from the endpoint the client submits requests to.
+            Cannot be updated.
+            In CamelCase.
+            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: VMwareMachineSpec defines the desired state of VMwareMachine
+          properties:
+            targetFlavorId:
+              description: TargetFlavorId is the flavor to be used to create the target VM on openstack
+              type: string
+            vms:
+              description: VMInfo is the info of the VMs in the VMwareMachine
+              properties:
+                cpu:
+                  type: integer
+                datastores:
+                  items:
+                    type: string
+                  type: array
+                disks:
+                  items:
+                    type: string
+                  type: array
+                ipAddress:
+                  type: string
+                memory:
+                  type: integer
+                name:
+                  type: string
+                networks:
+                  items:
+                    type: string
+                  type: array
+                osType:
+                  type: string
+                vmState:
+                  type: string
+              required:
+                - name
+              type: object
+          type: object
+        status:
+          description: VMwareMachineStatus defines the observed state of VMwareMachine
+          properties:
+            migrated:
+              default: false
+              description: Migrated flag to indicate if the VMs have been migrated
+              type: boolean
+            powerState:
+              description: PowerState is the state of the VMs in the VMware
+              type: string
+          required:
+            - migrated
+          type: object
+      type: object
