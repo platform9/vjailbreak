@@ -126,7 +126,7 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeFailed,
 			corev1.ConditionTrue,
 			constants.MigrationReason,
-			"Migration failed with reason: "+eventList.Items[i].Message,
+			eventList.Items[i].Message,
 			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
