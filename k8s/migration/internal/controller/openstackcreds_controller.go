@@ -176,7 +176,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 			// Now label the vmwaremachine object with the flavor name
 			if vmwaremachine.Labels == nil {
-				vmwaremachine.Labels[scope.OpenstackCreds.Name] = ""
+				vmwaremachine.Labels[scope.OpenstackCreds.Name] = "NOT_FOUND"
 			}
 			vmwaremachine.Labels[scope.OpenstackCreds.Name] = flavor.Name
 			if err := r.Client.Update(ctx, &vmwaremachine); err != nil {
