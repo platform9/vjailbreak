@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -176,21 +175,19 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
 			}
 			// Now label the vmwaremachine object with the flavor name
-			if vmwaremachine.Labels == nil {
-				vmwaremachine.Labels = make(map[string]string)
-			}
 			if flavor == nil {
-				vmwaremachine.Labels[scope.OpenstackCreds.Name] = "NOT_FOUND"
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, &vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+				}
 			} else {
-				vmwaremachine.Labels[scope.OpenstackCreds.Name] = flavor.Name
-			}
-			if err := r.Client.Update(ctx, &vmwaremachine); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, &vmwaremachine, scope.OpenstackCreds.Name, flavor.Name); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+				}
 			}
 		}
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: constants.OpenstackCredsRequeueAfter}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,

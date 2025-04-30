@@ -38,8 +38,9 @@ const (
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 	ENVFileLocation      = "/etc/pf9/k3s.env"
 
-	MigrationTriggerDelay   = 5 * time.Second
-	VMwareCredsRequeueAfter = 1 * time.Minute
+	MigrationTriggerDelay      = 5 * time.Second
+	VMwareCredsRequeueAfter    = 1 * time.Minute
+	OpenstackCredsRequeueAfter = 1 * time.Minute
 
 	MigrationReason = "Migration"
 	StartCutOverYes = "yes"
