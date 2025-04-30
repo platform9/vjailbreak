@@ -33,20 +33,21 @@ func main() {
 
 	eventReporterChan := make(chan string)
 	podLabelWatcherChan := make(chan string)
+	ackChan := make(chan struct{})
+
 	defer close(eventReporterChan)
 	defer close(podLabelWatcherChan)
 
 	// Start reporter goroutines
-	eventReporter.UpdatePodEvents(ctx, eventReporterChan)
+	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
 	eventReporter.WatchPodLabels(ctx, podLabelWatcherChan)
 
 	// Helper function to report and handle errors
 	handleError := func(msg string) {
 		if reporter.IsRunningInPod() {
 			eventReporterChan <- msg
-			//  Wait for the reporter to process the message
-			// TODO: Suhas find a better way to do this
-			time.Sleep(2 * time.Second)
+			// Wait for the reporter to process the message
+			<-ackChan
 		}
 		log.Print(msg)
 		os.Exit(1)

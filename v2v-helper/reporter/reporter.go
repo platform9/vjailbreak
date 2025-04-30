@@ -187,7 +187,7 @@ func (r *Reporter) UpdateProgress(progress string) error {
 	return nil
 }
 
-func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
+func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackChan chan<- struct{}) {
 	go func() {
 		for {
 			select {
@@ -203,6 +203,13 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string) {
 					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						log.Println(err)
 					}
+				}
+				// Send acknowledgment that the message has been processed
+				select {
+				case ackChan <- struct{}{}:
+					// Acknowledgment sent successfully
+				default:
+					// No one expecting ack
 				}
 
 			case <-ctx.Done():
