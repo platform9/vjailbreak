@@ -171,10 +171,13 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 			// Now get the closest flavor based on the cpu and memory
 			flavor, err := utils.GetClosestFlavour(context.TODO(), cpu, memory, computeClient.ComputeClient)
-			if err != nil {
+			if err != nil && strings.Contains(err.Error(), "no suitable flavor found") {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
 			}
 			// Now label the vmwaremachine object with the flavor name
+			if vmwaremachine.Labels == nil {
+				vmwaremachine.Labels[scope.OpenstackCreds.Name] = ""
+			}
 			vmwaremachine.Labels[scope.OpenstackCreds.Name] = flavor.Name
 			if err := r.Client.Update(ctx, &vmwaremachine); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
