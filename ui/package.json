@@ -11,6 +11,8 @@
     "docker:build": "docker build -t vjailbreak -f ./Dockerfile ."
   },
   "dependencies": {
+    "@bugsnag/js": "^8.2.0",
+    "@bugsnag/plugin-react": "^8.2.0",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "@fontsource/roboto": "^5.1.0",

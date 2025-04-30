@@ -1,5 +1,8 @@
 export const defaultNamespace = "migration-system"
 
+// Bugsnag Configuration
+export const BUGSNAG_API_KEY = process.env.BUGSNAG_API_KEY || '25ac6ab51e4d3f11b226f56008145003'
+
 // Polling intervals
 export const THREE_SECONDS = 1000 * 3
 export const FIVE_SECONDS = 1000 * 5
