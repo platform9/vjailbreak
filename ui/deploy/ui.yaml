@@ -103,3 +103,60 @@ spec:
             name: grafana
             port:
               number: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swagger-ui
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swagger-ui
+  template:
+    metadata:
+      labels:
+        app: swagger-ui
+    spec:
+      containers:
+        - name: swagger-ui
+          image: swaggerapi/swagger-ui:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SWAGGER_JSON
+              value: /usr/share/nginx/html/openapi.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swagger-ui-service
+  namespace: migration-system
+spec:
+  selector:
+    app: swagger-ui
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swagger-ui-ingress
+  namespace: migration-system
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+        - path: /swagger
+          pathType: Prefix
+          backend:
+            service:
+              name: swagger-ui-service
+              port:
+                number: 80

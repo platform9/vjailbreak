@@ -39,3 +39,9 @@ EXPOSE 3000
 
 # Start Nginx server
 CMD ["/usr/local/bin/start.sh"]
+
+# Add Swagger UI support
+FROM swaggerapi/swagger-ui as swagger
+
+COPY swagger-ui/openapi.yaml /usr/share/nginx/html/openapi.yaml
+ENV SWAGGER_JSON=/usr/share/nginx/html/openapi.yaml

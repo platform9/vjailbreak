@@ -25,15 +25,33 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
         color="default"
         sx={{
           backgroundColor: mode === 'dark'
-            ? `rgba(30, 30, 30, 0.9)`
-            : `rgba(255, 255, 255, 0.9)`,
+              ? `rgba(30, 30, 30, 0.9)`
+              : `rgba(255, 255, 255, 0.9)`,
         }}
         elevation={1}
       >
         <Toolbar>
           <Typography variant="h3">vJailbreak</Typography>
-          <Box sx={{ display: "flex", gap: 2, marginLeft: "auto", alignItems: "center" }}>
+          <Box
+            sx={{
+              display: "flex",
+              gap: 2,
+              marginLeft: "auto",
+              alignItems: "center",
+            }}
+          >
             <ThemeToggle />
+            <Button
+              size="large"
+              onClick={() =>
+                window.open(`https://${window.location.host}/swagger`, "_blank")
+              }
+              color="primary"
+              variant="outlined"
+            >
+              API's
+            </Button>
+
             {import.meta.env.MODE === "development" && (
               <Button
                 size="large"
@@ -64,5 +82,5 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
         </Toolbar>
       </AppBar>
     </Box>
-  )
+  );
 }
