@@ -82,5 +82,5 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
         </Toolbar>
       </AppBar>
     </Box>
-  );
+  )
 }
