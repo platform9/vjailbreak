@@ -160,7 +160,8 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		if err := r.Client.List(ctx, vmwaremachineList); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
 		}
-		for _, vmwaremachine := range vmwaremachineList.Items {
+		for i := range vmwaremachineList.Items {
+			vmwaremachine := &vmwaremachineList.Items[i]
 			// Get the cpu and memory of the vmwaremachine object
 			cpu := vmwaremachine.Spec.VMs.CPU
 			memory := vmwaremachine.Spec.VMs.Memory
@@ -176,11 +177,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 			// Now label the vmwaremachine object with the flavor name
 			if flavor == nil {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, &vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
 				}
 			} else {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, &vmwaremachine, scope.OpenstackCreds.Name, flavor.Name); err != nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.Name); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
 				}
 			}
