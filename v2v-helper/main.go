@@ -28,7 +28,7 @@ func main() {
 	eventReporter, err := reporter.NewReporter()
 	if err != nil {
 		log.Printf("Failed to create reporter: %v", err)
-		os.Exit(1)
+		return
 	}
 
 	eventReporterChan := make(chan string)
@@ -50,7 +50,7 @@ func main() {
 			<-ackChan
 		}
 		log.Print(msg)
-		os.Exit(1)
+		return
 	}
 
 	client, err := utils.GetInclusterClient()
@@ -148,4 +148,5 @@ func main() {
 	}
 
 	log.Println("Migration completed successfully")
+	return
 }

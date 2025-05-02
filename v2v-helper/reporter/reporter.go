@@ -204,7 +204,8 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackCha
 						log.Println(err)
 					}
 				}
-				// Send acknowledgment that the message has been processed
+				// Sending acknowledgment that the message has been processed
+				// If no one is expecting the ack, it will be dropped
 				select {
 				case ackChan <- struct{}{}:
 					// Acknowledgment sent successfully
