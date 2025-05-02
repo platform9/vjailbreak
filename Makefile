@@ -68,9 +68,3 @@ lint-check:
 build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
-
-.PHONY: update-api-spec
-update-api-spec:
-	@echo "Generating updated OpenAPI spec..."
-	cp ./swagger-ui/openapi.yaml ./swagger-ui/openapi.yaml
-	@echo "OpenAPI spec updated in swagger-ui/"

@@ -203,3 +203,8 @@ GOBIN=$(LOCALBIN) go install $${package} ;\
 mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
+
+## Generate openapi.yaml from CRD bases
+.PHONY: generate-openapi
+generate-openapi: 
+	cd swagger/swagger-ui && bash generate_openapi.sh

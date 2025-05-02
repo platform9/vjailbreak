@@ -1,3 +1,9 @@
+FROM golang:1.23 AS specgen
+WORKDIR /specgen
+COPY ../k8s/migration/swagger ./swagger
+RUN cd swagger && go run main.go > openapi.yaml
+
+
 # Use an official Node.js runtime as the base image
 FROM node:18 AS builder
 
@@ -25,6 +31,10 @@ FROM nginx:1.24-alpine3.17-slim
 # Copy built assets from the build stage
 COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
 
+# Copy Swagger UI static files and spec
+COPY --from=specgen /specgen/swagger/swagger-ui /usr/share/nginx/html/swagger
+COPY --from=specgen /specgen/swagger/openapi.yaml /usr/share/nginx/html/swagger/openapi.yaml
+
 # Copy the public directory
 COPY public /usr/share/nginx/html
 
@@ -39,9 +49,3 @@ EXPOSE 3000
 
 # Start Nginx server
 CMD ["/usr/local/bin/start.sh"]
-
-# Add Swagger UI support
-FROM swaggerapi/swagger-ui as swagger
-
-COPY swagger-ui/openapi.yaml /usr/share/nginx/html/openapi.yaml
-ENV SWAGGER_JSON=/usr/share/nginx/html/openapi.yaml
