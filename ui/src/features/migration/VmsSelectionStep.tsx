@@ -353,9 +353,7 @@ export default function VmsSelectionStep({
   };
 
   const isRowSelectable = (params) => {
-    if (params.row.isMigrated) return false;
-    if (params.row.flavorNotFound) return false;
-    
+    // Allow selection even if flavorNotFound, just show warning 
     // For the new API, we don't have IP address info, so we'll just use vmState
     return params.row.vmState === "running";
   };
