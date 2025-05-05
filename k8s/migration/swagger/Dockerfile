@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY swagger-ui ./swagger-ui
 COPY main.go .
-COPY openapi.yaml .
+COPY swagger-ui/openapi.yaml .  
 RUN go build -o swagger-server main.go
 
 
