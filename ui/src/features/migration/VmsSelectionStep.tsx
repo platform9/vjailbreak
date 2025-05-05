@@ -44,7 +44,6 @@ const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   "& .warning-row": {
     color: "#856404",
     fontWeight: "bold",
-    cursor: "auto",
   }
 }));
 
