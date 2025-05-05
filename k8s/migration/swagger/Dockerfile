@@ -1,10 +1,21 @@
-# Use a tiny web server base image
-FROM nginx:alpine
+FROM golang:1.20-alpine as builder
 
-# Copy generated Swagger UI files
-COPY swagger-ui/ /usr/share/nginx/html
+WORKDIR /app
 
-# Expose port (optional if using ingress)
-EXPOSE 80
+COPY swagger-ui ./swagger-ui
+COPY main.go .
+COPY openapi.yaml .
+RUN go build -o swagger-server main.go
 
-# nginx will serve /index.html by default
+
+FROM alpine:latest
+
+WORKDIR /root/
+
+COPY --from=builder /app/swagger-ui ./swagger-ui
+COPY --from=builder /app/swagger-server .
+COPY --from=builder /app/openapi.yaml .
+
+EXPOSE 8080
+
+CMD ["./swagger-server"]

@@ -11,7 +11,7 @@ echo "Building OpenAPI document..."
 cat > "$OUTPUT_OPENAPI" <<EOF
 openapi: 3.0.0
 info:
-  title: VJailbreak Custom APIs
+  title: vJailbreak API's
   version: v1
 paths:
 EOF
