@@ -27,6 +27,10 @@ type LUNInfo struct {
 	DisplayName string `json:"displayName,omitempty"`
 	// OperationalState is the operational state of the disk
 	OperationalState []string `json:"operationalState,omitempty"`
+
+	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+
+	VolumeType string `json:"volumeType,omitempty"`
 }
 
 type DiskInfo struct {
@@ -43,7 +47,8 @@ type DiskInfo struct {
 type VMInfo struct {
 	Name       string     `json:"name"`
 	Datastores []string   `json:"datastores,omitempty"`
-	Disks      []DiskInfo `json:"disks,omitempty"`
+	Disks      []string   `json:"disks,omitempty"`
+	RDMDisks   []DiskInfo `json:"rdmDisks,omitempty"`
 	Networks   []string   `json:"networks,omitempty"`
 	IPAddress  string     `json:"ipAddress,omitempty"`
 	VMState    string     `json:"vmState,omitempty"`

@@ -568,8 +568,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		}
 		var datastores []string
 		var networks []string
-		//var disks []string
-		var disks []vjailbreakv1alpha1.DiskInfo
+		var disks []string
 		var ds mo.Datastore
 		var dsref types.ManagedObjectReference
 		if vmProps.Config == nil {
@@ -599,13 +598,14 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 					return nil, fmt.Errorf("failed to get datastore: %w", err)
 				}
 				datastores = AppendUnique(datastores, ds.Name)
-				disks = append(disks, diskInfo...)
+				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
 		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
 			Disks:      disks,
+			RDMDisks:   diskInfo,
 			Networks:   networks,
 			IPAddress:  vmProps.Guest.IpAddress,
 			VMState:    vmProps.Guest.GuestState,
@@ -874,4 +874,28 @@ func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine) (*
 	storageDeviceInfo := hostSystemMo.StorageDeviceInfo
 
 	return storageDeviceInfo, nil
+}
+
+// GetVMwareMachine retrieves the VMwareMachine CR for a given VM name
+func GetVMwareMachine(ctx context.Context, c client.Client, vmName string, namespace string) (*vjailbreakv1alpha1.VMwareMachine, error) {
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
+
+	// Convert VM name to k8s compatible name
+	sanitizedVMName, err := ConvertToK8sName(vmName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert VM name: %w", err)
+	}
+
+	// Create namespaced name for lookup
+	namespacedName := k8stypes.NamespacedName{
+		Name:      sanitizedVMName,
+		Namespace: namespace,
+	}
+
+	// Get the VMwareMachine resource
+	if err := c.Get(ctx, namespacedName, vmMachine); err != nil {
+		return nil, fmt.Errorf("failed to get VMwareMachine %s/%s: %w", namespace, sanitizedVMName, err)
+	}
+
+	return vmMachine, nil
 }

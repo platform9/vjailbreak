@@ -232,8 +232,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
-
-	vminfo, err = vmops.UpdateDiskInfo(vminfo)
+	// TODO: Add namespace
+	vminfo, err = vmops.UpdateDiskInfo(vminfo, "")
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 	}
@@ -334,7 +334,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
-		vminfo, err = vmops.UpdateDiskInfo(vminfo)
+		// TODO: add namespace
+		vminfo, err = vmops.UpdateDiskInfo(vminfo, "")
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 		}
@@ -829,6 +830,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err))
 		return errors.Wrap(err, "failed to convert disks")
 	}
+
+	// Import LUN and MigrateRDM disk
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {

@@ -5,7 +5,13 @@ package vm
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -21,7 +27,7 @@ import (
 type VMOperations interface {
 	GetVMInfo(ostype string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
-	UpdateDiskInfo(vminfo VMInfo) (VMInfo, error)
+	UpdateDiskInfo(vminfo VMInfo, namespace string) (VMInfo, error)
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
@@ -33,17 +39,18 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU     int32
-	Memory  int32
-	State   types.VirtualMachinePowerState
-	Mac     []string
-	IPs     []string
-	UUID    string
-	Host    string
-	VMDisks []VMDisk
-	UEFI    bool
-	Name    string
-	OSType  string
+	CPU      int32
+	Memory   int32
+	State    types.VirtualMachinePowerState
+	Mac      []string
+	IPs      []string
+	UUID     string
+	Host     string
+	VMDisks  []VMDisk
+	UEFI     bool
+	Name     string
+	OSType   string
+	RDMDisks []vjailbreakv1alpha1.DiskInfo
 }
 
 type ChangeID struct {
@@ -65,18 +72,23 @@ type VMDisk struct {
 }
 
 type VMOps struct {
-	vcclient *vcenter.VCenterClient
-	VMObj    *object.VirtualMachine
-	ctx      context.Context
+	vcclient  *vcenter.VCenterClient
+	VMObj     *object.VirtualMachine
+	ctx       context.Context
+	k8sClient client.Client
 }
 
-func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
+func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string, k8sClient client.Client) (*VMOps, error) {
 	vm, err := vcclient.GetVMByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM: %s", err)
 	}
-	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx}, nil
-
+	return &VMOps{
+		vcclient:  &vcclient,
+		VMObj:     vm,
+		ctx:       ctx,
+		k8sClient: k8sClient,
+	}, nil
 }
 
 func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
@@ -85,11 +97,11 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 
 // func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
 // 	// Find all virtual machines on the host
-// 	vms, err := finder.VirtualMachineList(ctx, "*")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return vms, nil
+// 	// vms, err := finder.VirtualMachineList(ctx, "*")
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
+// 	// return vms, nil
 // }
 
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
@@ -193,7 +205,7 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
+func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo, namespace string) (VMInfo, error) {
 	pc := vmops.vcclient.VCPropertyCollector
 	vm := vmops.VMObj
 	var snapbackingdisk []string
@@ -228,6 +240,12 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 				snapid = append(snapid, changeid.Value)
 			}
 		}
+		rdmDIskInfo, err := GetVMwareMachine(vmops.ctx, vmops.k8sClient, vminfo.Name, namespace)
+		if err != nil {
+			return vminfo, fmt.Errorf("failed to get rdmDisk properties: %s", err)
+		}
+		vminfo.RDMDisks = rdmDIskInfo.Spec.VMs.RDMDisks
+		// Based on Vm and diskname fetch DiskInfo
 		for idx := range vminfo.VMDisks {
 			vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 			vminfo.VMDisks[idx].Snapname = snapname[idx]
@@ -372,4 +390,41 @@ func (vmops *VMOps) VMPowerOn() error {
 		return fmt.Errorf("failed while waiting for power on task: %s", err)
 	}
 	return nil
+}
+
+func GetVMwareMachine(ctx context.Context, client client.Client, vmName string, namespace string) (*vjailbreakv1alpha1.VMwareMachine, error) {
+	// Convert VM name to k8s compatible name
+	sanitizedVMName := ConvertToK8sName(vmName)
+
+	// Create VMwareMachine objet
+	vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
+
+	// Create namespaced name for lookup
+	namespacedName := k8stypes.NamespacedName{
+		Name:      sanitizedVMName,
+		Namespace: namespace,
+	}
+
+	// Get VMwareMachine object
+	if err := client.Get(ctx, namespacedName, vmwareMachine); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("VMwareMachine '%s' not found in namespace '%s'", sanitizedVMName, "migration-system")
+		}
+		return nil, fmt.Errorf("failed to get VMwareMachine: %w", err)
+	}
+
+	return vmwareMachine, nil
+}
+
+func ConvertToK8sName(name string) string {
+	// Replace invalid characters with dashes
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, "_", "-")
+	name = strings.ReplaceAll(name, " ", "-")
+
+	// Remove any other invalid characters
+	validChar := regexp.MustCompile(`[^a-z0-9-]`)
+	name = validChar.ReplaceAllString(name, "")
+
+	return name
 }
