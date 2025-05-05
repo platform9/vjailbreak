@@ -11,6 +11,9 @@
     "docker:build": "docker build -t vjailbreak -f ./Dockerfile ."
   },
   "dependencies": {
+    "@cds/city": "^1.1.0",
+    "@cds/core": "^6.15.1",
+    "@cds/react": "^6.15.1",
     "@codemirror/lang-yaml": "^6.1.2",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",

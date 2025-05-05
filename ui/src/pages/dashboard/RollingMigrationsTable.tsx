@@ -1,65 +1,564 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
     Box,
     Typography,
-    IconButton,
     Tooltip,
     Chip,
-    Button
+    Paper,
+    Drawer,
+    styled,
+    Button,
+    LinearProgress,
+    IconButton
 } from "@mui/material";
 import {
     DataGrid,
     GridColDef,
-    GridRowSelectionModel,
     GridToolbarContainer,
-    GridRenderCellParams
+    GridRowSelectionModel
 } from "@mui/x-data-grid";
-import DeleteIcon from '@mui/icons-material/DeleteOutlined';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import { ClusterMigration } from "src/api/clustermigrations/model";
-import { ESXIMigration } from "src/api/esximigrations/model";
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
-import {
-    getClusterMigrationPhase,
-    getClusterName,
-    getESXiMigrationSequence,
-    getCurrentESXi
-} from "src/api/clustermigrations/helper";
-import {
-    getESXiName,
-} from "src/api/esximigrations/helper";
+import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
+import { ReactElement } from "react";
 
-// Phase ordering for sorting
-const STATUS_ORDER = {
-    'Running': 0,
-    'Failed': 1,
-    'Succeeded': 2,
-    'Pending': 3
+// Import CDS icons
+import "@cds/core/icon/register.js";
+import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon";
+
+// Register clarity icons
+ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon);
+
+// Define interface for GridValueGetterParams to avoid import issues
+
+// Define ClusterMigration and ESXIMigration types
+interface ClusterMigration {
+    apiVersion: string;
+    kind: string;
+    metadata: {
+        name: string;
+        namespace: string;
+        creationTimestamp: string;
+        finalizers: string[];
+        generation: number;
+        resourceVersion: string;
+        uid: string;
+        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
+    };
+    spec: {
+        clusterName: string;
+        esxiMigrationSequence: string[];
+        openstackCredsRef: { name: string };
+        rollingMigrationPlanRef: { name: string };
+        vmwareCredsRef: { name: string };
+    };
+    status: {
+        currentESXi: string;
+        message: string;
+        phase: string;
+    };
 }
 
-const getStatusColor = (status: string) => {
-    switch (status) {
-        case 'Succeeded':
-            return 'success';
-        case 'Failed':
-            return 'error';
-        case 'Pending':
-            return 'warning';
+interface ESXIMigration {
+    apiVersion: string;
+    kind: string;
+    metadata: {
+        name: string;
+        namespace: string;
+        creationTimestamp: string;
+        finalizers: string[];
+        generation: number;
+        resourceVersion: string;
+        uid: string;
+        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
+    };
+    spec: {
+        esxiName: string;
+        openstackCredsRef: { name: string };
+        rollingMigrationPlanRef: { name: string };
+        vmwareCredsRef: { name: string };
+    };
+}
+
+// VM model based on the UI display needs
+interface VM {
+    id: string;
+    name: string;
+    status: string;
+    cluster: string;
+    ip: string;
+    esxHost: string;
+    networks?: string[];
+    datastores?: string[];
+    cpu?: number;
+    memory?: number;
+    powerState: string;
+}
+
+// ESX host model
+interface ESXHost {
+    id: string;
+    name: string;
+    ip: string;
+    bmcIp: string;
+    maasState: string;
+    vms: number;
+    state: string;
+}
+
+// Style for icons
+const CdsIconWrapper = styled('div')({
+    marginRight: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+});
+
+const StyledDrawer = styled(Drawer)(() => ({
+    "& .MuiDrawer-paper": {
+        display: "grid",
+        gridTemplateRows: "max-content 1fr max-content",
+        width: "1200px",
+        maxWidth: "90vw", // For responsiveness on smaller screens
+    },
+}));
+
+const DrawerContent = styled("div")(({ theme }) => ({
+    overflow: "auto",
+    padding: theme.spacing(4, 6, 4, 4),
+}));
+
+const DrawerHeader = styled("div")(({ theme }) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: theme.spacing(2, 4),
+    borderBottom: `1px solid ${theme.palette.divider}`,
+}));
+
+const DrawerFooter = styled("div")(({ theme }) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: theme.spacing(2, 4),
+    borderTop: `1px solid ${theme.palette.divider}`,
+}));
+
+function StatusChip({ status }: { status: string }) {
+    let color: "success" | "info" | "warning" | "error" | "default" = "default";
+    const icon: ReactElement | undefined = undefined;
+
+    switch (status.toLowerCase()) {
+        case "migrated":
+        case "succeeded":
+        case "completed":
+        case "done":
+            color = "success";
+            break;
+        case "in progress":
+        case "running":
+        case "active":
+            color = "info";
+            break;
+        case "pending":
+        case "queued":
+            color = "warning";
+            break;
+        case "failed":
+            color = "error";
+            break;
+        case "cordoned":
+            color = "warning";
+            break;
         default:
-            return 'primary';
+            color = "default";
+            break;
     }
+
+    return (
+        <Chip
+            size="small"
+            label={status}
+            variant="outlined"
+            color={color}
+            icon={icon}
+            sx={{
+                borderRadius: '4px',
+                height: '24px'
+            }}
+        />
+    );
+}
+
+// Status summary component to show counts at the top
+const StatusSummary = ({
+    items,
+    getStatus,
+    title
+}: {
+    items: unknown[];
+    getStatus: (item: unknown) => string;
+    title: string
+}) => {
+    const counts = items.reduce<Record<string, number>>((acc, item) => {
+        const status = getStatus(item);
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
+
+    const total = items.length;
+    const completed = counts['Completed'] || counts['Succeeded'] || counts['Done'] || counts['Migrated'] || 0;
+    const inProgress = counts['In Progress'] || counts['Running'] || counts['Active'] || 0;
+    const pending = counts['Pending'] || counts['Queued'] || 0;
+    const failed = counts['Failed'] || 0;
+    const cordoned = counts['Cordoned'] || 0;
+
+    return (
+        <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight="bold">{title}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Box sx={{ width: '100%', mr: 1 }}>
+                    <LinearProgress
+                        variant="determinate"
+                        value={(completed / total) * 100}
+                        sx={{
+                            height: 4,
+                            borderRadius: 5,
+                            backgroundColor: '#f5f5f5'
+                        }}
+                    />
+                </Box>
+                <Box sx={{ minWidth: 35 }}>
+                    <Typography variant="body2" color="text.secondary">
+                        {completed}/{total}
+                    </Typography>
+                </Box>
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {completed > 0 && <Chip label={`Completed: ${completed}`} size="small" color="success" variant="outlined" />}
+                {inProgress > 0 && <Chip label={`In Progress: ${inProgress}`} size="small" color="info" variant="outlined" />}
+                {pending > 0 && <Chip label={`Pending: ${pending}`} size="small" color="warning" variant="outlined" />}
+                {failed > 0 && <Chip label={`Failed: ${failed}`} size="small" color="error" variant="outlined" />}
+                {cordoned > 0 && <Chip label={`Cordoned: ${cordoned}`} size="small" color="info" variant="outlined" />}
+            </Box>
+        </Box>
+    );
 };
 
-interface CustomToolbarProps {
-    numSelected: number;
-    onDeleteSelected: () => void;
-    refetchData: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+// Generate ESX mock data
+const generateESXHostsForCluster = (clusterName: string): ESXHost[] => {
+    const hostCount = Math.floor(Math.random() * 5) + 6; // 6-10 hosts per cluster
+    return Array.from({ length: hostCount }, (_, i) => ({
+        id: `${clusterName}-esx-${i + 1}`,
+        name: `esx-${i + 1}.${clusterName.toLowerCase()}.local`,
+        ip: `10.0.${Math.floor(i / 3) + 1}.${10 + i}`,
+        bmcIp: `10.1.${Math.floor(i / 3) + 1}.${10 + i}`,
+        maasState: i % 5 === 0 ? "Cordoned" :
+            i % 5 === 1 ? "Active" :
+                i % 5 === 2 ? "Migrated" :
+                    i % 5 === 3 ? "Pending" : "In Progress",
+        vms: Math.floor(Math.random() * 8) + 3,
+        state: i % 4 === 0 ? "Migrated" :
+            i % 4 === 1 ? "In Progress" :
+                i % 4 === 2 ? "Pending" : "Active"
+    }));
+};
+
+// Mock VM data generator for the cluster
+const generateVMsForCluster = (clusterName: string): VM[] => {
+    const vmCount = Math.floor(Math.random() * 20) + 15; // 15-35 VMs per cluster
+    return Array.from({ length: vmCount }, (_, i) => ({
+        id: `${clusterName}-vm-${i + 1}`,
+        name: `vm-${i + 1}.${clusterName.toLowerCase()}`,
+        status: i % 6 === 0 ? "In Progress" :
+            i % 6 === 1 ? "Done" :
+                i % 6 === 2 ? "Queued" :
+                    i % 6 === 3 ? "Failed" :
+                        i % 6 === 4 ? "Pending" : "Migrated",
+        cluster: clusterName,
+        ip: `10.9.${Math.floor(i / 8) + 1}.${20 + i % 100}`,
+        esxHost: `esx-${Math.floor(i / 4) % 10 + 1}.${clusterName.toLowerCase()}.local`,
+        networks: [`Network ${i % 4 + 1}`, "Management Network"],
+        datastores: [`datastore${i % 3 + 1}`],
+        cpu: 2 + (i % 6),
+        memory: 4096 + (i % 4) * 2048,
+        powerState: i % 4 === 0 ? "powered-off" : "powered-on"
+    }));
+};
+
+// Generate mock cluster data with more examples
+const generateMockClusters = (): ClusterMigration[] => {
+    const clusters = [
+        "Prod-Finance",
+        "Dev-Engineering",
+        "QA-Testing",
+        "Staging-Web",
+        "Core-Infra",
+        "Marketing-Web",
+        "Sales-CRM",
+        "HR-Internal",
+        "Analytics-BI",
+        "Cloud-Services",
+        "Mobile-Backend",
+        "IoT-Platform",
+        "Database-Cluster",
+        "Data-Warehouse"
+    ];
+
+    return clusters.map((name, index) => ({
+        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+        kind: "ClusterMigration",
+        metadata: {
+            name: `${name.toLowerCase().replace('-', '-')}-migration`,
+            namespace: "vjailbreak-migration-system",
+            creationTimestamp: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
+            finalizers: [],
+            generation: 1,
+            resourceVersion: `${123456 + index}`,
+            uid: `${name}-uid-${index}`,
+            ownerReferences: []
+        },
+        spec: {
+            clusterName: name,
+            esxiMigrationSequence: [],
+            openstackCredsRef: { name: "openstack-creds" },
+            rollingMigrationPlanRef: { name: "rolling-plan" },
+            vmwareCredsRef: { name: "vmware-creds" }
+        },
+        status: {
+            currentESXi: "",
+            message: "",
+            phase: index % 5 === 0 ? "Running" :
+                index % 5 === 1 ? "Pending" :
+                    index % 5 === 2 ? "Succeeded" :
+                        index % 5 === 3 ? "Failed" : "Completed"
+        }
+    }));
+};
+
+// Generate mock ESXi migrations
+const generateMockESXiMigrations = (clusters: ClusterMigration[]): ESXIMigration[] => {
+    const esxiMigrations: ESXIMigration[] = [];
+
+    clusters.forEach(cluster => {
+        const esxCount = Math.floor(Math.random() * 5) + 5;
+        for (let i = 0; i < esxCount; i++) {
+            esxiMigrations.push({
+                apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+                kind: "ESXIMigration",
+                metadata: {
+                    name: `esx-${i + 1}-${cluster.metadata.name}`,
+                    namespace: "vjailbreak-migration-system",
+                    creationTimestamp: new Date(Date.now() - i * 60 * 60 * 1000).toISOString(),
+                    finalizers: [],
+                    generation: 1,
+                    resourceVersion: `${100000 + i}`,
+                    uid: `esx-${i + 1}-${cluster.metadata.name}-uid`,
+                    ownerReferences: [{
+                        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+                        kind: "ClusterMigration",
+                        name: cluster.metadata.name,
+                        uid: cluster.metadata.uid
+                    }]
+                },
+                spec: {
+                    esxiName: `esx-${i + 1}.${cluster.spec.clusterName.toLowerCase().replace('-', '.')}.local`,
+                    openstackCredsRef: { name: "openstack-creds" },
+                    rollingMigrationPlanRef: { name: "rolling-plan" },
+                    vmwareCredsRef: { name: "vmware-creds" }
+                }
+            });
+        }
+    });
+
+    return esxiMigrations;
+};
+
+// Component for the cluster details drawer
+function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }) {
+    // ESX Columns for the table
+    const esxColumns: GridColDef[] = [
+        {
+            field: 'name',
+            headerName: 'ESX Name',
+            flex: 1.5,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CdsIconWrapper>
+                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                        {/* @ts-ignore */}
+                        <cds-icon shape="host" size="md" badge="info"></cds-icon>
+                    </CdsIconWrapper>
+                    {params.value}
+                </Box>
+            ),
+        },
+        {
+            field: 'state',
+            headerName: 'State',
+            flex: 0.6,
+            renderCell: (params) => <StatusChip status={params.value as string} />
+        },
+        {
+            field: 'ip',
+            headerName: 'Current IP',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'bmcIp',
+            headerName: 'BMC IP Address',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'maasState',
+            headerName: 'MaaS State',
+            flex: 0.6,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'vms',
+            headerName: '# VMs',
+            flex: 0.5,
+            valueGetter: (value: string) => value || "—"
+        }
+    ];
+
+    // VM Columns for the table
+    const vmColumns: GridColDef[] = [
+        {
+            field: 'name',
+            headerName: 'VM Name',
+            flex: 1.5,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
+                        <CdsIconWrapper>
+                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                            {/* @ts-ignore */}
+                            <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
+                        </CdsIconWrapper>
+                    </Tooltip>
+                    <Box>{params.value}</Box>
+                </Box>
+            ),
+        },
+        {
+            field: 'status',
+            headerName: 'Status',
+            flex: 0.8,
+            renderCell: (params) => <StatusChip status={params.value as string} />
+        },
+        {
+            field: 'ip',
+            headerName: 'Current IP',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'networks',
+            headerName: 'Network Interface(s)',
+            flex: 1,
+            renderCell: (params) => {
+                const networks = (params.row as VM).networks;
+                return networks ? networks.join(", ") : "—";
+            }
+        },
+        {
+            field: 'memory',
+            headerName: 'Memory (MB)',
+            flex: 0.8,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'esxHost',
+            headerName: 'ESX Host',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+    ];
+
+    return (
+        <StyledDrawer
+            anchor="right"
+            open={open}
+            onClose={onClose}
+        >
+            <DrawerHeader>
+                <Typography variant="h6">
+                    {clusterMigration.spec.clusterName} Details
+                </Typography>
+                <IconButton onClick={onClose}>
+                    <CloseIcon />
+                </IconButton>
+            </DrawerHeader>
+            <DrawerContent>
+                <Box sx={{ p: 2 }}>
+                    <Box sx={{ mb: 4 }}>
+                        <StatusSummary
+                            items={esxHosts}
+                            getStatus={(esxi) => (esxi as ESXHost).maasState}
+                            title="ESX Migration"
+                        />
+                        <Box sx={{ height: 300, width: '100%' }}>
+                            <DataGrid
+                                rows={esxHosts}
+                                columns={esxColumns}
+                                initialState={{
+                                    pagination: { paginationModel: { pageSize: 10 } },
+                                }}
+                                pageSizeOptions={[10, 25, 50]}
+                                sx={{
+                                    '& .MuiDataGrid-columnHeaders': {
+                                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                                    }
+                                }}
+                            />
+                        </Box>
+                    </Box>
+
+                    <Box sx={{ mt: 4 }}>
+                        <StatusSummary
+                            items={vms}
+                            getStatus={(vm) => (vm as VM).status}
+                            title="VM Migrations"
+                        />
+                        <Box sx={{ height: 300, width: '100%' }}>
+                            <DataGrid
+                                rows={vms}
+                                columns={vmColumns}
+                                getRowId={(row) => row.id}
+                                initialState={{
+                                    pagination: { paginationModel: { pageSize: 10 } },
+                                }}
+                                pageSizeOptions={[10, 25, 50]}
+                                checkboxSelection
+                                sx={{
+                                    '& .MuiDataGrid-columnHeaders': {
+                                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                                    }
+                                }}
+                            />
+                        </Box>
+                    </Box>
+                </Box>
+            </DrawerContent>
+            <DrawerFooter>
+                <Button variant="outlined" onClick={onClose}>Close</Button>
+            </DrawerFooter>
+        </StyledDrawer>
+    );
 }
 
-const CustomToolbar = ({ numSelected, onDeleteSelected, refetchData }: CustomToolbarProps) => {
+interface CustomToolbarProps {
+    refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+}
+
+const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -71,24 +570,29 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchData }: CustomToo
         >
             <div>
                 <Typography variant="h6" component="h2">
-                    Rolling Migrations
+                    Cluster Migrations
                 </Typography>
+                {selectedCount > 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                        {selectedCount} {selectedCount === 1 ? 'row' : 'rows'} selected
+                    </Typography>
+                )}
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
-                {numSelected > 0 && (
+                {selectedCount > 0 && (
                     <Button
                         variant="outlined"
                         color="error"
                         startIcon={<DeleteIcon />}
                         onClick={onDeleteSelected}
-                        sx={{ height: 40 }}
+                        size="small"
                     >
-                        Delete Selected ({numSelected})
+                        Delete Selected
                     </Button>
                 )}
                 <CustomSearchToolbar
-                    placeholder="Search by Name, Cluster, or ESXi"
-                    onRefresh={refetchData}
+                    placeholder="Search by Cluster Name, Status, or ESXi Host"
+                    onRefresh={refetchClusterMigrations}
                 />
             </Box>
         </GridToolbarContainer>
@@ -97,246 +601,108 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchData }: CustomToo
 
 interface RollingMigrationsTableProps {
     clusterMigrations: ClusterMigration[];
-    esxiMigrations: ESXIMigration[];
-    onDeleteClusterMigration: (name: string) => void;
-    onDeleteESXIMigration: (name: string) => void;
-    onDeleteSelectedClusterMigrations: (clusterMigrations: ClusterMigration[]) => void;
-    onDeleteSelectedESXIMigrations: (esxiMigrations: ESXIMigration[]) => void;
-    refetchClusterMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
-    refetchESXIMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<ESXIMigration[], Error>>;
+    refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
 }
 
-// Enhanced type that can represent either a ClusterMigration or ESXIMigration with UI properties
-type EnhancedRow = (ClusterMigration | ESXIMigration) & {
-    id: string;
-    isESXiMigration: boolean;
-    onDelete: (name: string) => void;
-    relatedESXiCount?: number;
-    esxiNames?: string;
-    parentCluster?: string;
-};
-
 export default function RollingMigrationsTable({
-    clusterMigrations,
-    esxiMigrations,
-    onDeleteClusterMigration,
-    onDeleteESXIMigration,
-    onDeleteSelectedClusterMigrations,
-    onDeleteSelectedESXIMigrations,
+    clusterMigrations: propClusterMigrations,
     refetchClusterMigrations
 }: RollingMigrationsTableProps) {
-    const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
-    const [expandedClusterRows, setExpandedClusterRows] = useState<Record<string, boolean>>({});
+    // Generate mock data if no data is provided
+    const mockClusters = useMemo(() => generateMockClusters(), []);
 
-    // Initialize all clusters to be expanded by default
-    useEffect(() => {
-        if (clusterMigrations.length > 0) {
-            const expandedState: Record<string, boolean> = {};
-            clusterMigrations.forEach(migration => {
-                if (migration.metadata?.name) {
-                    expandedState[migration.metadata.name] = true;
-                }
-            });
-            setExpandedClusterRows(expandedState);
-        }
+    // Use provided data or mock data
+    const clusterMigrations = mockClusters;
+
+    const [selectedCluster, setSelectedCluster] = useState<ClusterMigration | null>(null);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+
+    // Generate ESX hosts and VMs for each cluster
+    const esxHostsByCluster = useMemo(() => {
+        const result: Record<string, ESXHost[]> = {};
+
+        clusterMigrations.forEach(cluster => {
+            if (cluster.metadata?.name) {
+                const clusterName = cluster.spec.clusterName || '';
+                result[cluster.metadata.name] = generateESXHostsForCluster(clusterName);
+            }
+        });
+
+        return result;
     }, [clusterMigrations]);
+
+    const vmsByCluster = useMemo(() => {
+        const result: Record<string, VM[]> = {};
+
+        clusterMigrations.forEach(cluster => {
+            if (cluster.metadata?.name) {
+                const clusterName = cluster.spec.clusterName || '';
+                result[cluster.metadata.name] = generateVMsForCluster(clusterName);
+            }
+        });
+
+        return result;
+    }, [clusterMigrations]);
+
+    const handleOpenDetails = (cluster: ClusterMigration) => {
+        setSelectedCluster(cluster);
+        setDrawerOpen(true);
+    };
+
+    const handleCloseDrawer = () => {
+        setDrawerOpen(false);
+    };
+
+    const handleDeleteSelected = () => {
+        console.log("Delete selected clusters:", selectedRows);
+        // Here you would implement actual deletion logic
+        // And call any API endpoint to delete the selected clusters
+        setSelectedRows([]);
+    };
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);
     };
 
-    const toggleClusterExpansion = (clusterName: string) => {
-        setExpandedClusterRows(prev => ({
-            ...prev,
-            [clusterName]: !prev[clusterName]
-        }));
+    // Status ordering for sorting
+    const STATUS_ORDER = {
+        'Running': 0,
+        'In Progress': 0,
+        'Active': 0,
+        'Failed': 1,
+        'Succeeded': 2,
+        'Completed': 2,
+        'Migrated': 2,
+        'Done': 2,
+        'Pending': 3,
+        'Queued': 3
     };
 
-    // Helper function to get ESXi migration status
-    const getESXiMigrationStatus = (esxiMigration: ESXIMigration): string => {
-        // Check if the ESXi migration is referenced in a running cluster migration
-        for (const cluster of clusterMigrations) {
-            const phase = getClusterMigrationPhase(cluster);
-            const currentESXi = cluster.status?.currentESXi;
-            const esxiSequence = getESXiMigrationSequence(cluster);
-
-            if (phase === "Running" && currentESXi === esxiMigration.spec?.esxiName) {
-                return "In Progress";
-            }
-
-            if (esxiSequence.includes(esxiMigration.metadata?.name || "")) {
-                if (phase === "Succeeded") {
-                    return "Completed";
-                } else if (phase === "Failed") {
-                    return "Failed";
-                } else if (phase === "Pending") {
-                    return "Pending";
-                }
-            }
-        }
-
-        return "Queued";
-    };
-
-    // Create a map of ESXi migrations by name for quick lookup
-    const esxiMigrationsByName = esxiMigrations.reduce((acc, migration) => {
-        if (migration.metadata?.name) {
-            acc[migration.metadata.name] = {
-                ...migration,
-                onDelete: onDeleteESXIMigration
-            };
-        }
-        return acc;
-    }, {} as Record<string, ESXIMigration & { onDelete: (name: string) => void }>);
-
-    // Helper function to create a cluster migration row
-    const createClusterRow = (clusterMigration: ClusterMigration): EnhancedRow => {
-        const esxiSequence = getESXiMigrationSequence(clusterMigration);
-        // Count related ESXi migrations
-        const relatedESXiCount = esxiSequence.filter(name => esxiMigrationsByName[name]).length;
-
-        return {
-            ...clusterMigration,
-            onDelete: onDeleteClusterMigration,
-            id: clusterMigration.metadata?.name || `cluster-${Math.random()}`,
-            isESXiMigration: false,
-            relatedESXiCount,
-            esxiNames: esxiSequence.join(", ")
-        };
-    };
-
-    // Helper function to create ESXi migration rows for a cluster
-    const createESXiRows = (clusterRow: EnhancedRow, esxiSequence: string[]): EnhancedRow[] => {
-        return esxiSequence
-            .filter(name => esxiMigrationsByName[name])
-            .map(name => ({
-                ...esxiMigrationsByName[name],
-                id: `${clusterRow.id}-${name}`,
-                isESXiMigration: true,
-                parentCluster: clusterRow.id
-            }));
-    };
-
-    // Process cluster migrations
-    const clusterRows: EnhancedRow[] = clusterMigrations.map(createClusterRow);
-
-    // Build the final rows based on expanded state
-    const finalRows: EnhancedRow[] = useMemo(() => {
-        const rows: EnhancedRow[] = [];
-
-        clusterRows.forEach(clusterRow => {
-            // Add the cluster row
-            rows.push(clusterRow);
-
-            // If expanded, add child ESXi rows
-            if (expandedClusterRows[clusterRow.id]) {
-                const esxiSequence = getESXiMigrationSequence(clusterRow as ClusterMigration);
-                const relatedESXiMigrations = createESXiRows(clusterRow, esxiSequence);
-                rows.push(...relatedESXiMigrations);
-            }
-        });
-
-        return rows;
-    }, [clusterRows, expandedClusterRows, esxiMigrationsByName]);
-
-    const isRowSelectable = (params: { row: EnhancedRow }) => {
-        if (params.row.isESXiMigration) {
-            return true;
-        }
-        const phase = getClusterMigrationPhase(params.row as ClusterMigration);
-        return !(!phase || phase === "Running" || phase === "Pending");
-    };
-
-    const columns: GridColDef[] = [
+    // ClusterMigration columns for the main table
+    const clusterColumns: GridColDef[] = [
         {
-            field: "name",
-            headerName: "Name",
-            flex: 1.5,
-            renderCell: (params: GridRenderCellParams) => {
-                if (!params.row) return null;
-                if (!params.row.isESXiMigration && params.row.relatedESXiCount && params.row.relatedESXiCount > 0) {
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleClusterExpansion(params.row.id as string);
-                                }}
-                                sx={{ p: 0.5, mr: 1 }}
-                            >
-                                {expandedClusterRows[params.row.id as string] ?
-                                    <KeyboardArrowDownIcon fontSize="medium" sx={{ width: 24, height: 24 }} /> :
-                                    <ChevronRightIcon fontSize="medium" sx={{ width: 24, height: 24 }} />
-                                }
-                            </IconButton>
-                            {params.row.metadata?.name} ({params.row.relatedESXiCount} ESXi hosts)
-                        </Box>
-                    );
-                }
-
-                return params.row.isESXiMigration ?
-                    <Box sx={{ pl: 6 }}>{params.row.metadata?.name}</Box> :
-                    params.row.metadata?.name;
-            }
-        },
-        {
-            field: "type",
-            headerName: "Type",
-            renderCell: (params: { row: EnhancedRow }) => {
-                if (!params?.row) return "";
-                return params.row.isESXiMigration ? "ESXi Migration" : "Cluster Migration";
-            },
-            flex: 0.8,
-        },
-        {
-            field: "clusterName",
-            headerName: "Cluster",
-            renderCell: (params: { row: EnhancedRow }) => {
-                if (!params?.row) return "";
-                if (params.row.isESXiMigration) {
-                    // For ESXi migrations, show the parent cluster's name if available
-                    const parentId = params.row.parentCluster;
-                    if (parentId) {
-                        const clusterRow = clusterRows.find(c => c.id === parentId);
-                        if (clusterRow) {
-                            return getClusterName(clusterRow as ClusterMigration);
-                        }
-                    }
-                    return "";
-                }
-                return getClusterName(params.row as ClusterMigration);
-            },
+            field: 'clusterName',
+            headerName: 'Cluster Name',
+            display: 'flex',
             flex: 1,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CdsIconWrapper>
+                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                        {/* @ts-ignore */}
+                        <cds-icon shape="cluster" size="md"></cds-icon>
+                    </CdsIconWrapper>
+                    <Typography variant="body2">{(params.row as ClusterMigration).spec.clusterName || 'Unknown'}</Typography>
+                </Box>
+            ),
         },
         {
-            field: "esxiHost",
-            headerName: "ESXi Host",
-            renderCell: (params: { row: EnhancedRow }) => {
-                if (!params?.row) return "";
-                if (params.row.isESXiMigration) {
-                    return getESXiName(params.row as ESXIMigration);
-                }
-                // For cluster migrations, show the current ESXi being migrated
-                return getCurrentESXi(params.row as ClusterMigration);
-            },
-            flex: 1,
-        },
-        {
-            field: "status",
-            headerName: "Status",
-            flex: 0.8,
-            renderCell: (params: GridRenderCellParams) => {
-                const status = params?.value?.phase;
-                if (!status) return null;
-                return (
-                    <Chip
-                        label={status}
-                        color={getStatusColor(status)}
-                        size="small"
-                        variant="outlined"
-                    />
-                );
+            field: 'status',
+            headerName: 'Status',
+            flex: 0.5,
+            renderCell: (params) => {
+                return <StatusChip status={(params.row as ClusterMigration).status?.phase || 'Pending'} />;
             },
             sortComparator: (v1, v2) => {
                 const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
@@ -344,118 +710,150 @@ export default function RollingMigrationsTable({
                 return order1 - order2;
             }
         },
-        // {
-        //     field: "vmwareCredentials",
-        //     headerName: "VMware Credentials",
-        //     valueGetter: (params: { row: EnhancedRow }) => {
-        //         if (!params?.row) return "";
-        //         if (params.row.isESXiMigration) {
-        //             return getVMwareCredsRefName(params.row as ESXIMigration);
-        //         }
-        //         return ""; // Not applicable for cluster migrations
-        //     },
-        //     flex: 1,
-        // },
-        // {
-        //     field: "openstackCredentials",
-        //     headerName: "OpenStack Credentials",
-        //     valueGetter: (params: { row: EnhancedRow }) => {
-        //         if (!params?.row) return "";
-        //         if (params.row.isESXiMigration) {
-        //             return getOpenstackCredsRefName(params.row as ESXIMigration);
-        //         }
-        //         return ""; // Not applicable for cluster migrations
-        //     },
-        //     flex: 1,
-        // },
         {
-            field: "actions",
-            headerName: "Actions",
+            field: 'esxCount',
+            headerName: 'ESX Hosts',
             flex: 0.5,
-            renderCell: (params: GridRenderCellParams) => {
-                if (!params.row) return null;
-                if (params.row.isESXiMigration) {
-                    return (
-                        <Tooltip title="Delete ESXi migration">
-                            <IconButton
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    params.row.onDelete(params.row.metadata?.name);
-                                }}
-                                size="small"
-                            >
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    );
-                } else {
-                    const phase = getClusterMigrationPhase(params.row as ClusterMigration);
-                    const isDisabled = !phase || phase === "Running" || phase === "Pending";
-
-                    return (
-                        <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete cluster migration"} >
-                            <IconButton
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    params.row.onDelete(params.row.metadata?.name);
-                                }}
-                                disabled={isDisabled}
-                                size="small"
-                                sx={{
-                                    cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                    position: 'relative'
-                                }}
-                            >
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    );
-                }
+            renderCell: (params) => {
+                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
+                return esxHostsByCluster[clusterId]?.length || 0;
             },
+        },
+        {
+            field: 'vmCount',
+            headerName: 'VMs',
+            flex: 0.5,
+            renderCell: (params) => {
+                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
+                return vmsByCluster[clusterId]?.length || 0;
+            },
+        },
+        {
+            field: 'progress',
+            headerName: 'Migration Progress',
+            flex: 1,
+            renderCell: (params) => {
+                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
+
+                // ESX Hosts progress
+                const esxHosts = esxHostsByCluster[clusterId] || [];
+                const totalEsx = esxHosts.length;
+                const migratedEsx = esxHosts.filter(host => host.state === 'Migrated').length;
+                const esxProgress = totalEsx > 0 ? (migratedEsx / totalEsx) * 100 : 0;
+
+                // VMs progress
+                const vms = vmsByCluster[clusterId] || [];
+                const totalVms = vms.length;
+                const migratedVms = vms.filter(vm => vm.status === 'Migrated' || vm.status === 'Done').length;
+                const vmProgress = totalVms > 0 ? (migratedVms / totalVms) * 100 : 0;
+
+                return (
+                    <Box sx={{ width: '100%' }}>
+                        {/* ESX Hosts progress - single line layout */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ width: 70 }}>
+                                ESX Hosts:
+                            </Typography>
+                            <Box sx={{ flex: 1, mx: 1, display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={esxProgress}
+                                    sx={{
+                                        width: 150,
+                                        borderRadius: 1,
+                                        backgroundColor: 'rgba(0, 0, 0, 0.08)'
+                                    }}
+                                />
+                                <Typography variant="caption" sx={{ width: 35, textAlign: 'right' }}>
+                                    {migratedEsx}/{totalEsx}
+                                </Typography>
+                            </Box>
+                        </Box>
+
+                        {/* VMs progress - single line layout */}
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ width: 70 }}>
+                                VMs:
+                            </Typography>
+                            <Box sx={{ flex: 1, mx: 1, display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={vmProgress}
+                                    sx={{
+                                        width: 150,
+                                        borderRadius: 1,
+                                        backgroundColor: 'rgba(0, 0, 0, 0.08)'
+                                    }}
+                                />
+                                <Typography variant="caption" sx={{ width: 35, textAlign: 'right' }}>
+                                    {migratedVms}/{totalVms}
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </Box>
+                );
+            }
+        },
+        {
+            field: 'actions',
+            headerName: 'Actions',
+            flex: 1,
+            renderCell: (params) => (
+                <Button
+                    variant="text"
+                    size="small"
+                    startIcon={<VisibilityIcon />}
+                    onClick={() => handleOpenDetails(params.row as ClusterMigration)}
+                >
+                    Details
+                </Button>
+            ),
         },
     ];
 
     return (
-        <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <Box sx={{ width: '100%' }}>
             <DataGrid
-                rows={finalRows}
-                columns={columns}
+                rows={clusterMigrations}
+                columns={clusterColumns}
+                getRowId={(row: ClusterMigration) => row.metadata?.name || ''}
                 initialState={{
-                    pagination: { paginationModel: { page: 0, pageSize: 25 } },
+                    pagination: { paginationModel: { pageSize: 10 } },
                     sorting: {
                         sortModel: [{ field: 'status', sort: 'asc' }],
                     },
                 }}
-                pageSizeOptions={[25, 50, 100]}
-                localeText={{ noRowsLabel: "No Migrations Available" }}
-                checkboxSelection
-                isRowSelectable={isRowSelectable}
-                onRowSelectionModelChange={handleSelectionChange}
-                rowSelectionModel={selectedRows}
+                pageSizeOptions={[5, 10, 25]}
                 slots={{
                     toolbar: () => (
                         <CustomToolbar
-                            numSelected={selectedRows.length}
-                            onDeleteSelected={() => {
-                                const selectedClusterMigrations = clusterMigrations?.filter(
-                                    m => selectedRows.includes(m.metadata?.name || "")
-                                );
-                                const selectedESXiMigrations = esxiMigrations?.filter(
-                                    m => selectedRows.some(id => id.toString().includes(m.metadata?.name || ""))
-                                );
-
-                                if (selectedClusterMigrations.length > 0) {
-                                    onDeleteSelectedClusterMigrations(selectedClusterMigrations);
-                                }
-                                if (selectedESXiMigrations.length > 0) {
-                                    onDeleteSelectedESXIMigrations(selectedESXiMigrations);
-                                }
-                            }}
-                            refetchData={refetchClusterMigrations}
+                            refetchClusterMigrations={refetchClusterMigrations}
+                            selectedCount={selectedRows.length}
+                            onDeleteSelected={handleDeleteSelected}
                         />
                     ),
                 }}
+                sx={{
+                    border: 'none',
+                    '& .MuiDataGrid-columnHeaders': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                    }
+                }}
+                checkboxSelection
+                onRowSelectionModelChange={handleSelectionChange}
+                rowSelectionModel={selectedRows}
+                disableRowSelectionOnClick
             />
+
+            {selectedCluster && (
+                <ClusterDetailsDrawer
+                    open={drawerOpen}
+                    onClose={handleCloseDrawer}
+                    clusterMigration={selectedCluster}
+                    esxHosts={esxHostsByCluster[selectedCluster.metadata?.name || ''] || []}
+                    vms={vmsByCluster[selectedCluster.metadata?.name || ''] || []}
+                />
+            )}
         </Box>
     );
-} 
+}

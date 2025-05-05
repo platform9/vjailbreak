@@ -282,7 +282,7 @@ export default function Dashboard() {
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label="Migrations" />
-          <Tab label="Rolling Migrations" />
+          <Tab label="Cluster Migrations" />
           <Tab label="Agents" />
           <Tab label="Credentials" />
           <Tab label="Maas Config" />
