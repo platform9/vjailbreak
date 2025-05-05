@@ -42,9 +42,9 @@ const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
     display: "none"
   },
   "& .warning-row": {
-    backgroundColor: "#fff3cd",
     color: "#856404",
     fontWeight: "bold",
+    cursor: "auto",
   }
 }));
 
@@ -415,10 +415,10 @@ export default function VmsSelectionStep({
                   let tooltipMessage = "";
                   if (isMigrated) {
                     tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
-                  } else if (hasFlavorNotFound) {
-                    tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE;
                   } else if (isVmStopped) {
                     tooltipMessage = DISABLED_TOOLTIP_MESSAGE;
+                  } else if (hasFlavorNotFound) {
+                    tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE;
                   }
 
                   return (
