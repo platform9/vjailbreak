@@ -65,5 +65,6 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     isMigrated: machine.status.migrated,
     disks: machine.spec.vms.disks || [],
     targetFlavorId: machine.spec.targetFlavorId,
+    osType: machine.spec.vms.osType,
   }))
 }
