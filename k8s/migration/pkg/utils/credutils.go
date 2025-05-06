@@ -559,7 +559,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	var vminfo []vjailbreakv1alpha1.VMInfo
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -573,12 +573,13 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
 			continue
 		}
+		for _, network := range vmProps.Network {
+			fmt.Println("networks present for vm", network.Reference().Value)
+			networks = append(networks, network.Reference().Value)
+		}
+
 		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *types.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			switch device.(type) {
 			case *types.VirtualDisk:
 				switch backing := device.GetVirtualDevice().Backing.(type) {
 				case *types.VirtualDiskFlatVer2BackingInfo:
