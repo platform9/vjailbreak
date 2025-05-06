@@ -480,9 +480,15 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, network := range o.Network {
-		fmt.Println("networks present", network.Reference().Value)
-		networks = append(networks, network.Value)
+	pc := property.DefaultCollector(c)
+	for _, netRef := range o.Network {
+		var netObj mo.Network
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+		}
+		fmt.Println("network present:", netObj.Name)
+		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -573,9 +579,15 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
 			continue
 		}
-		for _, network := range vmProps.Network {
-			fmt.Println("networks present for vm", network.Reference().Value)
-			networks = append(networks, network.Reference().Value)
+		pc := property.DefaultCollector(c)
+		for _, netRef := range vmProps.Network {
+			var netObj mo.Network
+			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+			}
+			fmt.Println("network present:", netObj.Name)
+			networks = append(networks, netObj.Name)
 		}
 
 		for _, device := range vmProps.Config.Hardware.Device {
