@@ -475,18 +475,13 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *types.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *types.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		}
+	for _, network := range o.Network {
+		networks = append(networks, network.Value)
 	}
 
 	return networks, nil
