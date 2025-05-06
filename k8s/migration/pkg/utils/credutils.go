@@ -487,7 +487,6 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
-		fmt.Println("network present:", netObj.Name)
 		networks = append(networks, netObj.Name)
 	}
 
@@ -586,7 +585,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			if err != nil {
 				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 			}
-			fmt.Println("network present:", netObj.Name)
 			networks = append(networks, netObj.Name)
 		}
 
