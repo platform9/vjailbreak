@@ -11,10 +11,11 @@ const (
 	TerminationPeriod = int64(120)
 	NameMaxLength     = 242
 
-	VjailbreakNodeControllerName = "vjailbreaknode-controller"
-	OpenstackCredsControllerName = "openstackcreds-controller" //nolint:gosec // not a password string
-	VMwareCredsControllerName    = "vmwarecreds-controller"    //nolint:gosec // not a password string
-	MigrationControllerName      = "migration-controller"
+	VjailbreakNodeControllerName   = "vjailbreaknode-controller"
+	OpenstackCredsControllerName   = "openstackcreds-controller" //nolint:gosec // not a password string
+	VMwareCredsControllerName      = "vmwarecreds-controller"    //nolint:gosec // not a password string
+	MigrationControllerName        = "migration-controller"
+	VjailbreakConfigControllerName = "vjailbreakconfig-controller"
 
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 	NodeRoleMaster          = "master"
