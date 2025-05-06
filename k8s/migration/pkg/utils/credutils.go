@@ -481,6 +481,7 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 	}
 
 	for _, network := range o.Network {
+		fmt.Println("networks present", network.Reference().Value)
 		networks = append(networks, network.Value)
 	}
 
