@@ -331,7 +331,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						},
 					},
 				},
-				TTLSecondsAfterFinished: ptr.To(constants.MigrationJobTTL),
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
