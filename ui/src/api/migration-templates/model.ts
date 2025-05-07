@@ -68,8 +68,8 @@ export interface VmData {
   ipAddress?: string
   targetFlavorId?: string
   disks?: string[]
+  labels?: { [key: string]: string }
 }
-
 export interface GetMigrationTemplatesMetadata {
   continue: string
   resourceVersion: string
