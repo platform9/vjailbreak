@@ -30,6 +30,7 @@ import * as React from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
 import InfoIcon from "@mui/icons-material/Info";
+import WarningIcon from "@mui/icons-material/Warning";
 import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
 
@@ -42,6 +43,10 @@ const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   },
   "& .hidden-column": {
     display: "none"
+  },
+  "& .warning-row": {
+    color: "#856404",
+    fontWeight: "bold",
   }
 }));
 
@@ -74,6 +79,7 @@ const CustomToolbarWithActions = (props) => {
 interface VmDataWithFlavor extends VmData {
   isMigrated?: boolean;
   flavorName?: string; // Add a field to store the flavor name
+  flavorNotFound?: boolean; // Add a flag to indicate if a flavor wasn't found
 }
 
 const columns: GridColDef[] = [
@@ -102,6 +108,14 @@ const columns: GridColDef[] = [
             color="info"
             size="small"
           />
+        )}
+        {params.row.flavorNotFound && (
+          <Box display="flex" alignItems="center" gap={0.5}>
+          <WarningIcon color="warning" fontSize="small" />
+          <Typography variant="body2" color="warning.main">
+            Flavor not found
+          </Typography>
+        </Box>
         )}
       </Box>
     ),
@@ -189,8 +203,9 @@ const columns: GridColDef[] = [
 
 const paginationModel = { page: 0, pageSize: 5 };
 
-const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or  already has been migrated.";
+const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or already has been migrated.";
 const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
+const FLAVOR_NOT_FOUND_MESSAGE = "Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.";
 
 interface VmsSelectionStepProps {
   onChange: (id: string) => (value: unknown) => void;
@@ -201,6 +216,7 @@ interface VmsSelectionStepProps {
   sessionId?: string;
   openstackFlavors?: OpenStackFlavor[];
   vmwareCredName?: string;
+  openstackCredName?: string;
 }
 
 export default function VmsSelectionStep({
@@ -212,6 +228,7 @@ export default function VmsSelectionStep({
   sessionId = Date.now().toString(),
   openstackFlavors = [],
   vmwareCredName,
+  openstackCredName,
 }: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
@@ -273,10 +290,14 @@ export default function VmsSelectionStep({
           flavor = vm.targetFlavorId;
         }
       }
+
+      // Check for NOT_FOUND label for OpenStack credentials
+      const flavorNotFound = openstackCredName ? vm.labels?.[openstackCredName] === "NOT_FOUND" : false;
       return {
         ...vm,
         isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
-        flavor
+        flavor,
+        flavorNotFound
       };
     });
     setVmsWithFlavor(initialVmsWithFlavor);
@@ -320,7 +341,9 @@ export default function VmsSelectionStep({
           return {
             ...vm,
             targetFlavorId: isAutoAssign ? "" : selectedFlavor,
-            flavorName
+            flavorName,
+            // If a flavor is assigned, the VM no longer has a flavor not found issue
+            flavorNotFound: isAutoAssign ? vm.flavorNotFound : false
           };
         }
         return vm;
@@ -360,8 +383,7 @@ export default function VmsSelectionStep({
   };
 
   const isRowSelectable = (params) => {
-    if (params.row.isMigrated) return false;
-
+    // Allow selection even if flavorNotFound, just show warning 
     // For the new API, we don't have IP address info, so we'll just use vmState
     return params.row.vmState === "running";
   };
@@ -370,6 +392,7 @@ export default function VmsSelectionStep({
   const getNoRowsLabel = () => {
     return "No VMs discovered";
   };
+
   return (
     <VmsSelectionStepContainer>
       <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
@@ -414,12 +437,15 @@ export default function VmsSelectionStep({
                 row: (props) => {
                   const isVmStopped = props.row.vmState !== "running";
                   const isMigrated = props.row.isMigrated;
+                  const hasFlavorNotFound = props.row.flavorNotFound;
 
                   let tooltipMessage = "";
                   if (isMigrated) {
                     tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
                   } else if (isVmStopped) {
                     tooltipMessage = DISABLED_TOOLTIP_MESSAGE;
+                  } else if (hasFlavorNotFound) {
+                    tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE;
                   }
 
                   return (
@@ -438,11 +464,15 @@ export default function VmsSelectionStep({
               checkboxSelection
               disableColumnMenu
               disableColumnResize
-              getRowClassName={(params) =>
-                (params.row.vmState !== "running" || params.row.isMigrated)
-                  ? "disabled-row"
-                  : ""
-              }
+              getRowClassName={(params) => {
+                if (params.row.vmState !== "running" || params.row.isMigrated) {
+                  return "disabled-row";
+                } else if (params.row.flavorNotFound) {
+                  return "warning-row";
+                } else {
+                  return "";
+                }
+              }}             
             />
           </Paper>
         </FormControl>

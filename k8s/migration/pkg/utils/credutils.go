@@ -475,18 +475,19 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *types.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *types.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+	pc := property.DefaultCollector(c)
+	for _, netRef := range o.Network {
+		var netObj mo.Network
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
+		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -563,7 +564,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	var vminfo []vjailbreakv1alpha1.VMInfo
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -577,12 +578,18 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
 			continue
 		}
+		pc := property.DefaultCollector(c)
+		for _, netRef := range vmProps.Network {
+			var netObj mo.Network
+			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+			}
+			networks = append(networks, netObj.Name)
+		}
+
 		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *types.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+			switch device.(type) {
 			case *types.VirtualDisk:
 				switch backing := device.GetVirtualDevice().Backing.(type) {
 				case *types.VirtualDiskFlatVer2BackingInfo:
@@ -785,4 +792,21 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_vCPUs", cpu,
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
+}
+
+func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
+		}
+		if vmwvm.Labels[key] == value {
+			return nil
+		}
+		vmwvm.Labels[key] = value
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
+	}
+	return nil
 }
