@@ -26,9 +26,12 @@ import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
 import { useEffect, useState } from "react";
+import * as React from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
 import InfoIcon from "@mui/icons-material/Info";
+import WindowsIcon from "src/assets/windows_icon.svg";
+import LinuxIcon from "src/assets/linux_icon.svg";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -108,6 +111,34 @@ const columns: GridColDef[] = [
     headerName: "Current IP",
     flex: 1,
     valueGetter: (value) => value || "- ",
+  },
+  {
+    field: "osType",
+    headerName: "OS",
+    flex: 1,
+    renderCell: (params) => {
+      const osType = params.row.osType || "Unknown";
+      let displayValue = osType;
+      let icon: React.ReactNode = null;
+
+      if (osType.includes("windows")) {
+        displayValue = "Windows";
+        icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
+      } else if (osType.includes("linux")) {
+        displayValue = "Linux";
+        icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
+      } else {
+        displayValue = "Other";
+      }
+
+      return (
+        <Tooltip title={displayValue}>
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            {icon}
+          </Box>
+        </Tooltip>
+      );
+    },
   },
   {
     field: "networks",
@@ -355,7 +386,6 @@ export default function VmsSelectionStep({
                 },
                 columns: {
                   columnVisibilityModel: {
-                    osType: false,
                     vmState: false  // Hide the vmState column that we use only for sorting
                   }
                 }
