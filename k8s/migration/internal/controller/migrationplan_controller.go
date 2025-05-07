@@ -674,6 +674,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 			}
 		}
 	}
+
 	if len(openstacknws) != len(vmnws) {
 		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping")
 	}

@@ -509,18 +509,19 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *govmitypes.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *govmitypes.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+	pc := property.DefaultCollector(c)
+	for _, netRef := range o.Network {
+		var netObj mo.Network
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
+		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -597,7 +598,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -611,13 +612,19 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
 			continue
 		}
+		pc := property.DefaultCollector(c)
+		for _, netRef := range vmProps.Network {
+			var netObj mo.Network
+			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+			}
+			networks = append(networks, netObj.Name)
+		}
+
 		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *govmitypes.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *govmitypes.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *govmitypes.VirtualDisk:
+			switch device.(type) {
+			case *types.VirtualDisk:
 				switch backing := device.GetVirtualDevice().Backing.(type) {
 				case *govmitypes.VirtualDiskFlatVer2BackingInfo:
 					dsref = backing.Datastore.Reference()
