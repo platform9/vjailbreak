@@ -93,8 +93,8 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "qcow2_img=${{ env.QCOW2_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "ui_img=${{ env.UI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
-          echo "v2v_img=${{ env.V2V_IMG }}:${TAG}" >> $GITHUB_OUTPUT
-          echo "controller_img=${{ env.CONTROLLER_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "v2v_img=${{ env.V2V_IMG }}:v0.1.10" >> $GITHUB_OUTPUT
+          echo "controller_img=${{ env.CONTROLLER_IMG }}:v0.1.10" >> $GITHUB_OUTPUT
 
   build-ui:
     runs-on: ubuntu-latest
