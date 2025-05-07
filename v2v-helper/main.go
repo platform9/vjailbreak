@@ -22,50 +22,84 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure context is canceled when we exit
+
+	// Initialize error reporter early
+	eventReporter, err := reporter.NewReporter()
+	if err != nil {
+		log.Printf("Failed to create reporter: %v", err)
+		return
+	}
+
+	eventReporterChan := make(chan string)
+	podLabelWatcherChan := make(chan string)
+	ackChan := make(chan struct{})
+
+	defer close(eventReporterChan)
+	defer close(podLabelWatcherChan)
+
+	// Start reporter goroutines
+	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
+	eventReporter.WatchPodLabels(ctx, podLabelWatcherChan)
+
+	// Helper function to report and handle errors
+	handleError := func(msg string) {
+		if reporter.IsRunningInPod() {
+			eventReporterChan <- msg
+			// Wait for the reporter to process the message
+			<-ackChan
+		}
+		log.Print(msg)
+		return
+	}
+
 	client, err := utils.GetInclusterClient()
 	if err != nil {
-		log.Fatalf("Failed to get in-cluster client: %v", err)
+		handleError(fmt.Sprintf("Failed to get in-cluster client: %v", err))
 	}
 
 	migrationparams, err := utils.GetMigrationParams(ctx, client)
 	if err != nil {
-		log.Fatalf("Failed to get migration parameters: %v", err)
+		handleError(fmt.Sprintf("Failed to get migration parameters: %v", err))
 	}
-	var vCenterURL = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
-	var vCenterUserName = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
-	var vCenterPassword = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
-	var vCenterInsecure = strings.TrimSpace(os.Getenv("VCENTER_INSECURE")) == constants.TrueString
-	var openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+
+	var (
+		vCenterURL        = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
+		vCenterUserName   = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
+		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
+		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
+		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+	)
 
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
 
-	// Validate vCenter and Openstack connection
+	// Validate vCenter connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
-		log.Fatalf("Failed to migrate VM: Failed to validate vCenter connection: %v", err)
+		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
 	}
 	log.Printf("Connected to vCenter: %s\n", vCenterURL)
 
-	// IMP: Must have one from OS_DOMAIN_NAME or OS_DOMAIN_ID only set in the rc file
+	// Validate OpenStack connection
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
-		log.Fatalf("Failed to migrate VM: Failed to validate OpenStack connection: %v", err)
+		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
 	log.Println("Connected to OpenStack")
 
 	// Get thumbprint
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
-		log.Fatalf("Failed to migrate VM: Failed to get thumbprint: %s\n", err)
+		handleError(fmt.Sprintf("Failed to get thumbprint: %s", err))
 	}
 	log.Printf("VCenter Thumbprint: %s\n", thumbprint)
 
 	// Retrieve the source VM
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
 	if err != nil {
-		log.Fatalf("Failed to migrate VM: Failed to get source VM: %v", err)
+		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
 
 	migrationobj := migrate.Migrate{
@@ -84,8 +118,8 @@ func main() {
 		Vcclient:         vcclient,
 		VMops:            vmops,
 		Nbdops:           []nbd.NBDOperations{},
-		EventReporter:    make(chan string),
-		PodLabelWatcher:  make(chan string),
+		EventReporter:    eventReporterChan,
+		PodLabelWatcher:  podLabelWatcherChan,
 		InPod:            reporter.IsRunningInPod(),
 		MigrationTimes: migrate.MigrationTimes{
 			DataCopyStart:  starttime,
@@ -99,29 +133,20 @@ func main() {
 		TargetFlavorId:      migrationparams.TARGET_FLAVOR_ID,
 	}
 
-	eventReporter, err := reporter.NewReporter()
-	if err != nil {
-		log.Fatalf("Failed to migrate VM: Failed to create reporter: %v", err)
-	}
-	eventReporter.UpdatePodEvents(ctx, migrationobj.EventReporter)
-	eventReporter.WatchPodLabels(ctx, migrationobj.PodLabelWatcher)
+	if err := migrationobj.MigrateVM(ctx); err != nil {
+		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
 
-	err = migrationobj.MigrateVM(ctx)
-	if err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %s\n", err)
-		cancel()
-		if migrationobj.InPod {
-			migrationobj.EventReporter <- msg
-		}
-		log.Fatalf(msg)
-
-		// Power on the VM
-		poweronerr := vmops.VMPowerOn()
-		if poweronerr != nil {
-			log.Fatalf("Failed to power on VM after migration failure: %s\n", poweronerr)
+		// Try to power on the VM if migration failed
+		powerOnErr := vmops.VMPowerOn()
+		if powerOnErr != nil {
+			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+		} else {
+			msg += "\nVM was powered on after migration failure"
 		}
 
-		log.Printf("VM powered on after migration failure\n")
+		handleError(msg)
 	}
-	cancel()
+
+	log.Println("Migration completed successfully")
+	return
 }

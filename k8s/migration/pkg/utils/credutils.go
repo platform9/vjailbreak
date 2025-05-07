@@ -590,17 +590,22 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	}
 	finder.SetDatacenter(dc)
 
-	// Get all the vms
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
+	var vminfo []vjailbreakv1alpha1.VMInfo
+	pc := property.DefaultCollector(c)
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
+		}
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+			continue
 		}
 		var datastores []string
 		var networks []string
@@ -642,6 +647,27 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				datastores = AppendUnique(datastores, ds.Name)
 				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
 			}
+
+			var dsref types.ManagedObjectReference
+			switch backing := disk.Backing.(type) {
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskSparseVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				dsref = backing.Datastore.Reference()
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+			}
+
+			var ds mo.Datastore
+			err := pc.RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datastore: %w", err)
+			}
+
+			datastores = AppendUnique(datastores, ds.Name)
+			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
 		// Get the host name and parent (cluster) information
 		host := mo.HostSystem{}
@@ -677,7 +703,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			ClusterName: clusterName,
 		})
 	}
-
 	return vminfo, nil
 }
 

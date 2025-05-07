@@ -38,4 +38,5 @@ systemctl enable --now serial-getty@ttyS0.service`
 	EventMessageMigrationSucessful                = "VM created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
 	EventMessageCopyingDisk                       = "Copying disk"
+	EventMessageFailed                            = "Failed to"
 )

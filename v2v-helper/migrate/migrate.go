@@ -820,36 +820,49 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to live replicate disks: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to convert disks: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to create target instance: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
 	cancel()
 	return nil
 }
 
-func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
+func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
-	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
+	}
+	err = migobj.DeleteAllVolumes(vminfo)
+	if err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
 	}
 	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
+		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
+	return nil
 }
