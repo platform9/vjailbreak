@@ -19,13 +19,17 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
 // VjailbreakConfigReconciler reconciles a VjailbreakConfig object
@@ -40,8 +44,8 @@ type VjailbreakConfigReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;delete
 
 func (r *VjailbreakConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
-	log := log.FromContext(ctx).WithName(constants.VjailbreakConfigControllerName)
-	log.Info("Reconciling VjailbreakConfig")
+	ctxlog := log.FromContext(ctx).WithName(constants.VjailbreakConfigControllerName)
+	ctxlog.Info("Reconciling VjailbreakConfig")
 
 	vjailbreakConfig := vjailbreakv1alpha1.VjailbreakConfig{}
 	if err := r.Get(ctx, req.NamespacedName, &vjailbreakConfig); err != nil {
@@ -49,11 +53,30 @@ func (r *VjailbreakConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if vjailbreakConfig.Spec.Debug {
-		log.Info("Debug mode enabled")
+		ctxlog.Info("Debug mode enabled")
 		// list all the current migrations and add "debug: true" to the configmap
+		migrationObjects := &vjailbreakv1alpha1.MigrationList{}
+		if err := r.List(ctx, migrationObjects); err != nil {
+			return ctrl.Result{}, err
+		}
+		for _, migration := range migrationObjects.Items {
+			vmName, err := utils.ConvertToK8sName(migration.Spec.VMName)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "Failed to convert vmName to k8s appropriate name")
+			}
+			configMapName := utils.GetMigrationConfigMapName(vmName)
 
+			configMap := &corev1.ConfigMap{}
+			if err := r.Get(ctx, types.NamespacedName{Name: configMapName}, configMap); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "Failed to get configmap")
+			}
+			configMap.Data["DEBUG"] = "true"
+			if err := r.Update(ctx, configMap); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "Failed to update configmap")
+			}
+			ctxlog.Info("Updated configmap", "configmap", configMapName)
+		}
 	}
-
 	return ctrl.Result{}, nil
 }
 

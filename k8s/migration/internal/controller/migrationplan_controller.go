@@ -573,6 +573,16 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
+
+		// Check if debug is enabled in vjailbreakconfig CR
+		vjailbreakConfig := &vjailbreakv1alpha1.VjailbreakConfig{}
+		if err := r.Get(ctx, types.NamespacedName{Name: "vjailbreakconfig", Namespace: migrationplan.Namespace}, vjailbreakConfig); err != nil {
+			return nil, fmt.Errorf("failed to get VjailbreakConfig: %w", err)
+		}
+		if vjailbreakConfig.Spec.Debug {
+			configMap.Data["DEBUG"] = "true"
+		}
+
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
