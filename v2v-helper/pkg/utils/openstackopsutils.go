@@ -287,6 +287,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {
 		log.Println("No suitable flavor found.")
+		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 	}
 
 	return bestFlavor, nil
