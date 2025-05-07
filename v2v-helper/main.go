@@ -50,7 +50,7 @@ func main() {
 			<-ackChan
 		}
 		log.Print(msg)
-		os.Exit(1)
+		return
 	}
 
 	client, err := utils.GetInclusterClient()
