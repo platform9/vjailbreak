@@ -18,8 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -163,10 +163,42 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
+
+		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
+		// This will help us to create the vmwaremachine object with the correct flavor.
+		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+		if err := r.Client.List(ctx, vmwaremachineList); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
+		}
+		for i := range vmwaremachineList.Items {
+			vmwaremachine := &vmwaremachineList.Items[i]
+			// Get the cpu and memory of the vmwaremachine object
+			cpu := vmwaremachine.Spec.VMs.CPU
+			memory := vmwaremachine.Spec.VMs.Memory
+			computeClient, err := utils.GetOpenStackClients(context.TODO(), scope.OpenstackCreds)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
+			}
+			// Now get the closest flavor based on the cpu and memory
+			flavor, err := utils.GetClosestFlavour(context.TODO(), cpu, memory, computeClient.ComputeClient)
+			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
+				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
+			}
+			// Now label the vmwaremachine object with the flavor name
+			if flavor == nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			} else {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.Name); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			}
+		}
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	ctxlog.Info("Requeuing for flavor updates", "requeueAfter", "1 minute")
-	return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: constants.OpenstackCredsRequeueAfter}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
