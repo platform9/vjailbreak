@@ -1,14 +1,51 @@
-import { Typography } from "@mui/material"
-import AppBar from "@mui/material/AppBar"
-import Box from "@mui/material/Box"
-import Button from "@mui/material/Button"
-import Toolbar from "@mui/material/Toolbar"
+import { useEffect, useState } from "react"
+import { Typography, AppBar, Box, Button, Toolbar, FormControlLabel, Switch } from "@mui/material"
 import { cleanupAllResources } from "src/api/helpers"
 import ThemeToggle from "./ThemeToggle"
 import { useThemeContext } from "src/theme/ThemeContext"
+import { getVjailbreakConfig, updateVjailbreakConfig } from "src/api/vjailbreak-config/vjailbreakConfig"
 
 export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
-  const { mode } = useThemeContext();
+  const { mode } = useThemeContext()
+  const [debugEnabled, setDebugEnabled] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const debugEnabled = await getVjailbreakConfig()
+        setDebugEnabled(debugEnabled)
+      } catch (error) {
+        console.error("Failed to fetch vJailbreak config:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchConfig()
+  }, [])
+
+  const toggleDebug = async () => {
+    try {
+      setLoading(true)
+      const updated = {
+        apiVersion: "vjailbreak.io/v1alpha1",
+        kind: "VjailbreakConfig",
+        metadata: {
+          name: "vjailbreakconfig",
+          namespace: "default", // update if dynamic
+        },
+        spec: {
+          debug: !debugEnabled,
+        },
+      }
+      await updateVjailbreakConfig(updated)
+      setDebugEnabled(!debugEnabled)
+    } catch (error) {
+      console.error("Failed to update debug config:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const openGrafanaDashboard = () => {
     window.open(`https://${window.location.host}/grafana`, "_blank")
@@ -24,9 +61,7 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
         position="static"
         color="default"
         sx={{
-          backgroundColor: mode === 'dark'
-            ? `rgba(30, 30, 30, 0.9)`
-            : `rgba(255, 255, 255, 0.9)`,
+          backgroundColor: mode === "dark" ? "rgba(30, 30, 30, 0.9)" : "rgba(255, 255, 255, 0.9)",
         }}
         elevation={1}
       >
@@ -34,6 +69,18 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
           <Typography variant="h3">vJailbreak</Typography>
           <Box sx={{ display: "flex", gap: 2, marginLeft: "auto", alignItems: "center" }}>
             <ThemeToggle />
+            {!loading && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={debugEnabled}
+                    onChange={toggleDebug}
+                    color="secondary"
+                  />
+                }
+                label={debugEnabled ? "Debug Enabled" : "Debug Disabled"}
+              />
+            )}
             {import.meta.env.MODE === "development" && (
               <Button
                 size="large"

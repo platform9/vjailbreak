@@ -41,7 +41,6 @@ type VjailbreakConfigReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreakconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreakconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreakconfigs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;delete
 
 func (r *VjailbreakConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.VjailbreakConfigControllerName)
