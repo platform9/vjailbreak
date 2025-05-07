@@ -863,4 +863,5 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
 		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
+	return nil
 }
