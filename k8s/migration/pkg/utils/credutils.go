@@ -793,3 +793,20 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
+
+func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
+		}
+		if vmwvm.Labels[key] == value {
+			return nil
+		}
+		vmwvm.Labels[key] = value
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
+	}
+	return nil
+}
