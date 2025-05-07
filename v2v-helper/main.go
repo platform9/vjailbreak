@@ -67,8 +67,8 @@ func main() {
 		vCenterURL        = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
 		vCenterUserName   = strings.TrimSpace(os.Getenv("VCENTER_USERNAME"))
 		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
-		vCenterInsecure   = strings.TrimSpace(os.Getenv("VCENTER_INSECURE")) == constants.TrueString
-		openstackInsecure = strings.TrimSpace(os.Getenv("OS_INSECURE")) == constants.TrueString
+		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
+		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
 	)
 
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
