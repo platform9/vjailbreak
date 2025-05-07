@@ -589,8 +589,11 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		}
 
 		for _, device := range vmProps.Config.Hardware.Device {
-			if _, ok := device.(*types.VirtualDisk); ok {
-				switch backing := device.GetVirtualDevice().Backing.(type) {
+			_, ok := device.(*types.VirtualDisk)
+			if !ok {
+				continue
+			}
+			switch backing := device.GetVirtualDevice().Backing.(type) {
 				case *types.VirtualDiskFlatVer2BackingInfo:
 					dsref = backing.Datastore.Reference()
 				case *types.VirtualDiskSparseVer2BackingInfo:
