@@ -556,29 +556,26 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	}
 	finder.SetDatacenter(dc)
 
-	// Get all the vms
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
 	var vminfo []vjailbreakv1alpha1.VMInfo
+	pc := property.DefaultCollector(c)
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+			continue
+		}
 		var datastores []string
 		var networks []string
 		var disks []string
-		var ds mo.Datastore
-		var dsref types.ManagedObjectReference
-		if vmProps.Config == nil {
-			// VM is not powered on or is in creating state
-			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
-			continue
-		}
-		pc := property.DefaultCollector(c)
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
 			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
@@ -589,26 +586,33 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		}
 
 		for _, device := range vmProps.Config.Hardware.Device {
-			switch device.(type) {
-			case *types.VirtualDisk:
-				switch backing := device.GetVirtualDevice().Backing.(type) {
-				case *types.VirtualDiskFlatVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *types.VirtualDiskSparseVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-					dsref = backing.Datastore.Reference()
-				default:
-					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
-				}
-				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get datastore: %w", err)
-				}
-				datastores = AppendUnique(datastores, ds.Name)
-				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
+			disk, ok := device.(*types.VirtualDisk)
+			if !ok {
+				continue
 			}
+
+			var dsref types.ManagedObjectReference
+			switch backing := disk.Backing.(type) {
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskSparseVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				dsref = backing.Datastore.Reference()
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+			}
+
+			var ds mo.Datastore
+			err := pc.RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datastore: %w", err)
+			}
+
+			datastores = AppendUnique(datastores, ds.Name)
+			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:       vmProps.Config.Name,
 			Datastores: datastores,
@@ -621,7 +625,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
 		})
 	}
-
 	return vminfo, nil
 }
 
