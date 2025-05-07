@@ -16,7 +16,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -355,7 +354,6 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 // ValidateAndGetProviderClient is a function to get provider client
 func ValidateAndGetProviderClient(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
-	ctxlog := log.FromContext(ctx)
 	openstackCredential, err := GetOpenstackCredentials(ctx, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
@@ -369,7 +367,6 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		MinVersion: tls.VersionTLS12,
 	}
 	if openstackCredential.Insecure {
-		ctxlog.Info("Insecure flag is set, skipping certificate verification")
 		tlsConfig.InsecureSkipVerify = true
 	} else {
 		// Get the certificate for the Openstack endpoint
@@ -377,7 +374,6 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		if certerr != nil {
 			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
 		}
-		ctxlog.Info("Trusting certificate for OpenStack endpoint", "authURL", openstackCredential.AuthURL)
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
 		caCertPool, _ := x509.SystemCertPool()
 		if caCertPool == nil {
@@ -750,13 +746,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	ctxlog := log.FromContext(ctx)
-
-	// Fixed logging with proper string keys
-	ctxlog.Info("Checking flavor requirements",
-		"CPU", cpu,
-		"MemoryMB", memory)
-
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -782,18 +771,9 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	}
 
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		// Fixed logging with proper string keys and descriptive field names
-		ctxlog.Info("Found matching OpenStack flavor",
-			"flavorName", bestFlavor.Name,
-			"vCPUs", bestFlavor.VCPUs,
-			"RAM_MB", bestFlavor.RAM,
-			"diskGB", bestFlavor.Disk)
 		return bestFlavor, nil
 	}
 
-	ctxlog.Info("No suitable flavor found matching requirements",
-		"required_vCPUs", cpu,
-		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
