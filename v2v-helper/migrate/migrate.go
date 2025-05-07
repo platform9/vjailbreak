@@ -853,15 +853,14 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
-		return errors.Wrap(err, "failed to detach volumes")
-	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
+	}
+	err = migobj.DeleteAllVolumes(vminfo)
+	if err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
-		return errors.Wrap(err, "failed to delete volumes")
 	}
 	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
-		return errors.Wrap(err, "failed to delete snapshot")
+		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
-	return nil
 }
