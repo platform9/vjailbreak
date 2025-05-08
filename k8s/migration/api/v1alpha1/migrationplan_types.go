@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -56,14 +57,19 @@ type AdvancedOptions struct {
 
 // MigrationPlanSpec defines the desired state of MigrationPlan
 type MigrationPlanSpec struct {
+	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
+	MigrationPlanSpecPerVM `json:",inline"`
+	// VirtualMachines is a list of virtual machines to be migrated
+	VirtualMachines [][]string `json:"virtualMachines"`
+}
+
+type MigrationPlanSpecPerVM struct {
 	// MigrationTemplate is the template to be used for the migration
 	MigrationTemplate string `json:"migrationTemplate"`
 	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
 	// Retry the migration if it fails
 	Retry bool `json:"retry,omitempty"`
-	// VirtualMachines is a list of virtual machines to be migrated
-	VirtualMachines [][]string `json:"virtualMachines"`
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
@@ -73,7 +79,7 @@ type MigrationPlanSpec struct {
 // MigrationPlanStatus defines the observed state of MigrationPlan
 type MigrationPlanStatus struct {
 	// MigrationStatus is the status of the migration
-	MigrationStatus string `json:"migrationStatus"`
+	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
 }

@@ -135,7 +135,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Info("ESXIMigration not found, creating new one", "esxiName", esxi)
-				if esxiMigration, err = utils.CreateESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan); err != nil {
+				if esxiMigration, err = utils.CreateESXIMigration(ctx, scope, esxi); err != nil {
 					log.Error(err, "Failed to create ESXIMigration", "esxiName", esxi)
 					return ctrl.Result{}, errors.Wrap(err, "failed to create esxi migration")
 				}
@@ -236,4 +236,23 @@ func (r *ClusterMigrationReconciler) UpdateClusterMigrationStatus(ctx context.Co
 	scope.ClusterMigration.Status.Message = message
 	scope.ClusterMigration.Status.CurrentESXi = currentESXi
 	return r.Status().Update(ctx, scope.ClusterMigration)
+}
+
+func (r *ClusterMigrationReconciler) CheckAndUpdateClusterMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope) error {
+	log := scope.Logger
+	esxiMigrationList := &vjailbreakv1alpha1.ESXIMigrationList{}
+	if err := r.Client.List(ctx, esxiMigrationList, client.InNamespace(scope.ClusterMigration.Namespace),
+		client.MatchingLabels{constants.ClusterMigrationLabel: scope.ClusterMigration.Name}); err != nil {
+		return err
+	}
+
+	// for _, esxiMigration := range esxiMigrationList.Items {
+	// 	switch esxiMigration.Status.Phase {
+	// 	case vjailbreakv1alpha1.ESXIMigrationPhasePending:
+
+	// 	}
+	// }
+
+	log.V(1).Info("Retrieved ESXIMigrations", "count", len(esxiMigrationList.Items))
+	return nil
 }

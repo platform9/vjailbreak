@@ -63,6 +63,15 @@ const (
 	// ClusterNameLabel is the label for cluster name
 	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
 
+	// ClusterMigrationLabel is the label for cluster migration
+	ClusterMigrationLabel = "vjailbreak.k8s.pf9.io/clustermigration"
+
+	// RollingMigrationPlanLabel is the label for rolling migration plan
+	RollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/rollingmigrationplan"
+
+	// PauseRollingMigrationPlanLabel is the label for pausing rolling migration plan
+	PauseRollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/pause-rollingmigrationplan"
+
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
 
@@ -164,19 +173,19 @@ runcmd:
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
-	// StatesEnum is a map of migration phase to state
-	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
-		vjailbreakv1alpha1.MigrationPhasePending:                  0,
-		vjailbreakv1alpha1.MigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.MigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.MigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.MigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.MigrationPhaseUnknown:                  10,
+	// VMMigrationStatesEnum is a map of migration phase to state
+	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
+		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
+		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

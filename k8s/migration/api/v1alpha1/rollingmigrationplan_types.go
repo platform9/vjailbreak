@@ -53,17 +53,17 @@ type RollingMigrationPlanSpec struct {
 	// ClusterSequence is the sequence of vCenter clusters to be migrated
 	ClusterSequence []ClusterMigrationInfo `json:"clusterSequence"`
 
-	// VMwareCredsRef is the reference to the VMware credentials
-	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
-
-	// OpenstackCredsRef is the reference to the OpenStack credentials
-	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
-
 	// BMConfigRef is the reference to the BMC credentials
 	BMConfigRef corev1.LocalObjectReference `json:"bmConfigRef"`
 
 	// CloudInitConfigRef is the reference to the cloud-init configuration
 	CloudInitConfigRef *corev1.SecretReference `json:"cloudInitConfigRef,omitempty"`
+
+	// VMMigrationPlans is the reference to the VM migration plan
+	VMMigrationPlans []string `json:"vmMigrationPlans,omitempty"`
+
+	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
+	MigrationPlanSpecPerVM `json:",inline"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan
@@ -82,6 +82,14 @@ type RollingMigrationPlanStatus struct {
 	MigratedVMs []string `json:"migratedVMs,omitempty"`
 	// FailedVMs is the list of virtual machines that have failed to migrate
 	FailedVMs []string `json:"failedVMs,omitempty"`
+	// MigratedESXi is the list of ESXi hosts that have been migrated
+	MigratedESXi []string `json:"migratedESXi,omitempty"`
+	// FailedESXi is the list of ESXi hosts that have failed to migrate
+	FailedESXi []string `json:"failedESXi,omitempty"`
+	// MigratedClusters is the list of vCenter clusters that have been migrated
+	MigratedClusters []string `json:"migratedClusters,omitempty"`
+	// FailedClusters is the list of vCenter clusters that have failed to migrate
+	FailedClusters []string `json:"failedClusters,omitempty"`
 }
 
 // +kubebuilder:object:root=true
