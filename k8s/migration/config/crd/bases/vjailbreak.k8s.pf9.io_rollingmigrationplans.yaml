@@ -40,6 +40,27 @@ spec:
           spec:
             description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
             properties:
+              advancedOptions:
+                description: AdvancedOptions is a list of advanced options for the
+                  migration
+                properties:
+                  granularNetworks:
+                    description: GranularNetworks is a list of networks to be migrated
+                    items:
+                      type: string
+                    type: array
+                  granularPorts:
+                    description: GranularPorts is a list of ports to be migrated
+                    items:
+                      type: string
+                    type: array
+                  granularVolumeTypes:
+                    description: GranularVolumeTypes is a list of volume types to
+                      be migrated
+                    items:
+                      type: string
+                    type: array
+                type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
                 properties:
@@ -99,39 +120,57 @@ spec:
                   - vmSequence
                   type: object
                 type: array
-              openstackCredsRef:
-                description: OpenstackCredsRef is the reference to the OpenStack credentials
+              firstBootScript:
+                default: echo "Add your startup script here!"
+                type: string
+              migrationStrategy:
+                description: MigrationStrategy is the strategy to be used for the
+                  migration
                 properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  adminInitiatedCutOver:
+                    default: false
+                    type: boolean
+                  dataCopyStart:
+                    format: date-time
                     type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              vmwareCredsRef:
-                description: VMwareCredsRef is the reference to the VMware credentials
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  healthCheckPort:
+                    default: "443"
                     type: string
+                  performHealthChecks:
+                    default: false
+                    type: boolean
+                  type:
+                    enum:
+                    - hot
+                    - cold
+                    type: string
+                  vmCutoverEnd:
+                    format: date-time
+                    type: string
+                  vmCutoverStart:
+                    format: date-time
+                    type: string
+                required:
+                - type
                 type: object
-                x-kubernetes-map-type: atomic
+              migrationTemplate:
+                description: MigrationTemplate is the template to be used for the
+                  migration
+                type: string
+              retry:
+                description: Retry the migration if it fails
+                type: boolean
+              vmMigrationPlans:
+                description: VMMigrationPlans is the reference to the VM migration
+                  plan
+                items:
+                  type: string
+                type: array
             required:
             - bmConfigRef
             - clusterSequence
-            - openstackCredsRef
-            - vmwareCredsRef
+            - migrationStrategy
+            - migrationTemplate
             type: object
           status:
             description: RollingMigrationPlanStatus defines the observed state of
@@ -149,6 +188,18 @@ spec:
                 description: CurrentVM is the name of the current virtual machine
                   being migrated
                 type: string
+              failedClusters:
+                description: FailedClusters is the list of vCenter clusters that have
+                  failed to migrate
+                items:
+                  type: string
+                type: array
+              failedESXi:
+                description: FailedESXi is the list of ESXi hosts that have failed
+                  to migrate
+                items:
+                  type: string
+                type: array
               failedVMs:
                 description: FailedVMs is the list of virtual machines that have failed
                   to migrate
@@ -159,6 +210,18 @@ spec:
                 description: Message is the message associated with the current state
                   of the migration
                 type: string
+              migratedClusters:
+                description: MigratedClusters is the list of vCenter clusters that
+                  have been migrated
+                items:
+                  type: string
+                type: array
+              migratedESXi:
+                description: MigratedESXi is the list of ESXi hosts that have been
+                  migrated
+                items:
+                  type: string
+                type: array
               migratedVMs:
                 description: MigratedVMs is the list of virtual machines that have
                   been migrated

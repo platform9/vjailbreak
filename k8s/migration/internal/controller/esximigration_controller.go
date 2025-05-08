@@ -31,7 +31,6 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -145,16 +144,17 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
-		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+		// provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
+		// if err != nil {
+		// 	return ctrl.Result{}, err
+		// }
+		// err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
+		// if err != nil {
+		// 	return ctrl.Result{}, err
+		// }
+		// TODO(omkar): Assume Convert to PCD host is done
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
-		err = r.Status().Update(ctx, scope.ESXIMigration)
+		err := r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")

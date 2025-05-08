@@ -529,10 +529,10 @@ func GetActiveMigrations(ctx context.Context, nodeName string, k3sclient client.
 		return nil, errors.Wrap(err, "failed to list migrations")
 	}
 
-	ignorePhases := []vjailbreakv1alpha1.MigrationPhase{vjailbreakv1alpha1.MigrationPhasePending,
-		vjailbreakv1alpha1.MigrationPhaseFailed,
-		vjailbreakv1alpha1.MigrationPhaseSucceeded,
-		vjailbreakv1alpha1.MigrationPhaseUnknown,
+	ignorePhases := []vjailbreakv1alpha1.VMMigrationPhase{vjailbreakv1alpha1.VMMigrationPhasePending,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown,
 	}
 
 	var activeMigrations []string
@@ -651,4 +651,16 @@ func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) erro
 		return errors.Wrap(err, "failed to update secret with finalizer")
 	}
 	return nil
+}
+
+func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
+	migration := &vjailbreakv1alpha1.Migration{}
+	err := k3sclient.Get(ctx, client.ObjectKey{
+		Name:      vmName,
+		Namespace: rollingMigrationPlan.Namespace,
+	}, migration)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vm migration")
+	}
+	return migration, nil
 }

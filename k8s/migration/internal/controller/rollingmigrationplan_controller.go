@@ -125,61 +125,38 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		}
 	}
 
-	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
-	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		for j := range cluster.VMSequence {
-			k8sVMName, err := utils.ConvertToK8sName(cluster.VMSequence[j].VMName)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to convert vm name to k8s name")
-			}
-			vm := &vjailbreakv1alpha1.VMwareMachine{}
-			err = r.Get(ctx, client.ObjectKey{
-				Name:      k8sVMName,
-				Namespace: scope.Namespace(),
-			}, vm)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting VMInfo for VM '%s'", cluster.VMSequence[j].VMName))
-			}
-			scope.RollingMigrationPlan.Spec.ClusterSequence[i].VMSequence[j].ESXiName = vm.Spec.VMInfo.ESXiName
-		}
+	if err := utils.UpdateESXiNamesInRollingMigrationPlan(ctx, scope); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi in rolling migration plan")
 	}
 
 	// execute rolling migration plan
-	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
-		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
-		clusterMigration, err := utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName, scope.RollingMigrationPlan)
+	if requeue, err := r.ExecuteRollingMigrationPlan(ctx, scope); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to execute rolling migration plan")
+	} else if requeue {
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
+	// execute VM Migrations
+	err := utils.ConvertVMSequenceToMigrationPlans(ctx, scope, 10)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to convert VM sequence to migration plans")
+	}
+
+	for _, mp := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
+		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
+		err := scope.Client.Get(ctx, client.ObjectKey{
+			Name:      mp,
+			Namespace: scope.RollingMigrationPlan.Namespace,
+		}, migrationPlan)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				if _, createErr := utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); createErr != nil {
-					return ctrl.Result{}, errors.Wrap(createErr, "failed to create cluster migration")
-				}
-				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-			} else {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
-			}
+			return ctrl.Result{}, errors.Wrap(err, "failed to get migration plan")
 		}
-		if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseFailed {
-			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
-			}
-			return ctrl.Result{}, nil
-		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded {
-			continue
-		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseRunning {
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
-			}
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-		} else {
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan status")
-			}
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		// Omkar
+		migrationPlan.Status.MigrationStatus = "Pending"
+		migrationPlan.Status.MigrationMessage = fmt.Sprintf("Created by RollingMigrationPlan %s", scope.RollingMigrationPlan.Name)
+		err = scope.Client.Status().Update(ctx, migrationPlan)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
 		}
 	}
 
@@ -232,5 +209,63 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 	scope.RollingMigrationPlan.Status.Message = message
 	scope.RollingMigrationPlan.Status.CurrentCluster = currentCluster
 	scope.RollingMigrationPlan.Status.CurrentESXi = currentESXi
+
+	// update migrated and failed VMs
+	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
+		migration, err := utils.GetVMMigration(ctx, scope.Client, vm, scope.RollingMigrationPlan)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return errors.Wrap(err, "failed to get vm migration")
+		}
+		if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+			scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
+		} else if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
+			scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
+		}
+	}
 	return r.Status().Update(ctx, scope.RollingMigrationPlan)
+}
+
+func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, error) {
+	log := scope.Logger
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
+		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
+		clusterMigration, err := utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName, scope.RollingMigrationPlan)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				if _, createErr := utils.CreateClusterMigration(ctx, scope.Client, cluster, scope.RollingMigrationPlan); createErr != nil {
+					return false, errors.Wrap(createErr, "failed to create cluster migration")
+				}
+				return true, nil
+			} else {
+				return false, errors.Wrap(err, "failed to get cluster migration")
+			}
+		}
+		if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseFailed {
+			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
+				return false, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return false, nil
+		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded {
+			continue
+		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseRunning {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
+				return false, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return true, nil
+		} else {
+			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+			if err != nil {
+				return false, errors.Wrap(err, "failed to update rolling migration plan status")
+			}
+			return true, nil
+		}
+	}
+	return false, nil
 }

@@ -44,8 +44,16 @@ func ConvertESXiToPCDHost(ctx context.Context,
 	bmProvider providers.BMCProvider) error {
 	ctxlog := log.FromContext(ctx).WithName(constants.ESXIMigrationControllerName)
 
+	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
+	if err := scope.Client.Get(ctx, types.NamespacedName{
+		Name:      scope.RollingMigrationPlan.Spec.MigrationTemplate,
+		Namespace: constants.NamespaceMigrationSystem},
+		&migrationTemplate); err != nil {
+		return errors.Wrap(err, "failed to get migration template")
+	}
+
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
-	err := scope.Client.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: scope.RollingMigrationPlan.Spec.VMwareCredsRef.Name}, vmwarecreds)
+	err := scope.Client.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: migrationTemplate.Spec.Source.VMwareRef}, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
@@ -232,7 +240,14 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 }
 
 func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMigrationPlanScope) (string, error) {
-	openstackCreds, err := GetOpenstackCredentials(ctx, scope.Client, scope.RollingMigrationPlan.Spec.OpenstackCredsRef.Name)
+	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
+	if err := scope.Client.Get(ctx, types.NamespacedName{
+		Name:      scope.RollingMigrationPlan.Spec.MigrationTemplate,
+		Namespace: constants.NamespaceMigrationSystem},
+		&migrationTemplate); err != nil {
+		return "", errors.Wrap(err, "failed to get migration template")
+	}
+	openstackCreds, err := GetOpenstackCredentials(ctx, scope.Client, migrationTemplate.Spec.Destination.OpenstackRef)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack credentials")
 	}
@@ -325,9 +340,16 @@ func GetBMConfig(ctx context.Context, k8sClient client.Client, bmConfigRef corev
 }
 
 func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (bool, error) {
+	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      rollingMigrationPlan.Spec.MigrationTemplate,
+		Namespace: constants.NamespaceMigrationSystem},
+		&migrationTemplate); err != nil {
+		return false, errors.Wrap(err, "failed to get migration template")
+	}
 	openstackCreds := vjailbreakv1alpha1.OpenstackCreds{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{
-		Name:      rollingMigrationPlan.Spec.OpenstackCredsRef.Name,
+		Name:      migrationTemplate.Spec.Destination.OpenstackRef,
 		Namespace: constants.NamespaceMigrationSystem},
 		&openstackCreds); err != nil {
 		return false, errors.Wrap(err, "failed to get openstack credentials")
