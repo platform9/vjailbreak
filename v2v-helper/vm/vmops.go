@@ -50,7 +50,7 @@ type VMInfo struct {
 	UEFI     bool
 	Name     string
 	OSType   string
-	RDMDisks []vjailbreakv1alpha1.DiskInfo
+	RDMDisks []vjailbreakv1alpha1.RDMDiskInfo
 }
 
 type ChangeID struct {
@@ -240,17 +240,17 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo, namespace string) (VMInfo, err
 				snapid = append(snapid, changeid.Value)
 			}
 		}
-		rdmDIskInfo, err := GetVMwareMachine(vmops.ctx, vmops.k8sClient, vminfo.Name, namespace)
-		if err != nil {
-			return vminfo, fmt.Errorf("failed to get rdmDisk properties: %s", err)
-		}
-		vminfo.RDMDisks = rdmDIskInfo.Spec.VMs.RDMDisks
-		// Based on Vm and diskname fetch DiskInfo
 		for idx := range vminfo.VMDisks {
 			vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 			vminfo.VMDisks[idx].Snapname = snapname[idx]
 			vminfo.VMDisks[idx].ChangeID = snapid[idx]
 		}
+		// Based on VMName and diskname fetch DiskInfo
+		rdmDIskInfo, err := GetVMwareMachine(vmops.ctx, vmops.k8sClient, vminfo.Name, namespace)
+		if err != nil {
+			return vminfo, fmt.Errorf("failed to get rdmDisk properties: %s", err)
+		}
+		vminfo.RDMDisks = rdmDIskInfo.Spec.VMs.RDMDisks
 	}
 
 	return vminfo, nil

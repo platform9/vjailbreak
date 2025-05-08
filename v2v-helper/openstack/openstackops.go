@@ -22,6 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
@@ -45,6 +46,7 @@ type OpenstackOperations interface {
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
 	WaitUntilVMActive(vmID string) (bool, error)
+	CinderManage(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]interface{}, error)
 }
 
 func getCert(endpoint string) (*x509.Certificate, error) {

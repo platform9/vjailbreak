@@ -16,6 +16,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -832,6 +833,13 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	// Import LUN and MigrateRDM disk
+	for _, rdmDisk := range vminfo.RDMDisks {
+		_, err = migobj.CinderManage(rdmDisk)
+		if err != nil {
+			migobj.cleanup(vminfo, fmt.Sprintf("failed to import LUN: %s", err))
+			return errors.Wrap(err, "failed to import LUN")
+		}
+	}
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {
@@ -854,4 +862,18 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
 	}
+}
+
+func (migobj *Migrate) CinderManage(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]interface{}, error) {
+	openstackops := migobj.Openstackclients
+	dat, err := openstackops.CinderManage(rdmDisk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to import LUN: %s", err)
+	}
+	// Wait for the volume to become available
+	err = openstackops.WaitForVolume(dat["id"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	return dat, nil
 }
