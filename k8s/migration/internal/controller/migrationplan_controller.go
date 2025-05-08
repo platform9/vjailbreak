@@ -576,7 +576,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
 			if flavor == nil {
-				return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory)
+				return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
