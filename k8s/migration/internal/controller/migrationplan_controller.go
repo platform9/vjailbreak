@@ -179,7 +179,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
-		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodRunning), "Migration(s) in progress")
+		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress")
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 		}
@@ -197,7 +197,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
 			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.MigrationPhaseFailed:
+			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if migrationplan.Spec.Retry {
 					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
@@ -215,13 +215,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					}
 					return ctrl.Result{}, nil
 				}
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodFailed),
+				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
 					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
 				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
+			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 				continue
 			default:
 				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
@@ -230,7 +230,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
-	migrationplan.Status.MigrationStatus = string(corev1.PodSucceeded)
+	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
 	err := r.Status().Update(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
@@ -241,7 +241,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, status, message string) error {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
 	migrationplan.Status.MigrationStatus = status
 	migrationplan.Status.MigrationMessage = message
 	err := r.Status().Update(ctx, migrationplan)
@@ -792,7 +792,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
-			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.MigrationPhaseSucceeded {
+			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
 				continue
 			}
@@ -856,7 +856,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	if err != nil {
 		logger.Error(err, "VDDK directory could not be read")
 
-		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 		setCondition := corev1.PodCondition{
 			Type:               "VDDKCheck",
 			Status:             corev1.ConditionFalse,
@@ -886,7 +886,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			"path", VDDKDirectory,
 			"whoami", whoami)
 
-		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
 			Type:               "VDDKCheck",
 			Status:             corev1.ConditionFalse,
