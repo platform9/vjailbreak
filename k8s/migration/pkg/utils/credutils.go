@@ -34,6 +34,7 @@ import (
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1204,4 +1205,13 @@ func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCre
 		}
 	}
 	return nil
+}
+
+func containsString(slice []string, value string) bool {
+	for _, item := range slice {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
