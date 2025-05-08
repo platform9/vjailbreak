@@ -23,34 +23,34 @@ import (
 
 // MigrationPhase represents the current phase of the VM migration process
 // +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
-type MigrationPhase string
+type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration
 type MigrationConditionType string
 
 const (
-	// MigrationPhasePending indicates the migration is waiting to start
-	MigrationPhasePending MigrationPhase = "Pending"
-	// MigrationPhaseValidating indicates the migration prerequisites are being validated
-	MigrationPhaseValidating MigrationPhase = "Validating"
-	// MigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
-	MigrationPhaseAwaitingDataCopyStart MigrationPhase = "AwaitingDataCopyStart"
-	// MigrationPhaseCopying indicates initial block copying is in progress
-	MigrationPhaseCopying MigrationPhase = "CopyingBlocks"
-	// MigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress
-	MigrationPhaseCopyingChangedBlocks MigrationPhase = "CopyingChangedBlocks"
-	// MigrationPhaseConvertingDisk indicates disk format conversion is in progress
-	MigrationPhaseConvertingDisk MigrationPhase = "ConvertingDisk"
-	// MigrationPhaseAwaitingCutOverStartTime indicates waiting for scheduled cutover time
-	MigrationPhaseAwaitingCutOverStartTime MigrationPhase = "AwaitingCutOverStartTime"
-	// MigrationPhaseAwaitingAdminCutOver indicates waiting for admin to initiate cutover
-	MigrationPhaseAwaitingAdminCutOver MigrationPhase = "AwaitingAdminCutOver"
-	// MigrationPhaseSucceeded indicates the migration completed successfully
-	MigrationPhaseSucceeded MigrationPhase = "Succeeded"
-	// MigrationPhaseFailed indicates the migration has failed
-	MigrationPhaseFailed MigrationPhase = "Failed"
-	// MigrationPhaseUnknown indicates the migration state is unknown
-	MigrationPhaseUnknown MigrationPhase = "Unknown"
+	// VMMigrationPhasePending indicates the migration is waiting to start
+	VMMigrationPhasePending VMMigrationPhase = "Pending"
+	// VMMigrationPhaseValidating indicates the migration prerequisites are being validated
+	VMMigrationPhaseValidating VMMigrationPhase = "Validating"
+	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
+	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
+	// VMMigrationPhaseCopying indicates initial block copying is in progress
+	VMMigrationPhaseCopying VMMigrationPhase = "CopyingBlocks"
+	// VMMigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress
+	VMMigrationPhaseCopyingChangedBlocks VMMigrationPhase = "CopyingChangedBlocks"
+	// VMMigrationPhaseConvertingDisk indicates disk format conversion is in progress
+	VMMigrationPhaseConvertingDisk VMMigrationPhase = "ConvertingDisk"
+	// VMMigrationPhaseAwaitingCutOverStartTime indicates waiting for scheduled cutover time
+	VMMigrationPhaseAwaitingCutOverStartTime VMMigrationPhase = "AwaitingCutOverStartTime"
+	// VMMigrationPhaseAwaitingAdminCutOver indicates waiting for admin to initiate cutover
+	VMMigrationPhaseAwaitingAdminCutOver VMMigrationPhase = "AwaitingAdminCutOver"
+	// VMMigrationPhaseSucceeded indicates the migration completed successfully
+	VMMigrationPhaseSucceeded VMMigrationPhase = "Succeeded"
+	// VMMigrationPhaseFailed indicates the migration has failed
+	VMMigrationPhaseFailed VMMigrationPhase = "Failed"
+	// VMMigrationPhaseUnknown indicates the migration state is unknown
+	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -71,7 +71,7 @@ type MigrationSpec struct {
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
 	// Phase is the current phase of the migration
-	Phase MigrationPhase `json:"phase"`
+	Phase VMMigrationPhase `json:"phase"`
 
 	// Conditions is the list of conditions of the migration object pod
 	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
