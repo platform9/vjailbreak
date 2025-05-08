@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.36.1
 	github.com/pkg/errors v0.9.1
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250429112016-395b51de449c
-	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250219180723-abba0e774f68
+	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250507163709-835c09847a29
 	github.com/vmware/govmomi v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.33.0
