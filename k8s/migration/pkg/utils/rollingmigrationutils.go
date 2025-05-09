@@ -94,6 +94,14 @@ func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string,
 	return esxiMigration, nil
 }
 
+func GetMigrationPlan(ctx context.Context, k8sClient client.Client, vm string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationPlan, error) {
+	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: vm, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
+		return nil, err
+	}
+	return migrationPlan, nil
+}
+
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
@@ -468,13 +476,10 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrat
 		Spec: vjailbreakv1alpha1.MigrationPlanSpec{
 			// Use the template name from existing plans or default
 			MigrationPlanSpecPerVM: vjailbreakv1alpha1.MigrationPlanSpecPerVM{
-				MigrationTemplate: templateName,
-				MigrationStrategy: vjailbreakv1alpha1.MigrationPlanStrategy{
-					Type:                "OnDemand",
-					PerformHealthChecks: true,
-				},
+				MigrationTemplate: rollingMigrationPlan.Spec.MigrationTemplate,
+				MigrationStrategy: rollingMigrationPlan.Spec.MigrationStrategy,
 				// Copy advanced options if needed
-				AdvancedOptions: vjailbreakv1alpha1.AdvancedOptions{},
+				AdvancedOptions: rollingMigrationPlan.Spec.AdvancedOptions,
 			},
 			// Include VM batch as a single group for migration
 			VirtualMachines: [][]string{batch},

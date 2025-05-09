@@ -910,6 +910,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		}
 	}
 
+	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 	migrationobj.Status.Conditions = cleanedConditions
 
 	if err = r.Status().Update(ctx, migrationobj); err != nil {
