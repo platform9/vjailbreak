@@ -183,12 +183,37 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 		}
 	}
 
+	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
+		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, vm, scope.RollingMigrationPlan)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			log.Error(err, "Failed to get MigrationPlan", "vm", vm)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get migration plan")
+		}
+		if err := r.Delete(ctx, migrationPlan); err != nil {
+			log.Error(err, "Failed to delete MigrationPlan", "vm", vm)
+			return ctrl.Result{}, errors.Wrap(err, "failed to delete migration plan")
+		}
+	}
+
 	// Wait for all ClusterMigrations to be deleted
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		_, err := utils.GetClusterMigration(ctx, r.Client, cluster.ClusterName, scope.RollingMigrationPlan)
 		if err == nil {
 			// ClusterMigration still exists, requeue
 			log.Info("ClusterMigration still exists, requeuing", "cluster", cluster)
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
+
+	// Wait for all MigrationPlans to be deleted
+	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
+		_, err := utils.GetMigrationPlan(ctx, r.Client, vm, scope.RollingMigrationPlan)
+		if err == nil {
+			// MigrationPlan still exists, requeue
+			log.Info("MigrationPlan still exists, requeuing", "vm", vm)
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 	}
