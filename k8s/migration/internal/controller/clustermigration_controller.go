@@ -130,7 +130,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	}
 
-	for _, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
+	for i, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
 		esxiMigration, err := utils.GetESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -157,6 +157,16 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 			log.Info("Successfully updated ClusterMigration status to failed")
 			return ctrl.Result{}, nil
 		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
+			if i == len(clusterMigration.Spec.ESXIMigrationSequence)-1 {
+				log.Info("All ESXIMigrations succeeded, updating ClusterMigration status to succeeded")
+				err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded, "All ESXIMigrations succeeded", "")
+				if err != nil {
+					log.Error(err, "Failed to update ClusterMigration status", "desiredPhase", vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded)
+					return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+				}
+				log.Info("Successfully updated ClusterMigration status to succeeded")
+				return ctrl.Result{}, nil
+			}
 			log.Info("ESXIMigration succeeded, continuing to next ESXi", "esxiName", esxi)
 			continue
 		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseRunning {

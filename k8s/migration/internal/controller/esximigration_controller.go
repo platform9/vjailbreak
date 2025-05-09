@@ -67,20 +67,10 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
-	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
-	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
-		}
-		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
-	}
-
 	scope, err := scope.NewESXIMigrationScope(scope.ESXIMigrationScopeParams{
-		Logger:               ctxlog,
-		Client:               r.Client,
-		ESXIMigration:        esxiMigration,
-		RollingMigrationPlan: rollingMigrationPlan,
+		Logger:        ctxlog,
+		Client:        r.Client,
+		ESXIMigration: esxiMigration,
 	})
 	if err != nil {
 		ctxlog.Error(err, "Failed to create ESXIMigrationScope")
@@ -144,6 +134,8 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
+
+		// Omkar Assume this will be done by vPwned
 		// provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
 		// if err != nil {
 		// 	return ctrl.Result{}, err
@@ -152,7 +144,6 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		// if err != nil {
 		// 	return ctrl.Result{}, err
 		// }
-		// TODO(omkar): Assume Convert to PCD host is done
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
 		err := r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
@@ -177,7 +168,8 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		log.Info("Counted VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
 		if vmCount != 0 {
 			log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+			// Omkar change back to 5 mins
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 		log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
 		// TODO(vPwned): Convert to PCD host
