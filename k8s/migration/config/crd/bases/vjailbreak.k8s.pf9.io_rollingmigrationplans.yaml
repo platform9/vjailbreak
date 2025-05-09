@@ -98,6 +98,14 @@ spec:
                       description: ClusterName is the name of the vCenter cluster
                         to be migrated
                       type: string
+                    vmMigrationBatchSize:
+                      default: 10
+                      description: |-
+                        VMMigrationBatchSize is the number of VMs in one batch for migration
+                        batches will be processed sequentially, but all VMs in a batch
+                        will be migrated in parallel. Default is 10
+                      minimum: 1
+                      type: integer
                     vmSequence:
                       description: VMSequence is the sequence of virtual machines
                         to be migrated

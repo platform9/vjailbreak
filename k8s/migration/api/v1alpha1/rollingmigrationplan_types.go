@@ -46,6 +46,12 @@ type ClusterMigrationInfo struct {
 	ClusterName string `json:"clusterName"`
 	// VMSequence is the sequence of virtual machines to be migrated
 	VMSequence []VMSequenceInfo `json:"vmSequence"`
+	// VMMigrationBatchSize is the number of VMs in one batch for migration
+	// batches will be processed sequentially, but all VMs in a batch
+	// will be migrated in parallel. Default is 10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	VMMigrationBatchSize int `json:"vmMigrationBatchSize,omitempty"`
 }
 
 // RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan

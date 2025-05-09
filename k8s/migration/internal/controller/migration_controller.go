@@ -131,8 +131,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) &&
-		string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -216,7 +216,7 @@ loop:
 			break loop
 		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
 			// If none of the above phases matched
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):

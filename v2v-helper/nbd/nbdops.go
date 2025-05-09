@@ -132,6 +132,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	}
+
 	log.Printf("Executing %s\n", cmdstring)
 	err = cmd.Start()
 	if err != nil {
