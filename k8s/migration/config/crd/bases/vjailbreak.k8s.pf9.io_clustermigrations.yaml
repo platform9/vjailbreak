@@ -124,7 +124,7 @@ spec:
                 enum:
                 - Pending
                 - Running
-                - Completed
+                - Succeeded
                 - Failed
                 type: string
             required:

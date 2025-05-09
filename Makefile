@@ -54,6 +54,9 @@ generate-manifests: vjail-controller ui
 	envsubst < ui/deploy/ui.yaml > image_builder/deploy/01ui.yaml
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 
+build-installer:
+	make -C k8s/migration/ build-installer 
+
 .PHONY: docker-build-image
 docker-build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
