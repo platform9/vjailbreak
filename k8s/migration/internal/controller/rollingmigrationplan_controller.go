@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -151,12 +153,15 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get migration plan")
 		}
-		// Omkar
-		migrationPlan.Status.MigrationStatus = "Pending"
-		migrationPlan.Status.MigrationMessage = fmt.Sprintf("Created by RollingMigrationPlan %s", scope.RollingMigrationPlan.Name)
-		err = scope.Client.Status().Update(ctx, migrationPlan)
+
+		// Aggregate MigrationPlan statuses and update RollingMigrationPlan status
+		updated, err := r.aggregateAndUpdateMigrationPlanStatuses(ctx, scope)
 		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
+			return ctrl.Result{}, errors.Wrap(err, "failed to aggregate migration plan statuses")
+		}
+		if updated {
+			// Requeue to check status updates
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	}
 
@@ -223,6 +228,111 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// aggregateAndUpdateMigrationPlanStatuses collects statuses from all MigrationPlans and updates the RollingMigrationPlan status
+func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, error) {
+	log := scope.Logger
+	log.Info("Aggregating MigrationPlan statuses", "rollingmigrationplan", scope.RollingMigrationPlan.Name)
+
+	var totalPlans, succeededPlans, failedPlans, runningPlans, waitingPlans int
+	var statusMessages []string
+
+	// Get all MigrationPlans associated with this RollingMigrationPlan
+	for _, planName := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
+		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, planName, scope.RollingMigrationPlan)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				log.Info("MigrationPlan not found, skipping", "vm", planName)
+				continue
+			}
+			return false, errors.Wrap(err, "failed to get migration plan")
+		}
+		totalPlans++
+
+		// Count statuses based on PodPhase
+		switch migrationPlan.Status.MigrationStatus {
+		case corev1.PodSucceeded:
+			succeededPlans++
+		case corev1.PodFailed:
+			failedPlans++
+			if migrationPlan.Status.MigrationMessage != "" {
+				statusMessages = append(statusMessages, fmt.Sprintf("VM %s: %s", planName, migrationPlan.Status.MigrationMessage))
+			}
+		case corev1.PodRunning:
+			runningPlans++
+		default: // PodPending or other states
+			waitingPlans++
+		}
+	}
+
+	if totalPlans == 0 {
+		log.Info("No MigrationPlans found for this RollingMigrationPlan")
+		return false, nil
+	}
+
+	// Determine the overall status based on aggregated statuses
+	var currentPhase vjailbreakv1alpha1.RollingMigrationPlanPhase
+	var message string
+
+	if failedPlans > 0 {
+		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed
+		message = fmt.Sprintf("Failed to complete migration: %d/%d plans failed. %s",
+			failedPlans, totalPlans, strings.Join(statusMessages, "; "))
+	} else if runningPlans > 0 {
+		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning
+		message = fmt.Sprintf("Migration in progress: %d/%d plans succeeded, %d running, %d waiting",
+			succeededPlans, totalPlans, runningPlans, waitingPlans)
+	} else if waitingPlans > 0 {
+		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
+		message = fmt.Sprintf("Waiting for migration to start: %d/%d plans succeeded, %d waiting",
+			succeededPlans, totalPlans, waitingPlans)
+	} else if succeededPlans == totalPlans {
+		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded
+		message = fmt.Sprintf("Migration completed successfully: all %d plans succeeded", totalPlans)
+	} else {
+		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
+		message = "Preparing for migration"
+	}
+
+	// Update the status if it has changed
+	if scope.RollingMigrationPlan.Status.Phase != currentPhase ||
+		scope.RollingMigrationPlan.Status.Message != message {
+		scope.RollingMigrationPlan.Status.Phase = currentPhase
+		scope.RollingMigrationPlan.Status.Message = message
+
+		// Update migrated and failed VMs lists
+		scope.RollingMigrationPlan.Status.MigratedVMs = []string{}
+		scope.RollingMigrationPlan.Status.FailedVMs = []string{}
+
+		for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+			for _, vmName := range cluster.VMSequence {
+				plan, err := utils.GetMigrationPlan(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						log.Info("MigrationPlan not found, skipping", "vm", vmName.VMName)
+						continue
+					}
+					return false, errors.Wrap(err, "failed to get migration plan")
+				}
+				if plan.Status.MigrationStatus == corev1.PodSucceeded {
+					scope.RollingMigrationPlan.Status.MigratedVMs = append(
+						scope.RollingMigrationPlan.Status.MigratedVMs, vmName.VMName)
+				} else if plan.Status.MigrationStatus == corev1.PodFailed {
+					scope.RollingMigrationPlan.Status.FailedVMs = append(
+						scope.RollingMigrationPlan.Status.FailedVMs, vmName.VMName)
+				}
+			}
+		}
+
+		if err := r.Status().Update(ctx, scope.RollingMigrationPlan); err != nil {
+			return false, errors.Wrap(err, "failed to update RollingMigrationPlan status")
+		}
+		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message)
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func (r *RollingMigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.RollingMigrationPlan{}).
