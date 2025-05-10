@@ -32,6 +32,10 @@ const (
 	RollingMigrationPlanPhaseFailed RollingMigrationPlanPhase = "Failed"
 	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
 	RollingMigrationPlanPhaseSucceeded RollingMigrationPlanPhase = "Succeeded"
+	// RollingMigrationPlanPhaseDeleting is the phase for deleting
+	RollingMigrationPlanPhaseDeleting RollingMigrationPlanPhase = "Deleting"
+	// RollingMigrationPlanPhaseMigratingVMs is the phase for migrating VMs
+	RollingMigrationPlanPhaseMigratingVMs RollingMigrationPlanPhase = "MigratingVMs"
 )
 
 type VMSequenceInfo struct {
