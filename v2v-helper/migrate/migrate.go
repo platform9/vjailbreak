@@ -309,6 +309,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
 					}
 					migobj.logMessage("Finished copying changed blocks")
+					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
 				}
 			}
 			if final {
