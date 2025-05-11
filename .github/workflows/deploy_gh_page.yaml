@@ -1,10 +1,13 @@
-name: Deploy to GitHub Pages
+name: Build & Deploy vJailbreak Docs + Swagger UI
+
 
 on:
   # Trigger the workflow every time you push to the `main` branch
   # Using a different branch name? Replace `main` with your branch’s name
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   # Allows you to run this workflow manually from the Actions tab on GitHub.
   workflow_dispatch:
     inputs:
@@ -14,7 +17,7 @@ on:
           default: 'main'
 # Allow this job to clone the repo and create a page deployment
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -24,6 +27,33 @@ jobs:
     steps:
       - name: Checkout your repository using git
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  
+
+      - name: Install yq for OpenAPI generation
+        run: |
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Generate Swagger UI for all tags
+        run: |
+          chmod +x scripts/generate_all_openapi.sh
+          ./scripts/generate_all_openapi.sh
+
+      - name: Generate Swagger UI links for all versions
+        run: ./scripts/generate_swagger_links.sh
+
+      - name: List Swagger UI build output
+        run: ls -alR docs/public/swagger-ui/ || echo "No Swagger UI build output found"
+
+      - name: Check generated Swagger UI links file
+        run: |
+          if [ -f docs/src/content/docs/guides/using_apis.md ]; then
+            head -20 docs/src/content/docs/guides/using_apis.md
+          else
+            echo "File not found: docs/src/content/docs/guides/using_apis.md"
+          fi
+
       - name: Install, build, and upload your site
         env:
           SITE_URL: ${{ env.SITE_URL }}
@@ -37,7 +67,6 @@ jobs:
         run: |
           echo "Astro Configuration:"
           cat ./docs/astro.config.mjs
-
 
   deploy:
     needs: build
