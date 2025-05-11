@@ -595,7 +595,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
 	var vminfo []vjailbreakv1alpha1.VMInfo
-	pc := property.DefaultCollector(c)
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
@@ -610,8 +609,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		var datastores []string
 		var networks []string
 		var disks []string
-		var ds mo.Datastore
-		var dsref govmitypes.ManagedObjectReference
+		var clusterName string
 		if vmProps.Config == nil {
 			// VM is not powered on or is in creating state
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
@@ -663,7 +661,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 
 		// Get the cluster name from the host's parent
-		var clusterName string
 		if host.Parent != nil {
 			var cluster mo.ClusterComputeResource
 			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
@@ -1042,168 +1039,4 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
 	}
 	return nil
-}
-
-// FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
-func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
-	vmList := vjailbreakv1alpha1.VMwareMachineList{}
-	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &vmList, nil
-}
-
-// FilterVMwareHostsForCreds filters VMwareHost objects for the given credentials
-func FilterVMwareHostsForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareHostList, error) {
-	hostList := vjailbreakv1alpha1.VMwareHostList{}
-	if err := k8sClient.List(ctx, &hostList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &hostList, nil
-}
-
-// FilterVMwareClustersForCreds filters VMwareCluster objects for the given credentials
-func FilterVMwareClustersForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareClusterList, error) {
-	clusterList := vjailbreakv1alpha1.VMwareClusterList{}
-	if err := k8sClient.List(ctx, &clusterList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &clusterList, nil
-}
-
-// FindVMwareMachinesNotInVcenter finds VMwareMachine objects that are not present in the vCenter
-func FindVMwareMachinesNotInVcenter(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
-	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error filtering VMs")
-	}
-	var staleVMs []vjailbreakv1alpha1.VMwareMachine
-	for _, vm := range vmList.Items {
-		if !VMExistsInVcenter(vm.Spec.VMInfo.Name, vcenterVMs) {
-			staleVMs = append(staleVMs, vm)
-		}
-	}
-	return staleVMs, nil
-}
-
-// FindVMwareHostsNotInVcenter finds VMwareHost objects that are not present in the vCenter
-func FindVMwareHostsNotInVcenter(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, clusterInfo []VMwareClusterInfo) ([]vjailbreakv1alpha1.VMwareHost, error) {
-	hostList, err := FilterVMwareHostsForCreds(ctx, client, vmwcreds)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error filtering VMs")
-	}
-	var staleHosts []vjailbreakv1alpha1.VMwareHost
-	for _, host := range hostList.Items {
-		if !HostExistsInVcenter(host.Name, clusterInfo) {
-			staleHosts = append(staleHosts, host)
-		}
-	}
-	return staleHosts, nil
-}
-
-// DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
-func DeleteStaleVMwareMachines(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
-	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
-	if err != nil {
-		return errors.Wrap(err, "Error finding stale VMs")
-	}
-	for _, vm := range staleVMs {
-		if err := client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
-			}
-		}
-	}
-	return nil
-}
-
-// VMExistsInVcenter checks if a VM exists in the vCenter
-func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
-	for _, vm := range vcenterVMs {
-		if vm.Name == vmName {
-			return true
-		}
-	}
-	return false
-}
-
-// HostExistsInVcenter checks if a host exists in the vCenter
-func HostExistsInVcenter(hostName string, clusterInfo []VMwareClusterInfo) bool {
-	for _, cluster := range clusterInfo {
-		for _, host := range cluster.Hosts {
-			if host.Name == hostName {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
-	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting VMs")
-	}
-	if err := DeleteVMwareHostsForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting hosts")
-	}
-	if err := DeleteVMwareClustersForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting clusters")
-	}
-
-	return nil
-}
-
-func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	vmList, err := FilterVMwareMachinesForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, vm := range vmList.Items {
-		if err := scope.Client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
-			}
-		}
-	}
-	return nil
-}
-
-func DeleteVMwareClustersForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	clusterList, err := FilterVMwareClustersForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, cluster := range clusterList.Items {
-		if err := scope.Client.Delete(ctx, &cluster); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", cluster.Name))
-			}
-		}
-	}
-	return nil
-}
-
-func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	hostList, err := FilterVMwareHostsForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, host := range hostList.Items {
-		if err := scope.Client.Delete(ctx, &host); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", host.Name))
-			}
-		}
-	}
-	return nil
-}
-
-func containsString(slice []string, value string) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
 }
