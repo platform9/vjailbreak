@@ -1,10 +1,24 @@
 #!/bin/bash
 set -e
-# === Config ===
-CRD_DIR="../../../k8s/migration/config/crd"
-CRD_BASES="$CRD_DIR/bases"
-OUTPUT_OPENAPI="./openapi.yaml"
 
+# Enable critical shell options for glob handling
+shopt -s nullglob extglob
+
+VERSION="${1:-v0.0.0}"
+PROJECT_ROOT="${2:-$(git rev-parse --show-toplevel)}"
+
+# Debug paths
+echo "PROJECT_ROOT: $PROJECT_ROOT"
+CRD_BASES="$PROJECT_ROOT/k8s/migration/config/crd/bases"
+echo "CRD_BASES: $CRD_BASES"
+ls -l $CRD_BASES/*.yaml 2>/dev/null || echo "No YAML files found in CRD_BASES"
+
+SWAGGER_OUT_DIR="$PROJECT_ROOT/docs/swagger-ui/$VERSION"
+mkdir -p "$SWAGGER_OUT_DIR"
+
+OUTPUT_OPENAPI="$SWAGGER_OUT_DIR/openapi.yaml"
+
+echo "Using version: $VERSION"
 echo "Cleaning previous OpenAPI file..."
 rm -f "$OUTPUT_OPENAPI"
 echo "Building OpenAPI document..."
@@ -12,14 +26,20 @@ cat > "$OUTPUT_OPENAPI" <<EOF
 openapi: 3.0.0
 info:
   title: vJailbreak API's
-  version: v0.1.9
+  version: $VERSION
 paths:
 EOF
 
-for file in "$CRD_BASES"/*.yaml; do
-  PLURAL=$(yq '.spec.names.plural' "$file")
-  KIND=$(yq '.spec.names.kind' "$file" | sed 's/-//g')
-  GROUP=$(yq '.spec.group' "$file")
+# Loop through CRD YAML files using absolute paths (NO QUOTES on glob!)
+for file in $CRD_BASES/*.yaml; do
+  echo "Processing file: $file"
+  if [ ! -f "$file" ]; then
+    echo "⚠️  Skipping $file (not found)"
+    continue
+  fi
+  PLURAL=$(/usr/local/bin/yq '.spec.names.plural' "$file") || { echo "Failed to process $file"; exit 1; }
+  KIND=$(/usr/local/bin/yq '.spec.names.kind' "$file" | sed 's/-//g')
+  GROUP=$(/usr/local/bin/yq '.spec.group' "$file")
 
   echo "  Adding REST paths for: $PLURAL"
 
@@ -57,7 +77,6 @@ for file in "$CRD_BASES"/*.yaml; do
       responses:
         '204':
           description: Deleted
-
 EOF
 done
 
@@ -65,9 +84,13 @@ done
 echo "components:" >> "$OUTPUT_OPENAPI"
 echo "  schemas:" >> "$OUTPUT_OPENAPI"
 
-for file in "$CRD_BASES"/*.yaml; do
-  NAME=$(yq '.metadata.name' "$file" | cut -d'.' -f1 | sed 's/-//g')
-  SCHEMA=$(yq -o=json '.spec.versions[0].schema.openAPIV3Schema' "$file")
+for file in $CRD_BASES/*.yaml; do
+  if [ ! -f "$file" ]; then
+    continue
+  fi
+  echo "Processing schema for file: $file"
+  NAME=$(/usr/local/bin/yq '.metadata.name' "$file" | cut -d'.' -f1 | sed 's/-//g')
+  SCHEMA=$(/usr/local/bin/yq -o=json '.spec.versions[0].schema.openAPIV3Schema' "$file")
 
   if [ -z "$SCHEMA" ] || [ "$SCHEMA" == "null" ]; then
     echo "⚠️  Skipping $file (no schema)"
@@ -76,7 +99,7 @@ for file in "$CRD_BASES"/*.yaml; do
 
   echo "  📦 Adding schema: $NAME"
   echo "    $NAME:" >> "$OUTPUT_OPENAPI"
-  echo "$SCHEMA" | yq -P | sed 's/^/      /' >> "$OUTPUT_OPENAPI"
+  echo "$SCHEMA" | /usr/local/bin/yq -P | sed 's/^/      /' >> "$OUTPUT_OPENAPI"
 done
 
 echo "OpenAPI written to $OUTPUT_OPENAPI"
