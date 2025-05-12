@@ -16,7 +16,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -91,16 +90,32 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	return vminfo, nil
 }
 
-func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
+// GetVolumeID implements VolumeAttacher for VMDisk
+func GetVolumeID(d interface{}) (string, error) {
+	switch d.(type) {
+	case vm.VMDisk:
+		return d.(vm.VMDisk).OpenstackVol.ID, nil
+	case string:
+		return d.(string), nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", d)
+	}
+}
+
+func (migobj *Migrate) AttachVolume(disk interface{}) (string, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Attaching volumes to VM")
 
-	if err := openstackops.AttachVolumeToVM(disk.OpenstackVol.ID); err != nil {
+	volumeID, err := GetVolumeID(disk)
+	if err != nil {
+		return "", fmt.Errorf("failed to get volume ID: %s", err)
+	}
+	if err := openstackops.AttachVolumeToVM(volumeID); err != nil {
 		return "", errors.Wrap(err, "failed to attach volume to VM")
 	}
 
 	// Get the Path of the attached volume
-	devicePath, err := openstackops.FindDevice(disk.OpenstackVol.ID)
+	devicePath, err := openstackops.FindDevice(volumeID)
 	if err != nil {
 		return "", fmt.Errorf("failed to find device: %s", err)
 	}
@@ -398,6 +413,13 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
 		if err != nil {
 			return fmt.Errorf("failed to attach volume: %s", err)
+		}
+	}
+
+	for idx, rdmdisk := range vminfo.RDMDisks {
+		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(rdmdisk.VolumeId)
+		if err != nil {
+			return fmt.Errorf("failed to attach volume for RDM: %s", err)
 		}
 	}
 
@@ -833,12 +855,13 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	// Import LUN and MigrateRDM disk
-	for _, rdmDisk := range vminfo.RDMDisks {
-		_, err = migobj.CinderManage(rdmDisk)
+	for idx, rdmDisk := range vminfo.RDMDisks {
+		volume, err := migobj.CinderManage(rdmDisk)
 		if err != nil {
 			migobj.cleanup(vminfo, fmt.Sprintf("failed to import LUN: %s", err))
 			return errors.Wrap(err, "failed to import LUN")
 		}
+		vminfo.RDMDisks[idx].VolumeId = volume["id"].(string)
 	}
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
@@ -864,7 +887,7 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
 	}
 }
 
-func (migobj *Migrate) CinderManage(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]interface{}, error) {
+func (migobj *Migrate) CinderManage(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {
 	openstackops := migobj.Openstackclients
 	dat, err := openstackops.CinderManage(rdmDisk)
 	if err != nil {

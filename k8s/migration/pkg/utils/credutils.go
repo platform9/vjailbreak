@@ -554,8 +554,38 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
 	ctxlog := log.FromContext(ctx)
-
 	var vminfo []vjailbreakv1alpha1.VMInfo
+
+	// Get the Custom Fields Manager
+	customFieldsManager := c.ServiceContent.CustomFieldsManager
+
+	// Fetch custom field definitions and values
+	var customFields []types.CustomFieldDef
+	if customFieldsManager != nil {
+		err := property.DefaultCollector(c).RetrieveOne(ctx, *customFieldsManager, []string{"field"}, &customFields)
+		if err != nil {
+			ctxlog.Error(err, "Failed to retrieve custom field definitions")
+		} else {
+			ctxlog.Info("Retrieved custom field definitions", "count", len(customFields))
+			for _, field := range customFields {
+				ctxlog.Info("Custom field definition",
+					"name", field.Name,
+					"key", field.Key,
+					"type", field.Type,
+					"managedObjectType", field.ManagedObjectType)
+			}
+		}
+	} else {
+		ctxlog.Info("No custom fields manager available")
+	}
+	var fieldKey int32
+	for _, customField := range customFields {
+		if customField.Name == "VJB_RDM" {
+			fieldKey = customField.Key
+			ctxlog.Info("Found custom field", "name", customField.Name, "key", customField.Key)
+		}
+	}
+
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{
@@ -578,8 +608,11 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var customAttributes []string
 		if vmProps.Summary.CustomValue != nil {
 			for _, cv := range vmProps.Summary.CustomValue {
-				if val, ok := cv.(*types.CustomFieldStringValue); ok {
-					customAttributes = append(customAttributes, val.Value)
+				if cv.GetCustomFieldValue().Key == fieldKey {
+					ctxlog.Info("Found custom field value", "key", cv.GetCustomFieldValue().Key, "value", cv)
+					if val, ok := cv.(*types.CustomFieldStringValue); ok {
+						customAttributes = append(customAttributes, val.Value)
+					}
 				}
 			}
 		}
@@ -874,24 +907,54 @@ func GetRDMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbrea
 func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine) (*types.HostStorageDeviceInfo, error) {
 	// Get the host system that the VM is running on
 	hostSystem, err := vm.HostSystem(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host system: %v", err)
+	}
+
+	// Get the storage system reference
+	var hs mo.HostSystem
+	err = hostSystem.Properties(ctx, hostSystem.Reference(), []string{"configManager.storageSystem"}, &hs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host system properties: %v", err)
+	}
+
+	if hs.ConfigManager.StorageSystem == nil {
+		return nil, fmt.Errorf("host storage system not available")
+	}
+
+	// Get the storage system information
+	var hss mo.HostStorageSystem
+	err = hostSystem.Properties(ctx, *hs.ConfigManager.StorageSystem, []string{"storageDeviceInfo"}, &hss)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage system info: %v", err)
+	}
+
+	return hss.StorageDeviceInfo, nil
+}
+
+/*
+func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine) (*types.HostStorageDeviceInfo, error) {
+	// Get the host system that the VM is running on
+	hostSystem, err := vm.HostSystem(ctx)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system: %v", err)
 	}
 
-	// Get the host config manager
-	var hostSystemMo mo.HostStorageSystem
-	err = hostSystem.Properties(ctx, hostSystem.Reference(), []string{"configManager"}, &hostSystemMo)
+	// Get the storage system reference
+	var hs mo.HostSystem
+	err = hostSystem.Properties(ctx, hostSystem.Reference(), []string{"configManager.storageSystem"}, &hs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system properties: %v", err)
 	}
 
+	vm.Client().Pr
 	// Get the storage system
 	// Get storage device info
-	storageDeviceInfo := hostSystemMo.StorageDeviceInfo
+	storageDeviceInfo := hs.Sto.StorageDeviceInfo
 
 	return storageDeviceInfo, nil
-}
+}*/
 
 // GetVMwareMachine retrieves the VMwareMachine CR for a given VM name
 func GetVMwareMachine(ctx context.Context, c client.Client, vmName string, namespace string) (*vjailbreakv1alpha1.VMwareMachine, error) {

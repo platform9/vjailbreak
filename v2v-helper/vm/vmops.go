@@ -50,7 +50,7 @@ type VMInfo struct {
 	UEFI     bool
 	Name     string
 	OSType   string
-	RDMDisks []vjailbreakv1alpha1.RDMDiskInfo
+	RDMDisks []RDMDisk
 }
 
 type ChangeID struct {
@@ -69,6 +69,31 @@ type VMDisk struct {
 	SnapBackingDisk string
 	ChangeID        string
 	Boot            bool
+}
+
+type RDMDisk struct {
+	// DiskName is the name of the disk
+	DiskName string `json:"diskName,omitempty"`
+	// DiskSize is the size of the disk in GB
+	DiskSize int64 `json:"diskSize,omitempty"`
+	// UUID is the unique identifier of the disk
+	UUID string `json:"uuid,omitempty"`
+	// DisplayName is the display name of the disk
+	DisplayName string `json:"displayName,omitempty"`
+	// OperationalState is the operational state of the disk
+	OperationalState []string `json:"operationalState,omitempty"`
+	// CinderBackendPool is the cinder backend pool of the disk
+	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+	// VolumeType is the volume type of the disk
+	VolumeType string `json:"volumeType,omitempty"`
+	// AvailabilityZone is the availability zone of the disk
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+	// Bootable indicates if the disk is bootable
+	Bootable bool `json:"bootable,omitempty"`
+	// DiskMode is the mode of the disk
+	Description string `json:"description,omitempty"`
+
+	VolumeId string `json:"volumeId,omitempty"`
 }
 
 type VMOps struct {
@@ -250,7 +275,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo, namespace string) (VMInfo, err
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to get rdmDisk properties: %s", err)
 		}
-		vminfo.RDMDisks = rdmDIskInfo.Spec.VMs.RDMDisks
+		copyRDMDisks(&vminfo, rdmDIskInfo)
 	}
 
 	return vminfo, nil
@@ -427,4 +452,24 @@ func ConvertToK8sName(name string) string {
 	name = validChar.ReplaceAllString(name, "")
 
 	return name
+}
+
+func copyRDMDisks(vminfo *VMInfo, rdmDiskInfo *vjailbreakv1alpha1.VMwareMachine) {
+	if rdmDiskInfo != nil && rdmDiskInfo.Spec.VMs.RDMDisks != nil {
+		vminfo.RDMDisks = make([]RDMDisk, len(rdmDiskInfo.Spec.VMs.RDMDisks))
+		for i, disk := range rdmDiskInfo.Spec.VMs.RDMDisks {
+			vminfo.RDMDisks[i] = RDMDisk{
+				DiskName:          disk.DiskName,
+				DiskSize:          disk.DiskSize,
+				UUID:              disk.UUID,
+				DisplayName:       disk.DisplayName,
+				OperationalState:  disk.OperationalState,
+				CinderBackendPool: disk.CinderBackendPool,
+				VolumeType:        disk.VolumeType,
+				AvailabilityZone:  disk.AvailabilityZone,
+				Bootable:          disk.Bootable,
+				Description:       disk.Description,
+			}
+		}
+	}
 }
