@@ -1,0 +1,137 @@
+[
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ESXIMigration",
+    "metadata": {
+      "name": "esx-1-prod-finance-migration",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-20T09:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "100000",
+      "uid": "esx-1-prod-finance-migration-uid",
+      "ownerReferences": [
+        {
+          "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+          "kind": "ClusterMigration",
+          "name": "prod-finance-migration",
+          "uid": "Prod-Finance-uid-0"
+        }
+      ]
+    },
+    "spec": {
+      "esxiName": "esx-1.prod.finance.local",
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    }
+  },
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ESXIMigration",
+    "metadata": {
+      "name": "esx-2-prod-finance-migration",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-20T08:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "100001",
+      "uid": "esx-2-prod-finance-migration-uid",
+      "ownerReferences": [
+        {
+          "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+          "kind": "ClusterMigration",
+          "name": "prod-finance-migration",
+          "uid": "Prod-Finance-uid-0"
+        }
+      ]
+    },
+    "spec": {
+      "esxiName": "esx-2.prod.finance.local",
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    }
+  },
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ESXIMigration",
+    "metadata": {
+      "name": "esx-1-dev-engineering-migration",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-19T09:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "100002",
+      "uid": "esx-1-dev-engineering-migration-uid",
+      "ownerReferences": [
+        {
+          "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+          "kind": "ClusterMigration",
+          "name": "dev-engineering-migration",
+          "uid": "Dev-Engineering-uid-1"
+        }
+      ]
+    },
+    "spec": {
+      "esxiName": "esx-1.dev.engineering.local",
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    }
+  },
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ESXIMigration",
+    "metadata": {
+      "name": "esx-1-qa-testing-migration",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-18T09:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "100003",
+      "uid": "esx-1-qa-testing-migration-uid",
+      "ownerReferences": [
+        {
+          "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+          "kind": "ClusterMigration",
+          "name": "qa-testing-migration",
+          "uid": "QA-Testing-uid-2"
+        }
+      ]
+    },
+    "spec": {
+      "esxiName": "esx-1.qa.testing.local",
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    }
+  },
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ESXIMigration",
+    "metadata": {
+      "name": "esx-1-staging-web-migration",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-17T09:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "100004",
+      "uid": "esx-1-staging-web-migration-uid",
+      "ownerReferences": [
+        {
+          "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+          "kind": "ClusterMigration",
+          "name": "staging-web-migration",
+          "uid": "Staging-Web-uid-3"
+        }
+      ]
+    },
+    "spec": {
+      "esxiName": "esx-1.staging.web.local",
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    }
+  }
+]

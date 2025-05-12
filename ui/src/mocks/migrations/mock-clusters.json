@@ -1,0 +1,28 @@
+[
+  {
+    "apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+    "kind": "ClusterMigration",
+    "metadata": {
+      "name": "cluster-migration-1",
+      "namespace": "vjailbreak-migration-system",
+      "creationTimestamp": "2023-09-20T10:00:00Z",
+      "finalizers": [],
+      "generation": 1,
+      "resourceVersion": "123456",
+      "uid": "cluster-migration-1-uid",
+      "ownerReferences": []
+    },
+    "spec": {
+      "clusterName": "cluster-1",
+      "esxiMigrationSequence": [],
+      "openstackCredsRef": { "name": "openstack-creds" },
+      "rollingMigrationPlanRef": { "name": "rolling-plan" },
+      "vmwareCredsRef": { "name": "vmware-creds" }
+    },
+    "status": {
+      "currentESXi": "",
+      "message": "",
+      "phase": "Running"
+    }
+  }
+]

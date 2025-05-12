@@ -133,7 +133,7 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: Cus
         >
             <div>
                 <Typography variant="h6" component="h2">
-                    Migrations
+                    VM Migrations
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>

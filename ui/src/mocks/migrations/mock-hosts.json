@@ -1,0 +1,194 @@
+{
+  "cluster-migration-1": [
+    {
+      "id": "cluster-migration-1-esx-1",
+      "name": "esx-1.cluster-migration-1.local",
+      "ip": "10.0.1.10",
+      "bmcIp": "10.1.1.10",
+      "maasState": "Cordoned",
+      "vms": 7,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-1-esx-2",
+      "name": "esx-2.cluster-migration-1.local",
+      "ip": "10.0.1.11",
+      "bmcIp": "10.1.1.11",
+      "maasState": "Active",
+      "vms": 9,
+      "state": "In Progress"
+    },
+    {
+      "id": "cluster-migration-1-esx-3",
+      "name": "esx-3.cluster-migration-1.local",
+      "ip": "10.0.1.12",
+      "bmcIp": "10.1.1.12",
+      "maasState": "Migrated",
+      "vms": 6,
+      "state": "Pending"
+    },
+    {
+      "id": "cluster-migration-1-esx-4",
+      "name": "esx-4.cluster-migration-1.local",
+      "ip": "10.0.2.13",
+      "bmcIp": "10.1.2.13",
+      "maasState": "Pending",
+      "vms": 8,
+      "state": "Active"
+    }
+  ],
+  "cluster-migration-2": [
+    {
+      "id": "cluster-migration-2-esx-1",
+      "name": "esx-1.cluster-migration-2.local",
+      "ip": "10.0.1.20",
+      "bmcIp": "10.1.1.20",
+      "maasState": "Cordoned",
+      "vms": 5,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-2-esx-2",
+      "name": "esx-2.cluster-migration-2.local",
+      "ip": "10.0.1.21",
+      "bmcIp": "10.1.1.21",
+      "maasState": "Active",
+      "vms": 8,
+      "state": "In Progress"
+    },
+    {
+      "id": "cluster-migration-2-esx-3",
+      "name": "esx-3.cluster-migration-2.local",
+      "ip": "10.0.1.22",
+      "bmcIp": "10.1.1.22",
+      "maasState": "Migrated",
+      "vms": 4,
+      "state": "Pending"
+    }
+  ],
+  "cluster-migration-3": [
+    {
+      "id": "cluster-migration-3-esx-1",
+      "name": "esx-1.cluster-migration-3.local",
+      "ip": "10.0.1.30",
+      "bmcIp": "10.1.1.30",
+      "maasState": "Cordoned",
+      "vms": 6,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-3-esx-2",
+      "name": "esx-2.cluster-migration-3.local",
+      "ip": "10.0.1.31",
+      "bmcIp": "10.1.1.31",
+      "maasState": "Active",
+      "vms": 7,
+      "state": "In Progress"
+    },
+    {
+      "id": "cluster-migration-3-esx-3",
+      "name": "esx-3.cluster-migration-3.local",
+      "ip": "10.0.1.32",
+      "bmcIp": "10.1.1.32",
+      "maasState": "Migrated",
+      "vms": 5,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-3-esx-4",
+      "name": "esx-4.cluster-migration-3.local",
+      "ip": "10.0.2.33",
+      "bmcIp": "10.1.2.33",
+      "maasState": "Pending",
+      "vms": 6,
+      "state": "Migrated"
+    }
+  ],
+  "cluster-migration-4": [
+    {
+      "id": "cluster-migration-4-esx-1",
+      "name": "esx-1.cluster-migration-4.local",
+      "ip": "10.0.1.40",
+      "bmcIp": "10.1.1.40",
+      "maasState": "Cordoned",
+      "vms": 4,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-4-esx-2",
+      "name": "esx-2.cluster-migration-4.local",
+      "ip": "10.0.1.41",
+      "bmcIp": "10.1.1.41",
+      "maasState": "Active",
+      "vms": 6,
+      "state": "In Progress"
+    }
+  ],
+  "cluster-migration-5": [
+    {
+      "id": "cluster-migration-5-esx-1",
+      "name": "esx-1.cluster-migration-5.local",
+      "ip": "10.0.1.50",
+      "bmcIp": "10.1.1.50",
+      "maasState": "Migrated",
+      "vms": 8,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-5-esx-2",
+      "name": "esx-2.cluster-migration-5.local",
+      "ip": "10.0.1.51",
+      "bmcIp": "10.1.1.51",
+      "maasState": "Migrated",
+      "vms": 9,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-5-esx-3",
+      "name": "esx-3.cluster-migration-5.local",
+      "ip": "10.0.1.52",
+      "bmcIp": "10.1.1.52",
+      "maasState": "Migrated",
+      "vms": 7,
+      "state": "Migrated"
+    }
+  ],
+  "cluster-migration-6": [
+    {
+      "id": "cluster-migration-6-esx-1",
+      "name": "esx-1.cluster-migration-6.local",
+      "ip": "10.0.1.60",
+      "bmcIp": "10.1.1.60",
+      "maasState": "Cordoned",
+      "vms": 5,
+      "state": "Migrated"
+    },
+    {
+      "id": "cluster-migration-6-esx-2",
+      "name": "esx-2.cluster-migration-6.local",
+      "ip": "10.0.1.61",
+      "bmcIp": "10.1.1.61",
+      "maasState": "Active",
+      "vms": 9,
+      "state": "In Progress"
+    },
+    {
+      "id": "cluster-migration-6-esx-3",
+      "name": "esx-3.cluster-migration-6.local",
+      "ip": "10.0.1.62",
+      "bmcIp": "10.1.1.62",
+      "maasState": "Migrated",
+      "vms": 6,
+      "state": "Pending"
+    },
+    {
+      "id": "cluster-migration-6-esx-4",
+      "name": "esx-4.cluster-migration-6.local",
+      "ip": "10.0.2.63",
+      "bmcIp": "10.1.2.63",
+      "maasState": "Pending",
+      "vms": 8,
+      "state": "Active"
+    }
+  ]
+}

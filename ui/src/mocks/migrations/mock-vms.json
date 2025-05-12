@@ -1,0 +1,233 @@
+{
+  "cluster-migration-1": [
+    {
+      "id": "cluster-migration-1-vm-1",
+      "name": "vm-1.cluster-migration-1",
+      "status": "In Progress",
+      "cluster": "cluster-migration-1",
+      "ip": "10.9.1.20",
+      "esxHost": "esx-1.cluster-migration-1.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 2,
+      "memory": 4096,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-1-vm-2",
+      "name": "vm-2.cluster-migration-1",
+      "status": "Done",
+      "cluster": "cluster-migration-1",
+      "ip": "10.9.1.21",
+      "esxHost": "esx-1.cluster-migration-1.local",
+      "networks": ["Network 2", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 4,
+      "memory": 8192,
+      "powerState": "powered-off"
+    },
+    {
+      "id": "cluster-migration-1-vm-3",
+      "name": "vm-3.cluster-migration-1",
+      "status": "Queued",
+      "cluster": "cluster-migration-1",
+      "ip": "10.9.1.22",
+      "esxHost": "esx-2.cluster-migration-1.local",
+      "networks": ["Network 3", "Management Network"],
+      "datastores": ["datastore3"],
+      "cpu": 6,
+      "memory": 16384,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-1-vm-4",
+      "name": "vm-4.cluster-migration-1",
+      "status": "Failed",
+      "cluster": "cluster-migration-1",
+      "ip": "10.9.1.23",
+      "esxHost": "esx-2.cluster-migration-1.local",
+      "networks": ["Network 4", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 8,
+      "memory": 32768,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-1-vm-5",
+      "name": "vm-5.cluster-migration-1",
+      "status": "Pending",
+      "cluster": "cluster-migration-1",
+      "ip": "10.9.1.24",
+      "esxHost": "esx-3.cluster-migration-1.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 2,
+      "memory": 4096,
+      "powerState": "powered-off"
+    }
+  ],
+  "cluster-migration-2": [
+    {
+      "id": "cluster-migration-2-vm-1",
+      "name": "vm-1.cluster-migration-2",
+      "status": "Migrated",
+      "cluster": "cluster-migration-2",
+      "ip": "10.9.1.30",
+      "esxHost": "esx-1.cluster-migration-2.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 4,
+      "memory": 8192,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-2-vm-2",
+      "name": "vm-2.cluster-migration-2",
+      "status": "In Progress",
+      "cluster": "cluster-migration-2",
+      "ip": "10.9.1.31",
+      "esxHost": "esx-1.cluster-migration-2.local",
+      "networks": ["Network 2", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 8,
+      "memory": 16384,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-2-vm-3",
+      "name": "vm-3.cluster-migration-2",
+      "status": "Pending",
+      "cluster": "cluster-migration-2",
+      "ip": "10.9.1.32",
+      "esxHost": "esx-2.cluster-migration-2.local",
+      "networks": ["Network 3", "Management Network"],
+      "datastores": ["datastore3"],
+      "cpu": 2,
+      "memory": 4096,
+      "powerState": "powered-on"
+    }
+  ],
+  "cluster-migration-3": [
+    {
+      "id": "cluster-migration-3-vm-1",
+      "name": "vm-1.cluster-migration-3",
+      "status": "Migrated",
+      "cluster": "cluster-migration-3",
+      "ip": "10.9.1.40",
+      "esxHost": "esx-1.cluster-migration-3.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 4,
+      "memory": 8192,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-3-vm-2",
+      "name": "vm-2.cluster-migration-3",
+      "status": "Migrated",
+      "cluster": "cluster-migration-3",
+      "ip": "10.9.1.41",
+      "esxHost": "esx-1.cluster-migration-3.local",
+      "networks": ["Network 2", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 6,
+      "memory": 12288,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-3-vm-3",
+      "name": "vm-3.cluster-migration-3",
+      "status": "Migrated",
+      "cluster": "cluster-migration-3",
+      "ip": "10.9.1.42",
+      "esxHost": "esx-2.cluster-migration-3.local",
+      "networks": ["Network 3", "Management Network"],
+      "datastores": ["datastore3"],
+      "cpu": 8,
+      "memory": 16384,
+      "powerState": "powered-off"
+    },
+    {
+      "id": "cluster-migration-3-vm-4",
+      "name": "vm-4.cluster-migration-3",
+      "status": "Migrated",
+      "cluster": "cluster-migration-3",
+      "ip": "10.9.1.43",
+      "esxHost": "esx-3.cluster-migration-3.local",
+      "networks": ["Network 4", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 2,
+      "memory": 4096,
+      "powerState": "powered-on"
+    }
+  ],
+  "cluster-migration-4": [
+    {
+      "id": "cluster-migration-4-vm-1",
+      "name": "vm-1.cluster-migration-4",
+      "status": "Failed",
+      "cluster": "cluster-migration-4",
+      "ip": "10.9.1.50",
+      "esxHost": "esx-1.cluster-migration-4.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 4,
+      "memory": 8192,
+      "powerState": "powered-off"
+    },
+    {
+      "id": "cluster-migration-4-vm-2",
+      "name": "vm-2.cluster-migration-4",
+      "status": "Failed",
+      "cluster": "cluster-migration-4",
+      "ip": "10.9.1.51",
+      "esxHost": "esx-1.cluster-migration-4.local",
+      "networks": ["Network 2", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 6,
+      "memory": 12288,
+      "powerState": "powered-on"
+    }
+  ],
+  "cluster-migration-5": [
+    {
+      "id": "cluster-migration-5-vm-1",
+      "name": "vm-1.cluster-migration-5",
+      "status": "Completed",
+      "cluster": "cluster-migration-5",
+      "ip": "10.9.1.60",
+      "esxHost": "esx-1.cluster-migration-5.local",
+      "networks": ["Network 1", "Management Network"],
+      "datastores": ["datastore1"],
+      "cpu": 8,
+      "memory": 16384,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-5-vm-2",
+      "name": "vm-2.cluster-migration-5",
+      "status": "Completed",
+      "cluster": "cluster-migration-5",
+      "ip": "10.9.1.61",
+      "esxHost": "esx-1.cluster-migration-5.local",
+      "networks": ["Network 2", "Management Network"],
+      "datastores": ["datastore2"],
+      "cpu": 4,
+      "memory": 8192,
+      "powerState": "powered-on"
+    },
+    {
+      "id": "cluster-migration-5-vm-3",
+      "name": "vm-3.cluster-migration-5",
+      "status": "Completed",
+      "cluster": "cluster-migration-5",
+      "ip": "10.9.1.62",
+      "esxHost": "esx-2.cluster-migration-5.local",
+      "networks": ["Network 3", "Management Network"],
+      "datastores": ["datastore3"],
+      "cpu": 2,
+      "memory": 4096,
+      "powerState": "powered-on"
+    }
+  ]
+}

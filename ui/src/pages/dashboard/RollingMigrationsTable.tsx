@@ -1,10 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
     Box,
     Typography,
     Tooltip,
     Chip,
-    Paper,
     Drawer,
     styled,
     Button,
@@ -25,89 +24,22 @@ import { RefetchOptions } from "@tanstack/react-query";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { ReactElement } from "react";
 
+// Import mock data and types
+import {
+    ClusterMigration,
+    ESXHost,
+    VM,
+    clusterMigrations as mockClusters,
+    esxHostsByCluster as mockEsxHostsByCluster,
+    vmsByCluster as mockVmsByCluster
+} from "src/mocks/migrations";
+
 // Import CDS icons
 import "@cds/core/icon/register.js";
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon";
 
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon);
-
-// Define interface for GridValueGetterParams to avoid import issues
-
-// Define ClusterMigration and ESXIMigration types
-interface ClusterMigration {
-    apiVersion: string;
-    kind: string;
-    metadata: {
-        name: string;
-        namespace: string;
-        creationTimestamp: string;
-        finalizers: string[];
-        generation: number;
-        resourceVersion: string;
-        uid: string;
-        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
-    };
-    spec: {
-        clusterName: string;
-        esxiMigrationSequence: string[];
-        openstackCredsRef: { name: string };
-        rollingMigrationPlanRef: { name: string };
-        vmwareCredsRef: { name: string };
-    };
-    status: {
-        currentESXi: string;
-        message: string;
-        phase: string;
-    };
-}
-
-interface ESXIMigration {
-    apiVersion: string;
-    kind: string;
-    metadata: {
-        name: string;
-        namespace: string;
-        creationTimestamp: string;
-        finalizers: string[];
-        generation: number;
-        resourceVersion: string;
-        uid: string;
-        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
-    };
-    spec: {
-        esxiName: string;
-        openstackCredsRef: { name: string };
-        rollingMigrationPlanRef: { name: string };
-        vmwareCredsRef: { name: string };
-    };
-}
-
-// VM model based on the UI display needs
-interface VM {
-    id: string;
-    name: string;
-    status: string;
-    cluster: string;
-    ip: string;
-    esxHost: string;
-    networks?: string[];
-    datastores?: string[];
-    cpu?: number;
-    memory?: number;
-    powerState: string;
-}
-
-// ESX host model
-interface ESXHost {
-    id: string;
-    name: string;
-    ip: string;
-    bmcIp: string;
-    maasState: string;
-    vms: number;
-    state: string;
-}
 
 // Style for icons
 const CdsIconWrapper = styled('div')({
@@ -248,135 +180,6 @@ const StatusSummary = ({
     );
 };
 
-// Generate ESX mock data
-const generateESXHostsForCluster = (clusterName: string): ESXHost[] => {
-    const hostCount = Math.floor(Math.random() * 5) + 6; // 6-10 hosts per cluster
-    return Array.from({ length: hostCount }, (_, i) => ({
-        id: `${clusterName}-esx-${i + 1}`,
-        name: `esx-${i + 1}.${clusterName.toLowerCase()}.local`,
-        ip: `10.0.${Math.floor(i / 3) + 1}.${10 + i}`,
-        bmcIp: `10.1.${Math.floor(i / 3) + 1}.${10 + i}`,
-        maasState: i % 5 === 0 ? "Cordoned" :
-            i % 5 === 1 ? "Active" :
-                i % 5 === 2 ? "Migrated" :
-                    i % 5 === 3 ? "Pending" : "In Progress",
-        vms: Math.floor(Math.random() * 8) + 3,
-        state: i % 4 === 0 ? "Migrated" :
-            i % 4 === 1 ? "In Progress" :
-                i % 4 === 2 ? "Pending" : "Active"
-    }));
-};
-
-// Mock VM data generator for the cluster
-const generateVMsForCluster = (clusterName: string): VM[] => {
-    const vmCount = Math.floor(Math.random() * 20) + 15; // 15-35 VMs per cluster
-    return Array.from({ length: vmCount }, (_, i) => ({
-        id: `${clusterName}-vm-${i + 1}`,
-        name: `vm-${i + 1}.${clusterName.toLowerCase()}`,
-        status: i % 6 === 0 ? "In Progress" :
-            i % 6 === 1 ? "Done" :
-                i % 6 === 2 ? "Queued" :
-                    i % 6 === 3 ? "Failed" :
-                        i % 6 === 4 ? "Pending" : "Migrated",
-        cluster: clusterName,
-        ip: `10.9.${Math.floor(i / 8) + 1}.${20 + i % 100}`,
-        esxHost: `esx-${Math.floor(i / 4) % 10 + 1}.${clusterName.toLowerCase()}.local`,
-        networks: [`Network ${i % 4 + 1}`, "Management Network"],
-        datastores: [`datastore${i % 3 + 1}`],
-        cpu: 2 + (i % 6),
-        memory: 4096 + (i % 4) * 2048,
-        powerState: i % 4 === 0 ? "powered-off" : "powered-on"
-    }));
-};
-
-// Generate mock cluster data with more examples
-const generateMockClusters = (): ClusterMigration[] => {
-    const clusters = [
-        "Prod-Finance",
-        "Dev-Engineering",
-        "QA-Testing",
-        "Staging-Web",
-        "Core-Infra",
-        "Marketing-Web",
-        "Sales-CRM",
-        "HR-Internal",
-        "Analytics-BI",
-        "Cloud-Services",
-        "Mobile-Backend",
-        "IoT-Platform",
-        "Database-Cluster",
-        "Data-Warehouse"
-    ];
-
-    return clusters.map((name, index) => ({
-        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-        kind: "ClusterMigration",
-        metadata: {
-            name: `${name.toLowerCase().replace('-', '-')}-migration`,
-            namespace: "vjailbreak-migration-system",
-            creationTimestamp: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
-            finalizers: [],
-            generation: 1,
-            resourceVersion: `${123456 + index}`,
-            uid: `${name}-uid-${index}`,
-            ownerReferences: []
-        },
-        spec: {
-            clusterName: name,
-            esxiMigrationSequence: [],
-            openstackCredsRef: { name: "openstack-creds" },
-            rollingMigrationPlanRef: { name: "rolling-plan" },
-            vmwareCredsRef: { name: "vmware-creds" }
-        },
-        status: {
-            currentESXi: "",
-            message: "",
-            phase: index % 5 === 0 ? "Running" :
-                index % 5 === 1 ? "Pending" :
-                    index % 5 === 2 ? "Succeeded" :
-                        index % 5 === 3 ? "Failed" : "Completed"
-        }
-    }));
-};
-
-// Generate mock ESXi migrations
-const generateMockESXiMigrations = (clusters: ClusterMigration[]): ESXIMigration[] => {
-    const esxiMigrations: ESXIMigration[] = [];
-
-    clusters.forEach(cluster => {
-        const esxCount = Math.floor(Math.random() * 5) + 5;
-        for (let i = 0; i < esxCount; i++) {
-            esxiMigrations.push({
-                apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-                kind: "ESXIMigration",
-                metadata: {
-                    name: `esx-${i + 1}-${cluster.metadata.name}`,
-                    namespace: "vjailbreak-migration-system",
-                    creationTimestamp: new Date(Date.now() - i * 60 * 60 * 1000).toISOString(),
-                    finalizers: [],
-                    generation: 1,
-                    resourceVersion: `${100000 + i}`,
-                    uid: `esx-${i + 1}-${cluster.metadata.name}-uid`,
-                    ownerReferences: [{
-                        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-                        kind: "ClusterMigration",
-                        name: cluster.metadata.name,
-                        uid: cluster.metadata.uid
-                    }]
-                },
-                spec: {
-                    esxiName: `esx-${i + 1}.${cluster.spec.clusterName.toLowerCase().replace('-', '.')}.local`,
-                    openstackCredsRef: { name: "openstack-creds" },
-                    rollingMigrationPlanRef: { name: "rolling-plan" },
-                    vmwareCredsRef: { name: "vmware-creds" }
-                }
-            });
-        }
-    });
-
-    return esxiMigrations;
-};
-
 // Component for the cluster details drawer
 function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }) {
     // ESX Columns for the table
@@ -408,18 +211,18 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
             flex: 1,
             valueGetter: (value: string) => value || "—"
         },
-        {
-            field: 'bmcIp',
-            headerName: 'BMC IP Address',
-            flex: 1,
-            valueGetter: (value: string) => value || "—"
-        },
-        {
-            field: 'maasState',
-            headerName: 'MaaS State',
-            flex: 0.6,
-            valueGetter: (value: string) => value || "—"
-        },
+        // {
+        //     field: 'bmcIp',
+        //     headerName: 'BMC IP Address',
+        //     flex: 1,
+        //     valueGetter: (value: string) => value || "—"
+        // },
+        // {
+        //     field: 'maasState',
+        //     headerName: 'MaaS State',
+        //     flex: 0.6,
+        //     valueGetter: (value: string) => value || "—"
+        // },
         {
             field: 'vms',
             headerName: '# VMs',
@@ -556,6 +359,8 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
 
 interface CustomToolbarProps {
     refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+    selectedCount?: number;
+    onDeleteSelected?: () => void;
 }
 
 const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
@@ -579,7 +384,7 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
                 )}
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
-                {selectedCount > 0 && (
+                {selectedCount && selectedCount > 0 && (
                     <Button
                         variant="outlined"
                         color="error"
@@ -600,7 +405,7 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
 };
 
 interface RollingMigrationsTableProps {
-    clusterMigrations: ClusterMigration[];
+    clusterMigrations?: ClusterMigration[];
     refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
 }
 
@@ -608,9 +413,6 @@ export default function RollingMigrationsTable({
     clusterMigrations: propClusterMigrations,
     refetchClusterMigrations
 }: RollingMigrationsTableProps) {
-    // Generate mock data if no data is provided
-    const mockClusters = useMemo(() => generateMockClusters(), []);
-
     // Use provided data or mock data
     const clusterMigrations = mockClusters;
 
@@ -618,32 +420,9 @@ export default function RollingMigrationsTable({
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
 
-    // Generate ESX hosts and VMs for each cluster
-    const esxHostsByCluster = useMemo(() => {
-        const result: Record<string, ESXHost[]> = {};
-
-        clusterMigrations.forEach(cluster => {
-            if (cluster.metadata?.name) {
-                const clusterName = cluster.spec.clusterName || '';
-                result[cluster.metadata.name] = generateESXHostsForCluster(clusterName);
-            }
-        });
-
-        return result;
-    }, [clusterMigrations]);
-
-    const vmsByCluster = useMemo(() => {
-        const result: Record<string, VM[]> = {};
-
-        clusterMigrations.forEach(cluster => {
-            if (cluster.metadata?.name) {
-                const clusterName = cluster.spec.clusterName || '';
-                result[cluster.metadata.name] = generateVMsForCluster(clusterName);
-            }
-        });
-
-        return result;
-    }, [clusterMigrations]);
+    // Use mock data for ESX hosts and VMs
+    const esxHostsByCluster = mockEsxHostsByCluster;
+    const vmsByCluster = mockVmsByCluster;
 
     const handleOpenDetails = (cluster: ClusterMigration) => {
         setSelectedCluster(cluster);

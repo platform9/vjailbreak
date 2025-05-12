@@ -73,8 +73,6 @@ interface ESXHost {
     id: string;
     name: string;
     ip: string;
-    bmcIp: string;
-    maasState: string;
     vms: number;
     state: string;
 }
@@ -113,18 +111,18 @@ const esxColumns: GridColDef[] = [
         flex: 1,
         valueGetter: (value) => value || "—",
     },
-    {
-        field: "bmcIp",
-        headerName: "BMC IP Address",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "maasState",
-        headerName: "MaaS State",
-        flex: 0.5,
-        valueGetter: (value) => value || "—",
-    },
+    // {
+    //     field: "bmcIp",
+    //     headerName: "BMC IP Address",
+    //     flex: 1,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "maasState",
+    //     headerName: "MaaS State",
+    //     flex: 0.5,
+    //     valueGetter: (value) => value || "—",
+    // },
     {
         field: "vms",
         headerName: "# VMs",
@@ -542,8 +540,6 @@ export default function RollingMigrationFormDrawer({
                 id: host.metadata.name,
                 name: host.spec.name,
                 ip: "",
-                bmcIp: "",
-                maasState: "Unknown",
                 vms: 0,
                 state: "Active"
             }));

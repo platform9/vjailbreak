@@ -281,7 +281,7 @@ export default function Dashboard() {
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
-          <Tab label="Migrations" />
+          <Tab label="VM Migrations" />
           <Tab label="Cluster Migrations" />
           <Tab label="Agents" />
           <Tab label="Credentials" />
