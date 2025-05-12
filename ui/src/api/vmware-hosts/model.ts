@@ -14,6 +14,7 @@ export interface VMwareHost {
   }
   spec: {
     name: string
+    ipAddress: string
     hardwareUuid: string
   }
 }

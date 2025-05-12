@@ -4,6 +4,7 @@ import {
   ResourceRef,
   StorageMapping,
   VMSequence,
+  MigrationStrategy,
 } from "./model"
 
 interface CreateRollingMigrationPlanParams {
@@ -15,6 +16,11 @@ interface CreateRollingMigrationPlanParams {
   bmConfigRef: ResourceRef
   networkMappings?: NetworkMapping[]
   storageMappings?: StorageMapping[]
+  advancedOptions?: Record<string, unknown>
+  firstBootScript?: string
+  migrationStrategy?: MigrationStrategy
+  migrationTemplate?: string
+  cloudInitConfigRef?: ResourceRef
   namespace?: string
 }
 
@@ -28,6 +34,13 @@ export const createRollingMigrationPlanJson = (
     vmwareCredsRef,
     openstackCredsRef,
     bmConfigRef,
+    networkMappings,
+    storageMappings,
+    advancedOptions,
+    firstBootScript,
+    migrationStrategy,
+    migrationTemplate,
+    cloudInitConfigRef,
     namespace,
   } = params || {}
 
@@ -52,6 +65,13 @@ export const createRollingMigrationPlanJson = (
       vmwareCredsRef,
       openstackCredsRef,
       bmConfigRef,
+      ...(networkMappings && networkMappings.length > 0 && { networkMappings }),
+      ...(storageMappings && storageMappings.length > 0 && { storageMappings }),
+      ...(advancedOptions && { advancedOptions }),
+      ...(firstBootScript && { firstBootScript }),
+      ...(migrationStrategy && { migrationStrategy }),
+      ...(migrationTemplate && { migrationTemplate }),
+      ...(cloudInitConfigRef && { cloudInitConfigRef }),
     },
   }
 }

@@ -34,6 +34,7 @@ export interface RollingMigrationPlanSpec {
   vmwareCredsRef: ResourceRef
   openstackCredsRef: ResourceRef
   bmConfigRef: ResourceRef
+  migrationTemplate?: string
 }
 
 export interface ClusterSequence {
@@ -67,4 +68,11 @@ export interface RollingMigrationPlanStatus {
   phase?: string
   startTime?: string
   completionTime?: string
+}
+
+export interface MigrationStrategy {
+  adminInitiatedCutOver?: boolean
+  healthCheckPort?: string
+  performHealthChecks?: boolean
+  type?: string
 }

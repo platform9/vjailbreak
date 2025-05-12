@@ -105,12 +105,12 @@ const esxColumns: GridColDef[] = [
             </Box>
         ),
     },
-    {
-        field: "ip",
-        headerName: "Current IP",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
+    // {
+    //     field: "ip",
+    //     headerName: "Current IP",
+    //     flex: 1,
+    //     valueGetter: (value) => value || "—",
+    // },
     // {
     //     field: "bmcIp",
     //     headerName: "BMC IP Address",
@@ -123,22 +123,22 @@ const esxColumns: GridColDef[] = [
     //     flex: 0.5,
     //     valueGetter: (value) => value || "—",
     // },
-    {
-        field: "vms",
-        headerName: "# VMs",
-        flex: 0.5,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "state",
-        headerName: "State",
-        flex: 0.5,
-        renderHeader: () => (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <div style={{ fontWeight: 500 }}>State</div>
-            </Box>
-        ),
-    },
+    // {
+    //     field: "vms",
+    //     headerName: "# VMs",
+    //     flex: 0.5,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "state",
+    //     headerName: "State",
+    //     flex: 0.5,
+    //     renderHeader: () => (
+    //         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+    //             <div style={{ fontWeight: 500 }}>State</div>
+    //         </Box>
+    //     ),
+    // },
 ];
 
 const vmColumns: GridColDef[] = [
@@ -206,7 +206,7 @@ const CustomToolbarWithActions = (props) => {
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-            {rowSelectionModel.length > 0 && (
+            {/* {rowSelectionModel.length > 0 && (
                 <>
                     <Tooltip title="Move to Top">
                         <Button
@@ -253,7 +253,7 @@ const CustomToolbarWithActions = (props) => {
                         </Button>
                     </Tooltip>
                 </>
-            )}
+            )} */}
             <CustomSearchToolbar {...toolbarProps} />
         </Box>
     );
@@ -378,6 +378,7 @@ export default function RollingMigrationFormDrawer({
 
     const [openstackCredData, setOpenstackCredData] = useState<OpenstackCreds | null>(null);
     const [loadingOpenstackDetails, setLoadingOpenstackDetails] = useState(false);
+
 
     useEffect(() => {
         if (open) {
@@ -539,7 +540,7 @@ export default function RollingMigrationFormDrawer({
             const mappedHosts: ESXHost[] = hostsResponse.items.map((host: VMwareHost) => ({
                 id: host.metadata.name,
                 name: host.spec.name,
-                ip: "",
+                ip: host.spec.ipAddress,
                 vms: 0,
                 state: "Active"
             }));
@@ -857,6 +858,15 @@ export default function RollingMigrationFormDrawer({
                     source: mapping.source,
                     destination: mapping.target
                 })),
+                // firstBootScript,
+                // migrationTemplate,
+                // migrationStrategy: {
+                //     type: migrationStrategyType,
+                //     performHealthChecks,
+                //     healthCheckPort,
+                //     adminInitiatedCutOver
+                // },
+                advancedOptions: {},
                 namespace: VJAILBREAK_DEFAULT_NAMESPACE
             });
 
@@ -1119,7 +1129,7 @@ export default function RollingMigrationFormDrawer({
 
 
                     <Box>
-                        <Step stepNumber="4" label="VM Migration Sequence" />
+                        <Step stepNumber="4" label="VM Migration" />
                         <Box sx={{ ml: 5, mt: 2 }}>
                             <Paper sx={{ width: "100%", height: 389 }}>
                                 <DataGrid
@@ -1200,7 +1210,7 @@ export default function RollingMigrationFormDrawer({
             <Footer
                 submitButtonLabel="Run"
                 onClose={handleClose}
-                onSubmit={handleSubmit}
+                onSubmit={handleClose}
                 disableSubmit={isSubmitDisabled}
                 submitting={submitting}
             />

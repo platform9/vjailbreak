@@ -22,7 +22,7 @@
     "status": {
       "currentESXi": "",
       "message": "",
-      "phase": "Running"
+      "phase": "Pending"
     }
   }
 ]
