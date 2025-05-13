@@ -375,24 +375,32 @@ export default function MigrationFormDrawer({
   const createMigrationPlan = async (updatedMigrationTemplate) => {
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
     const migrationFields = {
-      migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-      virtualMachines: vmsToMigrate,
-      type:
-        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-          ? params.dataCopyMethod
-          : "hot",
-      ...(selectedMigrationOptions.dataCopyStartTime &&
-        params?.dataCopyStartTime && {
-        dataCopyStart: params.dataCopyStartTime,
-      }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
-      retry: params.retryOnFailure,
-    }
+  migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+  virtualMachines: vmsToMigrate,
+  type:
+    selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+      ? params.dataCopyMethod
+      : "hot",
+  ...(selectedMigrationOptions.dataCopyStartTime &&
+    params?.dataCopyStartTime && {
+    dataCopyStart: params.dataCopyStartTime,
+  }),
+  ...(selectedMigrationOptions.cutoverOption &&
+    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+    params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
+  ...(selectedMigrationOptions.cutoverOption &&
+    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+    params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
+  retry: params.retryOnFailure,
+  // Add post-migration action fields (always included since mandatory)
+  postMigrationAction: {
+    renameVm: true, 
+    suffix: params.postMigrationAction?.suffix || "_migrated_to_pcd",
+    moveToFolder: true, 
+    folderName: params.postMigrationAction?.folderName || "vjailbreakedVMs",
+  }
+}
+
     const body = createMigrationPlanJson(migrationFields)
     try {
       const data = await postMigrationPlan(body)
@@ -611,6 +619,26 @@ export default function MigrationFormDrawer({
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
           />
+          <Box sx={{ display: "grid", gap: 2, mt: 2 }}>
+  <Typography variant="subtitle1">Post-Migration Actions (Required)</Typography>
+  <TextField
+    label="Suffix for Source VM Name"
+    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+    onChange={(e) => getParamsUpdater("postMigrationAction.suffix")(e.target.value)}
+    fullWidth
+    size="small"
+    helperText="This suffix will be appended to the source VM name after migration."
+  />
+  <TextField
+    label="Folder Name in vCenter"
+    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+    onChange={(e) => getParamsUpdater("postMigrationAction.folderName")(e.target.value)}
+    fullWidth
+    size="small"
+    helperText="The source VM will be moved to this folder after migration."
+  />
+</Box>
+
         </Box>
       </DrawerContent>
       <Footer

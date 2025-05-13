@@ -31,6 +31,10 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+
+	"github.com/go-logr/logr"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,9 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/go-logr/logr"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
@@ -126,7 +127,7 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
 
-	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan); err != nil {
+	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope); err != nil {
 		return res, err
 	}
 	return ctrl.Result{}, nil
@@ -152,9 +153,81 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
+func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, scope *scope.MigrationPlanScope, vm string) error {
+	migrationplan := scope.MigrationPlan
+	log := scope.Logger
+
+	log.Info(fmt.Sprintf("Performing post-migration actions for VM '%s' in MigrationPlan '%s'", vm, migrationplan.Name))
+
+	// Fetch MigrationTemplate to get vCenter reference
+	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace}, migrationtemplate); err != nil {
+		return fmt.Errorf("failed to get MigrationTemplate for post-migration actions: %w", err)
+	}
+
+	// Fetch VMwareCreds to get secret reference
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
+		return fmt.Errorf("VMwareCreds not validated for post-migration actions: %w", err)
+	}
+
+	// Fetch the secret containing vCenter credentials
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: vmwcreds.Spec.SecretRef.Name, Namespace: migrationplan.Namespace}, secret); err != nil {
+		return fmt.Errorf("failed to get Secret '%s' for vCenter credentials: %w", vmwcreds.Spec.SecretRef.Name, err)
+	}
+
+	// Extract username and password from the secret (adjust keys based on your secret structure)
+	username, ok := secret.Data["username"]
+	if !ok {
+		return fmt.Errorf("username not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
+	}
+	password, ok := secret.Data["password"]
+	if !ok {
+		return fmt.Errorf("password not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
+	}
+
+	// Create a VCenterClient instance
+	host := migrationtemplate.Spec.Source.VMwareRef // Adjust if host format needs processing
+	disableSSLVerification := true                  // Adjust based on your project's settings
+	vcClient, err := vcenter.VCenterClientBuilder(ctx, string(username), string(password), host, disableSSLVerification)
+	if err != nil {
+		return fmt.Errorf("failed to create vCenter client for post-migration actions: %v", err)
+	}
+
+	// Rename the VM by appending the suffix
+	suffix := migrationplan.Spec.PostMigrationAction.Suffix
+	if suffix == "" {
+		suffix = "_migrated_to_pcd" // Default if not specified
+	}
+	newVMName := vm + suffix
+	log.Info(fmt.Sprintf("Renaming source VM '%s' to '%s'", vm, newVMName))
+	err = vcClient.RenameVM(ctx, vm, newVMName)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed to rename VM '%s' to '%s'", vm, newVMName))
+		return fmt.Errorf("failed to rename VM '%s': %v", vm, err)
+	}
+
+	// Move the VM to the specified folder
+	folderName := migrationplan.Spec.PostMigrationAction.FolderName
+	if folderName == "" {
+		folderName = "vjailbreakedVMs" // Default if not specified
+	}
+	log.Info(fmt.Sprintf("Moving source VM '%s' to folder '%s'", vm, folderName))
+	err = vcClient.MoveVMFolder(ctx, vm, folderName)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed to move VM '%s' to folder '%s'", vm, folderName))
+		return fmt.Errorf("failed to move VM '%s' to folder '%s': %v", vm, folderName, err)
+	}
+
+	log.Info(fmt.Sprintf("Successfully completed post-migration actions for VM '%s'", vm))
+	return nil
+}
+
 // Similar to the Reconcile function above, but specifically for reconciling the Jobs
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan) (ctrl.Result, error) {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	// Fetch MigrationTemplate CR
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
@@ -221,6 +294,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				}
 				return ctrl.Result{}, nil
 			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
+				// Perform post-migration actions for this VM
+				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
+				if err != nil {
+					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
+					return ctrl.Result{}, fmt.Errorf("post-migration actions failed for VM %s: %w", migrationobjs.Items[i].Spec.VMName, err)
+				}
 				continue
 			default:
 				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
