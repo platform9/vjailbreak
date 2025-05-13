@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
     Box,
     Typography,
+    Tooltip,
     Chip,
     Drawer,
     styled,
@@ -22,14 +23,12 @@ import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { ReactElement } from "react";
-import { Migration } from "src/api/migrations/model";
-import { getMigrations } from "src/api/migrations/migrations";
-import { useQuery } from "@tanstack/react-query";
 
 // Import mock data and types
 import {
     ClusterMigration,
     ESXHost,
+    VM,
     clusterMigrations as mockClusters,
     esxHostsByCluster as mockEsxHostsByCluster,
     vmsByCluster as mockVmsByCluster
@@ -111,10 +110,13 @@ function StatusChip({ status }: { status: string }) {
             break;
     }
 
+    // If status is "Queued", display as "Pending" instead
+    const displayStatus = status.toLowerCase() === "queued" ? "Pending" : status;
+
     return (
         <Chip
             size="small"
-            label={status}
+            label={displayStatus}
             variant="outlined"
             color={color}
             icon={icon}
@@ -148,7 +150,6 @@ const StatusSummary = ({
     const pending = counts['Pending'] || counts['Queued'] || 0;
     const failed = counts['Failed'] || 0;
     const cordoned = counts['Cordoned'] || 0;
-    const completedPercentage = (completed / total) * 100;
 
     return (
         <Box sx={{ mb: 2 }}>
@@ -157,7 +158,7 @@ const StatusSummary = ({
                 <Box sx={{ width: '100%', mr: 1 }}>
                     <LinearProgress
                         variant="determinate"
-                        value={completed == total && total === 0 ? 0 : completedPercentage}
+                        value={(completed / total) * 100}
                         sx={{
                             height: 4,
                             borderRadius: 5,
@@ -183,7 +184,7 @@ const StatusSummary = ({
 };
 
 // Component for the cluster details drawer
-function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts }) {
+function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }) {
     // ESX Columns for the table
     const esxColumns: GridColDef[] = [
         {
@@ -233,12 +234,90 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts }) {
         }
     ];
 
-    // Fetch migrations for this cluster
-    const clusterName = clusterMigration.spec.clusterName;
-    const { data: migrations = [] } = useQuery<Migration[], Error>({
-        queryKey: ['migrations', clusterName],
-        queryFn: () => getMigrations(),
-    });
+    // VM Columns for the table
+    const vmColumns: GridColDef[] = [
+        {
+            field: 'name',
+            headerName: 'VM Name',
+            flex: 1.5,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
+                        <CdsIconWrapper>
+                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                            {/* @ts-ignore */}
+                            <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
+                        </CdsIconWrapper>
+                    </Tooltip>
+                    <Box>{params.value}</Box>
+                </Box>
+            ),
+        },
+        {
+            field: 'status',
+            headerName: 'Status',
+            flex: 0.8,
+            renderCell: (params) => <StatusChip status={params.value as string} />
+        },
+        {
+            field: 'progress',
+            headerName: 'Progress',
+            flex: 1,
+            align: 'center',
+            display: 'flex',
+            renderCell: (params) => {
+                const progress = params.value as number || 0;
+                let color = 'primary';
+                if (params.row.status === 'Failed') {
+                    color = 'error';
+                } else if (params.row.status === 'Completed' || params.row.status === 'Done' || params.row.status === 'Migrated') {
+                    color = 'success';
+                } else if (params.row.status === 'Pending') {
+                    color = 'warning';
+                }
+
+                return (
+                    <Box sx={{ width: '100%', display: 'flex', alignItems: 'center' }}>
+                        <Box sx={{ width: '100%', mr: 1 }}>
+                            <LinearProgress variant="determinate" value={progress} sx={{ borderRadius: 1 }} color={color as 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'} />
+                        </Box>
+                        <Box sx={{ minWidth: 35 }}>
+                            <Typography variant="body2" color="text.secondary">
+                                {`${progress}%`}
+                            </Typography>
+                        </Box>
+                    </Box>
+                );
+            },
+        },
+        {
+            field: 'ip',
+            headerName: 'Current IP',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'networks',
+            headerName: 'Network Interface(s)',
+            flex: 1,
+            renderCell: (params) => {
+                const networks = (params.row as VM).networks;
+                return networks ? networks.join(", ") : "—";
+            }
+        },
+        {
+            field: 'memory',
+            headerName: 'Memory (MB)',
+            flex: 0.8,
+            valueGetter: (value: string) => value || "—"
+        },
+        {
+            field: 'esxHost',
+            headerName: 'ESX Host',
+            flex: 1,
+            valueGetter: (value: string) => value || "—"
+        },
+    ];
 
     return (
         <StyledDrawer
@@ -281,62 +360,20 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts }) {
 
                     <Box sx={{ mt: 4 }}>
                         <StatusSummary
-                            items={migrations}
-                            getStatus={(migration) => (migration as Migration).status?.phase || 'Pending'}
+                            items={vms}
+                            getStatus={(vm) => (vm as VM).status}
                             title="VM Migrations"
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
                             <DataGrid
-                                rows={migrations}
-                                getRowId={(row) => row.metadata?.name}
-                                columns={[
-                                    {
-                                        field: "name",
-                                        headerName: "Name",
-                                        valueGetter: (_, row) => {
-                                            const name = row.metadata?.name || "";
-                                            return name.replace(/^migration-/, '');
-                                        },
-                                        flex: 1.5,
-                                    },
-                                    {
-                                        field: "status",
-                                        headerName: "Status",
-                                        valueGetter: (_, row) => row?.status?.phase || "Pending",
-                                        flex: 1,
-                                        renderCell: (params) => <StatusChip status={params.value as string} />,
-                                        sortComparator: (v1, v2) => {
-                                            const STATUS_ORDER = {
-                                                'Running': 0,
-                                                'Failed': 1,
-                                                'Succeeded': 2,
-                                                'Pending': 3
-                                            };
-                                            const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
-                                            const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
-                                            return order1 - order2;
-                                        }
-                                    },
-                                    {
-                                        field: "status.conditions",
-                                        headerName: "Progress",
-                                        valueGetter: (_, row) => {
-                                            const phase = row.status?.phase;
-                                            if (!phase || phase === "Unknown") {
-                                                return "Unknown Status";
-                                            }
-                                            return phase;
-                                        },
-                                        flex: 3,
-                                    }
-                                ]}
+                                rows={vms}
+                                columns={vmColumns}
+                                getRowId={(row) => row.id}
                                 initialState={{
                                     pagination: { paginationModel: { pageSize: 10 } },
-                                    sorting: {
-                                        sortModel: [{ field: 'status', sort: 'asc' }],
-                                    },
                                 }}
                                 pageSizeOptions={[10, 25, 50]}
+                                checkboxSelection
                                 sx={{
                                     '& .MuiDataGrid-columnHeaders': {
                                         backgroundColor: 'rgba(0, 0, 0, 0.04)'
@@ -360,7 +397,7 @@ interface CustomToolbarProps {
     onDeleteSelected?: () => void;
 }
 
-const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
+const CustomToolbar = ({ refetchClusterMigrations, selectedCount = 0, onDeleteSelected }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -381,7 +418,7 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
                 )}
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
-                {selectedCount && selectedCount > 0 && (
+                {selectedCount > 0 && (
                     <Button
                         variant="outlined"
                         color="error"
@@ -407,7 +444,7 @@ interface RollingMigrationsTableProps {
 }
 
 export default function RollingMigrationsTable({
-    clusterMigrations: propClusterMigrations,
+    clusterMigrations: _propClusterMigrations,
     refetchClusterMigrations
 }: RollingMigrationsTableProps) {
     // Use provided data or mock data
@@ -627,6 +664,7 @@ export default function RollingMigrationsTable({
                     onClose={handleCloseDrawer}
                     clusterMigration={selectedCluster}
                     esxHosts={esxHostsByCluster[selectedCluster.metadata?.name || ''] || []}
+                    vms={vmsByCluster[selectedCluster.metadata?.name || ''] || []}
                 />
             )}
         </Box>
