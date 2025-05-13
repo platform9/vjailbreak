@@ -127,7 +127,9 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		if volume.Status == "error" {
 			return fmt.Errorf("volume %s is in error state", volumeID)
 		}
-		if volume.Status == "available" {
+
+		// Check if volume is available and there are no attachments to the volume
+		if volume.Status == "available" && len(volume.Attachments) == 0 {
 			return nil
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
