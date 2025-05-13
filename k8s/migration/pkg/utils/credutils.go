@@ -509,18 +509,19 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *govmitypes.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *govmitypes.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+	pc := property.DefaultCollector(c)
+	for _, netRef := range o.Network {
+		var netObj mo.Network
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
+		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -589,71 +590,61 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	}
 	finder.SetDatacenter(dc)
 
-	// Get all the vms
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
+	var vminfo []vjailbreakv1alpha1.VMInfo
+	pc := property.DefaultCollector(c)
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
+		}
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+			continue
 		}
 		var datastores []string
 		var networks []string
 		var disks []string
-		var ds mo.Datastore
-		var dsref govmitypes.ManagedObjectReference
-		if vmProps.Config == nil {
-			// VM is not powered on or is in creating state
-			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
-			continue
-		}
-		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *govmitypes.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *govmitypes.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *govmitypes.VirtualDisk:
-				switch backing := device.GetVirtualDevice().Backing.(type) {
-				case *govmitypes.VirtualDiskFlatVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *govmitypes.VirtualDiskSparseVer2BackingInfo:
-					dsref = backing.Datastore.Reference()
-				case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
-					dsref = backing.Datastore.Reference()
-				default:
-					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
-				}
-				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get datastore: %w", err)
-				}
-				datastores = AppendUnique(datastores, ds.Name)
-				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
+		for _, netRef := range vmProps.Network {
+			var netObj mo.Network
+			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 			}
-		}
-		// Get the host name and parent (cluster) information
-		host := mo.HostSystem{}
-		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get host name: %w", err)
+			networks = append(networks, netObj.Name)
 		}
 
-		// Get the cluster name from the host's parent
-		var clusterName string
-		if host.Parent != nil {
-			var cluster mo.ClusterComputeResource
-			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
-			if err != nil {
-				// Log the error but don't fail - some hosts might not be in a cluster
-				fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
-			} else {
-				clusterName = cluster.Name
+		for _, device := range vmProps.Config.Hardware.Device {
+			disk, ok := device.(*types.VirtualDisk)
+			if !ok {
+				continue
 			}
+
+			var dsref types.ManagedObjectReference
+			switch backing := disk.Backing.(type) {
+			case *types.VirtualDiskFlatVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskSparseVer2BackingInfo:
+				dsref = backing.Datastore.Reference()
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				dsref = backing.Datastore.Reference()
+			default:
+				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+			}
+
+			var ds mo.Datastore
+			err := pc.RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datastore: %w", err)
+			}
+
+			datastores = AppendUnique(datastores, ds.Name)
+			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
@@ -670,7 +661,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			ClusterName: clusterName,
 		})
 	}
-
 	return vminfo, nil
 }
 
@@ -848,168 +838,19 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
-// containsString checks if a string exists in a slice of strings.
-// It is used internally by the package for string slice operations.
-func containsString(slice []string, target string) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
+func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
 		}
-	}
-	return false
-}
-
-// FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
-func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
-	vmList := vjailbreakv1alpha1.VMwareMachineList{}
-	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &vmList, nil
-}
-
-// FilterVMwareHostsForCreds filters VMwareHost objects for the given credentials
-func FilterVMwareHostsForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareHostList, error) {
-	hostList := vjailbreakv1alpha1.VMwareHostList{}
-	if err := k8sClient.List(ctx, &hostList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &hostList, nil
-}
-
-// FilterVMwareClustersForCreds filters VMwareCluster objects for the given credentials
-func FilterVMwareClustersForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareClusterList, error) {
-	clusterList := vjailbreakv1alpha1.VMwareClusterList{}
-	if err := k8sClient.List(ctx, &clusterList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
-		return nil, errors.Wrap(err, "Error listing VMs")
-	}
-	return &clusterList, nil
-}
-
-// FindVMwareMachinesNotInVcenter finds VMwareMachine objects that are not present in the vCenter
-func FindVMwareMachinesNotInVcenter(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
-	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
+		if vmwvm.Labels[key] == value {
+			return nil
+		}
+		vmwvm.Labels[key] = value
+		return nil
+	})
 	if err != nil {
-		return nil, errors.Wrap(err, "Error filtering VMs")
-	}
-	var staleVMs []vjailbreakv1alpha1.VMwareMachine
-	for _, vm := range vmList.Items {
-		if !VMExistsInVcenter(vm.Spec.VMInfo.Name, vcenterVMs) {
-			staleVMs = append(staleVMs, vm)
-		}
-	}
-	return staleVMs, nil
-}
-
-// FindVMwareHostsNotInVcenter finds VMwareHost objects that are not present in the vCenter
-func FindVMwareHostsNotInVcenter(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, clusterInfo []VMwareClusterInfo) ([]vjailbreakv1alpha1.VMwareHost, error) {
-	hostList, err := FilterVMwareHostsForCreds(ctx, client, vmwcreds)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error filtering VMs")
-	}
-	var staleHosts []vjailbreakv1alpha1.VMwareHost
-	for _, host := range hostList.Items {
-		if !HostExistsInVcenter(host.Name, clusterInfo) {
-			staleHosts = append(staleHosts, host)
-		}
-	}
-	return staleHosts, nil
-}
-
-// DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
-func DeleteStaleVMwareMachines(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
-	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
-	if err != nil {
-		return errors.Wrap(err, "Error finding stale VMs")
-	}
-	for _, vm := range staleVMs {
-		if err := client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
-			}
-		}
-	}
-	return nil
-}
-
-// VMExistsInVcenter checks if a VM exists in the vCenter
-func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
-	for _, vm := range vcenterVMs {
-		if vm.Name == vmName {
-			return true
-		}
-	}
-	return false
-}
-
-// HostExistsInVcenter checks if a host exists in the vCenter
-func HostExistsInVcenter(hostName string, clusterInfo []VMwareClusterInfo) bool {
-	for _, cluster := range clusterInfo {
-		for _, host := range cluster.Hosts {
-			if host.Name == hostName {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
-	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting VMs")
-	}
-	if err := DeleteVMwareHostsForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting hosts")
-	}
-	if err := DeleteVMwareClustersForVMwareCreds(ctx, scope); err != nil {
-		return errors.Wrap(err, "Error deleting clusters")
-	}
-
-	return nil
-}
-
-func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	vmList, err := FilterVMwareMachinesForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, vm := range vmList.Items {
-		if err := scope.Client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
-			}
-		}
-	}
-	return nil
-}
-
-func DeleteVMwareClustersForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	clusterList, err := FilterVMwareClustersForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, cluster := range clusterList.Items {
-		if err := scope.Client.Delete(ctx, &cluster); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", cluster.Name))
-			}
-		}
-	}
-	return nil
-}
-
-func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	hostList, err := FilterVMwareHostsForCreds(ctx, scope.Client, scope.VMwareCreds)
-	if err != nil {
-		return errors.Wrap(err, "Error filtering VMs")
-	}
-	for _, host := range hostList.Items {
-		if err := scope.Client.Delete(ctx, &host); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", host.Name))
-			}
-		}
+		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
 	}
 	return nil
 }

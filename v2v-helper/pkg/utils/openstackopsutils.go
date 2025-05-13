@@ -82,6 +82,12 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for volume: %s", err)
 	}
+	volume, err = volumes.Get(osclient.BlockStorageClient, volume.ID).Extract()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volume: %s", err)
+	}
+	fmt.Println("Volume created successfully %s", volume.Status)
+
 	if uefi {
 		err = osclient.SetVolumeUEFI(volume)
 		if err != nil {
@@ -118,7 +124,9 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
 		}
-
+		if volume.Status == "error" {
+			return fmt.Errorf("volume %s is in error state", volumeID)
+		}
 		if volume.Status == "available" {
 			return nil
 		}
@@ -287,6 +295,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {
 		log.Println("No suitable flavor found.")
+		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 	}
 
 	return bestFlavor, nil

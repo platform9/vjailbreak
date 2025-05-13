@@ -114,8 +114,9 @@ const (
 	// K3sTokenFileLocation is the location of the k3s token file
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 
-	// CredsRequeueAfter is the time to requeue after
-	CredsRequeueAfter = 1 * time.Minute
+	MigrationTriggerDelay      = 5 * time.Second
+	VMwareCredsRequeueAfter    = 1 * time.Minute
+	OpenstackCredsRequeueAfter = 1 * time.Minute
 
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
@@ -162,6 +163,7 @@ runcmd:
 
 	// MigrationConditionTypeValidated represents the condition type for validated phase
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
+	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
 	// StatesEnum is a map of migration phase to state
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
