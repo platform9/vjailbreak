@@ -451,7 +451,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 		}
 		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
-		fmt.Println("OS detected by guestfish: %s", osDetected)
+		fmt.Printf("OS detected by guestfish: %s", osDetected)
 		// Supported OSes
 		supportedOS := []string{
 			"redhat",

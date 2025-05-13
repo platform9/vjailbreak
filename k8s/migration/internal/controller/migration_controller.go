@@ -270,10 +270,14 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
+	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert VM name to k8s name")
+	}
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace),
-		client.MatchingLabels(map[string]string{"vm-name": migration.Spec.VMName})); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s'", migration.Spec.VMName))
+		client.MatchingLabels(map[string]string{"vm-name": vmname})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
 	}
 	if len(podList.Items) == 0 {
 		return nil, errors.New("migration pod not found")
