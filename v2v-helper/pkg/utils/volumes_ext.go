@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // ToVolumeManageMap builds the request payload for manage volume.
-func ToVolumeManageMap(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]interface{}, error) {
+func ToVolumeManageMap(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
 		"volume": map[string]interface{}{
 			"host": rdmDisk.CinderBackendPool,
@@ -26,7 +26,8 @@ func ToVolumeManageMap(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]inter
 }
 
 // Manage triggers the volume manage request.
-func (osclient *OpenStackClients) CinderManage(rdmDisk vjailbreakv1alpha1.RDMDiskInfo) (map[string]interface{}, error) {
+
+func (osclient *OpenStackClients) CinderManage(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {
 	body, err := ToVolumeManageMap(rdmDisk)
 	if err != nil {
 		return nil, err
