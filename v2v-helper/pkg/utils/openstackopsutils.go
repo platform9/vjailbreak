@@ -358,6 +358,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	}
 	log.Printf("Port with MAC address %s does not exist, creating new port\n", mac)
 	log.Println("Trying with same IP address: ", ip)
+
+	// Check if subnet is valid to avoid panic.
+	if len(network.Subnets) == 0 {
+		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
+	}
 	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 		Name:       "port-" + vmname,
 		NetworkID:  network.ID,
