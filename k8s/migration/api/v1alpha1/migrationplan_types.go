@@ -49,6 +49,18 @@ type AdvancedOptions struct {
 	GranularPorts       []string `json:"granularPorts,omitempty"`
 }
 
+// NEW: Define PostMigrationAction struct for post-migration actions
+type PostMigrationAction struct {
+	// +kubebuilder:default:=true
+	RenameVm bool `json:"renameVm"`
+	// +kubebuilder:default:="_migrated_to_pcd"
+	Suffix string `json:"suffix"`
+	// +kubebuilder:default:=true
+	MoveToFolder bool `json:"moveToFolder"`
+	// +kubebuilder:default:="vjailbreakedVMs"
+	FolderName string `json:"folderName"`
+}
+
 // MigrationPlanSpec defines the desired state of MigrationPlan
 type MigrationPlanSpec struct {
 	MigrationTemplate string                `json:"migrationTemplate"`
@@ -58,6 +70,8 @@ type MigrationPlanSpec struct {
 	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript string `json:"firstBootScript,omitempty"`
+	// NEW: Add post-migration action field
+	PostMigrationAction PostMigrationAction `json:"postMigrationAction,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan

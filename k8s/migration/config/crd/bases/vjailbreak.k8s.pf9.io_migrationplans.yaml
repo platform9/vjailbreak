@@ -91,6 +91,27 @@ spec:
                 type: object
               migrationTemplate:
                 type: string
+              postMigrationAction:
+                description: 'NEW: Add post-migration action field'
+                properties:
+                  folderName:
+                    default: vjailbreakedVMs
+                    type: string
+                  moveToFolder:
+                    default: true
+                    type: boolean
+                  renameVm:
+                    default: true
+                    type: boolean
+                  suffix:
+                    default: _migrated_to_pcd
+                    type: string
+                required:
+                - folderName
+                - moveToFolder
+                - renameVm
+                - suffix
+                type: object
               retry:
                 type: boolean
               virtualMachines:
