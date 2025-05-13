@@ -590,6 +590,10 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) e
 				return fmt.Errorf("failed to get network: %s", err)
 			}
 
+			if network == nil {
+				return fmt.Errorf("network not found")
+			}
+
 			ip := ""
 			if len(vminfo.Mac) != len(vminfo.IPs) {
 				ip = ""
