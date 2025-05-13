@@ -86,7 +86,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, fmt.Errorf("failed to get volume: %s", err)
 	}
-	fmt.Println("Volume created successfully %s", volume.Status)
+	fmt.Printf("Volume created successfully %s", volume.Status)
 
 	if uefi {
 		err = osclient.SetVolumeUEFI(volume)
