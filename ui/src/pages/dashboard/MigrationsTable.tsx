@@ -3,6 +3,7 @@ import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
+import MigrationDetailsDialog from "src/components/dialogs/MigrationDetailsDialog";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
 import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
@@ -171,9 +172,14 @@ export default function MigrationsTable({
     refetchMigrations
 }: MigrationsTableProps) {
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+    const [selectedMigrationName, setSelectedMigrationName] = useState<string | null>(null);
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);
+    };
+
+    const handleRowClick = (params) => {
+        setSelectedMigrationName(params.row.metadata?.name);
     };
 
     const migrationsWithActions = migrations?.map(migration => ({
@@ -185,38 +191,51 @@ export default function MigrationsTable({
         const phase = params.row?.status?.phase;
         return !(!phase || phase === "Running" || phase === "Pending");
     };
+    const selectedMigration = migrations.find(m => m.metadata?.name === selectedMigrationName);
+    const selectedPhase = selectedMigration?.status?.phase;
 
     return (
-        <DataGrid
-            rows={migrationsWithActions}
-            columns={columns}
-            initialState={{
-                pagination: { paginationModel: { page: 0, pageSize: 25 } },
-                sorting: {
-                    sortModel: [{ field: 'status', sort: 'asc' }],
-                },
-            }}
-            pageSizeOptions={[25, 50, 100]}
-            localeText={{ noRowsLabel: "No Migrations Available" }}
-            getRowId={(row) => row.metadata?.name}
-            checkboxSelection
-            isRowSelectable={isRowSelectable}
-            onRowSelectionModelChange={handleSelectionChange}
-            rowSelectionModel={selectedRows}
-            slots={{
-                toolbar: () => (
-                    <CustomToolbar
-                        numSelected={selectedRows.length}
-                        onDeleteSelected={() => {
-                            const selectedMigrations = migrations?.filter(
-                                m => selectedRows.includes(m.metadata?.name)
-                            );
-                            onDeleteSelected(selectedMigrations || []);
-                        }}
-                        refetchMigrations={refetchMigrations}
-                    />
-                ),
-            }}
-        />
+        <>
+            <DataGrid
+                rows={migrationsWithActions}
+                columns={columns}
+                initialState={{
+                    pagination: { paginationModel: { page: 0, pageSize: 25 } },
+                    sorting: {
+                        sortModel: [{ field: 'status', sort: 'asc' }],
+                    },
+                }}
+                pageSizeOptions={[25, 50, 100]}
+                localeText={{ noRowsLabel: "No Migrations Available" }}
+                getRowId={(row) => row.metadata?.name}
+                checkboxSelection
+                isRowSelectable={isRowSelectable}
+                onRowSelectionModelChange={handleSelectionChange}
+                rowSelectionModel={selectedRows}
+                slots={{
+                    toolbar: () => (
+                        <CustomToolbar
+                            numSelected={selectedRows.length}
+                            onDeleteSelected={() => {
+                                const selectedMigrations = migrations?.filter(
+                                    m => selectedRows.includes(m.metadata?.name)
+                                );
+                                onDeleteSelected(selectedMigrations || []);
+                            }}
+                            refetchMigrations={refetchMigrations}
+                        />
+                    ),
+                }}
+                onRowClick={handleRowClick}
+            />
+            {selectedMigrationName && (
+                <MigrationDetailsDialog
+                    open={!!selectedMigrationName}
+                    onClose={() => setSelectedMigrationName(null)}
+                    migrationName={selectedMigrationName}
+                    phase={selectedPhase}
+                />
+            )}
+        </>
     );
-} 
+}
