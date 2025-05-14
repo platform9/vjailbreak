@@ -9,7 +9,9 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -169,26 +171,38 @@ func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, e
 	return nil
 }
 
-func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) error {
+// GetESXiHostSystem returns a reference to an ESXi host system using VMware credentials
+func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (*object.HostSystem, *vim25.Client, error) {
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
-		return errors.Wrap(err, "failed to get vmware credentials")
+		return nil, nil, errors.Wrap(err, "failed to get vmware credentials")
 	}
 
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwarecreds)
 	if err != nil {
-		return errors.Wrap(err, "failed to validate vCenter connection")
+		return nil, nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
+
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
 	if err != nil {
-		return errors.Wrap(err, "failed to find datacenter")
+		return nil, nil, errors.Wrap(err, "failed to find datacenter")
 	}
 	finder.SetDatacenter(dc)
+
 	hostSystem, err := finder.HostSystem(ctx, esxiName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to find host %s", esxiName)
+		return nil, nil, errors.Wrapf(err, "failed to find host %s", esxiName)
+	}
+
+	return hostSystem, c, nil
+}
+
+func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) error {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+	if err != nil {
+		return errors.Wrap(err, "failed to get ESXi host system")
 	}
 
 	// Check host state
@@ -213,7 +227,6 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxi
 }
 
 func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (bool, error) {
-
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
@@ -233,20 +246,14 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, es
 }
 
 func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) (mo.HostSystem, error) {
+	// Create a temporary reference to use with our common function
+	vmwareCredsRef := corev1.LocalObjectReference{
+		Name: vmwareCreds.Name,
+	}
 
-	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwareCreds)
+	hostSystem, c, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
 	if err != nil {
-		return mo.HostSystem{}, errors.Wrap(err, "failed to validate vCenter connection")
-	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, vmwareCreds.Spec.DataCenter)
-	if err != nil {
-		return mo.HostSystem{}, errors.Wrap(err, "failed to find datacenter")
-	}
-	finder.SetDatacenter(dc)
-	hostSystem, err := finder.HostSystem(ctx, esxiName)
-	if err != nil {
-		return mo.HostSystem{}, errors.Wrapf(err, "failed to find host %s", esxiName)
+		return mo.HostSystem{}, errors.Wrap(err, "failed to get ESXi host system")
 	}
 
 	pc := property.DefaultCollector(c)
@@ -259,26 +266,52 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 	return hs, nil
 }
 
-func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (int, error) {
-	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
+// RemoveESXiFromVCenter removes an ESXi host from vCenter inventory
+// This should only be called after the host is in maintenance mode and has no VMs
+func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) error {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to get vmware credentials")
+		return errors.Wrap(err, "failed to get ESXi host system")
 	}
 
-	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwarecreds)
+	// Verify the host is in maintenance mode before removing
+	inMaintenance, err := CheckESXiInMaintenanceMode(ctx, k8sClient, esxiName, vmwareCredsRef)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to validate vCenter connection")
+		return errors.Wrap(err, "failed to check maintenance mode status")
 	}
-	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to find datacenter")
+
+	if !inMaintenance {
+		return errors.New("cannot remove ESXi host that is not in maintenance mode")
 	}
-	finder.SetDatacenter(dc)
-	hostSystem, err := finder.HostSystem(ctx, esxiName)
+
+	// Verify no VMs exist on the host
+	vmCount, err := CountVMsOnESXi(ctx, k8sClient, esxiName, vmwareCredsRef)
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to find host %s", esxiName)
+		return errors.Wrap(err, "failed to count VMs on host")
+	}
+
+	if vmCount > 0 {
+		return errors.New("cannot remove ESXi host with existing VMs")
+	}
+
+	// Remove the host from vCenter inventory
+	task, err := hostSystem.Destroy(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to destroy host from vCenter")
+	}
+
+	err = task.Wait(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed while waiting for host removal task to complete")
+	}
+
+	return nil
+}
+
+func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (int, error) {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get ESXi host system")
 	}
 
 	// Get the VMs on the host
