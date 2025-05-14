@@ -46,13 +46,6 @@ type ESXIMigrationReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ESXIMigration object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.ESXIMigrationControllerName)
 	ctxlog.Info("Starting reconciliation", "esximigration", req.NamespacedName)
@@ -135,7 +128,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
 
-		// Omkar Assume this will be done by vPwned
+		// TODO:Omkar Assume this will be done by vPwned
 		// provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
 		// if err != nil {
 		// 	return ctrl.Result{}, err
@@ -169,10 +162,20 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		if vmCount != 0 {
 			log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
 			// Omkar change back to 5 mins
+
+			
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
-		log.Info("No VMs on this ESXi host, Converting to PCD host now", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-		// TODO(vPwned): Convert to PCD host
+		log.Info("No VMs on this ESXi host, removing from vCenter and converting to PCD host", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
+		
+		// Remove the ESXi host from vCenter before changing the phase
+		err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+		if err != nil {
+			log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+			return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
+		}
+		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
