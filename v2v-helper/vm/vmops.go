@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -28,6 +29,7 @@ type VMOperations interface {
 	DeleteSnapshot(name string) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
 	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
+	VMGuestShutdown() error
 	VMPowerOff() error
 	VMPowerOn() error
 }
@@ -336,6 +338,48 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 	return changedblocks, nil
 }
 
+func (vmops *VMOps) VMGuestShutdown() error {
+	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get VM power state: %s", err)
+	}
+	if currstate == types.VirtualMachinePowerStatePoweredOff {
+		return nil
+	}
+	
+	// Attempt guest OS shutdown
+	err = vmops.VMObj.ShutdownGuest(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initiate guest shutdown: %s", err)
+	}
+	
+	// Wait for up to 2 minutes for the VM to power off
+	poweredOff := false
+	ctx, cancel := context.WithTimeout(vmops.ctx, 2*time.Minute)
+	defer cancel()
+	
+	for !poweredOff {
+		state, err := vmops.VMObj.PowerState(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get VM power state: %s", err)
+		}
+		if state == types.VirtualMachinePowerStatePoweredOff {
+			poweredOff = true
+			break
+		}
+		
+		// Check if timeout occurred
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("guest shutdown timed out after 2 minutes")
+		default:
+			time.Sleep(5 * time.Second)
+		}
+	}
+	
+	return nil
+}
+
 func (vmops *VMOps) VMPowerOff() error {
 	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
 	if err != nil {
@@ -344,6 +388,18 @@ func (vmops *VMOps) VMPowerOff() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
+	
+	// First try a clean guest shutdown
+	err = vmops.VMGuestShutdown()
+	if err == nil {
+		// Guest shutdown succeeded
+		return nil
+	}
+	
+	// If guest shutdown failed, log the error and fall back to power off
+	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
+	
+	// Fall back to power off
 	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
 		return err
