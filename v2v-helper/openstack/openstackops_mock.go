@@ -170,6 +170,21 @@ func (mr *MockOpenstackOperationsMockRecorder) GetClosestFlavour(cpu, memory int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClosestFlavour", reflect.TypeOf((*MockOpenstackOperations)(nil).GetClosestFlavour), cpu, memory)
 }
 
+// GetFlavor mocks base method.
+func (m *MockOpenstackOperations) GetFlavor(flavorId string) (*flavors.Flavor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFlavor", flavorId)
+	ret0, _ := ret[0].(*flavors.Flavor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFlavor indicates an expected call of GetFlavor.
+func (mr *MockOpenstackOperationsMockRecorder) GetFlavor(flavorId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFlavor", reflect.TypeOf((*MockOpenstackOperations)(nil).GetFlavor), flavorId)
+}
+
 // GetNetwork mocks base method.
 func (m *MockOpenstackOperations) GetNetwork(networkname string) (*networks.Network, error) {
 	m.ctrl.T.Helper()

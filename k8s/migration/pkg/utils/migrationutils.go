@@ -103,7 +103,30 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrating,
 			corev1.ConditionTrue,
 			constants.MigrationReason,
-			"Migrating VM from VMware to Openstack",
+			"Migrating VM from VMware to OpenStack",
+			eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+	}
+	return existingConditions
+}
+
+func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "failed to")) {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeFailed, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeFailed,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			eventList.Items[i].Message,
 			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {

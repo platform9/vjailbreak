@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/user"
 	"reflect"
 	"strconv"
 	"strings"
@@ -47,6 +49,8 @@ import (
 	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
+
+const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -184,6 +188,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
 		if err != nil {
+			if strings.Contains(err.Error(), "VDDK_MISSING") {
+				r.ctxlog.Info("Requeuing due to missing VDDK files.")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
@@ -320,7 +328,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						},
 					},
 				},
-				TTLSecondsAfterFinished: ptr.To(constants.MigrationJobTTL),
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
@@ -368,6 +375,13 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										SecretRef: &corev1.SecretEnvSource{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: openstackSecretRef,
+											},
+										},
+									},
+									{
+										ConfigMapRef: &corev1.ConfigMapEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "pf9-env",
 											},
 										},
 									},
@@ -556,6 +570,9 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			if err != nil {
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
+			if flavor == nil {
+				return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory)
+			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
@@ -638,6 +655,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 			}
 		}
 	}
+
 	if len(openstacknws) != len(vmnws) {
 		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping")
 	}
@@ -756,6 +774,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("failed to create Firstboot ConfigMap for VM %s: %w", vm, err)
 		}
+		//nolint:gocritic // err is already declared above
+		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+			return err
+		}
+
 		err = r.CreateJob(ctx,
 			migrationplan,
 			migrationobj,
@@ -783,4 +806,81 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
 		Complete(r)
+}
+
+func (r *MigrationPlanReconciler) validateVDDKPresence(
+	ctx context.Context,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	logger logr.Logger,
+) error {
+	currentUser, err := user.Current()
+	whoami := "unknown"
+	if err == nil {
+		whoami = currentUser.Username
+	}
+
+	files, err := os.ReadDir(VDDKDirectory)
+	if err != nil {
+		logger.Error(err, "VDDK directory could not be read")
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		setCondition := corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryMissing",
+			Message:            "VDDK directory is missing. Please create and upload the required files.",
+			LastTransitionTime: metav1.Now(),
+		}
+
+		newConditions := []corev1.PodCondition{}
+		for _, c := range migrationobj.Status.Conditions {
+			if c.Type != "VDDKCheck" {
+				newConditions = append(newConditions, c)
+			}
+		}
+		newConditions = append(newConditions, setCondition)
+		migrationobj.Status.Conditions = newConditions
+
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
+		}
+
+		return errors.Wrapf(err, "VDDK_MISSING: directory could not be read")
+	}
+
+	if len(files) == 0 {
+		logger.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.",
+			"path", VDDKDirectory,
+			"whoami", whoami)
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryEmpty",
+			Message:            "VDDK directory is empty. Please upload the required files.",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
+		}
+
+		return errors.Wrapf(errors.New("VDDK_MISSING"), "vddk directory is empty")
+	}
+
+	// Clear previous VDDKCheck condition if directory is valid
+	cleanedConditions := []corev1.PodCondition{}
+	for _, c := range migrationobj.Status.Conditions {
+		if c.Type != "VDDKCheck" {
+			cleanedConditions = append(cleanedConditions, c)
+		}
+	}
+
+	migrationobj.Status.Conditions = cleanedConditions
+
+	if err = r.Status().Update(ctx, migrationobj); err != nil {
+		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
+	}
+	return nil
 }

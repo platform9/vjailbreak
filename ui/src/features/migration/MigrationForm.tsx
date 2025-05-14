@@ -589,6 +589,7 @@ export default function MigrationFormDrawer({
             sessionId={sessionId}
             openstackFlavors={openstackCredentials?.spec?.flavors}
             vmwareCredName={params.vmwareCreds?.existingCredName}
+            openstackCredName={params.openstackCreds?.existingCredName}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep

@@ -38,8 +38,9 @@ const (
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 	ENVFileLocation      = "/etc/pf9/k3s.env"
 
-	MigrationTriggerDelay   = 5 * time.Second
-	VMwareCredsRequeueAfter = 1 * time.Minute
+	MigrationTriggerDelay      = 5 * time.Second
+	VMwareCredsRequeueAfter    = 1 * time.Minute
+	OpenstackCredsRequeueAfter = 1 * time.Minute
 
 	MigrationReason = "Migration"
 	StartCutOverYes = "yes"
@@ -67,6 +68,7 @@ runcmd:
 	MigrationConditionTypeDataCopy  corev1.PodConditionType = "DataCopy"
 	MigrationConditionTypeMigrating corev1.PodConditionType = "Migrating"
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
+	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
 	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
 		vjailbreakv1alpha1.MigrationPhasePending:                  0,

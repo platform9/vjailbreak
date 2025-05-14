@@ -325,6 +325,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
 					}
 					migobj.logMessage("Finished copying changed blocks")
+					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
 				}
 			}
 			if final {
@@ -474,7 +475,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 		}
 		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
-		fmt.Println("OS detected by guestfish: %s", osDetected)
+		fmt.Printf("OS detected by guestfish: %s", osDetected)
 		// Supported OSes
 		supportedOS := []string{
 			"redhat",
@@ -611,6 +612,10 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) e
 			network, err := openstackops.GetNetwork(networkname)
 			if err != nil {
 				return fmt.Errorf("failed to get network: %s", err)
+			}
+
+			if network == nil {
+				return fmt.Errorf("network not found")
 			}
 
 			ip := ""
@@ -843,14 +848,20 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to live replicate disks: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to convert disks: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
@@ -866,25 +877,32 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err))
+		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
+			// combine both errors
+			return errors.Wrapf(err, "failed to create target instance: %s", cleanuperror)
+		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
 
 	return nil
 }
 
-func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) {
+func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		log.Printf("Failed to detach all volumes from VM: %s\n", err)
-	} else if err = migobj.DeleteAllVolumes(vminfo); err != nil {
+	}
+	err = migobj.DeleteAllVolumes(vminfo)
+	if err != nil {
 		log.Printf("Failed to delete all volumes from host: %s\n", err)
 	}
 	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		log.Printf("Failed to delete snapshot of source VM: %s\n", err)
+		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
+	return nil
 }
 
 func (migobj *Migrate) CinderManage(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {

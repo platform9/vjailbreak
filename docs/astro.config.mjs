@@ -6,6 +6,7 @@ import mdx from '@astrojs/mdx';
 // https://astro.build/config
 export default defineConfig({
 	site: process.env.SITE_URL || 'https://platform9.github.io',
+	//base: '/vjailbreak/',
 	base: '/' + (process.env.BASE || ''),
 	trailingSlash: "always",
 	integrations: [
@@ -54,6 +55,7 @@ export default defineConfig({
 						{ label: 'Troubleshooting', slug: 'guides/troubleshooting' },
 						{ label: 'Building', slug: 'guides/building' },
 						{ label: 'Using APIs', slug: 'guides/using_apis' },
+						{ label: 'Injecting Custom Environment Variables', slug: 'guides/injecting_custom_env' },
 					],
 				},
 				{

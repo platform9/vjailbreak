@@ -95,8 +95,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
 		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
 	}
-	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running nor Succeeded for migration %s", migration.Name)
+
+	// Check if the pod is in a valid state only then continue
+	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
+		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
@@ -108,6 +110,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
 
@@ -128,7 +131,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(pod.Status.Phase) != string(corev1.PodSucceeded) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -157,6 +161,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+//nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
 	events, err := r.GetEventsSorted(ctx, scope)
 	if err != nil {
@@ -201,7 +206,8 @@ loop:
 			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart
 			break loop
-		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed):
+		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
+			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
 			break loop
 			// If none of the above phases matched
@@ -264,10 +270,14 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
+	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert VM name to k8s name")
+	}
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace),
-		client.MatchingLabels(map[string]string{"vm-name": migration.Spec.VMName})); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s'", migration.Spec.VMName))
+		client.MatchingLabels(map[string]string{"vm-name": vmname})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
 	}
 	if len(podList.Items) == 0 {
 		return nil, errors.New("migration pod not found")

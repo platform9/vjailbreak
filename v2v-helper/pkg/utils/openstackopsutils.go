@@ -82,6 +82,12 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for volume: %s", err)
 	}
+	volume, err = volumes.Get(osclient.BlockStorageClient, volume.ID).Extract()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volume: %s", err)
+	}
+	fmt.Printf("Volume created successfully %s", volume.Status)
+
 	if uefi {
 		err = osclient.SetVolumeUEFI(volume)
 		if err != nil {
@@ -118,8 +124,12 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
 		}
+		if volume.Status == "error" {
+			return fmt.Errorf("volume %s is in error state", volumeID)
+		}
 
-		if volume.Status == "available" {
+		// Check if volume is available and there are no attachments to the volume
+		if volume.Status == "available" && len(volume.Attachments) == 0 {
 			return nil
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
@@ -287,6 +297,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
 	} else {
 		log.Println("No suitable flavor found.")
+		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 	}
 
 	return bestFlavor, nil
@@ -349,6 +360,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	}
 	log.Printf("Port with MAC address %s does not exist, creating new port\n", mac)
 	log.Println("Trying with same IP address: ", ip)
+
+	// Check if subnet is valid to avoid panic.
+	if len(network.Subnets) == 0 {
+		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
+	}
 	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 		Name:       "port-" + vmname,
 		NetworkID:  network.ID,

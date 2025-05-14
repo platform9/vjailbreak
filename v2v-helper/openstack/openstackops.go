@@ -71,6 +71,7 @@ func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
 	}
+	opts.AllowReauth = true
 	providerClient, err := openstack.NewClient(opts.IdentityEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider client: %s", err)

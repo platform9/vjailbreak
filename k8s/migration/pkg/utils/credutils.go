@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -46,10 +45,11 @@ type OpenStackClients struct {
 
 // VMwareCredentials holds the actual credentials after decoding
 type VMwareCredentials struct {
-	Host     string
-	Username string
-	Password string
-	Insecure bool
+	Host       string
+	Username   string
+	Password   string
+	Insecure   bool
+	Datacenter string
 }
 
 // OpenStackCredentials holds the actual credentials after decoding
@@ -89,6 +89,7 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	username := string(secret.Data["VCENTER_USERNAME"])
 	password := string(secret.Data["VCENTER_PASSWORD"])
 	insecureStr := string(secret.Data["VCENTER_INSECURE"])
+	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
@@ -99,14 +100,18 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	if password == "" {
 		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
+	if datacenter == "" {
+		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+	}
 
-	insecure := strings.TrimSpace(insecureStr) == trueString
+	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
 	return VMwareCredentials{
-		Host:     host,
-		Username: username,
-		Password: password,
-		Insecure: insecure,
+		Host:       host,
+		Username:   username,
+		Password:   password,
+		Insecure:   insecure,
+		Datacenter: datacenter,
 	}, nil
 }
 
@@ -139,7 +144,7 @@ func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackC
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
-	insecure := strings.TrimSpace(insecureStr) == trueString
+	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
 	return OpenStackCredentials{
 		AuthURL:    fields["AuthURL"],
@@ -373,12 +378,7 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		if certerr != nil {
 			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
 		}
-		// Logging the certificate
-		ctxlog.Info(fmt.Sprintf("Trusting certificate for '%s'", openstackCredential.AuthURL))
-		ctxlog.Info(string(pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: caCert.Raw,
-		})))
+		ctxlog.Info("Trusting certificate for OpenStack endpoint", "authURL", openstackCredential.AuthURL)
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
 		caCertPool, _ := x509.SystemCertPool()
 		if caCertPool == nil {
@@ -443,6 +443,14 @@ func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 	if err != nil {
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}
+
+	// Check if the datacenter exists
+	finder := find.NewFinder(c, false)
+	_, err = finder.Datacenter(context.Background(), VMwareCredentials.Datacenter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+
 	return c, nil
 }
 
@@ -468,18 +476,19 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	for _, device := range o.Config.Hardware.Device {
-		switch dev := device.(type) {
-		case *types.VirtualE1000e:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-		case *types.VirtualVmxnet3:
-			networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
+	pc := property.DefaultCollector(c)
+	for _, netRef := range o.Network {
+		var netObj mo.Network
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
+		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -548,7 +557,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	}
 	finder.SetDatacenter(dc)
 
-	// Get all the vms
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
@@ -597,7 +605,6 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
-
 		// Skip VMs with no config
 		if vmProps.Config == nil {
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
@@ -629,20 +636,38 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		// Use the new method to populate RDM disk info
 		rdmDisks := PopulateRDMDiskInfoFromAttributes(diskInfo, attributes)
 
-		var datastores []string
-		var networks []string
-		var disks []string
-		var ds mo.Datastore
-		var dsref types.ManagedObjectReference
+		pc := property.DefaultCollector(c)
+		for _, vm := range vms {
+			var vmProps mo.VirtualMachine
+			err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get VM properties: %w", err)
+			}
+			if vmProps.Config == nil {
+				// VM is not powered on or is in creating state
+				fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+				continue
+			}
+			var datastores []string
+			var networks []string
+			var disks []string
+			for _, netRef := range vmProps.Network {
+				var netObj mo.Network
+				err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+				if err != nil {
+					return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+				}
+				networks = append(networks, netObj.Name)
+			}
 
-		for _, device := range vmProps.Config.Hardware.Device {
-			switch dev := device.(type) {
-			case *types.VirtualE1000e:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualVmxnet3:
-				networks = append(networks, dev.DeviceInfo.GetDescription().Summary)
-			case *types.VirtualDisk:
-				switch backing := device.GetVirtualDevice().Backing.(type) {
+			for _, device := range vmProps.Config.Hardware.Device {
+				disk, ok := device.(*types.VirtualDisk)
+				if !ok {
+					continue
+				}
+
+				var dsref types.ManagedObjectReference
+				switch backing := disk.Backing.(type) {
 				case *types.VirtualDiskFlatVer2BackingInfo:
 					dsref = backing.Datastore.Reference()
 				case *types.VirtualDiskSparseVer2BackingInfo:
@@ -650,33 +675,35 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 				case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 					dsref = backing.Datastore.Reference()
 				default:
-					return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
+					return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
 				}
-				err := property.DefaultCollector(c).RetrieveOne(ctx, dsref, []string{"name"}, &ds)
+
+				var ds mo.Datastore
+				err := pc.RetrieveOne(ctx, dsref, []string{"name"}, &ds)
 				if err != nil {
 					return nil, fmt.Errorf("failed to get datastore: %w", err)
 				}
+
 				datastores = AppendUnique(datastores, ds.Name)
-				disks = append(disks, device.GetVirtualDevice().DeviceInfo.GetDescription().Label)
+				disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 			}
+
+			vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
+				Name:             vmProps.Config.Name,
+				Datastores:       datastores,
+				Disks:            disks,
+				RDMDisks:         rdmDisks,
+				Networks:         networks,
+				IPAddress:        vmProps.Guest.IpAddress,
+				VMState:          vmProps.Guest.GuestState,
+				OSType:           vmProps.Guest.GuestFamily,
+				CPU:              int(vmProps.Config.Hardware.NumCPU),
+				Memory:           int(vmProps.Config.Hardware.MemoryMB),
+				Annotation:       vmProps.Summary.Config.Annotation,
+				CustomAttributes: customAttributes,
+			})
 		}
-
-		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:             vmProps.Config.Name,
-			Datastores:       datastores,
-			Disks:            disks,
-			RDMDisks:         rdmDisks,
-			Networks:         networks,
-			IPAddress:        vmProps.Guest.IpAddress,
-			VMState:          vmProps.Guest.GuestState,
-			OSType:           vmProps.Guest.GuestFamily,
-			CPU:              int(vmProps.Config.Hardware.NumCPU),
-			Memory:           int(vmProps.Config.Hardware.MemoryMB),
-			Annotation:       vmProps.Summary.Config.Annotation,
-			CustomAttributes: customAttributes,
-		})
 	}
-
 	return vminfo, nil
 }
 
@@ -717,7 +744,6 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
-	ctxlog := log.FromContext(ctx)
 	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
@@ -752,17 +778,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				VMs: *vminfo,
 			},
 		}
-		ctxlog.Info("Creating new VMwareMachine", "Name", vmwvmKey.Name)
 		init = true
 	} else {
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
-			ctxlog.Info("Adding new label to VMwareMachine",
-				"Name", vmwvmKey.Name,
-				"Label", label)
-
 			// Initialize labels map if needed
 			if vmwvm.Labels == nil {
 				vmwvm.Labels = make(map[string]string)
@@ -791,16 +812,13 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			PowerState: vminfo.VMState,
 			Migrated:   false,
 		}
-		ctxlog.Info("Creating new VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	} else {
 		// If the object is not new, update the status and persist migrated status.
 		currentMigratedStatus := vmwvm.Status.Migrated
 		if vmwvm.Status.PowerState != vminfo.VMState {
 			vmwvm.Status.PowerState = vminfo.VMState
-			ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name)
 		}
 		vmwvm.Status.Migrated = currentMigratedStatus
-		ctxlog.Info("Updating VMwareMachine status", "Name", vmwvmKey.Name, "migrated", vmwvm.Status.Migrated)
 	}
 
 	// Update the status
@@ -1048,4 +1066,20 @@ func CreateCinderServiceClient(region string, provider *gophercloud.ProviderClie
 	}
 
 	return client, nil
+}
+func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
+		}
+		if vmwvm.Labels[key] == value {
+			return nil
+		}
+		vmwvm.Labels[key] = value
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
+	}
+	return nil
 }
