@@ -31,6 +31,7 @@ const (
 	ESXIMigrationPhaseAssigningRole       ESXIMigrationPhase = "AssigningRole"
 	ESXIMigrationPhaseFailed              ESXIMigrationPhase = "Failed"
 	ESXIMigrationPhaseSucceeded           ESXIMigrationPhase = "Succeeded"
+	ESXIMigrationPhasePaused              ESXIMigrationPhase = "Paused"
 )
 
 // ESXIMigrationSpec defines the desired state of ESXIMigration

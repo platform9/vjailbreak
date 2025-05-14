@@ -185,6 +185,15 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
+	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
+		migrationplan.Status.MigrationStatus = "Paused"
+		migrationplan.Status.MigrationMessage = "Migration plan is paused"
+		if err := r.Update(ctx, migrationplan); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
