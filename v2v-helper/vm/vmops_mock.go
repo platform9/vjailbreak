@@ -166,6 +166,20 @@ func (mr *MockVMOperationsMockRecorder) UpdateDiskInfo(vminfo interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDiskInfo", reflect.TypeOf((*MockVMOperations)(nil).UpdateDiskInfo), vminfo)
 }
 
+// VMGuestShutdown mocks base method.
+func (m *MockVMOperations) VMGuestShutdown() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VMGuestShutdown")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// VMGuestShutdown indicates an expected call of VMGuestShutdown.
+func (mr *MockVMOperationsMockRecorder) VMGuestShutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VMGuestShutdown", reflect.TypeOf((*MockVMOperations)(nil).VMGuestShutdown))
+}
+
 // VMPowerOff mocks base method.
 func (m *MockVMOperations) VMPowerOff() error {
 	m.ctrl.T.Helper()
