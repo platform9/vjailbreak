@@ -503,7 +503,7 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrat
 				},
 			},
 			Labels: map[string]string{
-				constants.PauseRollingMigrationPlanLabel: trueString,
+				constants.PauseMigrationLabel: trueString,
 			},
 		},
 		Spec: vjailbreakv1alpha1.MigrationPlanSpec{
@@ -553,4 +553,205 @@ func convertVMSequenceToBatches(ctx context.Context, scope *scope.RollingMigrati
 		}
 	}
 	return batches, nil
+}
+
+func IsRollingMigrationPlanPaused(ctx context.Context, name string, client client.Client) bool {
+	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, rollingMigrationPlan); err != nil {
+		return false
+	}
+	if rollingMigrationPlan.Labels == nil {
+		return false
+	}
+	return rollingMigrationPlan.Labels[constants.PauseMigrationLabel] == trueString
+}
+
+func IsClusterMigrationPaused(ctx context.Context, name string, client client.Client) bool {
+	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{}
+	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
+		return false
+	}
+	if clusterMigration.Labels == nil {
+		return false
+	}
+	return clusterMigration.Labels[constants.PauseMigrationLabel] == trueString
+}
+
+func IsESXIMigrationPaused(ctx context.Context, name string, client client.Client) bool {
+	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
+	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+		return false
+	}
+	if esxiMigration.Labels == nil {
+		return false
+	}
+	return esxiMigration.Labels[constants.PauseMigrationLabel] == trueString
+}
+
+func IsMigrationPlanPaused(ctx context.Context, name string, client client.Client) bool {
+	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
+	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
+		return false
+	}
+	if migrationPlan.Labels == nil {
+		return false
+	}
+	return migrationPlan.Labels[constants.PauseMigrationLabel] == trueString
+}
+
+func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+	rollingMigrationPlan := scope.RollingMigrationPlan
+	if rollingMigrationPlan.Labels == nil {
+		rollingMigrationPlan.Labels = make(map[string]string)
+	}
+
+	// Set label on rolling migration plan
+	rollingMigrationPlan.Labels[constants.PauseMigrationLabel] = trueString
+
+	// Update all child ClusterMigrations
+	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
+		// Get the cluster migration
+		clusterMigration, err := GetClusterMigration(ctx, scope.Client, cluster.ClusterName, rollingMigrationPlan)
+		if err != nil {
+			scope.Logger.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
+			continue
+		}
+
+		// Add label to cluster migration
+		if clusterMigration.Labels == nil {
+			clusterMigration.Labels = make(map[string]string)
+		}
+		clusterMigration.Labels[constants.PauseMigrationLabel] = trueString
+		err = scope.Client.Update(ctx, clusterMigration)
+		if err != nil {
+			scope.Logger.Error(err, "failed to update cluster migration with pause label", "cluster", cluster.ClusterName)
+		}
+
+		// Get unique ESXi hosts from the VM sequence
+		esxiHosts := make(map[string]bool)
+		for _, vm := range cluster.VMSequence {
+			if vm.ESXiName != "" {
+				esxiHosts[vm.ESXiName] = true
+			}
+		}
+
+		// Find and update all ESXi migrations for this cluster
+		for esxi := range esxiHosts {
+			esxiMigration, err := GetESXIMigration(ctx, scope.Client, esxi, rollingMigrationPlan)
+			if err != nil {
+				scope.Logger.Error(err, "failed to get ESXi migration", "esxi", esxi)
+				continue
+			}
+
+			// Add label to ESXi migration
+			if esxiMigration.Labels == nil {
+				esxiMigration.Labels = make(map[string]string)
+			}
+			esxiMigration.Labels[constants.PauseMigrationLabel] = trueString
+			err = scope.Client.Update(ctx, esxiMigration)
+			if err != nil {
+				scope.Logger.Error(err, "failed to update ESXi migration with pause label", "esxi", esxi)
+			}
+		}
+	}
+
+	// Update all MigrationPlans
+	for _, planName := range rollingMigrationPlan.Spec.VMMigrationPlans {
+		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
+		err := scope.Client.Get(ctx, types.NamespacedName{Name: planName, Namespace: rollingMigrationPlan.Namespace}, migrationPlan)
+		if err != nil {
+			scope.Logger.Error(err, "failed to get migration plan", "plan", planName)
+			continue
+		}
+
+		// Add label to migration plan
+		if migrationPlan.Labels == nil {
+			migrationPlan.Labels = make(map[string]string)
+		}
+		migrationPlan.Labels[constants.PauseMigrationLabel] = trueString
+		err = scope.Client.Update(ctx, migrationPlan)
+		if err != nil {
+			scope.Logger.Error(err, "failed to update migration plan with pause label", "plan", planName)
+		}
+	}
+
+	// Update the rolling migration plan itself
+	return scope.Client.Update(ctx, rollingMigrationPlan)
+}
+
+func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+	rollingMigrationPlan := scope.RollingMigrationPlan
+	if rollingMigrationPlan.Labels == nil {
+		return nil
+	}
+
+	// Remove pause label from rolling migration plan
+	delete(rollingMigrationPlan.Labels, constants.PauseMigrationLabel)
+
+	// Update all child ClusterMigrations
+	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
+		// Get the cluster migration
+		clusterMigration, err := GetClusterMigration(ctx, scope.Client, cluster.ClusterName, rollingMigrationPlan)
+		if err != nil {
+			scope.Logger.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
+			continue
+		}
+
+		// Remove label from cluster migration
+		if clusterMigration.Labels != nil {
+			delete(clusterMigration.Labels, constants.PauseMigrationLabel)
+			err = scope.Client.Update(ctx, clusterMigration)
+			if err != nil {
+				scope.Logger.Error(err, "failed to update cluster migration to remove pause label", "cluster", cluster.ClusterName)
+			}
+		}
+
+		// Get unique ESXi hosts from the VM sequence
+		esxiHosts := make(map[string]bool)
+		for _, vm := range cluster.VMSequence {
+			if vm.ESXiName != "" {
+				esxiHosts[vm.ESXiName] = true
+			}
+		}
+
+		// Find and update all ESXi migrations for this cluster
+		for esxi := range esxiHosts {
+			esxiMigration, err := GetESXIMigration(ctx, scope.Client, esxi, rollingMigrationPlan)
+			if err != nil {
+				scope.Logger.Error(err, "failed to get ESXi migration", "esxi", esxi)
+				continue
+			}
+
+			// Remove label from ESXi migration
+			if esxiMigration.Labels != nil {
+				delete(esxiMigration.Labels, constants.PauseMigrationLabel)
+				err = scope.Client.Update(ctx, esxiMigration)
+				if err != nil {
+					scope.Logger.Error(err, "failed to update ESXi migration to remove pause label", "esxi", esxi)
+				}
+			}
+		}
+	}
+
+	// Update all MigrationPlans
+	for _, planName := range rollingMigrationPlan.Spec.VMMigrationPlans {
+		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
+		err := scope.Client.Get(ctx, types.NamespacedName{Name: planName, Namespace: rollingMigrationPlan.Namespace}, migrationPlan)
+		if err != nil {
+			scope.Logger.Error(err, "failed to get migration plan", "plan", planName)
+			continue
+		}
+
+		// Remove label from migration plan
+		if migrationPlan.Labels != nil {
+			delete(migrationPlan.Labels, constants.PauseMigrationLabel)
+			err = scope.Client.Update(ctx, migrationPlan)
+			if err != nil {
+				scope.Logger.Error(err, "failed to update migration plan to remove pause label", "plan", planName)
+			}
+		}
+	}
+
+	// Update the rolling migration plan itself
+	return scope.Client.Update(ctx, rollingMigrationPlan)
 }
