@@ -112,6 +112,17 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, nil
 	}
 
+	if utils.IsRollingMigrationPlanPaused(ctx, migrationPlan.Name, r.Client) {
+		if err := utils.PauseRollingMigrationPlan(ctx, scope); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to pause rolling migration plan")
+		}
+		return ctrl.Result{}, nil
+	} else {
+		if err := utils.ResumeRollingMigrationPlan(ctx, scope); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to resume rolling migration plan")
+		}
+	}
+
 	if migrationPlan.Spec.CloudInitConfigRef == nil {
 		log.Info("CloudInitConfigRef is not set")
 		err := utils.MergeCloudInitAndCreateSecret(ctx, scope)

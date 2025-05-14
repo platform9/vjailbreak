@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -120,6 +121,15 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseFailed {
 		log.Info("Cluster migration already failed")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsClusterMigrationPaused(ctx, clusterMigration.Name, scope.Client) {
+		clusterMigration.Status.Phase = vjailbreakv1alpha1.ClusterMigrationPhasePaused
+		if err := scope.Client.Status().Update(ctx, clusterMigration); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+		}
+		log.Info(fmt.Sprintf("Cluster migration %s is paused, skipping reconciliation", clusterMigration.Name))
 		return ctrl.Result{}, nil
 	}
 

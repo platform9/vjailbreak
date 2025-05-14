@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,6 +113,15 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return ctrl.Result{}, nil
 	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
 		log.Info("ESXIMigration already failed")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsESXIMigrationPaused(ctx, scope.ESXIMigration.Name, scope.Client) {
+		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhasePaused
+		if err := scope.Client.Status().Update(ctx, scope.ESXIMigration); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+		}
+		log.Info(fmt.Sprintf("ESXi migration %s is paused, skipping reconciliation", scope.ESXIMigration.Name))
 		return ctrl.Result{}, nil
 	}
 

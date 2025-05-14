@@ -34,6 +34,8 @@ const (
 	ClusterMigrationPhaseSucceeded ClusterMigrationPhase = "Succeeded"
 	// ClusterMigrationPhaseFailed indicates the migration has failed
 	ClusterMigrationPhaseFailed ClusterMigrationPhase = "Failed"
+	// ClusterMigrationPhasePaused indicates the migration is paused
+	ClusterMigrationPhasePaused ClusterMigrationPhase = "Paused"
 )
 
 // ClusterMigrationSpec defines the desired state of ClusterMigration
