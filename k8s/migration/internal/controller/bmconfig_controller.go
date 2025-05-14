@@ -109,9 +109,9 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 		bmConfig.Status.ValidationStatus = string(corev1.PodFailed)
 		bmConfig.Status.ValidationMessage = fmt.Sprintf("Error connecting to MAAS: %s", err)
 		if updateErr := r.Status().Update(ctx, bmConfig); updateErr != nil {
-			return ctrl.Result{}, errors.Wrap(err,
-				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
-					bmConfig.Name)).Error())
+			return ctrl.Result{}, errors.Wrap(
+				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'", bmConfig.Name)),
+				err.Error())
 		}
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, err
 	}
@@ -120,9 +120,8 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 	bmConfig.Status.ValidationStatus = string(corev1.PodSucceeded)
 	bmConfig.Status.ValidationMessage = "Successfully connected to MAAS"
 	if updateErr := r.Status().Update(ctx, bmConfig); updateErr != nil {
-		return ctrl.Result{}, errors.Wrap(err,
-			errors.Wrap(updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'",
-				bmConfig.Name)).Error())
+		return ctrl.Result{}, errors.Wrap(
+			updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'", bmConfig.Name))
 	}
 
 	ctxlog.Info("Successfully connected to MAAS", "bmconfig", bmConfig.Name)
