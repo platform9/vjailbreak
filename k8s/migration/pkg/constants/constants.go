@@ -69,8 +69,8 @@ const (
 	// RollingMigrationPlanLabel is the label for rolling migration plan
 	RollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/rollingmigrationplan"
 
-	// PauseRollingMigrationPlanLabel is the label for pausing rolling migration plan
-	PauseRollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/pause-rollingmigrationplan"
+	// PauseMigrationLabel is the label for pausing rolling migration plan
+	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
