@@ -94,9 +94,9 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-			return ctrl.Result{}, errors.Wrap(err,
-				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'",
-					scope.Name())).Error())
+			return ctrl.Result{}, errors.Wrap(
+				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name())),
+				err.Error())
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
