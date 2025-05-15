@@ -139,23 +139,43 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 
 func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
+
+	var attachSucceeded bool
+	var attachErr error
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
+
 	for i := 0; i < constants.MaxIntervalCount; i++ {
-		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
+		_, attachErr = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
 		}).Extract()
-		if err == nil || strings.Contains(err.Error(), "already attached") {
+
+		if attachErr == nil {
+			log.Println("Attach succeeded")
+			attachSucceeded = true
 			break
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+
+		if strings.Contains(attachErr.Error(), "already attached") {
+			log.Println("Volume already attached - checking if it's a leftover from earlier operation")
+			// Retry in case it's a stale attach state (from a previous run)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		// Any other error: retry
+		log.Printf("Attach attempt failed: %v, retrying to attach volume", attachErr)
+		time.Sleep(5 * time.Second)
 	}
-	if err != nil {
-		return fmt.Errorf("failed to attach volume to VM: %s", err)
+	if attachErr != nil {
+		return fmt.Errorf("failed to attach volume to VM: %s", attachErr)
 	}
 
+	if !attachSucceeded {
+		return fmt.Errorf("failed to attach volume to VM")
+	}
 	log.Println("Waiting for volume attachment")
 	err = osclient.WaitForVolumeAttachment(volumeID)
 	if err != nil {
