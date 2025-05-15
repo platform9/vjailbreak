@@ -306,7 +306,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s, on iteration %d, retrying again", err, incrementalCopyCount))
+						continue
 					}
 					migobj.logMessage("Finished copying changed blocks")
 					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
@@ -368,7 +369,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	log.Println("Deleting migration snapshot")
 	err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
-		return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
+		msg := fmt.Sprintf(`Warning: Failed to delete migration snapshot: %s, since copy is complete 
+		hence continue with next steps`, err.Error())
+		migobj.logMessage(msg)
 	}
 	return vminfo, nil
 }
