@@ -511,7 +511,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				}
 			}
 		}
-
 		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 		if err != nil {
 			return fmt.Errorf("failed to run virt-v2v: %s", err)
