@@ -1098,6 +1098,7 @@ rules:
   - networkmappings
   - openstackcreds
   - storagemappings
+  - vjailbreakconfigs
   - vjailbreaknodes
   - vmwarecreds
   - vmwaremachines
@@ -1117,6 +1118,7 @@ rules:
   - networkmappings/finalizers
   - openstackcreds/finalizers
   - storagemappings/finalizers
+  - vjailbreakconfigs/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
   verbs:
@@ -1130,6 +1132,7 @@ rules:
   - networkmappings/status
   - openstackcreds/status
   - storagemappings/status
+  - vjailbreakconfigs/status
   - vjailbreaknodes/status
   - vmwarecreds/status
   - vmwaremachines/status
@@ -1655,7 +1658,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.8
+        image: quay.io/platform9/vjailbreak-controller:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1674,14 +1677,11 @@ spec:
           requests:
             cpu: 200m
             memory: 256Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
         volumeMounts:
         - mountPath: /etc/pf9/k3s
           name: master-token
+        - mountPath: /home/ubuntu
+          name: vddk
       hostNetwork: true
       securityContext:
         runAsGroup: 0
@@ -1693,3 +1693,7 @@ spec:
           path: /var/lib/rancher/k3s/server
           type: Directory
         name: master-token
+      - hostPath:
+          path: /home/ubuntu
+          type: Directory
+        name: vddk

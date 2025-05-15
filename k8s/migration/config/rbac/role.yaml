@@ -64,6 +64,7 @@ rules:
   - networkmappings
   - openstackcreds
   - storagemappings
+  - vjailbreakconfigs
   - vjailbreaknodes
   - vmwarecreds
   - vmwaremachines
@@ -83,6 +84,7 @@ rules:
   - networkmappings/finalizers
   - openstackcreds/finalizers
   - storagemappings/finalizers
+  - vjailbreakconfigs/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
   verbs:
@@ -96,6 +98,7 @@ rules:
   - networkmappings/status
   - openstackcreds/status
   - storagemappings/status
+  - vjailbreakconfigs/status
   - vjailbreaknodes/status
   - vmwarecreds/status
   - vmwaremachines/status
