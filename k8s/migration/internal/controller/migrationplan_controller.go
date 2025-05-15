@@ -399,6 +399,10 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "firstboot",
 										MountPath: "/home/fedora/scripts",
 									},
+									{
+										Name:      "logs",
+										MountPath: "/var/log/pf9",
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -440,6 +444,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: firstbootconfigMapName,
 										},
+									},
+								},
+							},
+							{
+								Name: "logs",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/var/log/pf9",
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},
 							},
