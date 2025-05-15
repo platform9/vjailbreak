@@ -65,78 +65,27 @@ Please refer the following table for the required ports:
 
 ### What network connectivity do I need for vJailbreak?
 
-The vJailbreak VM and any helper nodes must be able to resolve & connect to your VMware vCenter environment and all ESXi hosts, and must be able to resolve & connect to [quay.io](https://quay.io).
+<!-- The vJailbreak VM and any helper nodes must be able to resolve & connect to your VMware vCenter environment and all ESXi hosts, and must be able to resolve & connect to [quay.io](https://quay.io). -->
 
-For a comprehensive list of network connectivity requirements, especially in restricted environments, refer to the following:
+The vJailbreak VM and any helper nodes must be able to resolve and connect to the following:
 
----
-
-#### VMware & OpenStack – TLS on port 443
-- **Direction**: `vJailbreak/agent` → `host:443` (TCP)
-- **Protocol**: TLS (`tls.Dial("tcp", host+":443", ...)`)
-- **Source Files**:
-  - `k8s/migration/pkg/utils/credutils.go`
-  - `v2v-helper/openstack/openstackops.go`
-  - `v2v-helper/vcenter/vcenterops.go`
-- **Purpose**: Fetch certificates or communicate with REST APIs (vCenter, ESXi, OpenStack)
-
----
-
-#### Cloud-init Certificate Retrieval – TLS on port 443
-- **Runs in**: Helper VM
-- **Command**: `openssl s_client -connect <FQDN>:443`
-- **Source File**: `k8s/migration/pkg/scripts/cloud-init.tmpl.yaml`
-
----
-
-#### Virtio Driver ISO Download – HTTPS on port 443
-- **Default URL**:  
-  https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
-- **References**:
-  - `k8s/migration/internal/controller/migrationplan_controller.go`
-  - `v2v-cli/cmd/root.go` (flag default)
-
----
-
-#### OpenStack Metadata Service – HTTP on port 80
-- **Accessed by**: Helper VM on boot
-- **URL**: `http://169.254.169.254/openstack/latest/network_data.json`
-- **File**: `k8s/migration/pkg/utils/vjailbreaknodeutils.go`
-
----
-
-#### Health-Check Probe to Migrated Guest – HTTP/HTTPS (custom port)
-- **Endpoint Attempted**: `http://<ip>:<port>`; fallback to `https://<ip>:<port>`
-- **Source**: `v2v-helper/migrate/migrate.go`
-
----
-
-#### External Tooling / Installers – HTTPS on port 443
-- **Used For**:
-  - Cloud-ctl setup script
-  - Prometheus-operator and cert-manager manifests pulled from GitHub
-- **Source**: `k8s/migration/pkg/constants/constants.go`
-- **Example**:  
-  `https://cloud-ctl.s3.us-west-1.amazonaws.com/cloud-ctl-setup | bash`
-
----
-
-#### K3s Install Script – HTTPS on port 443
-- **Endpoint**: `get.k3s.io` and related URLs
-- **Purpose**: Download and install K3s along with its dependencies for Kubernetes setup
-- **Source File(s)**:
-  - `k8s/migration/internal/controller/migrationplan_controller.go`
-  - CLI or internal modules may invoke the script as part of cluster bring-up
-- **Details**: The install script fetches K3s binaries and bootstrap components over HTTPS. Ensure internet access is available to these domains if you're running in a restricted environment.
-
----
-
-#### ICMP Echo (Ping)
-- **Purpose**: Connectivity checks to migrated guest VMs
-- **Source**: `v2v-helper/migrate/migrate.go` (uses `go-ping`)
-
-
-*Note:* Some endpoints and requirements (e.g., specific URLs for virtio ISO or K3s) may vary based on configuration or version updates. Users in restricted environments should ensure all listed connections are permitted and consult with network administrators if needed.
+- **vCenter, ESXi, and OpenStack API endpoints** — required for API communication.
+- **Cloud-init certificate endpoints**:
+- [`https://<FQDN>:443`](https://<FQDN>) — the FQDN is typically the hostname or IP of the VM where vJailbreak is deployed, used to retrieve certificates during cloud-init.
+- **Virtio ISO download source**:
+  - [https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso)
+- **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports.
+- **External tooling sources**:
+  - [https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml](https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml)
+  - [https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml](https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml)
+- **K3s installation source**:
+  - [https://get.k3s.io](https://get.k3s.io)
+- **Container registries required to pull images** — needed for K3s and vJailbreak components such as controller, UI, Prometheus, and Grafana:
+  - [https://docker.io](https://docker.io)
+  - [https://ghcr.io](https://ghcr.io)
+  - [https://quay.io](https://quay.io)
+  - [https://registry.k8s.io](https://registry.k8s.io)
+- **ICMP (ping) access to guest VM IPs** — for connectivity verification
 
 
 
