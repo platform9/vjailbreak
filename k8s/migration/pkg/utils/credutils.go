@@ -687,7 +687,10 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			datastores = AppendUnique(datastores, ds.Name)
 			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
-		ctxlog.Info("VM info appending", "disks", disks)
+		ctxlog.Info("VM info appending ", "disks", disks)
+		ctxlog.Info("VM info appending ", "name", vmProps.Config.Name)
+		ctxlog.Info("VM info appending ", "rdm", rdmDisks)
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:             vmProps.Config.Name,
 			Datastores:       datastores,
@@ -769,6 +772,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if k8serrors.IsNotFound(err) {
+		fmt.Println("VM info : ", *vminfo, "Name : ", vmwvmKey.Name)
 		// If not found, create a new object
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
@@ -892,6 +896,7 @@ func GetRDMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbrea
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM storage properties: %v", err)
 	}
+	fmt.Println("Host storage info:", hostStorageInfo)
 	diskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
 	for _, device := range devices {
 		// Check if device is a virtual disk
@@ -903,6 +908,7 @@ func GetRDMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbrea
 			// Check backing type to determine if it's RDM or regular virtual disk
 			switch backing := disk.Backing.(type) {
 			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				fmt.Println("Backing type is RDM")
 				if hostStorageInfo != nil {
 					for _, scsiDisk := range hostStorageInfo.ScsiLun {
 						lunDetails := scsiDisk.GetScsiLun()
@@ -1003,11 +1009,10 @@ func GetVMwareMachine(ctx context.Context, c client.Client, vmName string, names
 func PopulateRDMDiskInfoFromAttributes(baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) []vjailbreakv1alpha1.RDMDiskInfo {
 	rdmMap := make(map[string]*vjailbreakv1alpha1.RDMDiskInfo)
 
-	// Initialize RDM disks from existing info
+	// Create copies of base RDM disks to preserve existing data
 	for i := range baseRDMDisks {
-		if baseRDMDisks[i].DisplayName != "" {
-			rdmMap[baseRDMDisks[i].DisplayName] = &baseRDMDisks[i]
-		}
+		diskCopy := baseRDMDisks[i] // Make a copy
+		rdmMap[diskCopy.DiskName] = &diskCopy
 	}
 
 	// Process attributes for additional RDM information
@@ -1024,38 +1029,49 @@ func PopulateRDMDiskInfoFromAttributes(baseRDMDisks []vjailbreakv1alpha1.RDMDisk
 		// Get or create RDMDiskInfo
 		rdmInfo, exists := rdmMap[diskName]
 		if !exists {
+			// Create new disk info only if it doesn't exist
 			rdmInfo = &vjailbreakv1alpha1.RDMDiskInfo{
 				DisplayName: diskName,
 			}
 			rdmMap[diskName] = rdmInfo
 		}
 
-		// Set the appropriate field based on the key
+		// Update fields only if new value is provided
 		switch key {
 		case "cinderBackendPool":
-			rdmInfo.CinderBackendPool = value
+			if value != "" {
+				rdmInfo.CinderBackendPool = value
+			}
 		case "volumeType":
-			rdmInfo.VolumeType = value
+			if value != "" {
+				rdmInfo.VolumeType = value
+			}
 		case "availabilityZone":
-			rdmInfo.AvailabilityZone = value
+			if value != "" {
+				rdmInfo.AvailabilityZone = value
+			}
 		case "bootable":
-			rdmInfo.Bootable = strings.ToLower(value) == "true"
+			if value != "" {
+				rdmInfo.Bootable = strings.ToLower(value) == "true"
+			}
 		case "description":
-			rdmInfo.Description = value
+			if value != "" {
+				rdmInfo.Description = value
+			}
 		}
 	}
 
-	// Convert map back to slice
+	// Convert map back to slice while preserving all data
 	rdmDisks := make([]vjailbreakv1alpha1.RDMDiskInfo, 0, len(rdmMap))
 	for _, rdmInfo := range rdmMap {
+		fmt.Println("RDM Info:", rdmInfo.DiskName, rdmInfo.CinderBackendPool)
 		rdmDisks = append(rdmDisks, *rdmInfo)
 	}
 
 	return rdmDisks
 }
 
-// CreateServiceClient creates a new Openstack Cinder service client
-func CreateCinderServiceClient(region string, provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+func CreateServiceClient(region string, provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
 	// Create Cinder client
 	client, err := openstack.NewBlockStorageV3(provider, gophercloud.EndpointOpts{
 		Region: region,
