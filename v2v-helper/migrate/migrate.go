@@ -358,6 +358,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 
+	err = migobj.DetachAllVolumes(vminfo)
+	if err != nil {
+		return vminfo, errors.Wrap(err, "Second dettach Failed to detach all volumes from VM")
+	}
+
 	log.Println("Stopping NBD server")
 	for _, nbdserver := range nbdops {
 		err = nbdserver.StopNBDServer()
