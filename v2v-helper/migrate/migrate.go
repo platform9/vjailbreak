@@ -123,7 +123,6 @@ func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
-
 		if err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
 		}
@@ -356,11 +355,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	err = migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
-	}
-
-	err = migobj.DetachAllVolumes(vminfo)
-	if err != nil {
-		return vminfo, errors.Wrap(err, "Second dettach Failed to detach all volumes from VM")
 	}
 
 	log.Println("Stopping NBD server")
@@ -838,6 +832,10 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
+
+	// Sleep to simulate the detach taking time
+	migobj.logMessage("Sleeping for 30 seconds to simulate detach taking time")
+	time.Sleep(30 * time.Second)
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
