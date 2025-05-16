@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -148,6 +147,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 			DeleteOnTermination: false,
 		}).Extract()
 		if err == nil || strings.Contains(err.Error(), "already attached") {
+			err = nil
 			break
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
@@ -156,7 +156,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 		return fmt.Errorf("failed to attach volume to VM: %s", err)
 	}
 
-	log.Println("Waiting for volume attachment")
+	PrintLog("Waiting for volume attachment")
 	err = osclient.WaitForVolumeAttachment(volumeID)
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume attachment: %s", err)
@@ -278,7 +278,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 		return nil, fmt.Errorf("failed to extract all flavors: %s", err)
 	}
 
-	log.Println("Current requirements:", cpu, "CPUs and", memory, "MB of RAM")
+	PrintLog(fmt.Sprintf("Current requirements: %d CPUs and %d MB of RAM", cpu, memory))
 
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxCPU
@@ -293,10 +293,10 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 	}
 
 	if bestFlavor.VCPUs != constants.MaxCPU {
-		log.Printf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
-			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk)
+		PrintLog(fmt.Sprintf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
+			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk))
 	} else {
-		log.Println("No suitable flavor found.")
+		PrintLog("No suitable flavor found.")
 		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 	}
 
@@ -354,12 +354,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	for _, port := range portList {
 		if port.MACAddress == mac {
-			log.Printf("Port with MAC address %s already exists, ID: %s\n", mac, port.ID)
+			PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
 			return &port, nil
 		}
 	}
-	log.Printf("Port with MAC address %s does not exist, creating new port\n", mac)
-	log.Println("Trying with same IP address: ", ip)
+	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %s", mac, ip))
 
 	// Check if subnet is valid to avoid panic.
 	if len(network.Subnets) == 0 {
@@ -378,7 +377,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	}).Extract()
 	if err != nil {
 		// return nil, err
-		log.Printf("Could Not Use IP: %s, using DHCP to create Port", ip)
+		PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
 		port, err = ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 			Name:       "port-" + vmname,
 			NetworkID:  network.ID,
@@ -388,7 +387,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			return nil, err
 		}
 	}
-	log.Println("Port created with ID: ", port.ID)
+	PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
 	return port, nil
 }
 
@@ -453,9 +452,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		return nil, fmt.Errorf("failed to wait for server to become active: %s", err)
 	}
 
-	log.Println("Server created with ID: ", server.ID)
-
-	log.Println("Attaching Additional Disks")
+	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
 	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
 		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
