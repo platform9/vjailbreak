@@ -544,6 +544,10 @@ func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCre
 	return datastores, nil
 }
 
+type CustomFieldHolder struct {
+	Field []types.CustomFieldDef `xml:"field"`
+}
+
 // GetAllVMs gets all the VMs in a datacenter
 func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
 	c, err := ValidateVMwareCreds(vmwcreds)
@@ -565,16 +569,15 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	var vminfo []vjailbreakv1alpha1.VMInfo
 
 	// Get the Custom Fields Manager
-	customFieldsManager := c.ServiceContent.CustomFieldsManager
-
-	// Fetch custom field definitions and values
 	var customFields []types.CustomFieldDef
-	if customFieldsManager != nil {
-		err := property.DefaultCollector(c).RetrieveOne(ctx, *customFieldsManager, []string{"field"}, &customFields)
+	var customFieldsManager mo.CustomFieldsManager
+	if c.ServiceContent.CustomFieldsManager != nil {
+		err := property.DefaultCollector(c).RetrieveOne(ctx, *c.ServiceContent.CustomFieldsManager, []string{"field"}, &customFieldsManager)
 		if err != nil {
 			ctxlog.Error(err, "Failed to retrieve custom field definitions")
 		} else {
-			ctxlog.Info("Retrieved custom field definitions", "count", len(customFields))
+			ctxlog.Info("Retrieved custom field definitions", "count", len(customFieldsManager.Field))
+			customFields = customFieldsManager.Field
 			for _, field := range customFields {
 				ctxlog.Info("Custom field definition",
 					"name", field.Name,
@@ -719,8 +722,10 @@ func AppendUnique(slice []string, values ...string) []string {
 
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
+	fmt.Println("Creating or updating VM: funx is called")
 	var wg sync.WaitGroup
 	for i := range vminfo {
+		fmt.Println("Creating or updating VM:", vminfo[i].Name)
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -731,6 +736,7 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 				}
 			}()
 			vm := &vminfo[i] // Use a pointer
+			fmt.Println("Creating or updating VM: Called VMwareMachine", vminfo[i].Name)
 			err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
 			if err != nil {
 				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
