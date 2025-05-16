@@ -78,14 +78,20 @@ The vJailbreak VM and any helper nodes must be able to resolve and connect to th
 - **External tooling sources**:
   - [https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml](https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml)
   - [https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml](https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml)
-- **K3s installation source**:
+- **K3s installation sources** — includes scripts and supporting binaries fetched from:
   - [https://get.k3s.io](https://get.k3s.io)
-- **Container registries required to pull images** — needed for K3s and vJailbreak components such as controller, UI, Prometheus, and Grafana:
+  - [https://github.com/k3s-io/k3s](https://github.com/k3s-io/k3s)
+  - [https://update.k3s.io](https://update.k3s.io)
+  - [https://github.com/rancher/k3s-root](https://github.com/rancher/k3s-root)
+- **Helm chart repository for NGINX ingress** — used during setup:
+  - [https://kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx)
+- **Container registries required to pull images** — needed for K3s, vJailbreak components (controller, UI), Prometheus, Grafana, CoreDNS, NGINX ingress, exporters, etc.:
   - [https://docker.io](https://docker.io)
   - [https://ghcr.io](https://ghcr.io)
   - [https://quay.io](https://quay.io)
   - [https://registry.k8s.io](https://registry.k8s.io)
 - **ICMP (ping) access to guest VM IPs** — for connectivity verification
+
 
 
 
