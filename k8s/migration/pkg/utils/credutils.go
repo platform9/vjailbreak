@@ -882,7 +882,6 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 func GetRDMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
 	var devices object.VirtualDeviceList
 	var props mo.VirtualMachine
-	logx := log.FromContext(ctx)
 	err := vm.Properties(ctx, vm.Reference(), []string{"config.hardware.device"}, &props)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %v", err)
@@ -919,7 +918,6 @@ func GetRDMDiskInfo(ctx context.Context, vm *object.VirtualMachine) ([]vjailbrea
 			diskInfos = append(diskInfos, info)
 		}
 	}
-	logx.Info("RDM : VM DiskInfos: ", fmt.Sprintf("%d", len(diskInfos)))
 	return diskInfos, nil
 }
 
