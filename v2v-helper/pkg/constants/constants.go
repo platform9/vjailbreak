@@ -29,6 +29,8 @@ systemctl enable --now serial-getty@ttyS0.service`
 	MigrationSystemNamespace = "migration-system"
 	TrueString               = "true"
 
+	LogsDir = "/var/log/pf9"
+
 	EventMessageConvertingDisk                    = "Converting disk"
 	EventMessageWaitingForCutOverStart            = "Waiting for VM Cutover start time"
 	EventMessageCopyingChangedBlocksWithIteration = "Copying changed blocks"
