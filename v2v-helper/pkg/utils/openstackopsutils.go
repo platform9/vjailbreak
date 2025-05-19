@@ -155,7 +155,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Printf("Server status in nova before attach: %+v", server.AttachedVolumes)
+	log.Printf("Volume attachments in nova before attach: %+v", server.AttachedVolumes)
 	log.Printf("Server status in nova before attach: %+v", server)
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
