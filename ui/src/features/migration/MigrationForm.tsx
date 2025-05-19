@@ -1,4 +1,4 @@
-import { Box, Drawer, styled } from "@mui/material"
+import { Box, Drawer, styled, Typography, TextField} from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
 import { useEffect, useMemo, useState, useCallback } from "react"
@@ -95,7 +95,15 @@ export interface FormValues extends Record<string, unknown> {
   postMigrationScript?: string
   retryOnFailure?: boolean
   osType?: string
+  // Add postMigrationAction with optional properties
+  postMigrationAction?: {
+    suffix?: string
+    folderName?: string
+    renameVm?: boolean
+    moveToFolder?: boolean
+  }
 }
+
 
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
