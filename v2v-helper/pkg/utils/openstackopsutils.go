@@ -142,6 +142,21 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
+
+	// Log the volume status before attach
+	volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get volume: %s", err)
+	}
+	log.Printf("Volume status in cinder before attach: %s", volume.Status)
+
+	// Log the server status before attach
+	server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get server: %s", err)
+	}
+	log.Printf("Server status in nova before attach: %s", server.AttachedVolumes)
+
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 			VolumeID:            volumeID,
@@ -161,6 +176,20 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume attachment: %s", err)
 	}
+
+	// Log the volume status after attach
+	volume, err = volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get volume: %s", err)
+	}
+	log.Printf("Volume status in cinder after attach: %s", volume.Status)
+
+	// Log the server status after attach
+	server, err = servers.Get(osclient.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get server: %s", err)
+	}
+	log.Printf("Volume attachments in nova after attach: %s", server.AttachedVolumes)
 
 	return nil
 }
@@ -201,6 +230,21 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
+
+	// Log the volume status before detach from cinder and nova
+	volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get volume: %s", err)
+	}
+	log.Printf("Volume status in cinder before detach: %s", volume.Status)
+
+	server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get server: %s", err)
+	}
+	log.Println("Volume attachments in nova before detach:", server.AttachedVolumes)
+	log.Println("Server in nova before detach:", server)
+
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
@@ -211,6 +255,21 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
+
+	// Log the volume status after detach from cinder and nova
+	volume, err = volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get volume: %s", err)
+	}
+	log.Printf("Volume status from cinder after detach: %s", volume.Status)
+
+	server, err = servers.Get(osclient.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to get server: %s", err)
+	}
+	log.Println("Volume attachments in nova after detach:", server.AttachedVolumes)
+	log.Printf("Server status in nova after detach: %s", server)
+
 	return nil
 }
 
