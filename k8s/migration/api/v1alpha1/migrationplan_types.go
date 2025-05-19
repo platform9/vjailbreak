@@ -52,7 +52,7 @@ type AdvancedOptions struct {
 // NEW: Define PostMigrationAction struct for post-migration actions
 type PostMigrationAction struct {
 	// +kubebuilder:default:=true
-	RenameVm bool `json:"renameVm"`
+	RenameVM bool `json:"renameVm"`
 	// +kubebuilder:default:="_migrated_to_pcd"
 	Suffix string `json:"suffix"`
 	// +kubebuilder:default:=true

@@ -161,7 +161,10 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 
 	// Fetch MigrationTemplate to get vCenter reference
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
-	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace}, migrationtemplate); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      migrationplan.Spec.MigrationTemplate,
+		Namespace: migrationplan.Namespace,
+	}, migrationtemplate); err != nil {
 		return fmt.Errorf("failed to get MigrationTemplate for post-migration actions: %w", err)
 	}
 
@@ -210,7 +213,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	err = vcClient.RenameVM(ctx, vm, newVMName)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to rename VM '%s' to '%s'", vm, newVMName))
-		return fmt.Errorf("failed to rename VM '%s': %v", vm, err)
+		return fmt.Errorf("failed to rename VM '%s': %w", vm, err)
 	}
 
 	// Move the VM to the specified folder
@@ -222,7 +225,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	err = vcClient.MoveVMFolder(ctx, newVMName, folderName)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to move VM '%s' to folder '%s'", vm, folderName))
-		return fmt.Errorf("failed to move VM '%s' to folder '%s': %v", vm, folderName, err)
+		return fmt.Errorf("failed to move VM '%s' to folder '%s': %w", vm, folderName, err)
 	}
 
 	log.Info(fmt.Sprintf("Successfully completed post-migration actions for VM '%s'", vm))
