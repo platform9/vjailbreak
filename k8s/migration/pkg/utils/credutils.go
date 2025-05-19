@@ -976,6 +976,25 @@ func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwa
 		return errors.Wrap(err, "Error deleting clusters")
 	}
 
+	if err := DeleteVMwarecredsSecret(ctx, scope); err != nil {
+		return errors.Wrap(err, "Error deleting secret")
+	}
+
+	return nil
+}
+
+func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+	}
+	if err := scope.Client.Delete(ctx, &secret); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete associated secret")
+		}
+	}
 	return nil
 }
 
