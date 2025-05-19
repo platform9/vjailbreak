@@ -67,6 +67,10 @@ spec:
                   mkdir -p /home/ubuntu/vmware-vix-disklib-distrib/
                   echo "Syncing from rsync://${MASTER_IP}"
                   rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
+
+                  # Sync logs from worker to master 
+                  rsync -avz /var/log/pf9/ rsync://${MASTER_IP}/logs/
+
                   if [ $? -eq 0 ]; then
                     echo "Sync completed successfully."
                   else
