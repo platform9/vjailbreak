@@ -98,7 +98,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
-	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
+	ctxlog := scope.Logger
 	ctxlog.Info("Starting normal reconciliation", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 
 	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
@@ -204,7 +204,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
-	ctxlog := log.FromContext(ctx)
+	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling deletion", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 	// Delete the associated secret
 	client := r.Client
