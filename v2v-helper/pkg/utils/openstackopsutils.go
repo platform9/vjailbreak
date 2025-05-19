@@ -155,7 +155,8 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Printf("Server status in nova before attach: %s", server.AttachedVolumes)
+	log.Printf("Server status in nova before attach: %+v", server.AttachedVolumes)
+	log.Printf("Server status in nova before attach: %+v", server)
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
@@ -189,7 +190,8 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Printf("Volume attachments in nova after attach: %s", server.AttachedVolumes)
+	log.Printf("Volume attachments in nova after attach: %+v", server.AttachedVolumes)
+	log.Printf("Server status in nova after attach: %+v", server)
 
 	return nil
 }
@@ -242,8 +244,8 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Println("Volume attachments in nova before detach:", server.AttachedVolumes)
-	log.Println("Server in nova before detach:", server)
+	log.Println("Volume attachments in nova before detach: %+v", server.AttachedVolumes)
+	log.Println("Server in nova before detach: %+v", server)
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
@@ -267,8 +269,8 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Println("Volume attachments in nova after detach:", server.AttachedVolumes)
-	log.Printf("Server status in nova after detach: %s", server)
+	log.Println("Volume attachments in nova after detach: %+v ", server.AttachedVolumes)
+	log.Printf("Server status in nova after detach: %+v", server)
 
 	return nil
 }
