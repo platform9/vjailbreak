@@ -269,7 +269,7 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Println("Volume attachments in nova after detach: %+v ", server.AttachedVolumes)
+	log.Printf("Volume attachments in nova after detach: %+v ", server.AttachedVolumes)
 	log.Printf("Server status in nova after detach: %+v", server)
 
 	return nil
