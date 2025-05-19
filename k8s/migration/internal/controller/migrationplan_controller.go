@@ -172,12 +172,13 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 
 	// Fetch the secret containing vCenter credentials
+	// Fetch the secret containing vCenter credentials
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: vmwcreds.Spec.SecretRef.Name, Namespace: migrationplan.Namespace}, secret); err != nil {
 		return fmt.Errorf("failed to get Secret '%s' for vCenter credentials: %w", vmwcreds.Spec.SecretRef.Name, err)
 	}
 
-	// Extract username and password from the secret (adjust keys based on your secret structure)
+	// Extract username, password, and host from the secret (adjust keys based on your secret structure)
 	username, ok := secret.Data["username"]
 	if !ok {
 		return fmt.Errorf("username not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
@@ -186,13 +187,17 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	if !ok {
 		return fmt.Errorf("password not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
 	}
+	hostData, ok := secret.Data["host"]
+	if !ok {
+		return fmt.Errorf("vCenter host not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
+	}
+	host := string(hostData)
 
 	// Create a VCenterClient instance
-	host := migrationtemplate.Spec.Source.VMwareRef // Adjust if host format needs processing
-	disableSSLVerification := true                  // Adjust based on your project's settings
+	disableSSLVerification := true // Adjust based on your project's settings
 	vcClient, err := vcenter.VCenterClientBuilder(ctx, string(username), string(password), host, disableSSLVerification)
 	if err != nil {
-		return fmt.Errorf("failed to create vCenter client for post-migration actions: %v", err)
+		return fmt.Errorf("failed to create vCenter client for post-migration actions: %w", err)
 	}
 
 	// Rename the VM by appending the suffix
@@ -214,7 +219,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		folderName = "vjailbreakedVMs" // Default if not specified
 	}
 	log.Info(fmt.Sprintf("Moving source VM '%s' to folder '%s'", vm, folderName))
-	err = vcClient.MoveVMFolder(ctx, vm, folderName)
+	err = vcClient.MoveVMFolder(ctx, newVMName, folderName)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to move VM '%s' to folder '%s'", vm, folderName))
 		return fmt.Errorf("failed to move VM '%s' to folder '%s': %v", vm, folderName, err)
