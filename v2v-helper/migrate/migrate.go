@@ -833,10 +833,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
 
-	// Sleep to simulate the detach taking time
-	migobj.logMessage("Sleeping for 30 seconds to simulate detach taking time")
-	time.Sleep(30 * time.Second)
-
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
