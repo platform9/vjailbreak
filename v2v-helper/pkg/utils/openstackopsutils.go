@@ -244,8 +244,8 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get server: %s", err)
 	}
-	log.Println("Volume attachments in nova before detach: %+v", server.AttachedVolumes)
-	log.Println("Server in nova before detach: %+v", server)
+	log.Printf("Volume attachments in nova before detach: %+v", server.AttachedVolumes)
+	log.Printf("Server in nova before detach: %+v", server)
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
