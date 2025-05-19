@@ -69,10 +69,10 @@ spec:
                   rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
 
                   # Sync logs from worker to master 
-                  rsync -avz /var/log/pf9/ rsync://${MASTER_IP}/logs/
+                  rsync -avz /var/log/pf9/ rsync://${MASTER_IP}/worker-logs/
 
                   # Also Sync logs from master to worker
-                  rsync -avz rsync://${MASTER_IP}/logs/ /var/log/pf9/
+                  rsync -avz rsync://${MASTER_IP}/master-logs/ /var/log/pf9/
 
                   if [ $? -eq 0 ]; then
                     echo "Sync completed successfully."
