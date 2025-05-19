@@ -89,6 +89,8 @@ github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250429111646-93f2f1d33f56 h1
 github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250429111646-93f2f1d33f56/go.mod h1:hqditU2IGPlZuSUpKYkwgnop+AryDjdSOXxVh5kIhhE=
 github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250512054940-c900f286ee38 h1:o/UhsE55q6MNz24uOoW54QHJh00Qk2+v7RdvGGpdG+A=
 github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250512054940-c900f286ee38/go.mod h1:hqditU2IGPlZuSUpKYkwgnop+AryDjdSOXxVh5kIhhE=
+github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250519110518-98cb73fc034b h1:eCOQ81icbjUokWIypxt/o2iQSPUWgtB0znKS+ZzgEiQ=
+github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250519110518-98cb73fc034b/go.mod h1:hqditU2IGPlZuSUpKYkwgnop+AryDjdSOXxVh5kIhhE=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

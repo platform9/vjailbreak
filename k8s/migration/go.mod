@@ -11,7 +11,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250512054940-c900f286ee38
+	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250519110518-98cb73fc034b
 	github.com/vmware/govmomi v0.50.0
 	k8s.io/api v0.33.0
 	k8s.io/apimachinery v0.33.0
@@ -79,5 +79,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
