@@ -645,8 +645,6 @@ func MapNICsFromVMGuest(nics []types.GuestNicInfo, gateway string, dns []string)
 			continue // Skip NICs without IPs
 		}
 
-		dhcpEnabled := nic.DnsConfig.Dhcp
-
 		for _, ip := range nic.IpConfig.IpAddress {
 			if ip.IpAddress == "" || strings.Contains(ip.IpAddress, ":") {
 				continue // Skip empty or IPv6 addresses
@@ -660,7 +658,6 @@ func MapNICsFromVMGuest(nics []types.GuestNicInfo, gateway string, dns []string)
 				NetworkName:  nic.Network,
 				Gateway:      gateway,
 				DNSServers:   dns,
-				DhcpEnabled:  dhcpEnabled,
 			}
 			result = append(result, nicInfo)
 		}
