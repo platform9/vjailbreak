@@ -232,7 +232,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	return nil
 }
 
-// Similar to the Reconcile function above, but specifically for reconciling the Jobs
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
