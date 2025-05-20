@@ -23,6 +23,7 @@ Please refer to the following table for the required privileges:
 | `Virtual machine.Interaction` privileges: |     |
 | `Virtual machine.Interaction.Power Off` | Allows powering off a powered-on virtual machine. This operation powers down the guest operating system. |
 | `Virtual machine.Interaction.Power On` | Allows powering on a powered-off virtual machine and resuming a suspended virtual machine. |
+| `Virtual machine.Config.ChangeTracking`| Allows enabling or disabling change tracking on a virtual machine. |
 | `Virtual machine.Guest operating system management by VIX API` | Allows managing a virtual machine by the VMware VIX API. |
 | `Virtual machine.Provisioning` | Note: All `Virtual machine.Provisioning` privileges are required.  |
 | `Virtual machine.Provisioning.Allow disk access` | Allows opening a disk on a virtual machine for random read and write access. Used mostly for remote disk mounting. |
