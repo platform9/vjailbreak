@@ -302,7 +302,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				}
 				return ctrl.Result{}, nil
 			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
-				// Perform post-migration actions for this VM
 				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
 				if err != nil {
 					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
