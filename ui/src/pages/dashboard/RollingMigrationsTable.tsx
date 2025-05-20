@@ -4,7 +4,6 @@ import {
     Typography,
     Tooltip,
     Chip,
-    Paper,
     Drawer,
     styled,
     Button,
@@ -62,26 +61,26 @@ interface ClusterMigration {
     };
 }
 
-interface ESXIMigration {
-    apiVersion: string;
-    kind: string;
-    metadata: {
-        name: string;
-        namespace: string;
-        creationTimestamp: string;
-        finalizers: string[];
-        generation: number;
-        resourceVersion: string;
-        uid: string;
-        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
-    };
-    spec: {
-        esxiName: string;
-        openstackCredsRef: { name: string };
-        rollingMigrationPlanRef: { name: string };
-        vmwareCredsRef: { name: string };
-    };
-}
+// interface ESXIMigration {
+//     apiVersion: string;
+//     kind: string;
+//     metadata: {
+//         name: string;
+//         namespace: string;
+//         creationTimestamp: string;
+//         finalizers: string[];
+//         generation: number;
+//         resourceVersion: string;
+//         uid: string;
+//         ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
+//     };
+//     spec: {
+//         esxiName: string;
+//         openstackCredsRef: { name: string };
+//         rollingMigrationPlanRef: { name: string };
+//         vmwareCredsRef: { name: string };
+//     };
+// }
 
 // VM model based on the UI display needs
 interface VM {
@@ -339,43 +338,6 @@ const generateMockClusters = (): ClusterMigration[] => {
     }));
 };
 
-// Generate mock ESXi migrations
-const generateMockESXiMigrations = (clusters: ClusterMigration[]): ESXIMigration[] => {
-    const esxiMigrations: ESXIMigration[] = [];
-
-    clusters.forEach(cluster => {
-        const esxCount = Math.floor(Math.random() * 5) + 5;
-        for (let i = 0; i < esxCount; i++) {
-            esxiMigrations.push({
-                apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-                kind: "ESXIMigration",
-                metadata: {
-                    name: `esx-${i + 1}-${cluster.metadata.name}`,
-                    namespace: "vjailbreak-migration-system",
-                    creationTimestamp: new Date(Date.now() - i * 60 * 60 * 1000).toISOString(),
-                    finalizers: [],
-                    generation: 1,
-                    resourceVersion: `${100000 + i}`,
-                    uid: `esx-${i + 1}-${cluster.metadata.name}-uid`,
-                    ownerReferences: [{
-                        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-                        kind: "ClusterMigration",
-                        name: cluster.metadata.name,
-                        uid: cluster.metadata.uid
-                    }]
-                },
-                spec: {
-                    esxiName: `esx-${i + 1}.${cluster.spec.clusterName.toLowerCase().replace('-', '.')}.local`,
-                    openstackCredsRef: { name: "openstack-creds" },
-                    rollingMigrationPlanRef: { name: "rolling-plan" },
-                    vmwareCredsRef: { name: "vmware-creds" }
-                }
-            });
-        }
-    });
-
-    return esxiMigrations;
-};
 
 // Component for the cluster details drawer
 function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }) {
@@ -556,6 +518,8 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
 
 interface CustomToolbarProps {
     refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+    selectedCount: number;
+    onDeleteSelected: () => void;
 }
 
 const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
@@ -609,7 +573,7 @@ export default function RollingMigrationsTable({
     refetchClusterMigrations
 }: RollingMigrationsTableProps) {
     // Generate mock data if no data is provided
-    const mockClusters = useMemo(() => generateMockClusters(), []);
+    const mockClusters = useMemo(() => propClusterMigrations || generateMockClusters(), []);
 
     // Use provided data or mock data
     const clusterMigrations = mockClusters;

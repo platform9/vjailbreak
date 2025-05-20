@@ -7,10 +7,6 @@ import Step from "../../components/forms/Step"
 import { DrawerContent } from "src/components/forms/StyledDrawer"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward"
-import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop"
-import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom"
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
@@ -31,6 +27,13 @@ import NetworkAndStorageMappingStep, { ResourceMap } from "./NetworkAndStorageMa
 import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence } from "src/api/rolling-migration-plans"
 import { getSecret } from "src/api/secrets/secrets"
 import vmwareLogo from "src/assets/vmware.jpeg"
+// Import required APIs for creating migration resources
+import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
+import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
+import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
+import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
+import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
+import { postMigrationTemplate } from "src/api/migration-templates/migrationTemplates"
 
 // Import CDS icons
 import "@cds/core/icon/register.js"
@@ -107,40 +110,40 @@ const esxColumns: GridColDef[] = [
             </Box>
         ),
     },
-    {
-        field: "ip",
-        headerName: "Current IP",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "bmcIp",
-        headerName: "BMC IP Address",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "maasState",
-        headerName: "MaaS State",
-        flex: 0.5,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "vms",
-        headerName: "# VMs",
-        flex: 0.5,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "state",
-        headerName: "State",
-        flex: 0.5,
-        renderHeader: () => (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <div style={{ fontWeight: 500 }}>State</div>
-            </Box>
-        ),
-    },
+    // {
+    //     field: "ip",
+    //     headerName: "Current IP",
+    //     flex: 1,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "bmcIp",
+    //     headerName: "BMC IP Address",
+    //     flex: 1,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "maasState",
+    //     headerName: "MaaS State",
+    //     flex: 0.5,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "vms",
+    //     headerName: "# VMs",
+    //     flex: 0.5,
+    //     valueGetter: (value) => value || "—",
+    // },
+    // {
+    //     field: "state",
+    //     headerName: "State",
+    //     flex: 0.5,
+    //     renderHeader: () => (
+    //         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+    //             <div style={{ fontWeight: 500 }}>State</div>
+    //         </Box>
+    //     ),
+    // },
 ];
 
 const vmColumns: GridColDef[] = [
@@ -154,11 +157,7 @@ const vmColumns: GridColDef[] = [
                     <CdsIconWrapper>
                         {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                         {/* @ts-ignore */}
-                        <cds-icon
-                            shape="vm"
-                            size="md"
-                            badge={params.row.powerState === "powered-on" ? "success" : "danger"}
-                        ></cds-icon>
+                        <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
                     </CdsIconWrapper>
                 </Tooltip>
                 <Box>{params.value}</Box>
@@ -204,11 +203,11 @@ const vmColumns: GridColDef[] = [
 const paginationModel = { page: 0, pageSize: 5 };
 
 const CustomToolbarWithActions = (props) => {
-    const { rowSelectionModel, onMoveUp, onMoveDown, onMoveToTop, onMoveToBottom, ...toolbarProps } = props;
+    const { ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-            {rowSelectionModel.length > 0 && (
+            {/* {rowSelectionModel.length > 0 && (
                 <>
                     <Tooltip title="Move to Top">
                         <Button
@@ -255,7 +254,7 @@ const CustomToolbarWithActions = (props) => {
                         </Button>
                     </Tooltip>
                 </>
-            )}
+            )} */}
             <CustomSearchToolbar {...toolbarProps} />
         </Box>
     );
@@ -841,26 +840,47 @@ export default function RollingMigrationFormDrawer({
                     esxiName: vm.esxHost
                 })) as VMSequence[];
 
+            // 1. Create network mapping
+            const networkMappingJson = createNetworkMappingJson({
+                networkMappings: networkMappings.map(mapping => ({
+                    source: mapping.source,
+                    target: mapping.target  // Changed from destination to target
+                }))
+            });
+            const networkMappingResponse = await postNetworkMapping(networkMappingJson);
+
+            // 2. Create storage mapping
+            const storageMappingJson = createStorageMappingJson({
+                storageMappings: storageMappings.map(mapping => ({
+                    source: mapping.source,
+                    target: mapping.target  // Changed from destination to target
+                }))
+            });
+            const storageMappingResponse = await postStorageMapping(storageMappingJson);
+
+            // 3. Create migration template
+            const migrationTemplateJson = createMigrationTemplateJson({
+                vmwareRef: selectedVMwareCredName,
+                openstackRef: selectedPcdCredName,
+                networkMapping: networkMappingResponse.metadata.name,
+                storageMapping: storageMappingResponse.metadata.name
+            });
+            const migrationTemplateResponse = await postMigrationTemplate(migrationTemplateJson);
+
+            // 4. Create rolling migration plan with the template
             const migrationPlanJson = createRollingMigrationPlanJson({
                 clusterName,
                 vms: selectedVMsData,
-                vmwareCredsRef: {
-                    name: selectedVMwareCredName,
-                },
-                openstackCredsRef: {
-                    name: selectedPcdCredName,
-                },
                 bmConfigRef: {
                     name: selectedMaasConfig?.metadata.name || "",
                 },
-                networkMappings: networkMappings.map(mapping => ({
-                    source: mapping.source,
-                    destination: mapping.target
-                })),
-                storageMappings: storageMappings.map(mapping => ({
-                    source: mapping.source,
-                    destination: mapping.target
-                })),
+                migrationStrategy: {
+                    adminInitiatedCutOver: false,
+                    healthCheckPort: "443",
+                    performHealthChecks: false,
+                    type: "hot"
+                },
+                migrationTemplate: migrationTemplateResponse.metadata.name,
                 namespace: VJAILBREAK_DEFAULT_NAMESPACE
             });
 

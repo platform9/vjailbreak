@@ -1,20 +1,20 @@
 import { v4 as uuidv4 } from "uuid"
 import {
-  NetworkMapping,
-  ResourceRef,
-  StorageMapping,
   VMSequence,
+  MigrationStrategy,
+  BMConfigRef,
+  RollingMigrationPlanSpec,
 } from "./model"
 
 interface CreateRollingMigrationPlanParams {
   name?: string
   clusterName: string
   vms: VMSequence[]
-  vmwareCredsRef: ResourceRef
-  openstackCredsRef: ResourceRef
-  bmConfigRef: ResourceRef
-  networkMappings?: NetworkMapping[]
-  storageMappings?: StorageMapping[]
+  bmConfigRef: BMConfigRef
+  advancedOptions?: Record<string, unknown>
+  firstBootScript?: string
+  migrationStrategy?: MigrationStrategy
+  migrationTemplate?: string
   namespace?: string
 }
 
@@ -25,11 +25,29 @@ export const createRollingMigrationPlanJson = (
     name,
     clusterName,
     vms,
-    vmwareCredsRef,
-    openstackCredsRef,
     bmConfigRef,
+    advancedOptions,
+    firstBootScript,
+    migrationStrategy,
+    migrationTemplate,
     namespace,
   } = params || {}
+
+  const spec: Partial<RollingMigrationPlanSpec> = {
+    clusterSequence: [
+      {
+        clusterName,
+        vmSequence: vms,
+      },
+    ],
+    bmConfigRef,
+  }
+
+  // Add optional fields if they exist
+  if (advancedOptions) spec.advancedOptions = advancedOptions
+  if (firstBootScript) spec.firstBootScript = firstBootScript
+  if (migrationStrategy) spec.migrationStrategy = migrationStrategy
+  if (migrationTemplate) spec.migrationTemplate = migrationTemplate
 
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
@@ -42,16 +60,6 @@ export const createRollingMigrationPlanJson = (
         "app.kubernetes.io/part-of": "vjailbreak",
       },
     },
-    spec: {
-      clusterSequence: [
-        {
-          clusterName,
-          vmSequence: vms,
-        },
-      ],
-      vmwareCredsRef,
-      openstackCredsRef,
-      bmConfigRef,
-    },
+    spec,
   }
 }

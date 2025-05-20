@@ -16,7 +16,7 @@ import BMConfigForm from "./BMConfigForm"
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNodesQuery } from "../../hooks/api/useNodesQuery"
 import { useClusterMigrationsQuery } from "../../hooks/api/useClusterMigrationsQuery"
-import { useESXIMigrationsQuery } from "../../hooks/api/useESXIMigrationsQuery"
+// import { useESXIMigrationsQuery } from "../../hooks/api/useESXIMigrationsQuery"
 import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations"
 import { deleteESXIMigration } from "src/api/esximigrations/esximigrations"
 import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
@@ -73,12 +73,12 @@ export default function Dashboard() {
     refetchOnMount: true
   })
 
-  const { data: esxiMigrations, refetch: refetchESXIMigrations } = useESXIMigrationsQuery({
-    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
-    refetchInterval: THIRTY_SECONDS,
-    staleTime: 0,
-    refetchOnMount: true
-  })
+  // const { data: esxiMigrations } = useESXIMigrationsQuery({
+  //   queryKey: ESXI_MIGRATIONS_QUERY_KEY,
+  //   refetchInterval: THIRTY_SECONDS,
+  //   staleTime: 0,
+  //   refetchOnMount: true
+  // })
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -103,17 +103,8 @@ export default function Dashboard() {
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteSelectedClusterMigrations = (clusterMigrations: ClusterMigration[]) => {
-    setSelectedClusterMigrations(clusterMigrations)
-    setDeleteType('clusterMigration')
-    setDeleteDialogOpen(true)
-  }
 
-  const handleDeleteSelectedESXIMigrations = (esxiMigrations: ESXIMigration[]) => {
-    setSelectedESXIMigrations(esxiMigrations)
-    setDeleteType('esxiMigration')
-    setDeleteDialogOpen(true)
-  }
+
 
   const handleDeleteMigration = async (migrations: Migration[]) => {
     // Group VMs by migration plan
@@ -177,23 +168,6 @@ export default function Dashboard() {
     handleDeleteClose()
   }
 
-  const handleClusterMigrationDeleteClick = (migrationName: string) => {
-    const migration = clusterMigrations?.find(m => m.metadata.name === migrationName)
-    if (migration) {
-      setSelectedClusterMigrations([migration])
-      setDeleteType('clusterMigration')
-      setDeleteDialogOpen(true)
-    }
-  }
-
-  const handleESXIMigrationDeleteClick = (migrationName: string) => {
-    const migration = esxiMigrations?.find(m => m.metadata.name === migrationName)
-    if (migration) {
-      setSelectedESXIMigrations([migration])
-      setDeleteType('esxiMigration')
-      setDeleteDialogOpen(true)
-    }
-  }
 
   const handleDeleteAction = (): Promise<void> => {
     if (deleteType === 'migration') {
@@ -298,13 +272,7 @@ export default function Dashboard() {
         ) : activeTab === 1 ? (
           <RollingMigrationsTable
             clusterMigrations={clusterMigrations || []}
-            esxiMigrations={esxiMigrations || []}
-            onDeleteClusterMigration={handleClusterMigrationDeleteClick}
-            onDeleteESXIMigration={handleESXIMigrationDeleteClick}
-            onDeleteSelectedClusterMigrations={handleDeleteSelectedClusterMigrations}
-            onDeleteSelectedESXIMigrations={handleDeleteSelectedESXIMigrations}
             refetchClusterMigrations={refetchClusterMigrations}
-            refetchESXIMigrations={refetchESXIMigrations}
           />
         ) : activeTab === 2 ? (
           <NodesTable />
