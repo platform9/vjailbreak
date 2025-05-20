@@ -22,6 +22,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// OpenStackCredsInfo holds the actual credentials after decoding
+type OpenStackCredsInfo struct {
+	// AuthURL is the OpenStack authentication URL
+	AuthURL string
+	// Username is the OpenStack username
+	Username string
+	// Password is the OpenStack password
+	Password string
+	// RegionName is the OpenStack region
+	RegionName string
+	// TenantName is the OpenStack tenant
+	TenantName string
+	// Insecure is whether to skip certificate verification
+	Insecure bool
+	// DomainName is the OpenStack domain
+	DomainName string
+}
+
 type OpenstackInfo struct {
 	VolumeTypes []string `json:"volumeTypes,omitempty"`
 	Networks    []string `json:"networks,omitempty"`

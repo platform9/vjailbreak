@@ -4,13 +4,13 @@ import (
 	"errors"
 	"os"
 	"strings"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 func ParseInfoFromEnv() (Info, error) {
 	du := Info{
-		URL:               strings.TrimSpace(os.Getenv("DU_URL")),
-		ApiserverEndpoint: strings.TrimSpace(os.Getenv("DU_APISERVER_ENDPOINT")),
-		ForwarderEndpoint: strings.TrimSpace(os.Getenv("DU_FORWARDER_ENDPOINT")),
+		URL: strings.TrimSpace(os.Getenv("DU_URL")),
 	}
 
 	// TODO: Default 'ApiserverEndpoint' and 'ForwarderEndpoint'
@@ -22,4 +22,10 @@ func ParseInfoFromEnv() (Info, error) {
 		du.URL = "https://" + du.URL
 	}
 	return du, nil
+}
+
+func ParseInfoFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (Info, error) {
+	return Info{
+		URL: openstackCreds.AuthURL,
+	}, nil
 }

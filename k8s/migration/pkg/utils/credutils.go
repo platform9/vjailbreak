@@ -48,71 +48,39 @@ type OpenStackClients struct {
 	NetworkingClient *gophercloud.ServiceClient
 }
 
-// VMwareCredentials holds the actual credentials after decoding
-type VMwareCredentials struct {
-	// Host is the vCenter host
-	Host string
-	// Username is the vCenter username
-	Username string
-	// Password is the vCenter password
-	Password string
-	// Datacenter is the vCenter datacenter
-	Datacenter string
-	// Insecure is whether to skip certificate verification
-	Insecure bool
-}
-
-// OpenStackCredentials holds the actual credentials after decoding
-type OpenStackCredentials struct {
-	// AuthURL is the OpenStack authentication URL
-	AuthURL string
-	// Username is the OpenStack username
-	Username string
-	// Password is the OpenStack password
-	Password string
-	// RegionName is the OpenStack region
-	RegionName string
-	// TenantName is the OpenStack tenant
-	TenantName string
-	// Insecure is whether to skip certificate verification
-	Insecure bool
-	// DomainName is the OpenStack domain
-	DomainName string
-}
-
 const (
 	trueString = "true" // Define at package level
 )
 
-// GetVMwareCredentials retrieves vCenter credentials from a secret
-func GetVMwareCredentials(ctx context.Context, k3sclient client.Client, credsName string) (VMwareCredentials, error) {
+// GetVMwareCredsInfo retrieves vCenter credentials from a secret
+func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	creds := vjailbreakv1alpha1.VMwareCreds{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return VMwareCredentials{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
 	}
 	return GetVMwareCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
 }
 
-// GetOpenstackCredentials retrieves OpenStack credentials from a secret
-func GetOpenstackCredentials(ctx context.Context, k3sclient client.Client, credsName string) (OpenStackCredentials, error) {
+// GetOpenstackCredsInfo retrieves OpenStack credentials from a secret
+func GetOpenstackCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	creds := vjailbreakv1alpha1.OpenstackCreds{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return OpenStackCredentials{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
 	}
 	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
 }
 
 // GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
-func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (VMwareCredentials, error) {
+func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return VMwareCredentials{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
 	}
 
 	if secret.Data == nil {
-		return VMwareCredentials{}, fmt.Errorf("no data in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
 	host := string(secret.Data["VCENTER_HOST"])
@@ -122,21 +90,21 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
 	if username == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
 	}
 	if password == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 	if datacenter == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return VMwareCredentials{
+	return vjailbreakv1alpha1.VMwareCredsInfo{
 		Host:       host,
 		Username:   username,
 		Password:   password,
@@ -146,10 +114,10 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 }
 
 // GetOpenstackCredentialsFromSecret retrieves and checks the secret
-func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (OpenStackCredentials, error) {
+func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	secret := &corev1.Secret{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return OpenStackCredentials{}, errors.Wrap(err, "failed to get secret")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
 	}
 
 	// Extract and validate each field
@@ -164,14 +132,14 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 
 	for key, value := range fields {
 		if value == "" {
-			return OpenStackCredentials{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
+			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
 		}
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return OpenStackCredentials{
+	return vjailbreakv1alpha1.OpenStackCredsInfo{
 		AuthURL:    fields["AuthURL"],
 		DomainName: fields["DomainName"],
 		Username:   fields["Username"],
@@ -444,15 +412,15 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
 
-	host := VMwareCredentials.Host
-	username := VMwareCredentials.Username
-	password := VMwareCredentials.Password
-	disableSSLVerification := VMwareCredentials.Insecure
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
@@ -479,7 +447,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), VMwareCredentials.Datacenter)
+	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}

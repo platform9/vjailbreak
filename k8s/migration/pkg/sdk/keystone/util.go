@@ -6,7 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/du"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 )
 
 func ParseCredentialsFromEnv() (Credentials, error) {
@@ -31,16 +32,34 @@ func ParseCredentialsFromEnv() (Credentials, error) {
 	return creds, nil
 }
 
+func ParseCredentialsFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (Credentials, error) {
+	return Credentials{
+		Username: openstackCreds.Username,
+		Password: openstackCreds.Password,
+		Tenant:   openstackCreds.TenantName,
+		Region:   openstackCreds.RegionName,
+	}, nil
+}
+
 func CreateFromEnv() (Client, error) {
 	// TODO support overriding it
-	duInfo, err := du.ParseInfoFromEnv()
+	pcdInfo, err := pcd.ParseInfoFromEnv()
 	if err != nil {
 		return nil, err
 	}
-	return CreateFromDuInfo(duInfo), nil
+	return CreateFromDuInfo(pcdInfo), nil
 }
 
-func CreateFromDuInfo(duInfo du.Info) Client {
-	keystoneEndpoint := fmt.Sprintf("%s/keystone", duInfo.URL)
+func CreateFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (Client, error) {
+	// TODO support overriding it
+	pcdInfo, err := pcd.ParseInfoFromOpenstackCreds(openstackCreds)
+	if err != nil {
+		return nil, err
+	}
+	return CreateFromDuInfo(pcdInfo), nil
+}
+
+func CreateFromDuInfo(pcdInfo pcd.Info) Client {
+	keystoneEndpoint := fmt.Sprintf("%s/keystone", pcdInfo.URL)
 	return NewClient(keystoneEndpoint)
 }

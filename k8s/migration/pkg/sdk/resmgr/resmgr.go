@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/du"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
+	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 )
 
 type Resmgr interface {
@@ -31,7 +31,7 @@ type Impl struct {
 }
 
 type Config struct {
-	DU            du.Info
+	DU            pcd.Info
 	Authenticator keystone.Authenticator
 	HTTPClient    http.Client
 }
@@ -143,6 +143,7 @@ func (r Impl) ListHosts(ctx context.Context) ([]Host, error) {
 	if resp.StatusCode != http.StatusOK || err != nil {
 		return nil, fmt.Errorf("failed to query the resmgr to list hosts or failed to parse response: (%d) %s", resp.StatusCode, string(body))
 	}
+	fmt.Println("****** Response: ", string(body))
 
 	hosts := []Host{}
 
