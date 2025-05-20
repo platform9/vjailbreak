@@ -10,6 +10,7 @@ export interface ESXIMigration {
   kind: string
   metadata: ESXIMigrationMetadata
   spec: ESXIMigrationSpec
+  status: ESXIMigrationStatus
 }
 
 export interface ESXIMigrationMetadata {
@@ -21,6 +22,7 @@ export interface ESXIMigrationMetadata {
   ownerReferences: OwnerReference[]
   resourceVersion: string
   uid: string
+  labels: Record<string, string>
 }
 
 export interface OwnerReference {
@@ -44,4 +46,19 @@ export interface NameReference {
 export interface GetESXIMigrationsListMetadata {
   continue: string
   resourceVersion: string
+}
+
+export interface ESXIMigrationStatus {
+  vms: string[]
+  message: string
+  phase: string
+}
+
+export interface ESXHost {
+  id: string
+  name: string
+  ip: string
+  vms: string[]
+  state: string
+  statusMessage: string
 }

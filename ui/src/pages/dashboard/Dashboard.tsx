@@ -20,7 +20,7 @@ import { useClusterMigrationsQuery } from "../../hooks/api/useClusterMigrationsQ
 import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations"
 import { deleteESXIMigration } from "src/api/esximigrations/esximigrations"
 import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
-import { ESXI_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useESXIMigrationsQuery"
+import { ESXI_MIGRATIONS_QUERY_KEY, useESXIMigrationsQuery } from "src/hooks/api/useESXIMigrationsQuery"
 import RollingMigrationsTable from "./RollingMigrationsTable"
 import { ClusterMigration } from "src/api/clustermigrations/model"
 import { ESXIMigration } from "src/api/esximigrations/model"
@@ -73,12 +73,12 @@ export default function Dashboard() {
     refetchOnMount: true
   })
 
-  // const { data: esxiMigrations } = useESXIMigrationsQuery({
-  //   queryKey: ESXI_MIGRATIONS_QUERY_KEY,
-  //   refetchInterval: THIRTY_SECONDS,
-  //   staleTime: 0,
-  //   refetchOnMount: true
-  // })
+  const { data: esxiMigrations } = useESXIMigrationsQuery({
+    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
+    refetchInterval: THIRTY_SECONDS,
+    staleTime: 0,
+    refetchOnMount: true
+  })
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -272,7 +272,10 @@ export default function Dashboard() {
         ) : activeTab === 1 ? (
           <RollingMigrationsTable
             clusterMigrations={clusterMigrations || []}
+            esxiMigrations={esxiMigrations || []}
+            migrations={migrations || []}
             refetchClusterMigrations={refetchClusterMigrations}
+            refetchMigrations={refetchMigrations}
           />
         ) : activeTab === 2 ? (
           <NodesTable />

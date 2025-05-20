@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import {
     Box,
     Typography,
-    Tooltip,
     Chip,
     Drawer,
     styled,
@@ -23,17 +22,23 @@ import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { ReactElement } from "react";
+import WarningIcon from '@mui/icons-material/Warning';
+import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
+import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations";
+import { useQueryClient } from "@tanstack/react-query";
+import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery";
 
 // Import CDS icons
 import "@cds/core/icon/register.js";
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon";
+import { ESXHost, ESXIMigration } from "src/api/esximigrations/model";
+import { Migration, Phase } from "src/api/migrations/model";
+import { getESXHosts } from "src/api/esximigrations/helper";
+import MigrationsTable from "./MigrationsTable";
 
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon);
 
-// Define interface for GridValueGetterParams to avoid import issues
-
-// Define ClusterMigration and ESXIMigration types
 interface ClusterMigration {
     apiVersion: string;
     kind: string;
@@ -61,28 +66,7 @@ interface ClusterMigration {
     };
 }
 
-// interface ESXIMigration {
-//     apiVersion: string;
-//     kind: string;
-//     metadata: {
-//         name: string;
-//         namespace: string;
-//         creationTimestamp: string;
-//         finalizers: string[];
-//         generation: number;
-//         resourceVersion: string;
-//         uid: string;
-//         ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
-//     };
-//     spec: {
-//         esxiName: string;
-//         openstackCredsRef: { name: string };
-//         rollingMigrationPlanRef: { name: string };
-//         vmwareCredsRef: { name: string };
-//     };
-// }
-
-// VM model based on the UI display needs
+// VM interface definition to fix the linter error
 interface VM {
     id: string;
     name: string;
@@ -90,25 +74,13 @@ interface VM {
     cluster: string;
     ip: string;
     esxHost: string;
-    networks?: string[];
-    datastores?: string[];
-    cpu?: number;
-    memory?: number;
+    networks: string[];
+    datastores: string[];
+    cpu: number;
+    memory: number;
     powerState: string;
 }
 
-// ESX host model
-interface ESXHost {
-    id: string;
-    name: string;
-    ip: string;
-    bmcIp: string;
-    maasState: string;
-    vms: number;
-    state: string;
-}
-
-// Style for icons
 const CdsIconWrapper = styled('div')({
     marginRight: 8,
     display: 'flex',
@@ -247,100 +219,7 @@ const StatusSummary = ({
     );
 };
 
-// Generate ESX mock data
-const generateESXHostsForCluster = (clusterName: string): ESXHost[] => {
-    const hostCount = Math.floor(Math.random() * 5) + 6; // 6-10 hosts per cluster
-    return Array.from({ length: hostCount }, (_, i) => ({
-        id: `${clusterName}-esx-${i + 1}`,
-        name: `esx-${i + 1}.${clusterName.toLowerCase()}.local`,
-        ip: `10.0.${Math.floor(i / 3) + 1}.${10 + i}`,
-        bmcIp: `10.1.${Math.floor(i / 3) + 1}.${10 + i}`,
-        maasState: i % 5 === 0 ? "Cordoned" :
-            i % 5 === 1 ? "Active" :
-                i % 5 === 2 ? "Migrated" :
-                    i % 5 === 3 ? "Pending" : "In Progress",
-        vms: Math.floor(Math.random() * 8) + 3,
-        state: i % 4 === 0 ? "Migrated" :
-            i % 4 === 1 ? "In Progress" :
-                i % 4 === 2 ? "Pending" : "Active"
-    }));
-};
-
-// Mock VM data generator for the cluster
-const generateVMsForCluster = (clusterName: string): VM[] => {
-    const vmCount = Math.floor(Math.random() * 20) + 15; // 15-35 VMs per cluster
-    return Array.from({ length: vmCount }, (_, i) => ({
-        id: `${clusterName}-vm-${i + 1}`,
-        name: `vm-${i + 1}.${clusterName.toLowerCase()}`,
-        status: i % 6 === 0 ? "In Progress" :
-            i % 6 === 1 ? "Done" :
-                i % 6 === 2 ? "Queued" :
-                    i % 6 === 3 ? "Failed" :
-                        i % 6 === 4 ? "Pending" : "Migrated",
-        cluster: clusterName,
-        ip: `10.9.${Math.floor(i / 8) + 1}.${20 + i % 100}`,
-        esxHost: `esx-${Math.floor(i / 4) % 10 + 1}.${clusterName.toLowerCase()}.local`,
-        networks: [`Network ${i % 4 + 1}`, "Management Network"],
-        datastores: [`datastore${i % 3 + 1}`],
-        cpu: 2 + (i % 6),
-        memory: 4096 + (i % 4) * 2048,
-        powerState: i % 4 === 0 ? "powered-off" : "powered-on"
-    }));
-};
-
-// Generate mock cluster data with more examples
-const generateMockClusters = (): ClusterMigration[] => {
-    const clusters = [
-        "Prod-Finance",
-        "Dev-Engineering",
-        "QA-Testing",
-        "Staging-Web",
-        "Core-Infra",
-        "Marketing-Web",
-        "Sales-CRM",
-        "HR-Internal",
-        "Analytics-BI",
-        "Cloud-Services",
-        "Mobile-Backend",
-        "IoT-Platform",
-        "Database-Cluster",
-        "Data-Warehouse"
-    ];
-
-    return clusters.map((name, index) => ({
-        apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-        kind: "ClusterMigration",
-        metadata: {
-            name: `${name.toLowerCase().replace('-', '-')}-migration`,
-            namespace: "vjailbreak-migration-system",
-            creationTimestamp: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
-            finalizers: [],
-            generation: 1,
-            resourceVersion: `${123456 + index}`,
-            uid: `${name}-uid-${index}`,
-            ownerReferences: []
-        },
-        spec: {
-            clusterName: name,
-            esxiMigrationSequence: [],
-            openstackCredsRef: { name: "openstack-creds" },
-            rollingMigrationPlanRef: { name: "rolling-plan" },
-            vmwareCredsRef: { name: "vmware-creds" }
-        },
-        status: {
-            currentESXi: "",
-            message: "",
-            phase: index % 5 === 0 ? "Running" :
-                index % 5 === 1 ? "Pending" :
-                    index % 5 === 2 ? "Succeeded" :
-                        index % 5 === 3 ? "Failed" : "Completed"
-        }
-    }));
-};
-
-
-// Component for the cluster details drawer
-function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }) {
+function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migrations, refetchMigrations }) {
     // ESX Columns for the table
     const esxColumns: GridColDef[] = [
         {
@@ -390,59 +269,59 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
         }
     ];
 
-    // VM Columns for the table
-    const vmColumns: GridColDef[] = [
-        {
-            field: 'name',
-            headerName: 'VM Name',
-            flex: 1.5,
-            renderCell: (params) => (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
-                        <CdsIconWrapper>
-                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                            {/* @ts-ignore */}
-                            <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
-                        </CdsIconWrapper>
-                    </Tooltip>
-                    <Box>{params.value}</Box>
-                </Box>
-            ),
-        },
-        {
-            field: 'status',
-            headerName: 'Status',
-            flex: 0.8,
-            renderCell: (params) => <StatusChip status={params.value as string} />
-        },
-        {
-            field: 'ip',
-            headerName: 'Current IP',
-            flex: 1,
-            valueGetter: (value: string) => value || "—"
-        },
-        {
-            field: 'networks',
-            headerName: 'Network Interface(s)',
-            flex: 1,
-            renderCell: (params) => {
-                const networks = (params.row as VM).networks;
-                return networks ? networks.join(", ") : "—";
-            }
-        },
-        {
-            field: 'memory',
-            headerName: 'Memory (MB)',
-            flex: 0.8,
-            valueGetter: (value: string) => value || "—"
-        },
-        {
-            field: 'esxHost',
-            headerName: 'ESX Host',
-            flex: 1,
-            valueGetter: (value: string) => value || "—"
-        },
-    ];
+    // // VM Columns for the table
+    // const vmColumns: GridColDef[] = [
+    //     {
+    //         field: 'name',
+    //         headerName: 'VM Name',
+    //         flex: 1.5,
+    //         renderCell: (params) => (
+    //             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    //                 <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
+    //                     <CdsIconWrapper>
+    //                         {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+    //                         {/* @ts-ignore */}
+    //                         <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
+    //                     </CdsIconWrapper>
+    //                 </Tooltip>
+    //                 <Box>{params.value}</Box>
+    //             </Box>
+    //         ),
+    //     },
+    //     {
+    //         field: 'status',
+    //         headerName: 'Status',
+    //         flex: 0.8,
+    //         renderCell: (params) => <StatusChip status={params.value as string} />
+    //     },
+    //     {
+    //         field: 'ip',
+    //         headerName: 'Current IP',
+    //         flex: 1,
+    //         valueGetter: (value: string) => value || "—"
+    //     },
+    //     {
+    //         field: 'networks',
+    //         headerName: 'Network Interface(s)',
+    //         flex: 1,
+    //         renderCell: (params) => {
+    //             const networks = (params.row as VM).networks;
+    //             return networks ? networks.join(", ") : "—";
+    //         }
+    //     },
+    //     {
+    //         field: 'memory',
+    //         headerName: 'Memory (MB)',
+    //         flex: 0.8,
+    //         valueGetter: (value: string) => value || "—"
+    //     },
+    //     {
+    //         field: 'esxHost',
+    //         headerName: 'ESX Host',
+    //         flex: 1,
+    //         valueGetter: (value: string) => value || "—"
+    //     },
+    // ];
 
     return (
         <StyledDrawer
@@ -463,7 +342,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
                     <Box sx={{ mb: 4 }}>
                         <StatusSummary
                             items={esxHosts}
-                            getStatus={(esxi) => (esxi as ESXHost).maasState}
+                            getStatus={(esxi) => (esxi as ESXHost).state}
                             title="ESX Migration"
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
@@ -485,25 +364,16 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, vms }
 
                     <Box sx={{ mt: 4 }}>
                         <StatusSummary
-                            items={vms}
+                            items={migrations}
                             getStatus={(vm) => (vm as VM).status}
                             title="VM Migrations"
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
-                            <DataGrid
-                                rows={vms}
-                                columns={vmColumns}
-                                getRowId={(row) => row.id}
-                                initialState={{
-                                    pagination: { paginationModel: { pageSize: 10 } },
-                                }}
-                                pageSizeOptions={[10, 25, 50]}
-                                checkboxSelection
-                                sx={{
-                                    '& .MuiDataGrid-columnHeaders': {
-                                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                                    }
-                                }}
+                            <MigrationsTable
+                                refetchMigrations={refetchMigrations}
+                                migrations={migrations || []}
+                            // onDeleteMigration={handleDeleteClick}
+                            // onDeleteSelected={handleDeleteSelected}
                             />
                         </Box>
                     </Box>
@@ -565,64 +435,95 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
 
 interface RollingMigrationsTableProps {
     clusterMigrations: ClusterMigration[];
+    esxiMigrations: ESXIMigration[];
+    migrations: Migration[];
     refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+    refetchMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 export default function RollingMigrationsTable({
-    clusterMigrations: propClusterMigrations,
-    refetchClusterMigrations
+    clusterMigrations,
+    esxiMigrations,
+    migrations,
+    refetchClusterMigrations,
+    refetchMigrations,
 }: RollingMigrationsTableProps) {
-    // Generate mock data if no data is provided
-    const mockClusters = useMemo(() => propClusterMigrations || generateMockClusters(), []);
-
-    // Use provided data or mock data
-    const clusterMigrations = mockClusters;
-
+    const queryClient = useQueryClient();
     const [selectedCluster, setSelectedCluster] = useState<ClusterMigration | null>(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
-    // Generate ESX hosts and VMs for each cluster
     const esxHostsByCluster = useMemo(() => {
-        const result: Record<string, ESXHost[]> = {};
+        const esxisByCluster: Record<string, ESXHost[]> = {};
 
         clusterMigrations.forEach(cluster => {
             if (cluster.metadata?.name) {
                 const clusterName = cluster.spec.clusterName || '';
-                result[cluster.metadata.name] = generateESXHostsForCluster(clusterName);
+                esxisByCluster[clusterName] = getESXHosts(esxiMigrations
+                    .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.includes(clusterName))
+                );
             }
         });
 
-        return result;
-    }, [clusterMigrations]);
+        return esxisByCluster;
+    }, [clusterMigrations, esxiMigrations]);
 
-    const vmsByCluster = useMemo(() => {
-        const result: Record<string, VM[]> = {};
+    const migrationsByCluster = useMemo(() => {
+        const result: Record<string, Migration[]> = {};
 
         clusterMigrations.forEach(cluster => {
             if (cluster.metadata?.name) {
                 const clusterName = cluster.spec.clusterName || '';
-                result[cluster.metadata.name] = generateVMsForCluster(clusterName);
+                result[clusterName] = migrations.filter(migration => migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.includes(clusterName))
             }
         });
 
         return result;
-    }, [clusterMigrations]);
+    }, [clusterMigrations, migrations]);
 
     const handleOpenDetails = (cluster: ClusterMigration) => {
         setSelectedCluster(cluster);
         setDrawerOpen(true);
     };
-
     const handleCloseDrawer = () => {
         setDrawerOpen(false);
     };
 
     const handleDeleteSelected = () => {
-        console.log("Delete selected clusters:", selectedRows);
-        // Here you would implement actual deletion logic
-        // And call any API endpoint to delete the selected clusters
-        setSelectedRows([]);
+        setDeleteDialogOpen(true);
+    };
+
+    const handleDeleteClose = () => {
+        setDeleteDialogOpen(false);
+        setDeleteError(null);
+    };
+
+
+    const handleConfirmDelete = async () => {
+        try {
+            const selectedClusterMigrations = clusterMigrations.filter(cm =>
+                selectedRows.includes(cm.metadata?.name || '')
+            );
+
+            await Promise.all(
+                selectedClusterMigrations.map(async (migration) => {
+                    // const rollingMigrationPlanName = migration.spec.rollingMigrationPlanRef?.name;
+
+                    await deleteClusterMigration(migration.metadata.name);
+
+                })
+            );
+
+            queryClient.invalidateQueries({ queryKey: CLUSTER_MIGRATIONS_QUERY_KEY });
+
+            setSelectedRows([]);
+        } catch (error) {
+            console.error("Failed to delete cluster migrations:", error);
+            setDeleteError(error instanceof Error ? error.message : "Failed to delete cluster migrations");
+            throw error;
+        }
     };
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
@@ -666,7 +567,7 @@ export default function RollingMigrationsTable({
             headerName: 'Status',
             flex: 0.5,
             renderCell: (params) => {
-                return <StatusChip status={(params.row as ClusterMigration).status?.phase || 'Pending'} />;
+                return <StatusChip status={(params.row as ClusterMigration).status?.phase || 'Unknown'} />;
             },
             sortComparator: (v1, v2) => {
                 const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
@@ -679,8 +580,8 @@ export default function RollingMigrationsTable({
             headerName: 'ESX Hosts',
             flex: 0.5,
             renderCell: (params) => {
-                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
-                return esxHostsByCluster[clusterId]?.length || 0;
+                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
+                return esxHostsByCluster[clusterName]?.length || 0;
             },
         },
         {
@@ -688,8 +589,8 @@ export default function RollingMigrationsTable({
             headerName: 'VMs',
             flex: 0.5,
             renderCell: (params) => {
-                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
-                return vmsByCluster[clusterId]?.length || 0;
+                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
+                return migrationsByCluster[clusterName]?.length || 0;
             },
         },
         {
@@ -697,18 +598,18 @@ export default function RollingMigrationsTable({
             headerName: 'Migration Progress',
             flex: 1,
             renderCell: (params) => {
-                const clusterId = (params.row as ClusterMigration).metadata?.name || '';
+                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
 
                 // ESX Hosts progress
-                const esxHosts = esxHostsByCluster[clusterId] || [];
+                const esxHosts = esxHostsByCluster[clusterName] || [];
                 const totalEsx = esxHosts.length;
                 const migratedEsx = esxHosts.filter(host => host.state === 'Migrated').length;
                 const esxProgress = totalEsx > 0 ? (migratedEsx / totalEsx) * 100 : 0;
 
                 // VMs progress
-                const vms = vmsByCluster[clusterId] || [];
-                const totalVms = vms.length;
-                const migratedVms = vms.filter(vm => vm.status === 'Migrated' || vm.status === 'Done').length;
+                const migrations = migrationsByCluster[clusterName] || [];
+                const totalVms = migrations.length;
+                const migratedVms = migrations.filter(migration => migration.status?.phase === Phase.Succeeded).length;
                 const vmProgress = totalVms > 0 ? (migratedVms / totalVms) * 100 : 0;
 
                 return (
@@ -814,10 +715,35 @@ export default function RollingMigrationsTable({
                     open={drawerOpen}
                     onClose={handleCloseDrawer}
                     clusterMigration={selectedCluster}
-                    esxHosts={esxHostsByCluster[selectedCluster.metadata?.name || ''] || []}
-                    vms={vmsByCluster[selectedCluster.metadata?.name || ''] || []}
+                    esxHosts={esxHostsByCluster[selectedCluster.spec.clusterName || ''] || []}
+                    migrations={migrationsByCluster[selectedCluster.spec.clusterName || ''] || []}
+                    refetchMigrations={refetchMigrations}
+                // refetchESXMigrations={refetchESXMigrations}
                 />
             )}
+
+            <ConfirmationDialog
+                open={deleteDialogOpen}
+                onClose={handleDeleteClose}
+                title="Confirm Delete"
+                icon={<WarningIcon color="warning" />}
+                message={selectedRows.length > 1
+                    ? "Are you sure you want to delete these cluster migrations?"
+                    : `Are you sure you want to delete the selected cluster migration?`
+                }
+                items={clusterMigrations
+                    .filter(cm => selectedRows.includes(cm.metadata?.name || ''))
+                    .map(cm => ({
+                        id: cm.metadata?.name || '',
+                        name: cm.spec?.clusterName || cm.metadata?.name || ''
+                    }))}
+                actionLabel="Delete"
+                actionColor="error"
+                actionVariant="outlined"
+                onConfirm={handleConfirmDelete}
+                errorMessage={deleteError}
+                onErrorChange={setDeleteError}
+            />
         </Box>
     );
 }

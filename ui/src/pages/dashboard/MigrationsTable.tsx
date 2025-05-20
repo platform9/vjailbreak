@@ -159,8 +159,8 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: Cus
 
 interface MigrationsTableProps {
     migrations: Migration[];
-    onDeleteMigration: (name: string) => void;
-    onDeleteSelected: (migrations: Migration[]) => void;
+    onDeleteMigration?: (name: string) => void;
+    onDeleteSelected?: (migrations: Migration[]) => void;
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
@@ -199,23 +199,25 @@ export default function MigrationsTable({
             pageSizeOptions={[25, 50, 100]}
             localeText={{ noRowsLabel: "No Migrations Available" }}
             getRowId={(row) => row.metadata?.name}
-            checkboxSelection
+            checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
             isRowSelectable={isRowSelectable}
             onRowSelectionModelChange={handleSelectionChange}
             rowSelectionModel={selectedRows}
             slots={{
-                toolbar: () => (
+                toolbar: onDeleteSelected !== undefined && onDeleteMigration !== undefined ? () => (
                     <CustomToolbar
                         numSelected={selectedRows.length}
                         onDeleteSelected={() => {
                             const selectedMigrations = migrations?.filter(
                                 m => selectedRows.includes(m.metadata?.name)
                             );
-                            onDeleteSelected(selectedMigrations || []);
+                            if (onDeleteSelected) {
+                                onDeleteSelected(selectedMigrations || []);
+                            }
                         }}
                         refetchMigrations={refetchMigrations}
                     />
-                ),
+                ) : undefined,
             }}
         />
     );
