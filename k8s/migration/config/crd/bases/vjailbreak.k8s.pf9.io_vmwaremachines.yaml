@@ -66,6 +66,25 @@ spec:
                     items:
                       type: string
                     type: array
+                  nics:
+                    items:
+                      properties:
+                        dnsServers:
+                          items:
+                            type: string
+                          type: array
+                        gateway:
+                          type: string
+                        ipAddress:
+                          type: string
+                        macAddress:
+                          type: string
+                        networkName:
+                          type: string
+                        prefixLength:
+                          type: integer
+                      type: object
+                    type: array
                   osType:
                     type: string
                   vmState:

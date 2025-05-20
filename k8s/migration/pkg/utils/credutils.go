@@ -576,6 +576,11 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var datastores []string
 		var networks []string
 		var disks []string
+		var nics []vjailbreakv1alpha1.NICInfo
+
+		gateway, dns := ExtractGatewayAndDNS(vmProps.Guest.IpStack)
+		nics = MapNICsFromVMGuest(vmProps.Guest.Net, gateway, dns)
+
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
 			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
@@ -623,9 +628,72 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			OSType:     vmProps.Guest.GuestFamily,
 			CPU:        int(vmProps.Config.Hardware.NumCPU),
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
+			NICs:       nics,
 		})
 	}
 	return vminfo, nil
+}
+
+// MapNICsFromVMGuest takes a list of GuestNicInfo objects from a VM and maps them into a slice of NICInfo objects.
+// It also takes an optional gateway and DNS server list which are added to the NICInfo objects.
+// The function skips empty or IPv6 addresses and only uses the first IPv4 address from each NIC.
+func MapNICsFromVMGuest(nics []types.GuestNicInfo, gateway string, dns []string) []vjailbreakv1alpha1.NICInfo {
+	var result []vjailbreakv1alpha1.NICInfo
+
+	for _, nic := range nics {
+		if nic.IpConfig == nil || len(nic.IpConfig.IpAddress) == 0 {
+			continue // Skip NICs without IPs
+		}
+
+		for _, ip := range nic.IpConfig.IpAddress {
+			if ip.IpAddress == "" || strings.Contains(ip.IpAddress, ":") {
+				continue // Skip empty or IPv6 addresses
+			}
+
+			prefix := int(ip.PrefixLength)
+			nicInfo := vjailbreakv1alpha1.NICInfo{
+				MACAddress:   nic.MacAddress,
+				IPAddress:    ip.IpAddress,
+				PrefixLength: prefix,
+				NetworkName:  nic.Network,
+				Gateway:      gateway,
+				DNSServers:   dns,
+			}
+			result = append(result, nicInfo)
+			break // Only use the first IPv4 IP
+		}
+	}
+	return result
+}
+
+func ExtractGatewayAndDNS(stackList []types.GuestStackInfo) (string, []string) {
+	var gateway string
+	var dnsServers []string
+
+	if len(stackList) == 0 {
+		return gateway, dnsServers
+	}
+
+	// Typically only one GuestStackInfo entry per VM
+	stack := stackList[0]
+
+	// Extract default gateway
+	if stack.IpRouteConfig != nil {
+		for _, route := range stack.IpRouteConfig.IpRoute {
+			if (route.Gateway != types.NetIpRouteConfigInfoGateway{}) && strings.Contains(route.Gateway.IpAddress, ".") {
+				// filter for ipv4 address
+				gateway = route.Gateway.IpAddress
+				break
+			}
+		}
+	}
+
+	// Extract DNS servers
+	if stack.DnsConfig != nil {
+		dnsServers = stack.DnsConfig.IpAddress
+	}
+
+	return gateway, dnsServers
 }
 
 // AppendUnique appends unique values to a slice
