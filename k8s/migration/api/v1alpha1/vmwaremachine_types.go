@@ -27,6 +27,7 @@ type NICInfo struct {
 	Gateway      string   `json:"gateway,omitempty"`
 	DNSServers   []string `json:"dnsServers,omitempty"`
 	NetworkName  string   `json:"networkName,omitempty"`
+	DhcpEnabled  bool     `json:"dhcpEnabled,omitempty"`
 }
 
 type VMInfo struct {

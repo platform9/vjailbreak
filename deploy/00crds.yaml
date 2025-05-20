@@ -965,6 +965,8 @@ spec:
                   nics:
                     items:
                       properties:
+                        dhcpEnabled:
+                          type: boolean
                         dnsServers:
                           items:
                             type: string
