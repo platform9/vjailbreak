@@ -32,6 +32,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -108,6 +109,11 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	controllerutil.AddFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
 	if scope.ESXIMigration.Status.Phase == "" {
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaiting
+		err := r.Status().Update(ctx, scope.ESXIMigration)
+		if err != nil {
+			log.Error(err, "Failed to update ESXIMigration status")
+			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+		}
 	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
 		log.Info("ESXIMigration already succeeded")
 		return ctrl.Result{}, nil
@@ -139,16 +145,25 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
 
 		// TODO:Omkar Assume this will be done by vPwned
-		// provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
-		// if err != nil {
-		// 	return ctrl.Result{}, err
-		// }
-		// err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
-		// if err != nil {
-		// 	return ctrl.Result{}, err
-		// }
+		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Remove the ESXi host from vCenter before changing the phase
+		err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+		if err != nil {
+			log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+			return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
+		}
+		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
-		err := r.Status().Update(ctx, scope.ESXIMigration)
+		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
@@ -172,20 +187,16 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		if vmCount != 0 {
 			log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
 			// Omkar change back to 5 mins
-
-			
+			scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForVMsToBeMoved
+			err = r.Status().Update(ctx, scope.ESXIMigration)
+			if err != nil {
+				log.Error(err, "Failed to update ESXIMigration status")
+				return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+			}
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 		log.Info("No VMs on this ESXi host, removing from vCenter and converting to PCD host", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-		
-		// Remove the ESXi host from vCenter before changing the phase
-		err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
-		if err != nil {
-			log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
-		}
-		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		
+
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
 		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
@@ -200,6 +211,13 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 			log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
 		}
+		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseInMaintenanceMode
+		err = r.Status().Update(ctx, scope.ESXIMigration)
+		if err != nil {
+			log.Error(err, "Failed to update ESXIMigration status")
+			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+		}
+		log.Info("Successfully updated ESXIMigration status to maintenance")
 	}
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }

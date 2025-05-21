@@ -104,6 +104,13 @@ func GetMigrationPlan(ctx context.Context, k8sClient client.Client, vm string, r
 	return migrationPlan, nil
 }
 
+func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
+	migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: vm, Namespace: constants.NamespaceMigrationSystem}, migrationTemplate); err != nil {
+		return nil, err
+	}
+	return migrationTemplate, nil
+}
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
