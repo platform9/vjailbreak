@@ -34,7 +34,6 @@ import (
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/vim25/types"
 	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -820,8 +819,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 // GetClosestFlavour gets the closest flavor for the given CPU and memory
 func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	ctxlog := ctrllog.FromContext(ctx)
-
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -849,7 +846,6 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
 		return bestFlavor, nil
 	}
-
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 

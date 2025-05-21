@@ -192,6 +192,7 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 		}
 	}
 
+	// Delete all MigrationPlans
 	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
 		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, vm, scope.RollingMigrationPlan)
 		if err != nil {
@@ -224,6 +225,20 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 			// MigrationPlan still exists, requeue
 			log.Info("MigrationPlan still exists, requeuing", "vm", vm)
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
+
+	// Delete MigrationTemplates
+	migrationTemplate, err := utils.GetMigrationTemplate(ctx, r.Client, scope.RollingMigrationPlan.Spec.MigrationTemplate, scope.RollingMigrationPlan)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "Failed to get MigrationTemplate", "vm", scope.RollingMigrationPlan.Spec.MigrationTemplate)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get migration template")
+		}
+	} else {
+		if delErr := r.Delete(ctx, migrationTemplate); delErr != nil {
+			log.Error(delErr, "Failed to delete MigrationTemplate", "vm", scope.RollingMigrationPlan.Spec.MigrationTemplate)
+			return ctrl.Result{}, errors.Wrap(delErr, "failed to delete migration template")
 		}
 	}
 
@@ -397,13 +412,13 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
-			return true, nil
+			return false, nil
 		} else {
 			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
-			return true, nil
+			return false, nil
 		}
 	}
 	return false, nil

@@ -165,17 +165,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	// Fetch VMwareCreds CR
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		return ctrl.Result{}, err
 	}
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
 		false, openstackcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		return ctrl.Result{}, err
 	}
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
@@ -293,6 +289,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				InitiateCutover: !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 			},
 		}
+		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
 		err = r.createResource(ctx, migrationplan, migrationobj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
@@ -926,4 +923,15 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 	}
 	return nil
+}
+
+func MergeLabels(a, b map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range a {
+		result[k] = v
+	}
+	for k, v := range b {
+		result[k] = v
+	}
+	return result
 }
