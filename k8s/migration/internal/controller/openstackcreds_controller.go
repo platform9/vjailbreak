@@ -195,6 +195,16 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				}
 			}
 		}
+
+		if _, ok := scope.OpenstackCreds.Labels[constants.IsPCDCredsLabel]; ok {
+			err = utils.PrintHostsAndClustersFromResmgr(ctx, r.Client, *scope.OpenstackCreds)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to print hosts and clusters from resmgr")
+			}
+		} else {
+			ctxlog.Info("------------- OpenStack environment is not PCD, skipping printing hosts and clusters from resmgr")
+		}
+
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
 	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil

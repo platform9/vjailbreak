@@ -347,7 +347,7 @@ func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollin
 	return true, nil
 }
 
-func WaitForHostToComeUpOnPCD(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+func PrintHostsAndClustersFromResmgr(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
 
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
@@ -362,23 +362,35 @@ func WaitForHostToComeUpOnPCD(ctx context.Context, k8sClient client.Client, open
 	if err != nil {
 		return errors.Wrap(err, "failed to list hosts")
 	}
-	// for _, host := range hostList {
-	// 	if host.Hostname == OpenStackCredentials.FQDN {
-	// 		return nil
-	// 	}
-	// }
+	fmt.Println("---------------  Length Host list: ", len(hostList))
+	for _, host := range hostList {
+		fmt.Printf("---------------  Host:%s Roles: %v\n", host.ID, host.Roles)
+	}
 
-	fmt.Println("Length Host list: ", len(hostList))
-	return errors.New("host not found")
+	clusterList, err := resmgrClient.ListClusters(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list clusters")
+	}
+	fmt.Println("---------------  Length Cluster list: ", len(clusterList))
+	for _, cluster := range clusterList {
+		fmt.Println("---------------  Cluster: ", cluster.Name)
+	}
+
+	return nil
 }
 
 func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (*keystone.CachedAuthenticator, error) {
-	ksClient, err := keystone.CreateFromOpenstackCreds(openstackCreds)
+	var ksClient keystone.Client
+	var err error
+	// Create the client
+	ksClient, err = keystone.CreateFromOpenstackCreds(openstackCreds)
+
 	if err != nil {
 		// keystone is needed when its a CAPI enabled setup. However at this point there is no way to determine
 		// if controller manager will be used with CAPI or not. Fail to be safe if keystone client cannot be created.
-		return nil, fmt.Errorf("unable to create keystone client: %w", err)
+		return nil, fmt.Errorf("unable to create keystone client with insecure=true: %w", err)
 	}
+
 	creds, err := keystone.ParseCredentialsFromOpenstackCreds(openstackCreds)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch keystone creds from openstack creds: %w", err)
@@ -402,7 +414,8 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	return resmgr.NewResmgrClient(
 		resmgr.Config{
 			DU: pcd.Info{
-				URL: openstackCreds.AuthURL,
+				URL:      strings.Join(strings.Split(openstackCreds.AuthURL, "/")[:3], "/"),
+				Insecure: openstackCreds.Insecure,
 			},
 			Authenticator: ksAuth,
 			HTTPClient:    *resmgrHTTPClient,

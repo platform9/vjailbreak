@@ -1,5 +1,6 @@
 package du
 
 type Info struct {
-	URL string
+	URL      string
+	Insecure bool
 }

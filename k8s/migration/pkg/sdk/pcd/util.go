@@ -10,7 +10,8 @@ import (
 
 func ParseInfoFromEnv() (Info, error) {
 	du := Info{
-		URL: strings.TrimSpace(os.Getenv("DU_URL")),
+		URL:      strings.TrimSpace(os.Getenv("DU_URL")),
+		Insecure: os.Getenv("DU_INSECURE") == "true",
 	}
 
 	// TODO: Default 'ApiserverEndpoint' and 'ForwarderEndpoint'
@@ -26,6 +27,7 @@ func ParseInfoFromEnv() (Info, error) {
 
 func ParseInfoFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (Info, error) {
 	return Info{
-		URL: openstackCreds.AuthURL,
+		URL:      strings.Join(strings.Split(openstackCreds.AuthURL, "/")[:3], "/"),
+		Insecure: openstackCreds.Insecure,
 	}, nil
 }

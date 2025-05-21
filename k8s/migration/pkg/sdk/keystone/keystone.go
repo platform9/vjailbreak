@@ -245,12 +245,12 @@ type HTTPClient struct {
 	log *zap.Logger
 }
 
-func NewClient(endpoint string) *HTTPClient {
+func NewClient(endpoint string, insecure bool) *HTTPClient {
 	client := http.DefaultClient
 
 	// Turn off cert verification if running in airgapped mode
 	pmkEnv := os.Getenv("PMK_ENVIRONMENT")
-	if pmkEnv == "airgap" {
+	if pmkEnv == "airgap" || insecure {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

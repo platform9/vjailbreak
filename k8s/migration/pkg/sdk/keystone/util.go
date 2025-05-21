@@ -61,5 +61,5 @@ func CreateFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsIn
 
 func CreateFromDuInfo(pcdInfo pcd.Info) Client {
 	keystoneEndpoint := fmt.Sprintf("%s/keystone", pcdInfo.URL)
-	return NewClient(keystoneEndpoint)
+	return NewClient(keystoneEndpoint, pcdInfo.Insecure)
 }

@@ -15,6 +15,7 @@ import (
 
 type Resmgr interface {
 	ListHosts(ctx context.Context) ([]Host, error)
+	ListClusters(ctx context.Context) ([]Cluster, error)
 	DeauthHost(ctx context.Context, hostID string) error
 	GetHost(ctx context.Context, hostID string) (Host, error)
 	AddRoleVersion(ctx context.Context, details []byte, errIfAlreadyExists bool) error
@@ -28,6 +29,7 @@ type Impl struct {
 	url           string
 	authenticator keystone.Authenticator
 	httpClient    http.Client
+	insecure      bool
 }
 
 type Config struct {
@@ -41,6 +43,7 @@ func NewResmgrClient(config Config) Resmgr {
 		url:           config.DU.URL,
 		authenticator: config.Authenticator,
 		httpClient:    config.HTTPClient,
+		insecure:      config.DU.Insecure,
 	}
 }
 
@@ -72,6 +75,10 @@ type Host struct {
 	RawExtensionData json.RawMessage   `json:"extensions,omitempty"`
 	CAPIExtension    PF9CAPIExtensions `json:"-"`
 	Message          string            `json:"message,omitempty"`
+}
+
+type Cluster struct {
+	Name string `json:"name"`
 }
 
 // Type definition for payload to be sent to bundle generation request.
@@ -121,7 +128,7 @@ func (r Impl) getResmgrReq(ctx context.Context, url, method string, body []byte)
 	return req, nil
 }
 
-// ListHosts fetches all hosts from resmgr along with their pf9-kube role config
+// ListHosts fetches all hosts from resmgr along with their role config
 func (r Impl) ListHosts(ctx context.Context) ([]Host, error) {
 	// resmgr/v2?role_settings=true will fetch hosts and their config in a single API request.
 	url := fmt.Sprintf("%s/resmgr/v2/hosts?role_settings=true", r.url)
@@ -391,4 +398,32 @@ func (r Impl) AuthorizeHost(ctx context.Context, hostID string, token string, ve
 		return fmt.Errorf("failed to query the resmgr to authorize host: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+func (r Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
+	url := fmt.Sprintf("%s/resmgr/v2/clusters", r.url)
+	req, err := r.getResmgrReq(ctx, url, http.MethodGet, nil)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create request to list clusters: %w", err)
+	}
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to query the resmgr to list clusters: (%d) %s", resp.StatusCode, string(body))
+	}
+
+	var clusters []Cluster
+	decoder := json.NewDecoder(resp.Body)
+	err = decoder.Decode(&clusters)
+	if err != nil {
+		return nil, err
+	}
+
+	return clusters, nil
 }
