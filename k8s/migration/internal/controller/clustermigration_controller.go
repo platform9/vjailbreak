@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -172,7 +173,14 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 			}
 			log.Info("ESXIMigration succeeded, continuing to next ESXi", "esxiName", esxi)
 			continue
-		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseRunning {
+		} else if slices.Contains([]vjailbreakv1alpha1.ESXIMigrationPhase{
+			vjailbreakv1alpha1.ESXIMigrationPhaseWaiting,
+			vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForVMsToBeMoved,
+			vjailbreakv1alpha1.ESXIMigrationPhaseAssigningRole,
+			vjailbreakv1alpha1.ESXIMigrationPhaseConvertingToPCDHost,
+			vjailbreakv1alpha1.ESXIMigrationPhaseCordoned,
+			vjailbreakv1alpha1.ESXIMigrationPhaseInMaintenanceMode,
+		}, esxiMigration.Status.Phase) {
 			log.Info("ESXIMigration is running, updating ClusterMigration status", "esxiName", esxi)
 			err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhaseRunning, esxiMigration.Status.Message, esxi)
 			if err != nil {

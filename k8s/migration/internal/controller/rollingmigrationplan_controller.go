@@ -412,13 +412,13 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
-			return true, nil
+			return false, nil
 		} else {
 			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
-			return true, nil
+			return false, nil
 		}
 	}
 	return false, nil
