@@ -104,6 +104,13 @@ func GetMigrationPlan(ctx context.Context, k8sClient client.Client, vm string, r
 	return migrationPlan, nil
 }
 
+func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
+	migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: vm, Namespace: constants.NamespaceMigrationSystem}, migrationTemplate); err != nil {
+		return nil, err
+	}
+	return migrationTemplate, nil
+}
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
@@ -199,8 +206,8 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	return hostSystem, c, nil
 }
 
-func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -218,6 +225,22 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxi
 		return errors.Wrap(err, "failed to initiate maintenance mode")
 	}
 
+	esxiK8sName, err := ConvertToK8sName(scope.ESXIMigration.Spec.ESXiName)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
+	}
+
+	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, scope.RollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+		return err
+	}
+
+	esxiMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseInMaintenanceMode
+	err = k8sClient.Status().Update(ctx, esxiMigration)
+	if err != nil {
+		return errors.Wrap(err, "failed to update ESXi migration status")
+	}
+
 	err = task.Wait(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to wait for host to enter maintenance mode")
@@ -226,14 +249,14 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxi
 	return nil
 }
 
-func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (bool, error) {
+func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (bool, error) {
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
+	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: scope.ESXIMigration.Spec.VMwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get vmware credentials")
 	}
 
-	hs, err := GetESXiSummary(ctx, k8sClient, esxiName, vmwarecreds)
+	hs, err := GetESXiSummary(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get ESXi summary")
 	}
@@ -268,14 +291,14 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 
 // RemoveESXiFromVCenter removes an ESXi host from vCenter inventory
 // This should only be called after the host is in maintenance mode and has no VMs
-func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
 
 	// Verify the host is in maintenance mode before removing
-	inMaintenance, err := CheckESXiInMaintenanceMode(ctx, k8sClient, esxiName, vmwareCredsRef)
+	inMaintenance, err := CheckESXiInMaintenanceMode(ctx, k8sClient, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to check maintenance mode status")
 	}
@@ -285,7 +308,7 @@ func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, esxiNam
 	}
 
 	// Verify no VMs exist on the host
-	vmCount, err := CountVMsOnESXi(ctx, k8sClient, esxiName, vmwareCredsRef)
+	vmCount, err := CountVMsOnESXi(ctx, k8sClient, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to count VMs on host")
 	}
@@ -308,8 +331,8 @@ func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, esxiNam
 	return nil
 }
 
-func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (int, error) {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (int, error) {
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -503,7 +526,7 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrat
 				},
 			},
 			Labels: map[string]string{
-				constants.PauseMigrationLabel: trueString,
+				constants.RollingMigrationPlanLabel: rollingMigrationPlan.Name,
 			},
 		},
 		Spec: vjailbreakv1alpha1.MigrationPlanSpec{
