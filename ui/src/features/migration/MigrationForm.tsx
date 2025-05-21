@@ -470,7 +470,7 @@ export default function MigrationFormDrawer({
       setSubmitting(false)
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
       onClose()
-      navigate("/dashboard/migrations")
+      navigate("/dashboard?tab=migrations")
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
@@ -611,6 +611,7 @@ export default function MigrationFormDrawer({
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
+            stepNumber="4"
           />
         </Box>
       </DrawerContent>

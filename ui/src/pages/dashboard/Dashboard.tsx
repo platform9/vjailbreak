@@ -1,6 +1,6 @@
 import { Paper, styled, Tab, Tabs } from "@mui/material"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import { deleteMigration } from "src/api/migrations/migrations"
@@ -45,6 +45,7 @@ const StyledPaper = styled(Paper)({
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
@@ -243,8 +244,39 @@ export default function Dashboard() {
     }
   }, [migrations, navigate])
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      const tabMap = {
+        'migrations': 0,
+        'clustermigrations': 1,
+        'agents': 2,
+        'credentials': 3,
+        'maasconfig': 4
+      };
+
+      if (tabParam in tabMap) {
+        setActiveTab(tabMap[tabParam]);
+      } else {
+        const tabIndex = parseInt(tabParam, 10);
+        if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 4) {
+          setActiveTab(tabIndex);
+        }
+      }
+    }
+  }, [location]);
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue)
+    const tabNames = [
+      'migrations',
+      'clustermigrations',
+      'agents',
+      'credentials',
+      'maasconfig'
+    ];
+    navigate(`/dashboard?tab=${tabNames[newValue]}`, { replace: true });
   }
 
   return (

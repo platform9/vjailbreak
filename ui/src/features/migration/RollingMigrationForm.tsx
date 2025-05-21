@@ -1,6 +1,7 @@
 import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
+import { useNavigate } from "react-router-dom"
 import Footer from "../../components/forms/Footer"
 import Header from "../../components/forms/Header"
 import Step from "../../components/forms/Step"
@@ -34,10 +35,50 @@ import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
 import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
 import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
 import { postMigrationTemplate } from "src/api/migration-templates/migrationTemplates"
+import useParams from "src/hooks/useParams"
+import MigrationOptions from "./MigrationOptionsAlt"
+import { CUTOVER_TYPES } from "./constants"
+import WindowsIcon from "src/assets/windows_icon.svg";
+import LinuxIcon from "src/assets/linux_icon.svg";
 
 // Import CDS icons
 import "@cds/core/icon/register.js"
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon"
+
+// Define types for MigrationOptions
+interface FormValues extends Record<string, unknown> {
+    dataCopyMethod?: string;
+    dataCopyStartTime?: string;
+    cutoverOption?: string;
+    cutoverStartTime?: string;
+    cutoverEndTime?: string;
+    postMigrationScript?: string;
+    retryOnFailure?: boolean;
+    osType?: string;
+}
+
+export interface SelectedMigrationOptionsType extends Record<string, unknown> {
+    dataCopyMethod: boolean;
+    dataCopyStartTime: boolean;
+    cutoverOption: boolean;
+    cutoverStartTime: boolean;
+    cutoverEndTime: boolean;
+    postMigrationScript: boolean;
+    osType: boolean;
+}
+
+// Default state for checkboxes
+const defaultMigrationOptions = {
+    dataCopyMethod: false,
+    dataCopyStartTime: false,
+    cutoverOption: false,
+    cutoverStartTime: false,
+    cutoverEndTime: false,
+    postMigrationScript: false,
+    osType: false,
+}
+
+type FieldErrors = { [formId: string]: string };
 
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
@@ -171,10 +212,44 @@ const vmColumns: GridColDef[] = [
         valueGetter: (value) => value || "—",
     },
     {
+        field: "osType",
+        headerName: "OS",
+        flex: 0.5,
+        renderCell: (params) => {
+            const osType = params.row.osType || "Unknown";
+            let displayValue = osType;
+            let icon: React.ReactNode = null;
+
+            if (osType.includes("windows")) {
+                displayValue = "Windows";
+                icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
+            } else if (osType.includes("linux")) {
+                displayValue = "Linux";
+                icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
+            } else {
+                displayValue = "Other";
+            }
+
+            return (
+                <Tooltip title={displayValue}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                        {icon}
+                    </Box>
+                </Tooltip>
+            );
+        },
+    },
+    {
         field: "networks",
         headerName: "Network Interface(s)",
         flex: 1,
         valueGetter: (value) => value || "—",
+    },
+    {
+        field: "cpu",
+        headerName: "CPU",
+        flex: 0.3,
+        valueGetter: (value) => value || "- ",
     },
     {
         field: "memory",
@@ -346,6 +421,7 @@ export default function RollingMigrationFormDrawer({
     open,
     onClose,
 }: RollingMigrationFormDrawerProps) {
+    const navigate = useNavigate();
     const [sourceCluster, setSourceCluster] = useState("");
     const [destinationPCD, setDestinationPCD] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -379,6 +455,15 @@ export default function RollingMigrationFormDrawer({
 
     const [openstackCredData, setOpenstackCredData] = useState<OpenstackCreds | null>(null);
     const [loadingOpenstackDetails, setLoadingOpenstackDetails] = useState(false);
+
+    // Migration Options state
+    const { params, getParamsUpdater } = useParams<FormValues>({});
+    const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+    const getFieldErrorsUpdater = useCallback((key: string | number) => (value: string) => {
+        setFieldErrors(prev => ({ ...prev, [key]: value }));
+    }, []);
+    const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
+        useParams<SelectedMigrationOptionsType>(defaultMigrationOptions);
 
     useEffect(() => {
         if (open) {
@@ -597,6 +682,7 @@ export default function RollingMigrationFormDrawer({
                     datastores: vm.spec.vms.datastores,
                     cpu: vm.spec.vms.cpu,
                     memory: vm.spec.vms.memory,
+                    osType: vm.spec.vms.osType,
                     powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off"
                 };
             });
@@ -875,10 +961,25 @@ export default function RollingMigrationFormDrawer({
                     name: selectedMaasConfig?.metadata.name || "",
                 },
                 migrationStrategy: {
-                    adminInitiatedCutOver: false,
+                    adminInitiatedCutOver: selectedMigrationOptions.cutoverOption &&
+                        params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
                     healthCheckPort: "443",
                     performHealthChecks: false,
-                    type: "hot"
+                    type: selectedMigrationOptions.dataCopyMethod ?
+                        (params.dataCopyMethod as string) : "hot",
+                    ...(selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime && {
+                        dataCopyStart: params.dataCopyStartTime
+                    }),
+                    ...(selectedMigrationOptions.cutoverOption &&
+                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+                        params.cutoverStartTime && {
+                        vmCutoverStart: params.cutoverStartTime
+                    }),
+                    ...(selectedMigrationOptions.cutoverOption &&
+                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+                        params.cutoverEndTime && {
+                        vmCutoverEnd: params.cutoverEndTime
+                    }),
                 },
                 migrationTemplate: migrationTemplateResponse.metadata.name,
                 namespace: VJAILBREAK_DEFAULT_NAMESPACE
@@ -888,6 +989,7 @@ export default function RollingMigrationFormDrawer({
 
             console.log("Submitted rolling migration plan", migrationPlanJson);
             onClose();
+            navigate("/dashboard?tab=clustermigrations");
         } catch (error) {
             console.error("Failed to submit rolling migration plan:", error);
             const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -918,7 +1020,26 @@ export default function RollingMigrationFormDrawer({
             availableVmwareDatastores.some(datastore =>
                 !storageMappings.some(mapping => mapping.source === datastore)));
 
-        return basicRequirementsMissing || !mappingsValid;
+        // Migration options validation
+        const migrationOptionValidated = Object.keys(selectedMigrationOptions).every((key) => {
+            if (selectedMigrationOptions[key]) {
+                if (
+                    key === "cutoverOption" &&
+                    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
+                ) {
+                    return (
+                        params.cutoverStartTime &&
+                        params.cutoverEndTime &&
+                        !fieldErrors["cutoverStartTime"] &&
+                        !fieldErrors["cutoverEndTime"]
+                    )
+                }
+                return params?.[key] && !fieldErrors[key];
+            }
+            return true;
+        });
+
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated;
     }, [
         sourceCluster,
         destinationPCD,
@@ -928,7 +1049,10 @@ export default function RollingMigrationFormDrawer({
         availableVmwareNetworks,
         networkMappings,
         availableVmwareDatastores,
-        storageMappings
+        storageMappings,
+        selectedMigrationOptions,
+        params,
+        fieldErrors
     ]);
 
     useKeyboardSubmit({
@@ -1143,7 +1267,7 @@ export default function RollingMigrationFormDrawer({
 
 
                     <Box>
-                        <Step stepNumber="4" label="VM Migration Sequence" />
+                        <Step stepNumber="4" label="Select Virtual Machines to Migrate" />
                         <Box sx={{ ml: 5, mt: 2 }}>
                             <Paper sx={{ width: "100%", height: 389 }}>
                                 <DataGrid
@@ -1212,7 +1336,18 @@ export default function RollingMigrationFormDrawer({
                                     stepNumber="5"
                                     loading={loadingOpenstackDetails}
                                 />
+                                <MigrationOptions
+                                    stepNumber="6"
+                                    params={params}
+                                    onChange={getParamsUpdater}
+                                    selectedMigrationOptions={selectedMigrationOptions}
+                                    updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                                    errors={fieldErrors}
+                                    getErrorsUpdater={getFieldErrorsUpdater}
+                                />
                             </>
+
+
                         ) : (
                             <Typography variant="body2" color="text.secondary">
                                 Please select both source cluster and destination PCD to configure mappings.
@@ -1220,6 +1355,7 @@ export default function RollingMigrationFormDrawer({
                         )}
                     </Box>
                 </Box>
+
             </DrawerContent>
             <Footer
                 submitButtonLabel="Run"

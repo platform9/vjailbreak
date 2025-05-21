@@ -186,6 +186,7 @@ const StatusSummary = ({
     const pending = counts['Pending'] || counts['Queued'] || 0;
     const failed = counts['Failed'] || 0;
     const cordoned = counts['Cordoned'] || 0;
+    const progress = (completed / total) * 100;
 
     return (
         <Box sx={{ mb: 2 }}>
@@ -194,7 +195,7 @@ const StatusSummary = ({
                 <Box sx={{ width: '100%', mr: 1 }}>
                     <LinearProgress
                         variant="determinate"
-                        value={(completed / total) * 100}
+                        value={isNaN(progress) ? 0 : progress}
                         sx={{
                             height: 4,
                             borderRadius: 5,
@@ -247,18 +248,6 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
             field: 'ip',
             headerName: 'Current IP',
             flex: 1,
-            valueGetter: (value: string) => value || "—"
-        },
-        {
-            field: 'bmcIp',
-            headerName: 'BMC IP Address',
-            flex: 1,
-            valueGetter: (value: string) => value || "—"
-        },
-        {
-            field: 'maasState',
-            headerName: 'MaaS State',
-            flex: 0.6,
             valueGetter: (value: string) => value || "—"
         },
         {
@@ -343,12 +332,13 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
                         <StatusSummary
                             items={esxHosts}
                             getStatus={(esxi) => (esxi as ESXHost).state}
-                            title="ESX Migration"
+                            title="ESX Migrations"
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
                             <DataGrid
                                 rows={esxHosts}
                                 columns={esxColumns}
+                                disableRowSelectionOnClick
                                 initialState={{
                                     pagination: { paginationModel: { pageSize: 10 } },
                                 }}
@@ -462,11 +452,10 @@ export default function RollingMigrationsTable({
             if (cluster.metadata?.name) {
                 const clusterName = cluster.spec.clusterName || '';
                 esxisByCluster[clusterName] = getESXHosts(esxiMigrations
-                    .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.includes(clusterName))
+                    .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.toLowerCase().includes(clusterName.toLowerCase()))
                 );
             }
         });
-
         return esxisByCluster;
     }, [clusterMigrations, esxiMigrations]);
 
@@ -564,7 +553,7 @@ export default function RollingMigrationsTable({
         },
         {
             field: 'status',
-            headerName: 'Status',
+            headerName: 'Migration Status',
             flex: 0.5,
             renderCell: (params) => {
                 return <StatusChip status={(params.row as ClusterMigration).status?.phase || 'Unknown'} />;

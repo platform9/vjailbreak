@@ -90,7 +90,7 @@ const columns: GridColDef[] = [
         flex: 1,
         renderCell: (params) => {
             const phase = params.row?.status?.phase;
-            const isDisabled = !phase || phase === "Running" || phase === "Pending";
+            const isDisabled = !phase || phase === "Running";
 
             return (
                 <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
@@ -203,6 +203,7 @@ export default function MigrationsTable({
             isRowSelectable={isRowSelectable}
             onRowSelectionModelChange={handleSelectionChange}
             rowSelectionModel={selectedRows}
+            disableRowSelectionOnClick
             slots={{
                 toolbar: onDeleteSelected !== undefined && onDeleteMigration !== undefined ? () => (
                     <CustomToolbar
