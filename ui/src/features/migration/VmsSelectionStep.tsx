@@ -401,7 +401,6 @@ export default function VmsSelectionStep({
     return params.row.vmState === "running";
   };
 
-  // Message to display when credentials aren't validated yet
   const getNoRowsLabel = () => {
     return "No VMs discovered";
   };

@@ -54,8 +54,8 @@ const columns: GridColDef[] = [
     {
         field: "name",
         headerName: "Name",
-        valueGetter: (_, row) => row.metadata?.name,
-        flex: 1.5,
+        valueGetter: (_, row) => row.spec?.vmName,
+        flex: 1,
     },
     {
         field: "status",
@@ -72,7 +72,7 @@ const columns: GridColDef[] = [
         field: "status.conditions",
         headerName: "Progress",
         valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
-        flex: 3,
+        flex: 2,
         renderCell: (params) => {
             const phase = params.row?.status?.phase
             const conditions = params.row?.status?.conditions
@@ -189,7 +189,7 @@ export default function MigrationsTable({
     return (
         <DataGrid
             rows={migrationsWithActions}
-            columns={columns}
+            columns={onDeleteSelected === undefined && onDeleteMigration === undefined ? columns.filter(column => column.field !== "actions") : columns}
             initialState={{
                 pagination: { paginationModel: { page: 0, pageSize: 25 } },
                 sorting: {

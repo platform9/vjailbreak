@@ -355,7 +355,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
                     <Box sx={{ mt: 4 }}>
                         <StatusSummary
                             items={migrations}
-                            getStatus={(vm) => (vm as VM).status}
+                            getStatus={(migration) => (migration as Migration).status?.phase}
                             title="VM Migrations"
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
@@ -464,8 +464,8 @@ export default function RollingMigrationsTable({
 
         clusterMigrations.forEach(cluster => {
             if (cluster.metadata?.name) {
-                const clusterName = cluster.spec.clusterName || '';
-                result[clusterName] = migrations.filter(migration => migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.includes(clusterName))
+                const rollingMigrationPlan = cluster.spec.rollingMigrationPlanRef?.name || '';
+                result[rollingMigrationPlan] = migrations.filter(migration => migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/rollingmigrationplan']?.includes(rollingMigrationPlan))
             }
         });
 
@@ -578,8 +578,8 @@ export default function RollingMigrationsTable({
             headerName: 'VMs',
             flex: 0.5,
             renderCell: (params) => {
-                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
-                return migrationsByCluster[clusterName]?.length || 0;
+                const rollingMigrationPlan = (params.row as ClusterMigration).spec?.rollingMigrationPlanRef?.name || '';
+                return migrationsByCluster[rollingMigrationPlan]?.length || 0;
             },
         },
         {
@@ -588,15 +588,16 @@ export default function RollingMigrationsTable({
             flex: 1,
             renderCell: (params) => {
                 const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
+                const rollingMigrationPlan = (params.row as ClusterMigration).spec?.rollingMigrationPlanRef?.name || '';
 
                 // ESX Hosts progress
                 const esxHosts = esxHostsByCluster[clusterName] || [];
                 const totalEsx = esxHosts.length;
-                const migratedEsx = esxHosts.filter(host => host.state === 'Migrated').length;
+                const migratedEsx = esxHosts.filter(host => host.state === Phase.Succeeded).length;
                 const esxProgress = totalEsx > 0 ? (migratedEsx / totalEsx) * 100 : 0;
 
                 // VMs progress
-                const migrations = migrationsByCluster[clusterName] || [];
+                const migrations = migrationsByCluster[rollingMigrationPlan] || [];
                 const totalVms = migrations.length;
                 const migratedVms = migrations.filter(migration => migration.status?.phase === Phase.Succeeded).length;
                 const vmProgress = totalVms > 0 ? (migratedVms / totalVms) * 100 : 0;
@@ -666,18 +667,19 @@ export default function RollingMigrationsTable({
     ];
 
     return (
-        <Box sx={{ width: '100%' }}>
+        <Box sx={{ width: '100%', height: '100%' }}>
             <DataGrid
                 rows={clusterMigrations}
                 columns={clusterColumns}
                 getRowId={(row: ClusterMigration) => row.metadata?.name || ''}
                 initialState={{
-                    pagination: { paginationModel: { pageSize: 10 } },
+                    pagination: { paginationModel: { pageSize: 25 } },
                     sorting: {
                         sortModel: [{ field: 'status', sort: 'asc' }],
                     },
                 }}
                 pageSizeOptions={[5, 10, 25]}
+                localeText={{ noRowsLabel: "No Migrations Available" }}
                 slots={{
                     toolbar: () => (
                         <CustomToolbar
@@ -686,12 +688,6 @@ export default function RollingMigrationsTable({
                             onDeleteSelected={handleDeleteSelected}
                         />
                     ),
-                }}
-                sx={{
-                    border: 'none',
-                    '& .MuiDataGrid-columnHeaders': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                    }
                 }}
                 checkboxSelection
                 onRowSelectionModelChange={handleSelectionChange}
@@ -705,7 +701,7 @@ export default function RollingMigrationsTable({
                     onClose={handleCloseDrawer}
                     clusterMigration={selectedCluster}
                     esxHosts={esxHostsByCluster[selectedCluster.spec.clusterName || ''] || []}
-                    migrations={migrationsByCluster[selectedCluster.spec.clusterName || ''] || []}
+                    migrations={migrationsByCluster[selectedCluster.spec.rollingMigrationPlanRef?.name || ''] || []}
                     refetchMigrations={refetchMigrations}
                 // refetchESXMigrations={refetchESXMigrations}
                 />
