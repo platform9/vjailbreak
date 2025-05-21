@@ -49,6 +49,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
+	//"github.com/vmware/govmomi/vim25/types"
 )
 
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
@@ -202,6 +206,25 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	if err != nil {
 		return fmt.Errorf("failed to create vCenter client for post-migration actions: %w", err)
 	}
+	// Get datacenter from VMwareCreds (ensure your CRD has this field)
+	datacenterName := vmwcreds.Spec.DataCenter
+	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
+	if err != nil {
+		return fmt.Errorf("failed to find datacenter '%s': %w", datacenterName, err)
+	}
+
+	// Get folder name from MigrationPlan (with default)
+	folderName := migrationplan.Spec.PostMigrationAction.FolderName
+	if folderName == "" {
+		folderName = "vjailbreakedVMs"
+	}
+
+	// Ensure folder exists before moving VM
+	_, err = EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName)
+	if err != nil {
+		log.Error(err, "Failed to create/verify target folder")
+		return fmt.Errorf("failed to ensure folder '%s' exists: %w", folderName, err)
+	}
 
 	// Rename the VM by appending the suffix
 	suffix := migrationplan.Spec.PostMigrationAction.Suffix
@@ -217,10 +240,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 
 	// Move the VM to the specified folder
-	folderName := migrationplan.Spec.PostMigrationAction.FolderName
-	if folderName == "" {
-		folderName = "vjailbreakedVMs" // Default if not specified
-	}
 	log.Info(fmt.Sprintf("Moving source VM '%s' to folder '%s'", vm, folderName))
 	err = vcClient.MoveVMFolder(ctx, newVMName, folderName)
 	if err != nil {
@@ -982,4 +1001,25 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 	}
 	return nil
+}
+
+func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.Datacenter, folderName string) (*object.Folder, error) {
+	finder.SetDatacenter(dc)
+
+	// Check if folder exists
+	folder, err := finder.Folder(ctx, folderName)
+	if err == nil {
+		return folder, nil
+	}
+
+	// Create folder if missing
+	folders, err := dc.Folders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get datacenter folders: %w", err)
+	}
+	folder, err = folders.VmFolder.CreateFolder(ctx, folderName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create folder '%s': %w", folderName, err)
+	}
+	return folder, nil
 }
