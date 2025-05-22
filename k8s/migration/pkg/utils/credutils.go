@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/labels"
+
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
@@ -22,15 +24,15 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	resmgr "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/vim25/types"
 	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,71 +50,39 @@ type OpenStackClients struct {
 	NetworkingClient *gophercloud.ServiceClient
 }
 
-// VMwareCredentials holds the actual credentials after decoding
-type VMwareCredentials struct {
-	// Host is the vCenter host
-	Host string
-	// Username is the vCenter username
-	Username string
-	// Password is the vCenter password
-	Password string
-	// Datacenter is the vCenter datacenter
-	Datacenter string
-	// Insecure is whether to skip certificate verification
-	Insecure bool
-}
-
-// OpenStackCredentials holds the actual credentials after decoding
-type OpenStackCredentials struct {
-	// AuthURL is the OpenStack authentication URL
-	AuthURL string
-	// Username is the OpenStack username
-	Username string
-	// Password is the OpenStack password
-	Password string
-	// RegionName is the OpenStack region
-	RegionName string
-	// TenantName is the OpenStack tenant
-	TenantName string
-	// Insecure is whether to skip certificate verification
-	Insecure bool
-	// DomainName is the OpenStack domain
-	DomainName string
-}
-
 const (
 	trueString = "true" // Define at package level
 )
 
-// GetVMwareCredentials retrieves vCenter credentials from a secret
-func GetVMwareCredentials(ctx context.Context, k3sclient client.Client, credsName string) (VMwareCredentials, error) {
+// GetVMwareCredsInfo retrieves vCenter credentials from a secret
+func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	creds := vjailbreakv1alpha1.VMwareCreds{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return VMwareCredentials{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
 	}
 	return GetVMwareCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
 }
 
-// GetOpenstackCredentials retrieves OpenStack credentials from a secret
-func GetOpenstackCredentials(ctx context.Context, k3sclient client.Client, credsName string) (OpenStackCredentials, error) {
+// GetOpenstackCredsInfo retrieves OpenStack credentials from a secret
+func GetOpenstackCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	creds := vjailbreakv1alpha1.OpenstackCreds{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return OpenStackCredentials{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
 	}
 	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
 }
 
 // GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
-func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (VMwareCredentials, error) {
+func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return VMwareCredentials{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
 	}
 
 	if secret.Data == nil {
-		return VMwareCredentials{}, fmt.Errorf("no data in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
 	host := string(secret.Data["VCENTER_HOST"])
@@ -122,21 +92,21 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
 	if username == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
 	}
 	if password == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 	if datacenter == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return VMwareCredentials{
+	return vjailbreakv1alpha1.VMwareCredsInfo{
 		Host:       host,
 		Username:   username,
 		Password:   password,
@@ -146,10 +116,10 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 }
 
 // GetOpenstackCredentialsFromSecret retrieves and checks the secret
-func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (OpenStackCredentials, error) {
+func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	secret := &corev1.Secret{}
 	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return OpenStackCredentials{}, errors.Wrap(err, "failed to get secret")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
 	}
 
 	// Extract and validate each field
@@ -164,14 +134,14 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 
 	for key, value := range fields {
 		if value == "" {
-			return OpenStackCredentials{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
+			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
 		}
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return OpenStackCredentials{
+	return vjailbreakv1alpha1.OpenStackCredsInfo{
 		AuthURL:    fields["AuthURL"],
 		DomainName: fields["DomainName"],
 		Username:   fields["Username"],
@@ -390,7 +360,6 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
 	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
-	ctxlog := ctrllog.Log
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -403,7 +372,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		MinVersion: tls.VersionTLS12,
 	}
 	if openstackCredential.Insecure {
-		ctxlog.Info("Insecure flag is set, skipping certificate verification")
 		tlsConfig.InsecureSkipVerify = true
 	} else {
 		// Get the certificate for the Openstack endpoint
@@ -444,15 +412,15 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
 
-	host := VMwareCredentials.Host
-	username := VMwareCredentials.Username
-	password := VMwareCredentials.Password
-	disableSSLVerification := VMwareCredentials.Insecure
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
@@ -479,7 +447,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), VMwareCredentials.Datacenter)
+	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
@@ -571,7 +539,8 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 			if err != nil {
 				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
-			datastores = append(datastores, ds.Name)
+
+			datastores = AppendUnique(datastores, ds.Name)
 		}
 	}
 	return datastores, nil
@@ -626,18 +595,18 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 
 		for _, device := range vmProps.Config.Hardware.Device {
-			disk, ok := device.(*types.VirtualDisk)
+			disk, ok := device.(*govmitypes.VirtualDisk)
 			if !ok {
 				continue
 			}
 
-			var dsref types.ManagedObjectReference
+			var dsref govmitypes.ManagedObjectReference
 			switch backing := disk.Backing.(type) {
-			case *types.VirtualDiskFlatVer2BackingInfo:
+			case *govmitypes.VirtualDiskFlatVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskSparseVer2BackingInfo:
+			case *govmitypes.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+			case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
 				dsref = backing.Datastore.Reference()
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
@@ -744,12 +713,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 	// Try to fetch existing resource
 	err = client.Get(ctx, vmwvmKey, vmwvm)
-	if err != nil && !k8serrors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
 
 	// Check if the object is present or not if not present create a new object and set init to true.
-	if k8serrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
@@ -928,7 +897,7 @@ func DeleteStaleVMwareMachines(ctx context.Context, client client.Client, vmwcre
 	}
 	for _, vm := range staleVMs {
 		if err := client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
 			}
 		}
@@ -985,7 +954,7 @@ func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope)
 		},
 	}
 	if err := scope.Client.Delete(ctx, &secret); err != nil {
-		if !k8serrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete associated secret")
 		}
 	}
@@ -999,7 +968,7 @@ func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMware
 	}
 	for _, vm := range vmList.Items {
 		if err := scope.Client.Delete(ctx, &vm); err != nil {
-			if !k8serrors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
 			}
 		}
@@ -1014,7 +983,7 @@ func DeleteVMwareClustersForVMwareCreds(ctx context.Context, scope *scope.VMware
 	}
 	for _, cluster := range clusterList.Items {
 		if err := scope.Client.Delete(ctx, &cluster); err != nil {
-			if !k8serrors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", cluster.Name))
 			}
 		}
@@ -1029,7 +998,7 @@ func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCre
 	}
 	for _, host := range hostList.Items {
 		if err := scope.Client.Delete(ctx, &host); err != nil {
-			if !k8serrors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", host.Name))
 			}
 		}
@@ -1037,6 +1006,271 @@ func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCre
 	return nil
 }
 
+// SyncPCDInfo syncs PCD info from resmgr
+func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+
+	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials")
+	}
+	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
+	if err != nil {
+		return errors.Wrap(err, "failed to get resmgr client")
+	}
+
+	// Get PCDHostConfig from openstackCreds
+	pcdHostConfig, err := resmgrClient.ListHostConfig(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list host configs")
+	}
+	openstackCreds.Spec.PCDHostConfig = pcdHostConfig
+
+	if err := k8sClient.Update(ctx, &openstackCreds); err != nil {
+		return errors.Wrap(err, "failed to update openstack creds")
+	}
+
+	clusterList, err := resmgrClient.ListClusters(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list clusters")
+	}
+	for _, cluster := range clusterList {
+		err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
+		if err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				updateErr := UpdatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
+				if updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update PCD cluster")
+				}
+				continue
+			}
+			return errors.Wrap(err, "failed to create PCD cluster")
+		}
+	}
+	hostList, err := resmgrClient.ListHosts(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list hosts")
+	}
+	for _, host := range hostList {
+		err := CreatePCDHostFromResmgrHost(ctx, k8sClient, host, &openstackCreds)
+		if err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				updateErr := UpdatePCDHostFromResmgrHost(ctx, k8sClient, host, &openstackCreds)
+				if updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update PCD host")
+				}
+				continue
+			}
+			return errors.Wrap(err, "failed to create PCD host")
+		}
+	}
+	err = DeleteStalePCDHosts(ctx, k8sClient, openstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete stale PCD hosts")
+	}
+	err = DeleteStalePCDClusters(ctx, k8sClient, openstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete stale PCD clusters")
+	}
+	return nil
+}
+
+// CreatePCDHostFromResmgrHost creates a PCDHost from resmgr Host
+func CreatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, host resmgr.Host, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	pcdHost := generatePCDHostFromResmgrHost(openstackCreds, host)
+	if err := k8sClient.Create(ctx, &pcdHost); err != nil {
+		return errors.Wrap(err, "failed to create PCD host")
+	}
+	return nil
+}
+
+// CreatePCDClusterFromResmgrCluster creates a PCDCluster from resmgr Cluster
+func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	pcdCluster := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
+	if err := k8sClient.Create(ctx, &pcdCluster); err != nil {
+		return errors.Wrap(err, "failed to create PCD cluster")
+	}
+	return nil
+}
+
+func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, host resmgr.Host, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	pcdHost := generatePCDHostFromResmgrHost(openstackCreds, host)
+	oldPCDHost := vjailbreakv1alpha1.PCDHost{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: host.ID, Namespace: constants.NamespaceMigrationSystem}, &oldPCDHost); err != nil {
+		return errors.Wrap(err, "failed to get PCD host")
+	}
+	oldPCDHost.Spec = pcdHost.Spec
+	oldPCDHost.Status = pcdHost.Status
+	if err := k8sClient.Update(ctx, &oldPCDHost); err != nil {
+		return errors.Wrap(err, "failed to update PCD host")
+	}
+	if err := k8sClient.Status().Update(ctx, &oldPCDHost); err != nil {
+		return errors.Wrap(err, "failed to update PCD host status")
+	}
+	return nil
+}
+
+func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	oldPCDCluster := vjailbreakv1alpha1.PCDCluster{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: cluster.Name, Namespace: constants.NamespaceMigrationSystem}, &oldPCDCluster); err != nil {
+		return errors.Wrap(err, "failed to get PCD cluster")
+	}
+
+	pcdCluster := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
+	oldPCDCluster.Spec = pcdCluster.Spec
+	oldPCDCluster.Status = pcdCluster.Status
+	if err := k8sClient.Update(ctx, &oldPCDCluster); err != nil {
+		return errors.Wrap(err, "failed to update PCD cluster")
+	}
+	if err := k8sClient.Status().Update(ctx, &oldPCDCluster); err != nil {
+		return errors.Wrap(err, "failed to update PCD cluster status")
+	}
+	return nil
+}
+
+func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, host resmgr.Host) vjailbreakv1alpha1.PCDHost {
+	// Create a new PCDHost
+	interfaces := []vjailbreakv1alpha1.PCDHostInterface{}
+	for name, itface := range host.Extensions.Interfaces.Data.IfaceInfo {
+		// Collect all IP addresses from the interface
+		ipAddresses := []string{}
+		for _, iface := range itface.Ifaces {
+			ipAddresses = append(ipAddresses, iface.Addr)
+		}
+
+		// Create the interface with all IPs and the MAC address
+		interfaces = append(interfaces, vjailbreakv1alpha1.PCDHostInterface{
+			IPAddresses: ipAddresses,
+			MACAddress:  itface.MAC,
+			Name:        name,
+		})
+	}
+	pcdHost := vjailbreakv1alpha1.PCDHost{
+		ObjectMeta: metav1.ObjectMeta{
+			// Use the host ID as the name to ensure uniqueness
+			Name:      host.ID,
+			Namespace: constants.NamespaceMigrationSystem,
+			// Add labels if needed
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel: openstackCreds.Name,
+			},
+		},
+		Spec: vjailbreakv1alpha1.PCDHostSpec{
+			HostName:      host.Info.Hostname,
+			HostID:        host.ID,
+			HostState:     host.RoleStatus,
+			RolesAssigned: host.Roles,
+			OSFamily:      host.Info.OSFamily,
+			Arch:          host.Info.Arch,
+			OSInfo:        host.Info.OSInfo,
+			Interfaces:    interfaces,
+		},
+		Status: vjailbreakv1alpha1.PCDHostStatus{
+			Responding: host.Info.Responding,
+			RoleStatus: host.RoleStatus,
+		},
+	}
+	return pcdHost
+}
+
+func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, cluster resmgr.Cluster) vjailbreakv1alpha1.PCDCluster {
+	return vjailbreakv1alpha1.PCDCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel: openstackCreds.Name,
+			},
+		},
+		Spec: vjailbreakv1alpha1.PCDClusterSpec{
+			ClusterName:                   cluster.Name,
+			Description:                   cluster.Description,
+			Hosts:                         cluster.Hostlist,
+			VMHighAvailability:            cluster.VMHighAvailability.Enabled,
+			EnableAutoResourceRebalancing: cluster.AutoResourceRebalancing.Enabled,
+			RebalancingFrequencyMins:      cluster.AutoResourceRebalancing.RebalancingFrequencyMins,
+		},
+		Status: vjailbreakv1alpha1.PCDClusterStatus{
+			AggregateID: cluster.AggregateID,
+			CreatedAt:   cluster.CreatedAt,
+			UpdatedAt:   cluster.UpdatedAt,
+		},
+	}
+}
+
+func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+
+	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials")
+	}
+	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
+	if err != nil {
+		return errors.Wrap(err, "failed to get resmgr client")
+	}
+	upstreamHostList, err := resmgrClient.ListHosts(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list hosts")
+	}
+	upstreamHostNames := []string{}
+	for _, host := range upstreamHostList {
+		upstreamHostNames = append(upstreamHostNames, host.ID)
+	}
+	downstreamHostList, err := filterPCDHostsOnOpenstackCreds(ctx, k8sClient, openstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to filter PCD hosts")
+	}
+	for _, host := range downstreamHostList {
+		if !containsString(upstreamHostNames, host.Spec.HostID) {
+			if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDHost{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      host.Name,
+					Namespace: constants.NamespaceMigrationSystem,
+				},
+			}); err != nil {
+				return errors.Wrap(err, "failed to delete stale PCD host")
+			}
+		}
+	}
+	return nil
+}
+func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials")
+	}
+	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
+	if err != nil {
+		return errors.Wrap(err, "failed to get resmgr client")
+	}
+	upstreamClusterList, err := resmgrClient.ListClusters(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list clusters")
+	}
+	upstreamClusterNames := []string{}
+	for _, cluster := range upstreamClusterList {
+		upstreamClusterNames = append(upstreamClusterNames, cluster.Name)
+	}
+
+	downstreamClusterList, err := filterPCDClustersOnOpenstackCreds(ctx, k8sClient, openstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to filter PCD clusters")
+	}
+	for _, cluster := range downstreamClusterList {
+		if !containsString(upstreamClusterNames, cluster.Spec.ClusterName) {
+			if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cluster.Name,
+					Namespace: constants.NamespaceMigrationSystem,
+				},
+			}); err != nil {
+				return errors.Wrap(err, "failed to delete stale PCD cluster")
+			}
+		}
+	}
+	return nil
+}
+
+// containsString checks if a string exists in a slice
 func containsString(slice []string, target string) bool {
 	for _, item := range slice {
 		if item == target {
@@ -1044,4 +1278,30 @@ func containsString(slice []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func filterPCDClustersOnOpenstackCreds(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) ([]vjailbreakv1alpha1.PCDCluster, error) {
+	err := k8sClient.List(ctx, &vjailbreakv1alpha1.PCDClusterList{}, &client.ListOptions{
+		Namespace: constants.NamespaceMigrationSystem,
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			constants.OpenstackCredsLabel: openstackCreds.Name,
+		}),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list PCD clusters")
+	}
+	return nil, nil
+}
+
+func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) ([]vjailbreakv1alpha1.PCDHost, error) {
+	err := k8sClient.List(ctx, &vjailbreakv1alpha1.PCDHostList{}, &client.ListOptions{
+		Namespace: constants.NamespaceMigrationSystem,
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			constants.OpenstackCredsLabel: openstackCreds.Name,
+		}),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list PCD hosts")
+	}
+	return nil, nil
 }

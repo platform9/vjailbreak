@@ -21,6 +21,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VMwareCredeInfo holds the actual credentials after decoding
+type VMwareCredsInfo struct {
+	// Host is the vCenter host
+	Host string
+	// Username is the vCenter username
+	Username string
+	// Password is the vCenter password
+	Password string
+	// Datacenter is the vCenter datacenter
+	Datacenter string
+	// Insecure is whether to skip certificate verification
+	Insecure bool
+}
+
 // VMwareCredsSpec defines the desired state of VMwareCreds
 type VMwareCredsSpec struct {
 	// DataCenter is the datacenter for the virtual machine

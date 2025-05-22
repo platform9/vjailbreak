@@ -95,6 +95,32 @@ spec:
                   - vcpus
                   type: object
                 type: array
+              pcdHostConfig:
+                description: PCDHostConfig is the list of available clusters in openstack
+                items:
+                  properties:
+                    clusterName:
+                      type: string
+                    hostLivenessInterface:
+                      type: string
+                    id:
+                      type: string
+                    imagelibInterface:
+                      type: string
+                    mgmtInterface:
+                      type: string
+                    name:
+                      type: string
+                    networkLabels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    tunnelingInterface:
+                      type: string
+                    vmConsoleInterface:
+                      type: string
+                  type: object
+                type: array
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials

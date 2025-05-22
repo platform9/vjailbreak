@@ -66,6 +66,8 @@ rules:
   - migrationtemplates
   - networkmappings
   - openstackcreds
+  - pcdclusters
+  - pcdhosts
   - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
@@ -91,6 +93,8 @@ rules:
   - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
+  - pcdclusters/finalizers
+  - pcdhosts/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
@@ -108,6 +112,8 @@ rules:
   - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
+  - pcdclusters/status
+  - pcdhosts/status
   - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status

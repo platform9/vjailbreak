@@ -45,6 +45,9 @@ const (
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
 
+	// OpenstackCredsLabel is the label for openstack credentials
+	OpenstackCredsLabel = "vjailbreak.k8s.pf9.io/openstackcreds" //nolint:gosec // not a password string
+
 	// IsPCDCredsLabel is the label for pcd credentials
 	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"
 
