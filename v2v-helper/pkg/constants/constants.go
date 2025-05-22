@@ -17,7 +17,7 @@ systemctl enable --now serial-getty@ttyS0.service`
 	MaxRAM = 9999999
 
 	// Number of intervals to wait for the volume to become available
-	MaxIntervalCount = 12
+	MaxIntervalCount = 36
 
 	InspectOSCommand         = "inspect-os"
 	LSBootCommand            = "ls /boot"
