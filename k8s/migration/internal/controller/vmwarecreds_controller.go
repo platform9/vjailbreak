@@ -102,10 +102,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
-	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
-	}
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
 	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
@@ -114,6 +110,12 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+
+	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
+	}
+
 	vminfo, err := utils.GetAllVMs(ctx, r.Client, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))

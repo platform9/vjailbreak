@@ -82,13 +82,6 @@ func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
-	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{
-		Name:      rollingMigrationPlan.Spec.MigrationTemplate,
-		Namespace: constants.NamespaceMigrationSystem},
-		&migrationTemplate); err != nil {
-		return nil, errors.Wrap(err, "failed to get migration template")
-	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
 		return nil, err
@@ -353,59 +346,6 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// generateMigrationTemplate creates a new MigrationTemplate resource based on the RollingMigrationPlan
-// and returns the name of the created template
-// func generateMigrationTemplate(ctx context.Context, scope *scope.RollingMigrationPlanScope) (string, error) {
-// 	rollingMigrationPlan := scope.RollingMigrationPlan
-
-// 	// Create a unique name for the template
-// 	templateName := GenerateRollingMigrationObjectName("template", rollingMigrationPlan)
-
-// 	// Get the client
-// 	client := scope.Client
-
-// 	// Create the template
-// 	template := &vjailbreakv1alpha1.MigrationTemplate{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      templateName,
-// 			Namespace: rollingMigrationPlan.Namespace,
-// 			// Set owner reference to the rolling migration plan
-// 			OwnerReferences: []metav1.OwnerReference{
-// 				{
-// 					APIVersion: rollingMigrationPlan.APIVersion,
-// 					Kind:       rollingMigrationPlan.Kind,
-// 					Name:       rollingMigrationPlan.Name,
-// 					UID:        rollingMigrationPlan.UID,
-// 					Controller: boolPtr(true),
-// 				},
-// 			},
-// 		},
-// 		Spec: vjailbreakv1alpha1.MigrationTemplateSpec{
-// 			// Default to empty OS type, v2v-helper will try to figure out OS
-// 			OSType: "",
-// 			// Create network and storage mapping names based on the rolling migration plan
-// 			NetworkMapping: rollingMigrationPlan.Spec.NetworkMapping,
-// 			StorageMapping: rollingMigrationPlan.Spec.StorageMapping,
-// 			Source: vjailbreakv1alpha1.MigrationTemplateSource{
-// 				// Reference VMware credentials
-// 				VMwareRef: rollingMigrationPlan.Spec.VMwareCredsRef.Name,
-// 			},
-// 			Destination: vjailbreakv1alpha1.MigrationTemplateDestination{
-// 				// Reference OpenStack credentials
-// 				OpenstackRef: rollingMigrationPlan.Spec.OpenstackCredsRef.Name,
-// 			},
-// 		},
-// 	}
-
-// 	// Create the template
-// 	err := client.Create(ctx, template)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to create migration template: %w", err)
-// 	}
-
-// 	return templateName, nil
-// }
-
 func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	for key, srcVal := range src {
 		dstVal, exists := dst[key]
@@ -448,6 +388,10 @@ func GenerateRollingMigrationObjectName(objectName string, rollingMigrationPlan 
 	return fmt.Sprintf("%s-%s", objectName, rollingMigrationPlan.Name)
 }
 
+func GenerateVMwareCredsDependantObjectName(objectName string, vmwareCredsName string) string {
+	return fmt.Sprintf("%s-%s", objectName, vmwareCredsName)
+}
+
 func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
@@ -485,14 +429,14 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Rolling
 	}
 
 	// Collect all VM names from all clusters
-	batches, err := convertVMSequenceToBatches(ctx, scope, batchSize)
+	batches, err := convertVMSequenceToBatches(scope, batchSize)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert VM sequence to batches")
 	}
 
 	// Create a MigrationPlan for each batch
 	for i, batch := range batches {
-		err := convertBatchToMigrationPlan(ctx, scope, batch, i, rollingMigrationPlan.Spec.MigrationTemplate)
+		err := convertBatchToMigrationPlan(ctx, scope, batch, i)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				continue
@@ -507,7 +451,7 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Rolling
 	return nil
 }
 
-func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, batch []string, i int, templateName string) error {
+func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, batch []string, i int) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	// Create a migration plan for this batch
@@ -556,7 +500,7 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrat
 	return nil
 }
 
-func convertVMSequenceToBatches(ctx context.Context, scope *scope.RollingMigrationPlanScope, batchSize int) ([][]string, error) {
+func convertVMSequenceToBatches(scope *scope.RollingMigrationPlanScope, batchSize int) ([][]string, error) {
 	var batches [][]string
 	rollingMigrationPlan := scope.RollingMigrationPlan
 

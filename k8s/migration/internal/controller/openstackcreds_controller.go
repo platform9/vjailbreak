@@ -47,6 +47,12 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -118,14 +124,13 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	} else {
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
-			if strings.Contains(err.Error(), "404") {
-				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-			} else {
-				ctxlog.Error(err, "Failed to update master node image ID")
-				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
-			}
-		} else {
-			ctxlog.Info("Successfully updated master node image ID")
+			// TODO(vpwned): Handle the error
+			// if strings.Contains(err.Error(), "404") {
+			// 	ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
+			// } else {
+			// 	return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			// }
+			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 		}
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
@@ -195,6 +200,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				}
 			}
 		}
+
+		if _, ok := scope.OpenstackCreds.Labels[constants.IsPCDCredsLabel]; ok {
+			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
+			}
+		}
+
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
 	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil
