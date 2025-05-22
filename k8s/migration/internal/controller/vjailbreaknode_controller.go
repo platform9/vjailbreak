@@ -130,7 +130,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	if uuid != "" {
-		log.Info("Skipping creation of already created node, updating status", "name", vjNode.Name)
 		if vjNode.Status.OpenstackUUID == "" {
 			// This will error until the the IP is available
 			vmip, err = utils.GetOpenstackVMIP(ctx, uuid, r.Client)
