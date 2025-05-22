@@ -56,6 +56,7 @@ export default defineConfig({
 						{ label: 'Building', slug: 'guides/building' },
 						{ label: 'Using APIs', slug: 'guides/using_apis' },
 						{ label: 'Injecting Custom Environment Variables', slug: 'guides/injecting_custom_env' },
+						{ label: 'Debug Log Collection', slug: 'guides/debuglogs' },
 					],
 				},
 				{
