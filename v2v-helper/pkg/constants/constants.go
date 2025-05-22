@@ -28,6 +28,8 @@ systemctl enable --now serial-getty@ttyS0.service`
 	VMActiveCheckInterval    = 20 * time.Second
 	MigrationSystemNamespace = "migration-system"
 	TrueString               = "true"
+	MaxRetries               = 3
+	RetryDelay               = 5 * time.Second
 
 	LogsDir = "/var/log/pf9"
 
