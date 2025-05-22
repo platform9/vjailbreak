@@ -127,12 +127,6 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		if volume.Status == "error" {
 			return fmt.Errorf("volume %s is in error state", volumeID)
 		}
-
-		// Check if volume is available and there are no attachments to the volume
-		if volume.Status == "available" && len(volume.Attachments) == 0 {
-			return nil
-		}
-
 		instanceID, err := GetCurrentInstanceUUID()
 		if err != nil {
 			return fmt.Errorf("failed to get instance ID: %s", err)
@@ -153,9 +147,11 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 				break
 			}
 		}
-		if !found {
+		// Check if volume is available and there are no attachments to the volume
+		if volume.Status == "available" && len(volume.Attachments) == 0 && !found {
 			return nil
 		}
+		fmt.Printf("Volume %s is still attached to server retrying %d times\n", volumeID, i)
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
 	return fmt.Errorf("volume did not become available within %d seconds", constants.MaxIntervalCount*5)
@@ -166,20 +162,6 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
-
-	// Log the volume status before attach
-	volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get volume: %s", err)
-	}
-	log.Printf("Volume status before attach: %s", volume.Status)
-
-	// Log the server status before attach
-	server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get server: %s", err)
-	}
-	log.Printf("Server status before attach: %s", server.AttachedVolumes)
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
@@ -200,20 +182,6 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume attachment: %s", err)
 	}
-
-	// Log the volume status after attach
-	volume, err = volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get volume: %s", err)
-	}
-	log.Printf("Volume status after attach: %s", volume.Status)
-
-	// Log the server status after attach
-	server, err = servers.Get(osclient.ComputeClient, instanceID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get server: %s", err)
-	}
-	log.Printf("Volume attachments after attach: %s", server.AttachedVolumes)
 
 	return nil
 }
@@ -255,20 +223,6 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
 
-	// Log the volume status before detach from cinder and nova
-	volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get volume: %s", err)
-	}
-	log.Printf("Volume status before detach: %s", volume.Status)
-
-	server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get server: %s", err)
-	}
-	log.Println("Volume attachments before detach:", server.AttachedVolumes)
-	log.Println("Server before detach:", server)
-
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
@@ -279,20 +233,6 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
-
-	// Log the volume status after detach from cinder and nova
-	volume, err = volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get volume: %s", err)
-	}
-	log.Printf("Volume status after detach: %s", volume.Status)
-
-	server, err = servers.Get(osclient.ComputeClient, instanceID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to get server: %s", err)
-	}
-	log.Println("Volume attachments after detach:", server.AttachedVolumes)
-	log.Printf("Server status after detach: %s", server)
 
 	return nil
 }
