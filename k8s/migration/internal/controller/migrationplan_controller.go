@@ -763,7 +763,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		vmMachineObj = nil
 		for i := range vmMachines.Items {
 			if vmMachines.Items[i].Spec.VMs.Name == vm {
-				ctxlog.Info(fmt.Sprintf("Found VMwareMachineobject '%v'", vmMachines.Items[i]))
 				vmMachineObj = &vmMachines.Items[i]
 				break
 			}

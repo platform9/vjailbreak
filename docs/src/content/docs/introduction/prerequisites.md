@@ -15,6 +15,11 @@ No, vJailbreak will remove them for you, with the help of virt-v2v. The process 
 ### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
 No, vJailbreak will install it for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
+### How does Vjailbreak handle flavors of the vm in the target openstack environment? 
+vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment.
+
+If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (We always try to find the exact match if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
+
 ### What access do I need for my vCenter user to be able to perform this migration?
 Please refer to the following table for the required privileges:
 
@@ -23,6 +28,7 @@ Please refer to the following table for the required privileges:
 | `Virtual machine.Interaction` privileges: |     |
 | `Virtual machine.Interaction.Power Off` | Allows powering off a powered-on virtual machine. This operation powers down the guest operating system. |
 | `Virtual machine.Interaction.Power On` | Allows powering on a powered-off virtual machine and resuming a suspended virtual machine. |
+| `Virtual machine.Config.ChangeTracking`| Allows enabling or disabling change tracking on a virtual machine. |
 | `Virtual machine.Guest operating system management by VIX API` | Allows managing a virtual machine by the VMware VIX API. |
 | `Virtual machine.Provisioning` | Note: All `Virtual machine.Provisioning` privileges are required.  |
 | `Virtual machine.Provisioning.Allow disk access` | Allows opening a disk on a virtual machine for random read and write access. Used mostly for remote disk mounting. |
