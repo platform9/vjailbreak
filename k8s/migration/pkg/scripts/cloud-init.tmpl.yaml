@@ -1,5 +1,6 @@
 #cloud-config
-
+password: password
+chpasswd: { expire: False }
 runcmd:
   - echo "Validating prerequisites..."
   - echo "Downloading and executing cloud-ctl setup script..."
