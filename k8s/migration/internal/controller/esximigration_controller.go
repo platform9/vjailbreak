@@ -32,6 +32,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -144,25 +145,25 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
 
 		// TODO:Omkar Assume this will be done by vPwned
-		// provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
-		// if err != nil {
-		// 	return ctrl.Result{}, err
-		// }
-		// err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
-		// if err != nil {
-		// 	return ctrl.Result{}, err
-		// }
+		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-		// // Remove the ESXi host from vCenter before changing the phase
-		// err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
-		// if err != nil {
-		// 	log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		// 	return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
-		// }
-		// log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		// Remove the ESXi host from vCenter before changing the phase
+		err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
+		if err != nil {
+			log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+			return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
+		}
+		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
-		err := r.Status().Update(ctx, scope.ESXIMigration)
+		err = r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")

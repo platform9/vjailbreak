@@ -183,27 +183,23 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			log.Error(err, "Failed to get ClusterMigration", "cluster", cluster)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get cluster migration")
 		}
 		if err := r.Delete(ctx, clusterMigration); err != nil {
-			log.Error(err, "Failed to delete ClusterMigration", "cluster", cluster)
 			return ctrl.Result{}, errors.Wrap(err, "failed to delete cluster migration")
 		}
 	}
 
 	// Delete all MigrationPlans
 	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, vm, scope.RollingMigrationPlan)
+		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, vm)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			log.Error(err, "Failed to get MigrationPlan", "vm", vm)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get migration plan")
 		}
 		if err := r.Delete(ctx, migrationPlan); err != nil {
-			log.Error(err, "Failed to delete MigrationPlan", "vm", vm)
 			return ctrl.Result{}, errors.Wrap(err, "failed to delete migration plan")
 		}
 	}
@@ -220,7 +216,7 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 
 	// Wait for all MigrationPlans to be deleted
 	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		_, err := utils.GetMigrationPlan(ctx, r.Client, vm, scope.RollingMigrationPlan)
+		_, err := utils.GetMigrationPlan(ctx, r.Client, vm)
 		if err == nil {
 			// MigrationPlan still exists, requeue
 			log.Info("MigrationPlan still exists, requeuing", "vm", vm)
@@ -257,11 +253,11 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 
 	// Get all MigrationPlans associated with this RollingMigrationPlan
 	for _, planName := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, planName, scope.RollingMigrationPlan)
+		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, planName)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Info("MigrationPlan not found, skipping", "vm", planName)
-				continue
+				// force update requeue, by sending true
+				return true, nil
 			}
 			return false, errors.Wrap(err, "failed to get migration plan")
 		}
@@ -324,7 +320,7 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 
 		for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 			for _, vmName := range cluster.VMSequence {
-				plan, err := utils.GetMigrationPlan(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
+				vmMigration, err := utils.GetVMMigration(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
 				if err != nil {
 					if apierrors.IsNotFound(err) {
 						log.Info("MigrationPlan not found, skipping", "vm", vmName.VMName)
@@ -332,10 +328,10 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 					}
 					return false, errors.Wrap(err, "failed to get migration plan")
 				}
-				if plan.Status.MigrationStatus == corev1.PodSucceeded {
+				if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodSucceeded {
 					scope.RollingMigrationPlan.Status.MigratedVMs = append(
 						scope.RollingMigrationPlan.Status.MigratedVMs, vmName.VMName)
-				} else if plan.Status.MigrationStatus == corev1.PodFailed {
+				} else if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodFailed {
 					scope.RollingMigrationPlan.Status.FailedVMs = append(
 						scope.RollingMigrationPlan.Status.FailedVMs, vmName.VMName)
 				}

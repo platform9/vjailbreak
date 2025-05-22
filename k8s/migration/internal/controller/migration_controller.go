@@ -83,6 +83,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -290,7 +293,7 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
 	}
 	if len(podList.Items) == 0 {
-		return nil, errors.New("migration pod not found")
+		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil
