@@ -96,9 +96,9 @@ func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string,
 	return esxiMigration, nil
 }
 
-func GetMigrationPlan(ctx context.Context, k8sClient client.Client, vm string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationPlan, error) {
+func GetMigrationPlan(ctx context.Context, k8sClient client.Client, migrationPlanName string) (*vjailbreakv1alpha1.MigrationPlan, error) {
 	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: vm, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: migrationPlanName, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
 		return nil, err
 	}
 	return migrationPlan, nil
@@ -708,8 +708,9 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 		return nil
 	}
 
-	// Remove pause label from rolling migration plan
-	delete(rollingMigrationPlan.Labels, constants.PauseMigrationLabel)
+	if _, ok := rollingMigrationPlan.Labels[constants.PauseMigrationLabel]; !ok {
+		return nil
+	}
 
 	// Update all child ClusterMigrations
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
@@ -774,6 +775,9 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 			}
 		}
 	}
+
+	// Remove pause label from rolling migration plan
+	delete(rollingMigrationPlan.Labels, constants.PauseMigrationLabel)
 
 	// Update the rolling migration plan itself
 	return scope.Client.Update(ctx, rollingMigrationPlan)
