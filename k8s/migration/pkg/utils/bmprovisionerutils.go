@@ -68,7 +68,7 @@ func ConvertESXiToPCDHost(ctx context.Context,
 	for i := 0; i < len(resources); i++ {
 		if resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
 			ctxlog.Info("Found a matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
-			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id)
+			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id, hs.Hardware.SystemInfo.Uuid)
 			if err != nil {
 				scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
 				updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
@@ -100,7 +100,7 @@ func PrettyPrint(v interface{}) {
 	fmt.Println(string(b))
 }
 
-func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvider providers.BMCProvider, resourceId string) error {
+func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvider providers.BMCProvider, resourceId string, hostID string) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	// Get BMConfig for the rolling migration plan
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
@@ -117,6 +117,7 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	}
 
 	cloudInit := string(secret.Data[constants.CloudInitConfigKey])
+	cloudInit = strings.ReplaceAll(cloudInit, "HOST_ID", hostID)
 	err = bmProvider.ReclaimBM(ctx, service.ReclaimBMRequest{
 		AccessInfo: &service.BMProvisionerAccessInfo{
 			BaseUrl:     bmConfig.Spec.APIUrl,
@@ -345,38 +346,6 @@ func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollin
 
 	}
 	return true, nil
-}
-
-func PrintHostsAndClustersFromResmgr(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
-
-	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
-	if err != nil {
-		return errors.Wrap(err, "failed to get openstack credentials")
-	}
-	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
-	if err != nil {
-		return errors.Wrap(err, "failed to get resmgr client")
-	}
-
-	hostList, err := resmgrClient.ListHosts(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to list hosts")
-	}
-	fmt.Println("---------------  Length Host list: ", len(hostList))
-	for _, host := range hostList {
-		fmt.Printf("---------------  Host:%s Roles: %v\n", host.ID, host.Roles)
-	}
-
-	clusterList, err := resmgrClient.ListClusters(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to list clusters")
-	}
-	fmt.Println("---------------  Length Cluster list: ", len(clusterList))
-	for _, cluster := range clusterList {
-		fmt.Println("---------------  Cluster: ", cluster.Name)
-	}
-
-	return nil
 }
 
 func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (*keystone.CachedAuthenticator, error) {

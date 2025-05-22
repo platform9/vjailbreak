@@ -39,24 +39,47 @@ spec:
           spec:
             description: PCDHostSpec defines the desired state of PCDHost
             properties:
-              hostName:
-                description: HostName is the name of the host
+              arch:
                 type: string
-            type: object
-          status:
-            description: PCDHostStatus defines the observed state of PCDHost
-            properties:
               hostID:
                 description: HostID is the ID of the host
                 type: string
+              hostName:
+                description: HostName is the name of the host
+                type: string
               hostState:
                 description: HostState is the state of the host
+                type: string
+              interfaces:
+                items:
+                  properties:
+                    ipAddresses:
+                      items:
+                        type: string
+                      type: array
+                    macAddress:
+                      type: string
+                    name:
+                      type: string
+                  type: object
+                type: array
+              osFamily:
+                type: string
+              osInfo:
                 type: string
               rolesAssigned:
                 description: RolesAssigned is the list of roles assigned to the host
                 items:
                   type: string
                 type: array
+            type: object
+          status:
+            description: PCDHostStatus defines the observed state of PCDHost
+            properties:
+              responding:
+                type: boolean
+              roleStatus:
+                type: string
             type: object
         type: object
     served: true

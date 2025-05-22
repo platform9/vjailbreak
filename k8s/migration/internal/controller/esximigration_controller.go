@@ -162,16 +162,8 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		}
 		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 
-		openstackCreds, err := utils.GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to get openstack credentials")
-		}
-		if err := utils.WaitForHostToComeUpOnPCD(ctx, r.Client, *openstackCreds); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to wait for host to come up on PCD")
-		}
-
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
-		err = r.Status().Update(ctx, scope.ESXIMigration)
+		err := r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")

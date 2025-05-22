@@ -918,6 +918,32 @@ spec:
                   - vcpus
                   type: object
                 type: array
+              pcdHostConfig:
+                description: PCDHostConfig is the list of available clusters in openstack
+                items:
+                  properties:
+                    clusterName:
+                      type: string
+                    hostLivenessInterface:
+                      type: string
+                    id:
+                      type: string
+                    imagelibInterface:
+                      type: string
+                    mgmtInterface:
+                      type: string
+                    name:
+                      type: string
+                    networkLabels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    tunnelingInterface:
+                      type: string
+                    vmConsoleInterface:
+                      type: string
+                  type: object
+                type: array
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -985,6 +1011,180 @@ spec:
               openstackValidationStatus:
                 description: OpenStackValidationStatus is the status of the OpenStack
                   validation
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: pcdclusters.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: PCDCluster
+    listKind: PCDClusterList
+    plural: pcdclusters
+    singular: pcdcluster
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PCDCluster is the Schema for the pcdclusters API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PCDClusterSpec defines the desired state of PCDCluster
+            properties:
+              clusterName:
+                description: ClusterName is the name of the PCD cluster
+                type: string
+              description:
+                description: Description is the description of the PCD cluster
+                type: string
+              enableAutoResourceRebalancing:
+                description: EnableAutoResourceRebalancing indicates if auto resource
+                  rebalancing is enabled
+                type: boolean
+              hosts:
+                description: Hosts is the list of hosts in the PCD cluster
+                items:
+                  type: string
+                type: array
+              rebalancingFrequencyMins:
+                description: RebalancingFrequencyMins defines how often rebalancing
+                  occurs in minutes
+                type: integer
+              vmHighAvailability:
+                description: VMHighAvailability indicates if VM high availability
+                  is enabled
+                type: boolean
+            type: object
+          status:
+            description: PCDClusterStatus defines the observed state of PCDCluster
+            properties:
+              aggregateID:
+                description: AggregateID is the aggregate ID in the PCD cluster
+                type: integer
+              clusterID:
+                description: ClusterID is the ID of the PCD cluster
+                type: string
+              createdAt:
+                description: CreatedAt indicates when the cluster was created
+                type: string
+              updatedAt:
+                description: UpdatedAt indicates when the cluster was last updated
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: pcdhosts.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: PCDHost
+    listKind: PCDHostList
+    plural: pcdhosts
+    singular: pcdhost
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PCDHost is the Schema for the pcdhosts API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PCDHostSpec defines the desired state of PCDHost
+            properties:
+              arch:
+                type: string
+              hostID:
+                description: HostID is the ID of the host
+                type: string
+              hostName:
+                description: HostName is the name of the host
+                type: string
+              hostState:
+                description: HostState is the state of the host
+                type: string
+              interfaces:
+                items:
+                  properties:
+                    ipAddresses:
+                      items:
+                        type: string
+                      type: array
+                    macAddress:
+                      type: string
+                    name:
+                      type: string
+                  type: object
+                type: array
+              osFamily:
+                type: string
+              osInfo:
+                type: string
+              rolesAssigned:
+                description: RolesAssigned is the list of roles assigned to the host
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: PCDHostStatus defines the observed state of PCDHost
+            properties:
+              responding:
+                type: boolean
+              roleStatus:
                 type: string
             type: object
         type: object
@@ -2067,6 +2267,8 @@ rules:
   - migrationtemplates
   - networkmappings
   - openstackcreds
+  - pcdclusters
+  - pcdhosts
   - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
@@ -2092,6 +2294,8 @@ rules:
   - migrationtemplates/finalizers
   - networkmappings/finalizers
   - openstackcreds/finalizers
+  - pcdclusters/finalizers
+  - pcdhosts/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
@@ -2109,6 +2313,8 @@ rules:
   - migrationtemplates/status
   - networkmappings/status
   - openstackcreds/status
+  - pcdclusters/status
+  - pcdhosts/status
   - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status
@@ -2366,6 +2572,106 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - openstackcreds/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-pcdcluster-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdclusters/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-pcdcluster-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdclusters/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-pcdhost-editor-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdhosts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdhosts/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-pcdhost-viewer-role
+rules:
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdhosts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - pcdhosts/status
   verbs:
   - get
 ---
@@ -2800,7 +3106,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/omkardeshpande7/vjailbreak-controller:resmgr
+        image: docker.io/omkardeshpande7/vjailbreak-controller:resmgr
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

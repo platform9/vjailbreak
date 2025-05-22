@@ -42,17 +42,41 @@ spec:
               clusterName:
                 description: ClusterName is the name of the PCD cluster
                 type: string
+              description:
+                description: Description is the description of the PCD cluster
+                type: string
+              enableAutoResourceRebalancing:
+                description: EnableAutoResourceRebalancing indicates if auto resource
+                  rebalancing is enabled
+                type: boolean
               hosts:
                 description: Hosts is the list of hosts in the PCD cluster
                 items:
                   type: string
                 type: array
+              rebalancingFrequencyMins:
+                description: RebalancingFrequencyMins defines how often rebalancing
+                  occurs in minutes
+                type: integer
+              vmHighAvailability:
+                description: VMHighAvailability indicates if VM high availability
+                  is enabled
+                type: boolean
             type: object
           status:
             description: PCDClusterStatus defines the observed state of PCDCluster
             properties:
+              aggregateID:
+                description: AggregateID is the aggregate ID in the PCD cluster
+                type: integer
               clusterID:
                 description: ClusterID is the ID of the PCD cluster
+                type: string
+              createdAt:
+                description: CreatedAt indicates when the cluster was created
+                type: string
+              updatedAt:
+                description: UpdatedAt indicates when the cluster was last updated
                 type: string
             type: object
         type: object

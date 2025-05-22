@@ -22,6 +22,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type HostConfig struct {
+	ID                   string            `json:"id,omitempty"`
+	Name                 string            `json:"name,omitempty"`
+	MgmtInterface        string            `json:"mgmtInterface,omitempty"`
+	VMConsoleInterface   string            `json:"vmConsoleInterface,omitempty"`
+	HostLivenessInterface string            `json:"hostLivenessInterface,omitempty"`
+	TunnelingInterface   string            `json:"tunnelingInterface,omitempty"`
+	ImagelibInterface    string            `json:"imagelibInterface,omitempty"`
+	NetworkLabels        map[string]string `json:"networkLabels,omitempty"`
+	ClusterName          string            `json:"clusterName,omitempty"`
+}
+
 // OpenStackCredsInfo holds the actual credentials after decoding
 type OpenStackCredsInfo struct {
 	// AuthURL is the OpenStack authentication URL
@@ -52,6 +64,9 @@ type OpenstackCredsSpec struct {
 
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`
+
+	// PCDHostConfig is the list of available clusters in openstack
+	PCDHostConfig []HostConfig `json:"pcdHostConfig,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

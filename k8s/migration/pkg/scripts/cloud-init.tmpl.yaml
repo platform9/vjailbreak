@@ -1,6 +1,13 @@
 #cloud-config
 password: password
 chpasswd: { expire: False }
+write_files:
+  - path: /etc/pf9/host_id.conf
+    content: |
+      [hostagent]
+      host_id = HOST_ID
+    owner: root:root
+    permissions: '0644'
 runcmd:
   - echo "Validating prerequisites..."
   - echo "Downloading and executing cloud-ctl setup script..."

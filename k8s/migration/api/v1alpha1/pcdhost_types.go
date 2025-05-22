@@ -20,20 +20,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type PCDHostInterface struct {
+	IPAddresses []string `json:"ipAddresses,omitempty"`
+	MACAddress  string   `json:"macAddress,omitempty"`
+	Name        string   `json:"name,omitempty"`
+}
+
 // PCDHostSpec defines the desired state of PCDHost
 type PCDHostSpec struct {
 	// HostName is the name of the host
 	HostName string `json:"hostName,omitempty"`
-}
 
-// PCDHostStatus defines the observed state of PCDHost
-type PCDHostStatus struct {
 	// HostID is the ID of the host
 	HostID string `json:"hostID,omitempty"`
 	// HostState is the state of the host
 	HostState string `json:"hostState,omitempty"`
 	// RolesAssigned is the list of roles assigned to the host
-	RolesAssigned []string `json:"rolesAssigned,omitempty"`
+	RolesAssigned []string           `json:"rolesAssigned,omitempty"`
+	OSFamily      string             `json:"osFamily,omitempty"`
+	Arch          string             `json:"arch,omitempty"`
+	OSInfo        string             `json:"osInfo,omitempty"`
+	Interfaces    []PCDHostInterface `json:"interfaces,omitempty"`
+}
+
+// PCDHostStatus defines the observed state of PCDHost
+type PCDHostStatus struct {
+	Responding bool   `json:"responding,omitempty"`
+	RoleStatus string `json:"roleStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
