@@ -66,21 +66,6 @@ interface ClusterMigration {
     };
 }
 
-// VM interface definition to fix the linter error
-interface VM {
-    id: string;
-    name: string;
-    status: string;
-    cluster: string;
-    ip: string;
-    esxHost: string;
-    networks: string[];
-    datastores: string[];
-    cpu: number;
-    memory: number;
-    powerState: string;
-}
-
 const CdsIconWrapper = styled('div')({
     marginRight: 8,
     display: 'flex',
@@ -226,7 +211,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
         {
             field: 'name',
             headerName: 'ESX Name',
-            flex: 1.5,
+            flex: 1,
             renderCell: (params) => (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CdsIconWrapper>
@@ -241,7 +226,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
         {
             field: 'state',
             headerName: 'State',
-            flex: 0.6,
+            flex: 1,
             renderCell: (params) => <StatusChip status={params.value as string} />
         },
         {

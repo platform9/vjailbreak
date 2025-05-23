@@ -35,6 +35,18 @@ export interface OpenstackFlavor {
   disk: number
 }
 
+export interface PCDHostConfig {
+  clusterName: string
+  hostLivenessInterface: string
+  id: string
+  imagelibInterface: string
+  mgmtInterface: string
+  name: string
+  networkLabels: Record<string, string>
+  tunnelingInterface: string
+  vmConsoleInterface: string
+}
+
 export interface OpenstackCredsSpec {
   // For credentials using secretRef (new approach)
   secretRef?: {
@@ -49,6 +61,7 @@ export interface OpenstackCredsSpec {
   OS_TENANT_NAME?: string
   OS_INSECURE?: boolean
   flavors?: OpenStackFlavor[]
+  pcdHostConfig?: PCDHostConfig[]
 }
 
 export interface GetOpenstackCredsListMetadata {

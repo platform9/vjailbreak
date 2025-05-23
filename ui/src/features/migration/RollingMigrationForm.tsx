@@ -22,10 +22,12 @@ import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
 import { getBMConfigList, getBMConfig } from "src/api/bmconfig/bmconfig"
 import { BMConfig } from "src/api/bmconfig/model"
 import MaasConfigDetailsModal from "src/pages/dashboard/BMConfigDetailsModal"
-import { getOpenstackCredentialsList, getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds"
+import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds"
 import { OpenstackCreds } from "src/api/openstack-creds/model"
+import { getPCDClusters } from "src/api/pcd-clusters"
+import { PCDCluster } from "src/api/pcd-clusters/model"
 import NetworkAndStorageMappingStep, { ResourceMap } from "./NetworkAndStorageMappingStep"
-import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence } from "src/api/rolling-migration-plans"
+import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence, ClusterMapping } from "src/api/rolling-migration-plans"
 import { getSecret } from "src/api/secrets/secrets"
 import vmwareLogo from "src/assets/vmware.jpeg"
 // Import required APIs for creating migration resources
@@ -109,8 +111,9 @@ const StyledDrawer = styled(Drawer)(() => ({
 }))
 
 interface PcdDataItem {
+    id: string;
     name: string;
-    credName: string;
+    openstackCredName: string;
 }
 
 interface ESXHost {
@@ -121,6 +124,7 @@ interface ESXHost {
     maasState: string;
     vms: number;
     state: string;
+    pcdHostConfigName?: string;
 }
 
 interface VM {
@@ -148,6 +152,20 @@ const esxColumns: GridColDef[] = [
                     <cds-icon shape="host" size="md" badge="info"></cds-icon>
                 </CdsIconWrapper>
                 {params.value}
+            </Box>
+        ),
+    },
+    {
+        field: "pcdHostConfigName",
+        headerName: "PCD Host Config",
+        flex: 1,
+        align: "center",
+        valueGetter: (value) => value || "—",
+        renderCell: (params) => (
+            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                <Typography variant="body2">
+                    {params.value || "—"}
+                </Typography>
             </Box>
         ),
     },
@@ -336,10 +354,21 @@ const CustomToolbarWithActions = (props) => {
 };
 
 const CustomESXToolbarWithActions = (props) => {
-    const { ...toolbarProps } = props;
+    const { rowSelectionModel, onAddPcdHost, ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
+            {rowSelectionModel && rowSelectionModel.length > 0 && (
+                <Button
+                    variant="text"
+                    color="primary"
+                    onClick={onAddPcdHost}
+                    size="small"
+                    sx={{ ml: 1 }}
+                >
+                    Add PCD Host ({rowSelectionModel.length})
+                </Button>
+            )}
             <CustomSearchToolbar {...toolbarProps} />
         </Box>
     );
@@ -435,6 +464,11 @@ export default function RollingMigrationFormDrawer({
     const [selectedPcdCredName, setSelectedPcdCredName] = useState("");
 
     const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([]);
+    const [selectedESXHosts, setSelectedESXHosts] = useState<GridRowSelectionModel>([]);
+    const [esxHostToPcdMapping, setEsxHostToPcdMapping] = useState<Record<string, string>>({});
+    const [pcdHostConfigDialogOpen, setPcdHostConfigDialogOpen] = useState(false);
+    const [selectedPcdHostConfig, setSelectedPcdHostConfig] = useState("");
+    const [updatingPcdMapping, setUpdatingPcdMapping] = useState(false);
 
     const [loadingHosts, setLoadingHosts] = useState(false);
     const [loadingVMs, setLoadingVMs] = useState(false);
@@ -535,34 +569,28 @@ export default function RollingMigrationFormDrawer({
     const fetchPcdData = async () => {
         setLoadingPCD(true);
         try {
-            const openstackCreds = await getOpenstackCredentialsList(VJAILBREAK_DEFAULT_NAMESPACE);
+            const pcdClusters = await getPCDClusters(VJAILBREAK_DEFAULT_NAMESPACE);
 
-            if (!openstackCreds || openstackCreds.length === 0) {
+            if (!pcdClusters || pcdClusters.items.length === 0) {
                 setPcdData([]);
                 setLoadingPCD(false);
                 return;
             }
 
-            const filteredPcds = openstackCreds
-                .filter(cred => {
-                    const metadata = cred.metadata as {
-                        name: string,
-                        namespace: string,
-                        labels?: Record<string, string>
-                    };
-                    return metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
-                })
-                .map(cred => {
-                    const credName = cred.metadata.name;
-                    return {
-                        name: credName,
-                        credName: credName
-                    };
-                });
+            const clusterData = pcdClusters.items.map((cluster: PCDCluster) => {
+                const clusterName = cluster.spec.clusterName;
+                const openstackCredName = cluster.metadata.labels?.["vjailbreak.k8s.pf9.io/openstackcreds"] || "";
 
-            setPcdData(filteredPcds);
+                return {
+                    id: cluster.metadata.name,
+                    name: clusterName,
+                    openstackCredName: openstackCredName
+                };
+            });
+
+            setPcdData(clusterData);
         } catch (error) {
-            console.error("Failed to fetch PCD data:", error);
+            console.error("Failed to fetch PCD clusters:", error);
         } finally {
             setLoadingPCD(false);
         }
@@ -794,11 +822,15 @@ export default function RollingMigrationFormDrawer({
     const handleDestinationPCDChange = (event) => {
         const value = event.target.value;
         setDestinationPCD(value);
-        setSelectedPcdCredName(value);
 
         if (value) {
-            fetchOpenstackCredentialDetails(value);
+            const selectedPCD = pcdData.find(p => p.id === value);
+            if (selectedPCD) {
+                setSelectedPcdCredName(selectedPCD.openstackCredName);
+                fetchOpenstackCredentialDetails(selectedPCD.openstackCredName);
+            }
         } else {
+            setSelectedPcdCredName("");
             setOpenstackCredData(null);
         }
     };
@@ -861,6 +893,16 @@ export default function RollingMigrationFormDrawer({
 
         return Array.from(new Set(["datastore1", "datastore2", "ssd-storage"]));
     }, [vmsWithAssignments, selectedVMs]);
+
+    // Calculate ESX host to PCD config mapping status
+    const esxHostMappingStatus = useMemo(() => {
+        const mappedHostsCount = orderedESXHosts.filter(host => host.pcdHostConfigName).length;
+        return {
+            mapped: mappedHostsCount,
+            total: orderedESXHosts.length,
+            fullyMapped: mappedHostsCount === orderedESXHosts.length
+        };
+    }, [orderedESXHosts]);
 
     const openstackNetworks = useMemo(() => {
         if (!openstackCredData) return [];
@@ -926,6 +968,15 @@ export default function RollingMigrationFormDrawer({
                     esxiName: vm.esxHost
                 })) as VMSequence[];
 
+            // Create cluster mapping between VMware cluster and PCD cluster
+            const selectedPCD = pcdData.find(p => p.id === destinationPCD);
+            const pcdClusterName = selectedPCD?.name || "";
+
+            const clusterMapping: ClusterMapping[] = [{
+                vmwareClusterName: clusterName,
+                pcdClusterName: pcdClusterName
+            }];
+
             // 1. Create network mapping
             const networkMappingJson = createNetworkMappingJson({
                 networkMappings: networkMappings.map(mapping => ({
@@ -957,6 +1008,7 @@ export default function RollingMigrationFormDrawer({
             const migrationPlanJson = createRollingMigrationPlanJson({
                 clusterName,
                 vms: selectedVMsData,
+                clusterMapping,
                 bmConfigRef: {
                     name: selectedMaasConfig?.metadata.name || "",
                 },
@@ -1039,7 +1091,14 @@ export default function RollingMigrationFormDrawer({
             return true;
         });
 
-        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated;
+        // PCD host config validation - ensure all selected ESX hosts have PCD host configs assigned
+        const pcdHostConfigValid = selectedESXHosts.length === 0 ||
+            selectedESXHosts.every(hostId => {
+                const host = orderedESXHosts.find(h => h.id === hostId);
+                return host?.pcdHostConfigName;
+            });
+
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid;
     }, [
         sourceCluster,
         destinationPCD,
@@ -1052,7 +1111,9 @@ export default function RollingMigrationFormDrawer({
         storageMappings,
         selectedMigrationOptions,
         params,
-        fieldErrors
+        fieldErrors,
+        selectedESXHosts,
+        orderedESXHosts
     ]);
 
     useKeyboardSubmit({
@@ -1068,6 +1129,61 @@ export default function RollingMigrationFormDrawer({
 
     const handleCloseMaasDetailsModal = () => {
         setMaasDetailsModalOpen(false);
+    };
+
+    const handleOpenPcdHostConfigDialog = () => {
+        if (selectedESXHosts.length === 0) return;
+        setPcdHostConfigDialogOpen(true);
+    };
+
+    const handleClosePcdHostConfigDialog = () => {
+        setPcdHostConfigDialogOpen(false);
+        setSelectedPcdHostConfig("");
+    };
+
+    const handlePcdHostConfigChange = (event) => {
+        setSelectedPcdHostConfig(event.target.value);
+    };
+
+    const handleApplyPcdHostConfig = async () => {
+        if (!selectedPcdHostConfig) {
+            handleClosePcdHostConfigDialog();
+            return;
+        }
+
+        setUpdatingPcdMapping(true);
+
+        try {
+            const availablePcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || [];
+            const selectedPcdConfig = availablePcdHostConfigs.find(config => config.id === selectedPcdHostConfig);
+            const pcdConfigName = selectedPcdConfig ? selectedPcdConfig.name : selectedPcdHostConfig;
+
+            // Update the ESX hosts with the selected PCD host config
+            const updatedESXHosts = orderedESXHosts.map(host => {
+                if (selectedESXHosts.includes(host.id)) {
+                    return {
+                        ...host,
+                        pcdHostConfigName: pcdConfigName
+                    };
+                }
+                return host;
+            });
+
+            setOrderedESXHosts(updatedESXHosts);
+
+            // Update the mapping record
+            const newMapping = { ...esxHostToPcdMapping };
+            selectedESXHosts.forEach(hostId => {
+                newMapping[hostId as string] = selectedPcdHostConfig;
+            });
+            setEsxHostToPcdMapping(newMapping);
+
+            handleClosePcdHostConfigDialog();
+        } catch (error) {
+            console.error("Error updating PCD host config mapping:", error);
+        } finally {
+            setUpdatingPcdMapping(false);
+        }
     };
 
     return (
@@ -1093,7 +1209,7 @@ export default function RollingMigrationFormDrawer({
                                             displayEmpty
                                             disabled={loading}
                                             renderValue={(selected) => {
-                                                if (!selected) return <em>Select Cluster</em>;
+                                                if (!selected) return <em>Select VMware Cluster</em>;
                                                 const parts = selected.split(":");
                                                 const credName = parts[0];
 
@@ -1112,7 +1228,7 @@ export default function RollingMigrationFormDrawer({
                                                 }
                                             }}
                                         >
-                                            <MenuItem value="" disabled><em>Select Cluster</em></MenuItem>
+                                            <MenuItem value="" disabled><em>Select VMware Cluster</em></MenuItem>
 
                                             {loading ? (
                                                 <MenuItem disabled>Loading...</MenuItem>
@@ -1179,8 +1295,8 @@ export default function RollingMigrationFormDrawer({
                                             displayEmpty
                                             disabled={!sourceCluster || loadingPCD}
                                             renderValue={(selected) => {
-                                                if (!selected) return <em>Select Destination</em>;
-                                                const pcd = pcdData.find(p => p.credName === selected);
+                                                if (!selected) return <em>Select PCD Cluster</em>;
+                                                const pcd = pcdData.find(p => p.id === selected);
                                                 return pcd?.name || selected;
                                             }}
                                             MenuProps={{
@@ -1191,19 +1307,26 @@ export default function RollingMigrationFormDrawer({
                                                 }
                                             }}
                                         >
-                                            <MenuItem value="" disabled><em>Select Destination</em></MenuItem>
+                                            <MenuItem value="" disabled><em>Select PCD Cluster</em></MenuItem>
 
                                             {loadingPCD ? (
                                                 <MenuItem disabled>Loading...</MenuItem>
                                             ) : pcdData.length === 0 ? (
-                                                <MenuItem disabled>No PCD destinations found</MenuItem>
+                                                <MenuItem disabled>No PCD clusters found</MenuItem>
                                             ) : (
                                                 pcdData.map((pcd) => (
                                                     <MenuItem
-                                                        key={pcd.credName}
-                                                        value={pcd.credName}
+                                                        key={pcd.id}
+                                                        value={pcd.id}
                                                     >
-                                                        {pcd.name}
+                                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                            <CdsIconWrapper>
+                                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                                {/* @ts-ignore */}
+                                                                <cds-icon shape="cluster" size="md"></cds-icon>
+                                                            </CdsIconWrapper>
+                                                            {pcd.name}
+                                                        </Box>
                                                     </MenuItem>
                                                 ))
                                             )}
@@ -1242,6 +1365,20 @@ export default function RollingMigrationFormDrawer({
                     <Box>
                         <Step stepNumber="3" label="ESXi Hosts" />
                         <Box sx={{ ml: 5, mt: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Select ESXi hosts and assign PCD host configurations
+                                </Typography>
+                                {esxHostMappingStatus.fullyMapped && esxHostMappingStatus.total > 0 ? (
+                                    <Typography variant="body2" color="success.main">
+                                        All hosts mapped ✓
+                                    </Typography>
+                                ) :
+                                    <Typography variant="body2" color="warning.main">
+                                        {esxHostMappingStatus.mapped} of {esxHostMappingStatus.total} hosts unmapped
+                                    </Typography>
+                                }
+                            </Box>
                             <Paper sx={{ width: "100%", height: 389 }}>
                                 <DataGrid
                                     rows={orderedESXHosts}
@@ -1254,8 +1391,17 @@ export default function RollingMigrationFormDrawer({
                                     }}
                                     pageSizeOptions={[5, 10, 25]}
                                     rowHeight={45}
+                                    checkboxSelection
+                                    onRowSelectionModelChange={setSelectedESXHosts}
+                                    rowSelectionModel={selectedESXHosts}
                                     slots={{
-                                        toolbar: CustomESXToolbarWithActions
+                                        toolbar: (props) => (
+                                            <CustomESXToolbarWithActions
+                                                {...props}
+                                                rowSelectionModel={selectedESXHosts}
+                                                onAddPcdHost={handleOpenPcdHostConfigDialog}
+                                            />
+                                        )
                                     }}
                                     disableColumnMenu
                                     disableColumnFilter
@@ -1264,7 +1410,6 @@ export default function RollingMigrationFormDrawer({
                             </Paper>
                         </Box>
                     </Box>
-
 
                     <Box>
                         <Step stepNumber="4" label="Select Virtual Machines to Migrate" />
@@ -1489,6 +1634,58 @@ export default function RollingMigrationFormDrawer({
                     />
                 )
             }
+
+            {/* PCD Host Config Assignment Dialog */}
+            <Dialog
+                open={pcdHostConfigDialogOpen}
+                onClose={handleClosePcdHostConfigDialog}
+                fullWidth
+                maxWidth="sm"
+            >
+                <DialogTitle>
+                    Assign PCD Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
+                </DialogTitle>
+                <DialogContent>
+                    <Box sx={{ my: 2 }}>
+                        <Typography variant="body2" gutterBottom>
+                            Select PCD Host Configuration
+                        </Typography>
+                        <Select
+                            fullWidth
+                            value={selectedPcdHostConfig}
+                            onChange={handlePcdHostConfigChange}
+                            size="small"
+                            sx={{ mt: 1 }}
+                            displayEmpty
+                        >
+                            <MenuItem value="">
+                                <em>Select a PCD host configuration</em>
+                            </MenuItem>
+                            {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
+                                <MenuItem key={config.id} value={config.id}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="body1">{config.name}</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Management Interface: {config.mgmtInterface}
+                                        </Typography>
+                                    </Box>
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleClosePcdHostConfigDialog}>Cancel</Button>
+                    <Button
+                        onClick={handleApplyPcdHostConfig}
+                        variant="contained"
+                        color="primary"
+                        disabled={!selectedPcdHostConfig || updatingPcdMapping}
+                    >
+                        {updatingPcdMapping ? "Applying..." : "Apply to selected hosts"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </StyledDrawer >
     );
 } 

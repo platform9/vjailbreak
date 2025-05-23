@@ -31,6 +31,7 @@ export interface ItemMetadata {
 
 export interface RollingMigrationPlanSpec {
   clusterSequence: ClusterSequence[]
+  clusterMapping: ClusterMapping[]
   bmConfigRef: BMConfigRef
   advancedOptions?: Record<string, unknown>
   firstBootScript?: string
@@ -41,6 +42,11 @@ export interface RollingMigrationPlanSpec {
 export interface ClusterSequence {
   clusterName: string
   vmSequence: VMSequence[]
+}
+
+export interface ClusterMapping {
+  vmwareClusterName: string
+  pcdClusterName: string
 }
 
 export interface VMSequence {
