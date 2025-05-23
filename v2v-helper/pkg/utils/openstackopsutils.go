@@ -128,10 +128,37 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 			return fmt.Errorf("volume %s is in error state", volumeID)
 		}
 
+		instanceID, err := GetCurrentInstanceUUID()
+		if err != nil {
+			return fmt.Errorf("failed to get instance ID: %s", err)
+		}
+
+		// Check if the volume is available from nova side as well
+		server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
+		if err != nil {
+			return fmt.Errorf("failed to get server: %s", err)
+		}
+
+		// get the attachments from the server
+		found := false
+		attachments := server.AttachedVolumes
+		for _, attachment := range attachments {
+			if attachment.ID == volumeID {
+				log.Printf("Volume %s is attached to server %s, retrying %d times", volumeID, instanceID, i)
+				found = true
+				break
+			}
+		}
+		log.Printf("In waitforvolume func Volume %s status from cinder: %s", volumeID, volume.Status)
+		log.Printf("In waitforvolume func Volume %s attachments from nova: %+v", volumeID, attachments)
+		log.Printf("In waitforvolume func Volume %s attachments from cinder: %+v", volumeID, volume.Attachments)
 		// Check if volume is available and there are no attachments to the volume
-		if volume.Status == "available" && len(volume.Attachments) == 0 {
+		if volume.Status == "available" && len(volume.Attachments) == 0 && !found {
+			log.Printf("Volume %s is available and there are no attachments to the volume", volumeID)
 			return nil
 		}
+
+		log.Printf("Volume %s is still attached to server retrying %d times", volumeID, i)
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
 	}
 	return fmt.Errorf("volume did not become available within %d seconds", constants.MaxIntervalCount*5)
@@ -164,6 +191,8 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 			DeleteOnTermination: false,
 		}).Extract()
 		if err == nil || strings.Contains(err.Error(), "already attached") {
+			log.Printf("Volume %s is already attached to server", volumeID)
+			err = nil
 			break
 		}
 		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
