@@ -55,19 +55,26 @@ const columns: GridColDef[] = [
         field: "name",
         headerName: "Name",
         valueGetter: (_, row) => row.spec?.vmName,
-        flex: 1,
+        flex: 0.7,
     },
     {
         field: "status",
         headerName: "Status",
         valueGetter: (_, row) => row?.status?.phase || "Pending",
-        flex: 1,
+        flex: 0.5,
         sortComparator: (v1, v2) => {
             const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
             const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
             return order1 - order2;
         }
     },
+    {
+        field: "agent",
+        headerName: "Agent",
+        valueGetter: (_, row) => row.status?.agentName,
+        flex: 1,
+    },
+
     {
         field: "status.conditions",
         headerName: "Progress",

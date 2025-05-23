@@ -3,6 +3,7 @@ import {
   VMSequence,
   MigrationStrategy,
   BMConfigRef,
+  ClusterMapping,
   RollingMigrationPlanSpec,
 } from "./model"
 
@@ -10,6 +11,7 @@ interface CreateRollingMigrationPlanParams {
   name?: string
   clusterName: string
   vms: VMSequence[]
+  clusterMapping: ClusterMapping[]
   bmConfigRef: BMConfigRef
   advancedOptions?: Record<string, unknown>
   firstBootScript?: string
@@ -25,6 +27,7 @@ export const createRollingMigrationPlanJson = (
     name,
     clusterName,
     vms,
+    clusterMapping,
     bmConfigRef,
     advancedOptions,
     firstBootScript,
@@ -40,6 +43,7 @@ export const createRollingMigrationPlanJson = (
         vmSequence: vms,
       },
     ],
+    clusterMapping,
     bmConfigRef,
   }
 

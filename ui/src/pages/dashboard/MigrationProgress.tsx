@@ -9,6 +9,10 @@ const ProgressContainer = styled(Box)({
   display: "flex",
   alignItems: "center",
   height: "100%",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  maxWidth: "100%",
+  overflow: "hidden",
 })
 
 interface MigrationProgressProps {
