@@ -303,8 +303,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					// 11. Copy Changed Blocks over
 					done = false
 					migobj.logMessage("Copying changed blocks")
-
-					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+					err = migobj.retryOperation(ctx, constants.MaxRetries, constants.RetryDelay,
+						fmt.Sprintf("copy changed blocks for disk %d", idx),
+						func() error {
+							return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+						})
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
 					}
@@ -861,4 +864,26 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
 	return nil
+}
+
+// Helper function for retrying operations
+func (migobj *Migrate) retryOperation(ctx context.Context, maxRetries int, delay time.Duration, operationName string, op func() error) error {
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if err := ctx.Err(); err != nil {
+			return err // Context canceled
+		}
+
+		if i > 0 {
+			migobj.logMessage(fmt.Sprintf("Retrying %s (attempt %d/%d)", operationName, i+1, maxRetries))
+			time.Sleep(delay)
+		}
+
+		if err := op(); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return lastErr
 }
