@@ -387,6 +387,9 @@ export default function MigrationFormDrawer({
         dataCopyStart: params.dataCopyStartTime,
       }),
       ...(selectedMigrationOptions.cutoverOption &&
+        params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { adminInitiatedCutOver: true }),
+
+      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
       ...(selectedMigrationOptions.cutoverOption &&
