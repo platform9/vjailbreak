@@ -52,7 +52,6 @@ import (
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
-	//"github.com/vmware/govmomi/vim25/types"
 )
 
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
@@ -142,10 +141,10 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
-	log := scope.Logger
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
 	// The object is being deleted
-	log.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
+	ctxlog.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
 
 	// Now that the finalizer has completed deletion tasks, we can remove it
 	// to allow deletion of the Migration object
@@ -159,9 +158,9 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 
 func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, scope *scope.MigrationPlanScope, vm string) error {
 	migrationplan := scope.MigrationPlan
-	log := scope.Logger
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	log.Info(fmt.Sprintf("Performing post-migration actions for VM '%s' in MigrationPlan '%s'", vm, migrationplan.Name))
+	ctxlog.Info(fmt.Sprintf("Performing post-migration actions for VM '%s' in MigrationPlan '%s'", vm, migrationplan.Name))
 
 	// Fetch MigrationTemplate to get vCenter reference
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
@@ -222,7 +221,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	// Ensure folder exists before moving VM
 	_, err = EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName)
 	if err != nil {
-		log.Error(err, "Failed to create/verify target folder")
+		ctxlog.Error(err, "Failed to create/verify target folder")
 		return fmt.Errorf("failed to ensure folder '%s' exists: %w", folderName, err)
 	}
 
@@ -232,22 +231,22 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		suffix = "_migrated_to_pcd" // Default if not specified
 	}
 	newVMName := vm + suffix
-	log.Info(fmt.Sprintf("Renaming source VM '%s' to '%s'", vm, newVMName))
+	ctxlog.Info(fmt.Sprintf("Renaming source VM '%s' to '%s'", vm, newVMName))
 	err = vcClient.RenameVM(ctx, vm, newVMName)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to rename VM '%s' to '%s'", vm, newVMName))
+		ctxlog.Error(err, fmt.Sprintf("Failed to rename VM '%s' to '%s'", vm, newVMName))
 		return fmt.Errorf("failed to rename VM '%s': %w", vm, err)
 	}
 
 	// Move the VM to the specified folder
-	log.Info(fmt.Sprintf("Moving source VM '%s' to folder '%s'", vm, folderName))
+	ctxlog.Info(fmt.Sprintf("Moving source VM '%s' to folder '%s'", vm, folderName))
 	err = vcClient.MoveVMFolder(ctx, newVMName, folderName)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to move VM '%s' to folder '%s'", vm, folderName))
+		ctxlog.Error(err, fmt.Sprintf("Failed to move VM '%s' to folder '%s'", vm, folderName))
 		return fmt.Errorf("failed to move VM '%s' to folder '%s': %w", vm, folderName, err)
 	}
 
-	log.Info(fmt.Sprintf("Successfully completed post-migration actions for VM '%s'", vm))
+	ctxlog.Info(fmt.Sprintf("Successfully completed post-migration actions for VM '%s'", vm))
 	return nil
 }
 
