@@ -326,6 +326,19 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 			}
 			if final {
+				// If final copy is done, break out of the loop
+				// Check if all disks have copied successfully
+				failedDisks := []int{}
+				for idx, v := range diskCopySucceeded {
+					if !v {
+						migobj.logMessage("Failed to do final incremental copy for disk " + string(idx))
+						failedDisks = append(failedDisks, idx)
+					}
+				}
+				if len(failedDisks) > 0 {
+					migobj.logMessage("Failed to do final incremental copy for one or more disks")
+					return vminfo, fmt.Errorf("failed to do final incremental copy for one or more disks")
+				}
 				break
 			}
 			if done || incrementalCopyCount > 20 {
