@@ -21,7 +21,7 @@ import (
 type VMOperations interface {
 	GetVMInfo(ostype string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
-	UpdateDiskInfo(vminfo VMInfo) (VMInfo, error)
+	UpdateDiskInfo(vminfo VMInfo, diskCopySucceeded map[int]bool) (VMInfo, error)
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
@@ -193,7 +193,7 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
+func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo, diskCopySucceeded map[int]bool) (VMInfo, error) {
 	pc := vmops.vcclient.VCPropertyCollector
 	vm := vmops.VMObj
 	var snapbackingdisk []string
@@ -231,7 +231,11 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 		for idx := range vminfo.VMDisks {
 			vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 			vminfo.VMDisks[idx].Snapname = snapname[idx]
-			vminfo.VMDisks[idx].ChangeID = snapid[idx]
+
+			// Only if disk copy succeeded, update the change ID. or else keep the old change ID
+			if diskCopySucceeded[idx] {
+				vminfo.VMDisks[idx].ChangeID = snapid[idx]
+			}
 		}
 	}
 

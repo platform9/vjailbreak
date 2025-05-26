@@ -232,8 +232,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
+	// Initialise the map with disk idx to true for first copy
+	diskCopySucceededInitial := make(map[int]bool)
+	for idx := range vminfo.VMDisks {
+		diskCopySucceededInitial[idx] = true
+	}
 
-	vminfo, err = vmops.UpdateDiskInfo(vminfo)
+	// Update disk info with snapshot name and backing disk
+	vminfo, err = vmops.UpdateDiskInfo(vminfo, diskCopySucceededInitial)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 	}
@@ -258,14 +264,17 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	incrementalCopyCount := 0
 	for {
+		diskCopySucceeded := make(map[int]bool)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx := range vminfo.VMDisks {
 				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
+				// Returning an error here since the entire disk copy failed
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
+				diskCopySucceeded[idx] = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -284,6 +293,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 				if len(changedAreas.ChangedArea) == 0 {
 					migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+					diskCopySucceeded[idx] = true
 				} else {
 					migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
 
@@ -303,16 +313,16 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					// 11. Copy Changed Blocks over
 					done = false
 					migobj.logMessage("Copying changed blocks")
-					err = migobj.retryOperation(ctx, constants.MaxRetries, constants.RetryDelay,
-						fmt.Sprintf("copy changed blocks for disk %d", idx),
-						func() error {
-							return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-						})
+
+					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks for disk %d: %s, will retry in the next iteration", idx, err))
+						diskCopySucceeded[idx] = false
+						continue
 					}
 					migobj.logMessage("Finished copying changed blocks")
 					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
+					diskCopySucceeded[idx] = true
 				}
 			}
 			if final {
@@ -338,7 +348,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
-		vminfo, err = vmops.UpdateDiskInfo(vminfo)
+		// Only update the change id for disks that have successfully done the block copy.
+		vminfo, err = vmops.UpdateDiskInfo(vminfo, diskCopySucceeded)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 		}
@@ -864,26 +875,4 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
 	return nil
-}
-
-// Helper function for retrying operations
-func (migobj *Migrate) retryOperation(ctx context.Context, maxRetries int, delay time.Duration, operationName string, op func() error) error {
-	var lastErr error
-	for i := 0; i < maxRetries; i++ {
-		if err := ctx.Err(); err != nil {
-			return err // Context canceled
-		}
-
-		if i > 0 {
-			migobj.logMessage(fmt.Sprintf("Retrying %s (attempt %d/%d)", operationName, i+1, maxRetries))
-			time.Sleep(delay)
-		}
-
-		if err := op(); err != nil {
-			lastErr = err
-			continue
-		}
-		return nil
-	}
-	return lastErr
 }
