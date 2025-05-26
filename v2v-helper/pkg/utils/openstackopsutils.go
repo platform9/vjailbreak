@@ -473,3 +473,20 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 	}
 	return true, nil
 }
+
+func (osclient *OpenStackClients) MacExistsInPort(mac string) (bool, error) {
+	allPages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
+		MACAddress: mac,
+	}).AllPages()
+	if err != nil {
+		return false, fmt.Errorf("failed to list ports: %s", err)
+	}
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, fmt.Errorf("failed to extract all ports: %s", err)
+	}
+	if len(allPorts) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
