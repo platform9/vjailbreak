@@ -383,32 +383,24 @@ export default function MigrationFormDrawer({
   const createMigrationPlan = async (updatedMigrationTemplate) => {
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
     const migrationFields = {
-  migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-  virtualMachines: vmsToMigrate,
-  type:
-    selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-      ? params.dataCopyMethod
-      : "hot",
-  ...(selectedMigrationOptions.dataCopyStartTime &&
-    params?.dataCopyStartTime && {
-    dataCopyStart: params.dataCopyStartTime,
-  }),
-  ...(selectedMigrationOptions.cutoverOption &&
-    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-    params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
-  ...(selectedMigrationOptions.cutoverOption &&
-    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-    params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
-  retry: params.retryOnFailure,
-  // Add post-migration action fields (always included since mandatory)
-  postMigrationAction: {
-    renameVm: true, 
-    suffix: params.postMigrationAction?.suffix || "_migrated_to_pcd",
-    moveToFolder: true, 
-    folderName: params.postMigrationAction?.folderName || "vjailbreakedVMs",
-  }
-}
-
+      migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+      virtualMachines: vmsToMigrate,
+      type:
+        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+          ? params.dataCopyMethod
+          : "hot",
+      ...(selectedMigrationOptions.dataCopyStartTime &&
+        params?.dataCopyStartTime && {
+        dataCopyStart: params.dataCopyStartTime,
+      }),
+      ...(selectedMigrationOptions.cutoverOption &&
+        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
+      ...(selectedMigrationOptions.cutoverOption &&
+        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
+      retry: params.retryOnFailure,
+    }
     const body = createMigrationPlanJson(migrationFields)
     try {
       const data = await postMigrationPlan(body)
