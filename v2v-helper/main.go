@@ -111,10 +111,10 @@ func main() {
 	for _, mac := range vminfo.Mac {
 		macExists, err := openstackclients.MacExistsInPort(mac)
 		if err != nil {
-			handleError(fmt.Sprintf("Failed to check if mac exists in any port in openstack: %v", err))
+			handleError(fmt.Sprintf("Failed to migrate VM: Failed to check if mac exists in any port in openstack: %v", err))
 		}
 		if macExists {
-			handleError(fmt.Sprintf("Mac %s already exists in openstack", mac))
+			handleError(fmt.Sprintf("Failed to migrate VM: Mac %s already exists in openstack", mac))
 		}
 	}
 
