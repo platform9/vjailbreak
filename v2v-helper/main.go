@@ -111,10 +111,10 @@ func main() {
 	for _, mac := range vminfo.Mac {
 		macExists, err := openstackclients.MacExistsInPort(mac)
 		if err != nil {
-			handleError(fmt.Sprintf("Failed to migrate VM: Failed to check if mac exists in any port in openstack: %v", err))
+			handleError(fmt.Sprintf("failed to migrate VM: Failed to check if mac exists in any port in openstack: %v", err))
 		}
 		if macExists {
-			handleError(fmt.Sprintf("Failed to migrate VM: Mac %s already exists in openstack", mac))
+			handleError(fmt.Sprintf("failed to migrate VM: Mac %s already exists in openstack", mac))
 		}
 	}
 
@@ -150,7 +150,7 @@ func main() {
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
+		msg := fmt.Sprintf("failed to migrate VM: %v", err)
 
 		// Try to power on the VM if migration failed
 		powerOnErr := vmops.VMPowerOn()
