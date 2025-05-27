@@ -101,6 +101,7 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 		Spec: vjailbreakv1alpha1.VMwareHostSpec{
 			Name:         host.Name,
 			HardwareUUID: host.HardwareUUID,
+			ClusterName:  clusterName,
 		},
 	}
 

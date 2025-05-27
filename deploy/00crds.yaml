@@ -1283,6 +1283,22 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              clusterMapping:
+                description: ClusterMapping is the mapping of vCenter clusters to
+                  PCD clusters
+                items:
+                  properties:
+                    pcdClusterName:
+                      description: PCDClusterName is the name of the PCD cluster
+                      type: string
+                    vmwareClusterName:
+                      description: VMwareClusterName is the name of the vCenter cluster
+                      type: string
+                  required:
+                  - pcdClusterName
+                  - vmwareClusterName
+                  type: object
+                type: array
               clusterSequence:
                 description: ClusterSequence is the sequence of vCenter clusters to
                   be migrated
@@ -1873,8 +1889,14 @@ spec:
           spec:
             description: VMwareHostSpec defines the desired state of VMwareHost
             properties:
+              clusterName:
+                description: Cluster name of the host
+                type: string
               hardwareUuid:
                 description: Hardware UUID of the host
+                type: string
+              hostConfigId:
+                description: Host config ID of the host
                 type: string
               name:
                 description: Name of the host
@@ -3106,7 +3128,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: docker.io/omkardeshpande7/vjailbreak-controller:resmgr
+        image: docker.io/omkardeshpande7/vjailbreak-controller:resmgr2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

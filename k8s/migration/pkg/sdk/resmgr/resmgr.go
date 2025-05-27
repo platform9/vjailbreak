@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strconv"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
-	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 )
 
 type Resmgr interface {
@@ -25,19 +25,8 @@ type Resmgr interface {
 	GetRoles(ctx context.Context, hostID string) ([]string, error)
 	AssignHypervisor(ctx context.Context, hostID string, clusterName string) error
 	ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConfig, error)
-}
-
-type Impl struct {
-	url           string
-	authenticator keystone.Authenticator
-	httpClient    http.Client
-	insecure      bool
-}
-
-type Config struct {
-	DU            pcd.Info
-	Authenticator keystone.Authenticator
-	HTTPClient    http.Client
+	AssignHostConfig(ctx context.Context, hostID string, hostConfigID string) error
+	HostExists(ctx context.Context, hostID string) (bool, error)
 }
 
 func NewResmgrClient(config Config) Resmgr {
@@ -47,160 +36,6 @@ func NewResmgrClient(config Config) Resmgr {
 		httpClient:    config.HTTPClient,
 		insecure:      config.DU.Insecure,
 	}
-}
-
-type RoleResponse struct {
-	Roles []string `json:"roles"`
-}
-
-type PF9CAPIExtensions struct {
-	CapiManaged struct {
-		Status string `json:"status"`
-		Data   struct {
-			Managed bool `json:"managed"`
-		} `json:"data,omitempty"`
-	} `json:"pf9_capi,omitempty"`
-}
-
-type Host struct {
-	ID   string `json:"id"`
-	Info struct {
-		Hostname         string      `json:"hostname"`
-		OSFamily         string      `json:"os_family"`
-		Arch             string      `json:"arch"`
-		OSInfo           string      `json:"os_info"`
-		Responding       bool        `json:"responding"`
-		LastResponseTime interface{} `json:"last_response_time"`
-		CPUInfo          struct {
-			CPUSockets int `json:"cpu_sockets"`
-			CPUCores   int `json:"cpu_cores"`
-			CPUThreads struct {
-				Total   int     `json:"total"`
-				PerCore float64 `json:"per_core"`
-			} `json:"cpu_threads"`
-			CPUCapacity struct {
-				Total     string `json:"total"`
-				PerSocket string `json:"per_socket"`
-				PerCore   string `json:"per_core"`
-				PerThread string `json:"per_thread"`
-			} `json:"cpu_capacity"`
-			CPUArch   string `json:"cpu_arch"`
-			CPUVendor string `json:"cpu_vendor"`
-			CPUModel  struct {
-				ModelID   int    `json:"model_id"`
-				ModelName string `json:"model_name"`
-			} `json:"cpu_model"`
-			CPUFeatures     []string `json:"cpu_features"`
-			VirtualPhysical string   `json:"virtual/physical"`
-		} `json:"cpu_info,omitempty"`
-	} `json:"info,omitempty"`
-	Roles              []string               `json:"roles,omitempty"`
-	RolesStatusDetails map[string]string      `json:"roles_status_details,omitempty"`
-	RoleStatus         string                 `json:"role_status,omitempty"`
-	RoleSettings       map[string]interface{} `json:"role_settings,omitempty"`
-	HypervisorInfo     struct {
-		HypervisorType string `json:"hypervisor_type"`
-	} `json:"hypervisor_info,omitempty"`
-	RawExtensionData json.RawMessage   `json:"-"`
-	CAPIExtension    PF9CAPIExtensions `json:"-"`
-	Extensions       struct {
-		IPAddress struct {
-			Status string   `json:"status"`
-			Data   []string `json:"data"`
-		} `json:"ip_address,omitempty"`
-		CPUStats struct {
-			Status string `json:"status"`
-			Data   struct {
-				LoadAverage string `json:"load_average"`
-			} `json:"data"`
-		} `json:"cpu_stats,omitempty"`
-		ResourceUsage struct {
-			Status string `json:"status"`
-			Data   struct {
-				Disk struct {
-					Percent float64 `json:"percent"`
-					Total   int64   `json:"total"`
-					Used    int64   `json:"used"`
-				} `json:"disk"`
-				Memory struct {
-					Percent   float64 `json:"percent"`
-					Total     int64   `json:"total"`
-					Available int64   `json:"available"`
-				} `json:"memory"`
-				CPU struct {
-					Percent float64 `json:"percent"`
-					Total   int64   `json:"total"`
-					Used    float64 `json:"used"`
-				} `json:"cpu"`
-			} `json:"data"`
-		} `json:"resource_usage,omitempty"`
-		Interfaces struct {
-			Status string `json:"status"`
-			Data   struct {
-				IfaceIP    map[string]string `json:"iface_ip"`
-				OVSBridges []string          `json:"ovs_bridges"`
-				IfaceInfo  map[string]struct {
-					MAC    string `json:"mac"`
-					Ifaces []struct {
-						Addr      string `json:"addr"`
-						Netmask   string `json:"netmask"`
-						Broadcast string `json:"broadcast,omitempty"`
-					} `json:"ifaces"`
-				} `json:"iface_info"`
-				IntfList []string `json:"intf_list"`
-			} `json:"data"`
-		} `json:"interfaces,omitempty"`
-		VolumesPresent struct {
-			Status string `json:"status"`
-			Data   []struct {
-				Name string `json:"name"`
-				Size string `json:"size"`
-				Free string `json:"free"`
-			} `json:"data"`
-		} `json:"volumes_present,omitempty"`
-	} `json:"extensions,omitempty"`
-	CertInfo struct {
-		Details struct {
-			Status     string  `json:"status"`
-			Version    string  `json:"version"`
-			ExpiryDate float64 `json:"expiry_date"`
-			StartDate  float64 `json:"start_date"`
-			Timestamp  float64 `json:"timestamp"`
-		} `json:"details,omitempty"`
-		RefreshInfo struct {
-			Status    string `json:"status"`
-			Message   string `json:"message"`
-			Timestamp string `json:"timestamp"`
-		} `json:"refresh_info,omitempty"`
-	} `json:"cert_info,omitempty"`
-	Message      string `json:"message,omitempty"`
-	HostconfigID string `json:"hostconfig_id,omitempty"`
-}
-
-type Cluster struct {
-	Name               string `json:"name"`
-	Description        string `json:"description"`
-	VMHighAvailability struct {
-		Enabled bool `json:"enabled"`
-	} `json:"vmHighAvailability"`
-	AutoResourceRebalancing struct {
-		Enabled                  bool `json:"enabled"`
-		RebalancingFrequencyMins int  `json:"rebalancingFrequencyMins"`
-	} `json:"autoResourceRebalancing"`
-	Hostlist    []string `json:"hostlist"`
-	AggregateID int      `json:"aggregate_id"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
-}
-
-// Type definition for payload to be sent to bundle generation request.
-type bundle struct {
-	Upload string `json:"upload"`
-	Label  string `json:"label"`
-}
-
-type assignHypervisor struct {
-	ClusterName string `json:"hostcluster"`
 }
 
 func (h *Host) UnmarshalJSON(data []byte) error {
@@ -517,7 +352,6 @@ func (r Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
 }
 
 func (r Impl) AuthorizeHost(ctx context.Context, hostID string, token string, version string, role string) error {
-
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/roles/%s", r.url, hostID, role)
 	req, err := r.getResmgrReq(ctx, url, http.MethodPost, nil)
 	if err != nil {
@@ -591,4 +425,35 @@ func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConf
 	}
 
 	return hostConfig, nil
+}
+
+func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID string) error {
+	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/hostconfig/%s", r.url, hostID, hostConfigID)
+	data, _ := json.Marshal(hostConfigID)
+
+	req, err := r.getResmgrReq(ctx, url, http.MethodPut, data)
+	if err != nil {
+		return fmt.Errorf("unable to create request to assign host config: %w", err)
+	}
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to query the resmgr to assign host config: (%d) %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (r Impl) HostExists(ctx context.Context, hostID string) (bool, error) {
+	_, err := r.GetHost(ctx, hostID)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

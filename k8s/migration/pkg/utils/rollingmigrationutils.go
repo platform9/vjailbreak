@@ -415,7 +415,6 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 }
 
 func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.RollingMigrationPlanScope, batchSize int) error {
-	log := scope.Logger
 
 	if batchSize <= 0 {
 		return fmt.Errorf("batch size must be greater than 0")
@@ -424,7 +423,6 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Rolling
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	if len(rollingMigrationPlan.Spec.VMMigrationPlans) != 0 {
-		log.Info("Migration plans already added")
 		return nil
 	}
 

@@ -33,6 +33,8 @@ const (
 	ESXIMigrationPhaseAssigningRole          ESXIMigrationPhase = "AssigningRole"
 	ESXIMigrationPhaseFailed                 ESXIMigrationPhase = "Failed"
 	ESXIMigrationPhaseSucceeded              ESXIMigrationPhase = "Succeeded"
+	ESXIMigrationPhaseWaitingForPCDHost      ESXIMigrationPhase = "WaitingForPCDHost"
+	ESXIMigrationPhaseConfiguringPCDHost     ESXIMigrationPhase = "ConfiguringPCDHost"
 	ESXIMigrationPhasePaused                 ESXIMigrationPhase = "Paused"
 )
 
