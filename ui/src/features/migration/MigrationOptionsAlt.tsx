@@ -269,6 +269,8 @@ export default function MigrationOptionsAlt({
               <CustomTextField
                 label="Post Migration Script"
                 size="small"
+                multiline
+                rows={4}
                 value={params?.postMigrationScript || ""}
                 onChange={(e) =>
                   onChange("postMigrationScript")(String(e.target.value))
@@ -276,6 +278,7 @@ export default function MigrationOptionsAlt({
                 disabled={!selectedMigrationOptions.postMigrationScript}
                 error={!!errors["postMigrationScript"]}
                 required={selectedMigrationOptions.postMigrationScript}
+                placeholder="Enter your post-migration script here..."
               />
             </Fields>
 

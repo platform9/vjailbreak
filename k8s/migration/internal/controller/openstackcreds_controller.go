@@ -192,7 +192,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
 				}
 			} else {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.Name); err != nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
 				}
 			}

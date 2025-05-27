@@ -26,6 +26,7 @@ import {
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
+  deleteSecret,
 } from "./secrets/secrets"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
@@ -137,26 +138,12 @@ export const createOpenstackCredsWithSecretFlow = async (
 // Create VMware credentials with secret
 export const createVMwareCredsWithSecretFlow = async (
   credName: string,
-  credentials: {
-    VCENTER_HOST: string
-    VCENTER_USERNAME: string
-    VCENTER_DATACENTER: string
-    VCENTER_PASSWORD: string
-  },
+  credentials,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const secretName = `${credName}-vmware-secret`
 
-  const vmwareCredentialsWithInsecure = {
-    ...credentials,
-    VCENTER_INSECURE: true,
-  }
-
-  await createVMwareCredsSecret(
-    secretName,
-    vmwareCredentialsWithInsecure,
-    namespace
-  )
+  await createVMwareCredsSecret(secretName, credentials, namespace)
 
   return createVMwareCredsWithSecret(
     credName,
@@ -171,7 +158,9 @@ export const deleteVMwareCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
+    const secretName = `${credName}-vmware-secret`
     await deleteVmwareCredentials(credName, namespace)
+    await deleteSecret(secretName, namespace)
     return { success: true }
   } catch (error) {
     console.error(`Error deleting VMware credential ${credName}:`, error)
@@ -185,7 +174,9 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
+    const secretName = `${credName}-openstack-secret`
     await deleteOpenstackCredentials(credName, namespace)
+    await deleteSecret(secretName, namespace)
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)

@@ -96,20 +96,17 @@ const columns: GridColDef[] = [
         headerName: "Actions",
         flex: 1,
         renderCell: (params) => {
-            const phase = params.row?.status?.phase;
-            const isDisabled = !phase || phase === "Running";
 
             return (
-                <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete migration"} >
+                <Tooltip title={"Delete migration"} >
                     <IconButton
                         onClick={(e) => {
                             e.stopPropagation();
                             params.row.onDelete(params.row.metadata?.name);
                         }}
-                        disabled={isDisabled}
                         size="small"
                         sx={{
-                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            cursor: 'pointer',
                             position: 'relative'
                         }}
                     >
@@ -188,11 +185,6 @@ export default function MigrationsTable({
         onDelete: onDeleteMigration
     })) || [];
 
-    const isRowSelectable = (params) => {
-        const phase = params.row?.status?.phase;
-        return !(!phase || phase === "Running" || phase === "Pending");
-    };
-
     return (
         <DataGrid
             rows={migrationsWithActions}
@@ -207,7 +199,6 @@ export default function MigrationsTable({
             localeText={{ noRowsLabel: "No Migrations Available" }}
             getRowId={(row) => row.metadata?.name}
             checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
-            isRowSelectable={isRowSelectable}
             onRowSelectionModelChange={handleSelectionChange}
             rowSelectionModel={selectedRows}
             disableRowSelectionOnClick
