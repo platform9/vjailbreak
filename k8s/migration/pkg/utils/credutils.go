@@ -658,6 +658,25 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 			}
 		}(i)
 	}
+
+	// Delete the vmwaremachine objects that are not present in the vsphere environment
+	vmwareMachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := client.List(ctx, vmwareMachineList); err != nil {
+		return fmt.Errorf("failed to list vmwaremachine objects: %w", err)
+	}
+	for _, vmwareMachine := range vmwareMachineList.Items {
+		exists, err := CheckVMExists(ctx, client, &vmwareMachine, vmwcreds)
+		if err != nil && !strings.Contains(err.Error(), "failed to find vm") {
+			return fmt.Errorf("failed to check vm exists: %w", err)
+		}
+		if !exists {
+			fmt.Printf(`VM '%s' not found in vsphere environment, 
+			deleting vmwaremachine object\n`, vmwareMachine.Name)
+			if err := client.Delete(ctx, &vmwareMachine); err != nil {
+				return fmt.Errorf("failed to delete vmwaremachine object: %w", err)
+			}
+		}
+	}
 	// Wait for all vms to be created or updated
 	wg.Wait()
 	return nil
@@ -702,7 +721,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		init = true
 	} else {
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
 			// Initialize labels map if needed
@@ -717,6 +735,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)
 			}
+		}
+
+		// Update the vmwaremachine object
+		vmwvm.Spec.VMs = *vminfo
+		if err = client.Update(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to update VMwareMachine: %w", err)
 		}
 	}
 
@@ -812,4 +836,25 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
 	}
 	return nil
+}
+
+func CheckVMExists(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (bool, error) {
+	// Check if the VM exists in the vsphere environment
+	c, err := ValidateVMwareCreds(vmwcreds)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	finder := find.NewFinder(c, false)
+	dc, err := finder.Datacenter(ctx, vmwcreds.Spec.DataCenter)
+	if err != nil {
+		return false, fmt.Errorf("failed to find datacenter: %w", err)
+	}
+	finder.SetDatacenter(dc)
+
+	// Get the vm
+	_, err = finder.VirtualMachine(ctx, vmwvm.Spec.VMs.Name)
+	if err != nil {
+		return false, fmt.Errorf("failed to find vm: %w", err)
+	}
+	return true, nil
 }
