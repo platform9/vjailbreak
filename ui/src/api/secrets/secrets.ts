@@ -175,20 +175,11 @@ export const getSecret = async (
   }
 }
 
-// Function to delete a Kubernetes secret
 export const deleteSecret = async (
   name: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
-): Promise<void> => {
+) => {
   const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
-
-  try {
-    await axios.del({
-      endpoint,
-    })
-    console.log(`Secret ${name} deleted successfully`)
-  } catch (error) {
-    console.error(`Error deleting secret ${name}:`, error)
-    throw error
-  }
+  const response = await axios.del({ endpoint })
+  return response
 }
