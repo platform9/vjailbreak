@@ -737,9 +737,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)
 			}
 		}
-
 	}
-
 	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		vmwvm.Spec.VMs = *vminfo
 		return nil
