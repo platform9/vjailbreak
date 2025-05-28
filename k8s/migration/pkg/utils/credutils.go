@@ -628,14 +628,38 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 
 		// Get the cluster name from the host's parent
 		if host.Parent != nil {
-			var cluster mo.ClusterComputeResource
-			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+			// Determine parent type based on the object reference type
+			parentType := host.Parent.Type
+			// Get the parent name
+			var parentEntity mo.ManagedEntity
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
 			if err != nil {
-				// Log the error but don't fail - some hosts might not be in a cluster
-				fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
 			} else {
-				clusterName = cluster.Name
+				// Handle based on the parent's type
+				switch parentType {
+				case "ClusterComputeResource":
+					var cluster mo.ClusterComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+					if err != nil {
+						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = cluster.Name
+					}
+				case "ComputeResource":
+					var compute mo.ComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
+					if err != nil {
+						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = compute.Name
+					}
+				default:
+					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+				}
 			}
+		} else {
+			clusterName = ""
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
@@ -740,9 +764,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		// Set the new label
 		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
-		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) {
+		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], vminfo.ESXiName) || !reflect.DeepEqual(vmwvm.Labels[constants.ClusterNameLabel], vminfo.ClusterName) {
 			// update vminfo in case the VM has been moved by vMotion
 			vmwvm.Spec.VMInfo = *vminfo
+			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
+			vmwvm.Labels[constants.ClusterNameLabel] = vminfo.ClusterName
 
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {

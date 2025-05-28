@@ -255,6 +255,9 @@ spec:
               phase:
                 description: Phase is the current phase of the migration
                 type: string
+              vmMigrationPhase:
+                description: VMMigrationsPhase is the list of VM migration plans
+                type: string
             type: object
         type: object
     served: true

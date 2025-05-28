@@ -644,6 +644,19 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 	return scope.Client.Update(ctx, rollingMigrationPlan)
 }
 
+// StringSlicesEqual compares two string slices and returns true if they contain the same elements (order sensitive)
+func StringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	if rollingMigrationPlan.Labels == nil {

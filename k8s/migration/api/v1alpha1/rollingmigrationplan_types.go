@@ -90,6 +90,8 @@ type RollingMigrationPlanSpec struct {
 type RollingMigrationPlanStatus struct {
 	// Phase is the current phase of the migration
 	Phase RollingMigrationPlanPhase `json:"phase,omitempty"`
+	// VMMigrationsPhase is the list of VM migration plans
+	VMMigrationsPhase string `json:"vmMigrationPhase,omitempty"`
 	// CurrentESXi is the name of the current ESXi host being migrated
 	CurrentESXi string `json:"currentESXi,omitempty"`
 	// CurrentCluster is the name of the current vCenter cluster being migrated
