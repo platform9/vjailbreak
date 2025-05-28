@@ -89,6 +89,22 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              clusterMapping:
+                description: ClusterMapping is the mapping of vCenter clusters to
+                  PCD clusters
+                items:
+                  properties:
+                    pcdClusterName:
+                      description: PCDClusterName is the name of the PCD cluster
+                      type: string
+                    vmwareClusterName:
+                      description: VMwareClusterName is the name of the vCenter cluster
+                      type: string
+                  required:
+                  - pcdClusterName
+                  - vmwareClusterName
+                  type: object
+                type: array
               clusterSequence:
                 description: ClusterSequence is the sequence of vCenter clusters to
                   be migrated
@@ -238,6 +254,9 @@ spec:
                 type: array
               phase:
                 description: Phase is the current phase of the migration
+                type: string
+              vmMigrationPhase:
+                description: VMMigrationsPhase is the list of VM migration plans
                 type: string
             type: object
         type: object

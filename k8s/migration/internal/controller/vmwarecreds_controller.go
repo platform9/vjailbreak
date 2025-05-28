@@ -133,6 +133,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
 	}
+	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
+	}
 
 	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }

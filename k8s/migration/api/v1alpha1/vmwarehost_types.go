@@ -26,6 +26,10 @@ type VMwareHostSpec struct {
 	Name string `json:"name,omitempty"`
 	// Hardware UUID of the host
 	HardwareUUID string `json:"hardwareUuid,omitempty"`
+	// Host config ID of the host
+	HostConfigID string `json:"hostConfigId,omitempty"`
+	// Cluster name of the host
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // VMwareHostStatus defines the observed state of VMwareHost

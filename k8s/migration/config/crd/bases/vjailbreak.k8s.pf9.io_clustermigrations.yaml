@@ -126,6 +126,7 @@ spec:
                 - Running
                 - Succeeded
                 - Failed
+                - Paused
                 type: string
             required:
             - currentESXi
