@@ -664,15 +664,16 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	if err := client.List(ctx, vmwareMachineList); err != nil {
 		return fmt.Errorf("failed to list vmwaremachine objects: %w", err)
 	}
-	for _, vmwareMachine := range vmwareMachineList.Items {
-		exists, err := CheckVMExists(ctx, client, &vmwareMachine, vmwcreds)
+	for i := range vmwareMachineList.Items {
+		vmwareMachine := &vmwareMachineList.Items[i]
+		exists, err := CheckVMExists(ctx, vmwareMachine, vmwcreds)
 		if err != nil && !strings.Contains(err.Error(), "failed to find vm") {
 			return fmt.Errorf("failed to check vm exists: %w", err)
 		}
 		if !exists && !vmwareMachine.Status.Migrated {
 			fmt.Printf(`VM '%s' not found in vsphere environment, 
 			deleting vmwaremachine object\n`, vmwareMachine.Name)
-			if err := client.Delete(ctx, &vmwareMachine); err != nil {
+			if err := client.Delete(ctx, vmwareMachine); err != nil {
 				return fmt.Errorf("failed to delete vmwaremachine object: %w", err)
 			}
 		}
@@ -834,7 +835,7 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 	return nil
 }
 
-func CheckVMExists(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (bool, error) {
+func CheckVMExists(ctx context.Context, vmwvm *vjailbreakv1alpha1.VMwareMachine, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (bool, error) {
 	// Check if the VM exists in the vsphere environment
 	c, err := ValidateVMwareCreds(vmwcreds)
 	if err != nil {
