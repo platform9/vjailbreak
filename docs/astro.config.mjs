@@ -57,6 +57,7 @@ export default defineConfig({
 						{ label: 'Using APIs', slug: 'guides/using_apis' },
 						{ label: 'Injecting Custom Environment Variables', slug: 'guides/injecting_custom_env' },
 						{ label: 'Debug Log Collection', slug: 'guides/debuglogs' },
+						{ label: 'Debug vJailbreak Installation', slug: 'guides/debug_vjailbreak_install' },
 					],
 				},
 				{
