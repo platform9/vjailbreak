@@ -102,6 +102,22 @@ func main() {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
 
+	// Get VM Info
+	vminfo, err := vmops.GetVMInfo(migrationparams.OpenstackOSType)
+	if err != nil {
+		handleError(fmt.Sprintf("Failed to get VM info: %v", err))
+	}
+	// Before starting the migration check if mac does not exist in any port in openstack
+	for _, mac := range vminfo.Mac {
+		macExists, err := openstackclients.MacExistsInPort(mac)
+		if err != nil {
+			handleError(fmt.Sprintf("failed to migrate VM: Failed to check if mac exists in any port in openstack: %v", err))
+		}
+		if macExists {
+			handleError(fmt.Sprintf("failed to migrate VM: Mac %s already exists in openstack", mac))
+		}
+	}
+
 	migrationobj := migrate.Migrate{
 		URL:              vCenterURL,
 		UserName:         vCenterUserName,
@@ -134,7 +150,7 @@ func main() {
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
+		msg := fmt.Sprintf("failed to migrate VM: %v", err)
 
 		// Try to power on the VM if migration failed
 		powerOnErr := vmops.VMPowerOn()
