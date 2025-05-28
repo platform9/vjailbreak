@@ -2,9 +2,10 @@ package maas
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	ipmi "github.com/bougou/go-ipmi"
 	gomaasclient "github.com/canonical/gomaasclient/client"
@@ -32,7 +33,7 @@ func NewMaasClient(accessInfo MaasAccessInfo) (*MaasClient, error) {
 	c, err := gomaasclient.GetClient(client.BaseURL, client.ApiKey, "2.0")
 	if err != nil {
 		logrus.Errorf("Failed to create MaaS client: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create maas client")
 	}
 	client.Client = c
 	return client, nil
@@ -46,7 +47,7 @@ func (m *MaasClient) ListMachines(ctx context.Context) ([]api.MachineInfo, error
 	machines, err := m.Client.Machines.Get(&entity.MachinesParams{})
 	if err != nil {
 		logrus.Errorf("Failed to list machines: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "failed to list machines")
 	}
 	var result []api.MachineInfo
 	result = make([]api.MachineInfo, len(machines))
@@ -89,7 +90,7 @@ func (m *MaasClient) SetMachinePower(ctx context.Context, systemID string, actio
 	_, err := m.Client.Machine.Get(systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get machine: %v", err)
-		return err
+		return errors.Wrap(err, "failed to get machine")
 	}
 
 	// Determine the power action
@@ -149,7 +150,7 @@ func (m *MaasClient) ReleaseMachine(ctx context.Context, machine *entity.Machine
 	})
 	if err != nil {
 		logrus.Errorf("Failed to release machine: %v", err)
-		return err
+		return errors.Wrap(err, "failed to release machine")
 	}
 	return nil
 }
@@ -166,7 +167,7 @@ func (m *MaasClient) DeployMachine(ctx context.Context, machine *entity.Machine,
 	})
 	if err != nil {
 		logrus.Errorf("Failed to deploy machine: %v", err)
-		return err
+		return errors.Wrap(err, "failed to deploy machine")
 	}
 	return nil
 }
@@ -189,7 +190,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	machine, err := m.Client.Machine.Get(systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get machine: %v", err)
-		return err
+		return errors.Wrap(err, "failed to get machine")
 	}
 	con_interface := ipmi.InterfaceLanplus
 	if req.IpmiInterface == nil {
@@ -211,7 +212,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
 		if err != nil {
 			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-			return err
+			return errors.Wrap(err, "failed to set machine to pxe boot")
 		}
 	}
 	//check if machine is already released
@@ -226,7 +227,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		})
 		if err != nil {
 			logrus.Errorf("%s Failed to release machine: %v", ctx, err)
-			return err
+			return errors.Wrap(err, "failed to release machine")
 		}
 	}
 	if !req.ManualPowerControl {
@@ -234,7 +235,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
 		if err != nil {
 			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-			return err
+			return errors.Wrap(err, "failed to set machine to pxe boot")
 		}
 	}
 	// Deploy the machine again
@@ -286,7 +287,7 @@ func (m *MaasClient) ListBootSource(ctx context.Context) ([]api.BootsourceSelect
 			bs, err := m.Client.BootSourceSelection.Get(v.BootSourceID, v.ID)
 			if err != nil {
 				logrus.Errorf("cannot get boot source, err: %v", err)
-				return nil, err
+				return nil, errors.Wrap(err, "failed to get boot source")
 			}
 			bootSourcesList = append(bootSourcesList, api.BootsourceSelections{
 				OS:           bs.OS,
@@ -310,7 +311,7 @@ func (m *MaasClient) GetPowerParameters(ctx context.Context, systemID string) (m
 	powerParams, err := m.Client.Machine.GetPowerParameters(systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get power parameters: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get power parameters")
 	}
 	return powerParams, nil
 }
@@ -331,7 +332,7 @@ func (m *MaasClient) GetIPMIClient(ctx context.Context, host, username, password
 	config, err := ipmi.NewClient(host, 623, username, password)
 	if err != nil {
 		logrus.Errorf("Failed to create IPMI client: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create ipmi client")
 	}
 	config.WithInterface(con_interface)
 	return config, nil
@@ -350,7 +351,7 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 	machine, err := m.Client.Machine.Get(systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get machine: %v", err)
-		return err
+		return errors.Wrap(err, "failed to get machine")
 	}
 	if !strings.EqualFold(machine.PowerType, "ipmi") {
 		logrus.Errorf("Machine %s does not support IPMI power type", systemID)
@@ -360,7 +361,7 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 	powerParams, err := m.GetPowerParameters(ctx, systemID)
 	if err != nil {
 		logrus.Errorf("Failed to get power parameters: %v", err)
-		return err
+		return errors.Wrap(err, "failed to get power parameters")
 	}
 	host := powerParams["power_address"]
 	username := powerParams["power_user"]
@@ -373,13 +374,13 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 	config, err := m.GetIPMIClient(ctx, host.(string), username.(string), password.(string), ipmi_interface)
 	if err != nil {
 		logrus.Errorf("Failed to create IPMI client: %v", err)
-		return err
+		return errors.Wrap(err, "failed to create ipmi client")
 	}
 	// Open IPMI connection
 	err = config.Connect(ctx)
 	if err != nil {
 		logrus.Errorf("Failed to open IPMI connection: %v", err)
-		return err
+		return errors.Wrap(err, "failed to open ipmi connection")
 	}
 	defer config.Close(ctx)
 
@@ -395,29 +396,35 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 	config.SetBootDevice(ctx, bootDevice, boot_type, false)
 	if err != nil {
 		logrus.Errorf("Failed to set boot device to PXE: %v", err)
-		return err
+		return errors.Wrap(err, "failed to set boot device to pxe")
 	}
 
 	// Power cycle the machine to apply PXE boot based on the flag passed in [optional]
 	powerState, err := config.GetChassisStatus(ctx)
 	if err != nil {
 		logrus.Errorf("Failed to get chassis status: %v", err)
-		return err
+		return errors.Wrap(err, "failed to get chassis status")
 	}
 	logrus.Infof("current power state for %s is %s", systemID, powerState.ChassisIdentifyState)
 
 	//If machine is on, perform a power reset
 	if power_cycle && powerState.PowerIsOn {
-		_, err = config.ChassisControl(ctx, ipmi.ChassisControlHardReset)
+		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerDown)
 		if err != nil {
 			logrus.Errorf("Failed to power cycle machine: %v", err)
-			return err
+			return errors.Wrap(err, "failed to power cycle machine")
+		}
+
+		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
+		if err != nil {
+			logrus.Errorf("Failed to power cycle machine: %v", err)
+			return errors.Wrap(err, "failed to power cycle machine")
 		}
 	} else if !powerState.PowerIsOn {
 		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
 		if err != nil {
 			logrus.Errorf("Failed to power up machine: %v", err)
-			return err
+			return errors.Wrap(err, "failed to power up machine")
 		}
 	}
 	logrus.Infof("Successfully set machine %s to PXE boot", systemID)

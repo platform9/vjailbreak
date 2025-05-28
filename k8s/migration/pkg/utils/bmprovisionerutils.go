@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -118,7 +120,9 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 
 	cloudInit := string(secret.Data[constants.CloudInitConfigKey])
 	cloudInit = strings.ReplaceAll(cloudInit, "HOST_ID", hostID)
-	err = bmProvider.ReclaimBM(ctx, service.ReclaimBMRequest{
+
+	// Create ReclaimBM request
+	reclaimRequest := service.ReclaimBMRequest{
 		AccessInfo: &service.BMProvisionerAccessInfo{
 			BaseUrl:     bmConfig.Spec.APIUrl,
 			ApiKey:      bmConfig.Spec.APIKey,
@@ -130,9 +134,42 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 		BootSource: &service.BootsourceSelections{
 			Release: bmConfig.Spec.BootSource.Release,
 		},
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to reclaim BM")
+	}
+
+	// Retry logic: attempt up to 3 times with exponential backoff
+	maxRetries := 3
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = bmProvider.ReclaimBM(ctx, reclaimRequest)
+		if err == nil {
+			// Success, no need to retry
+			break
+		}
+
+		lastErr = err
+		if attempt < maxRetries {
+			// Calculate backoff delay: 2^attempt * 500ms (0.5s, 1s, 2s)
+			backoffTime := time.Duration(math.Pow(2, float64(attempt-1))*500) * time.Millisecond
+			logger := log.FromContext(ctx)
+			logger.Info(
+				"ReclaimBM attempt failed, retrying",
+				"attempt", attempt,
+				"maxRetries", maxRetries,
+				"backoffTime", backoffTime,
+				"error", err.Error(),
+			)
+			// Wait before retrying
+			select {
+			case <-ctx.Done():
+				return errors.Wrap(ctx.Err(), "context canceled during ReclaimBM retry")
+			case <-time.After(backoffTime):
+				// Continue to next retry
+			}
+		}
+	}
+
+	if lastErr != nil {
+		return errors.Wrap(lastErr, fmt.Sprintf("failed to reclaim BM after %d attempts", maxRetries))
 	}
 	return nil
 }

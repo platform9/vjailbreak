@@ -101,12 +101,23 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 		Spec: vjailbreakv1alpha1.VMwareHostSpec{
 			Name:         host.Name,
 			HardwareUUID: host.HardwareUUID,
+			ClusterName:  clusterName,
 		},
 	}
-
-	err = k3sclient.Create(ctx, &vmwareHost)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return "", errors.Wrap(err, "failed to create vmware host")
+	existingHost := vjailbreakv1alpha1.VMwareHost{}
+	if err := k3sclient.Get(ctx, client.ObjectKey{Name: hostk8sName, Namespace: namespace}, &existingHost); err == nil {
+		if existingHost.Spec.Name != host.Name || existingHost.Spec.HardwareUUID != host.HardwareUUID || existingHost.Spec.ClusterName != clusterName {
+			existingHost.Spec = vmwareHost.Spec
+			updateErr := k3sclient.Update(ctx, &existingHost)
+			if updateErr != nil {
+				return "", errors.Wrap(updateErr, "failed to update vmware host")
+			}
+		}
+	} else {
+		err = k3sclient.Create(ctx, &vmwareHost)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return "", errors.Wrap(err, "failed to create vmware host")
+		}
 	}
 
 	return hostk8sName, nil
@@ -142,9 +153,20 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 	}
 
 	// Create the cluster
-	err = k3sclient.Create(ctx, &vmwareCluster)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "failed to create vmware cluster")
+	existingCluster := vjailbreakv1alpha1.VMwareCluster{}
+	if err := k3sclient.Get(ctx, client.ObjectKey{Name: clusterk8sName, Namespace: scope.Namespace()}, &existingCluster); err == nil {
+		if existingCluster.Spec.Name != cluster.Name {
+			existingCluster.Spec = vmwareCluster.Spec
+			updateErr := k3sclient.Update(ctx, &existingCluster)
+			if updateErr != nil {
+				return errors.Wrap(updateErr, "failed to update vmware cluster")
+			}
+		}
+	} else {
+		createErr := k3sclient.Create(ctx, &vmwareCluster)
+		if createErr != nil && !apierrors.IsAlreadyExists(createErr) {
+			return errors.Wrap(createErr, "failed to create vmware cluster")
+		}
 	}
 
 	return nil
@@ -160,6 +182,63 @@ func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, 
 	for _, cluster := range clusters {
 		if err := createVMwareCluster(ctx, k3sclient, cluster, scope); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func DeleteStaleVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
+	clusters, err := GetVMwareClustersAndHosts(ctx, k3sclient, scope)
+	if err != nil {
+		return errors.Wrap(err, "failed to get clusters and hosts")
+	}
+	hosts := []VMwareHostInfo{}
+	for _, cluster := range clusters {
+		hosts = append(hosts, cluster.Hosts...)
+	}
+	existingClusters := vjailbreakv1alpha1.VMwareClusterList{}
+	if err := k3sclient.List(ctx, &existingClusters); err != nil {
+		return errors.Wrap(err, "failed to list vmware clusters")
+	}
+	existingHosts := vjailbreakv1alpha1.VMwareHostList{}
+	if err := k3sclient.List(ctx, &existingHosts); err != nil {
+		return errors.Wrap(err, "failed to list vmware hosts")
+	}
+	// Create a map of valid cluster names for O(1) lookups
+	clusterNames := make(map[string]bool)
+	for _, cluster := range clusters {
+		cname, err := ConvertToK8sName(cluster.Name)
+		if err != nil {
+			return errors.Wrap(err, "failed to convert cluster name to k8s name")
+		}
+		clusterNames[cname] = true
+	}
+
+	// Delete only clusters that don't exist in vSphere anymore
+	for _, existingCluster := range existingClusters.Items {
+		if !clusterNames[existingCluster.Name] {
+			if err := k3sclient.Delete(ctx, &existingCluster); err != nil {
+				return errors.Wrap(err, "failed to delete stale vmware cluster")
+			}
+		}
+	}
+
+	// Create a map of valid host names for O(1) lookups
+	hostNames := make(map[string]bool)
+	for _, host := range hosts {
+		hname, err := ConvertToK8sName(host.Name)
+		if err != nil {
+			return errors.Wrap(err, "failed to convert host name to k8s name")
+		}
+		hostNames[hname] = true
+	}
+
+	// Delete only hosts that don't exist in vSphere anymore
+	for _, existingHost := range existingHosts.Items {
+		if !hostNames[existingHost.Name] {
+			if err := k3sclient.Delete(ctx, &existingHost); err != nil {
+				return errors.Wrap(err, "failed to delete stale vmware host")
+			}
 		}
 	}
 	return nil

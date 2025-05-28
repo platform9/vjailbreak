@@ -142,33 +142,15 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	}
 
 	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseCordoned {
-		log.Info("ESXIMigration is in cordoned phase, initializing BM Provisioner", "providerType", bmConfig.Spec.ProviderType)
+		return r.handleESXiCordoned(ctx, scope, bmConfig)
+	}
 
-		// TODO:Omkar Assume this will be done by vPwned
-		provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForPCDHost {
+		return r.handleESXiWaitingForPCDHost(ctx, scope)
+	}
 
-		// Remove the ESXi host from vCenter before changing the phase
-		err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
-		if err != nil {
-			log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
-		}
-		log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-
-		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
-		err := r.Status().Update(ctx, scope.ESXIMigration)
-		if err != nil {
-			log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
-		}
-		return ctrl.Result{}, nil
+	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseConfiguringPCDHost {
+		return r.handleESXiConfiguringPCDHost(ctx, scope)
 	}
 
 	inMaintenance, err := utils.CheckESXiInMaintenanceMode(ctx, r.Client, scope)
@@ -177,33 +159,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return ctrl.Result{}, errors.Wrap(err, "failed to check ESXi maintenance mode")
 	}
 	if inMaintenance {
-		log.Info("ESXi is already in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		vmCount, err := utils.CountVMsOnESXi(ctx, r.Client, scope)
-		if err != nil {
-			log.Error(err, "Failed to count VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
-		}
-		log.Info("Counted VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
-		if vmCount != 0 {
-			log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-			// Omkar change back to 5 mins
-			scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForVMsToBeMoved
-			err = r.Status().Update(ctx, scope.ESXIMigration)
-			if err != nil {
-				log.Error(err, "Failed to update ESXIMigration status")
-				return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
-			}
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-		}
-		log.Info("No VMs on this ESXi host, removing from vCenter and converting to PCD host", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
-
-		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
-		err = r.Status().Update(ctx, scope.ESXIMigration)
-		if err != nil {
-			log.Error(err, "Failed to update ESXIMigration status")
-			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
-		}
-		log.Info("Successfully updated ESXIMigration status to cordoned")
+		return r.handleESXiInMaintenanceMode(ctx, scope)
 	} else {
 		log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
@@ -229,4 +185,166 @@ func (r *ESXIMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.ESXIMigration{}).
 		Complete(r)
+}
+
+func (r *ESXIMigrationReconciler) handleESXiCordoned(ctx context.Context, scope *scope.ESXIMigrationScope, bmConfig *vjailbreakv1alpha1.BMConfig) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("ESXi is cordoned", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	// TODO:Omkar Assume this will be done by vPwned
+	provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	err = utils.ConvertESXiToPCDHost(ctx, scope, provider)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForPCDHost
+	err = r.Status().Update(ctx, scope.ESXIMigration)
+	if err != nil {
+		log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ESXIMigrationReconciler) handleESXiWaitingForPCDHost(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("ESXi is waiting for PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	destOpenstackCreds, err := utils.GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
+	}
+	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName)
+	if err != nil {
+		log.Error(err, "Failed to get VMware host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
+	}
+	onPCD, err := utils.WaitForHostOnPCD(ctx, r.Client, *destOpenstackCreds, vmwareHost.Spec.HardwareUUID)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to wait for host to be on PCD")
+	}
+	if !onPCD {
+		log.Info("Host is not on PCD, waiting for it to be on PCD", "hostID", vmwareHost.Spec.HardwareUUID)
+		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	}
+
+	// Remove the ESXi host from vCenter before changing the phase
+	err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
+	if err != nil {
+		log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
+	}
+	log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+
+	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseConfiguringPCDHost
+	err = r.Status().Update(ctx, scope.ESXIMigration)
+	if err != nil {
+		log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("ESXi is configuring PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	var pcdClusterName string
+
+	destOpenstackCreds, err := utils.GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
+	}
+	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName)
+	if err != nil {
+		log.Error(err, "Failed to get VMware host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
+	}
+	if vmwareHost.Spec.HostConfigID == "" {
+		log.Info("Host config ID is empty, pausing ESXi migration. please assign host config to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = "true"
+		err = r.Client.Update(ctx, scope.RollingMigrationPlan)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")
+		}
+		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	}
+	if len(scope.RollingMigrationPlan.Spec.ClusterMapping) > 0 {
+		for _, mapping := range scope.RollingMigrationPlan.Spec.ClusterMapping {
+			if mapping.VMwareClusterName == vmwareHost.Spec.ClusterName {
+				pcdClusterName = mapping.PCDClusterName
+				break
+			}
+		}
+	}
+	if pcdClusterName == "" {
+		log.Info("PCD cluster name is empty, pausing ESXi migration. please assign PCD cluster to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		pcdClusterList := &vjailbreakv1alpha1.PCDClusterList{}
+		err = r.List(ctx, pcdClusterList)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to list PCD clusters")
+		}
+		if len(pcdClusterList.Items) == 0 {
+			log.Info("No PCD clusters found, pausing ESXi migration. please create PCD cluster to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+			return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+		}
+		pcdClusterName = pcdClusterList.Items[0].Name
+	}
+
+	if err := utils.AssignHostConfigToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.Name, vmwareHost.Spec.HostConfigID); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to assign host config to PCD host")
+	}
+	if err := utils.AssignHypervisorRoleToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.Name, pcdClusterName); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to assign hypervisor role to PCD host")
+	}
+	assigned, err := utils.WaitForHypervisorRoleAssignment(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to wait for hypervisor role assignment")
+	}
+	if !assigned {
+		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	}
+
+	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
+	err = r.Status().Update(ctx, scope.ESXIMigration)
+	if err != nil {
+		log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ESXIMigrationReconciler) handleESXiInMaintenanceMode(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("ESXi is in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	vmCount, err := utils.CountVMsOnESXi(ctx, r.Client, scope)
+	if err != nil {
+		log.Error(err, "Failed to count VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to count VMs on ESXi")
+	}
+	log.Info("Counted VMs on ESXi", "esxiName", scope.ESXIMigration.Spec.ESXiName, "vmCount", vmCount)
+	if vmCount != 0 {
+		log.Info("VMs present on this ESXi host, waiting for VMs to be moved", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
+		// Omkar change back to 5 mins
+		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaitingForVMsToBeMoved
+		err = r.Status().Update(ctx, scope.ESXIMigration)
+		if err != nil {
+			log.Error(err, "Failed to update ESXIMigration status")
+			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+	log.Info("No VMs on this ESXi host, removing from vCenter and converting to PCD host", "ESXiName", scope.ESXIMigration.Spec.ESXiName)
+
+	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseCordoned
+	err = r.Status().Update(ctx, scope.ESXIMigration)
+	if err != nil {
+		log.Error(err, "Failed to update ESXIMigration status")
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+	}
+	log.Info("Successfully updated ESXIMigration status to cordoned")
+	return ctrl.Result{}, nil
 }
