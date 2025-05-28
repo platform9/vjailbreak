@@ -415,7 +415,6 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 }
 
 func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.RollingMigrationPlanScope, batchSize int) error {
-	log := scope.Logger
 
 	if batchSize <= 0 {
 		return fmt.Errorf("batch size must be greater than 0")
@@ -424,7 +423,6 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Rolling
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	if len(rollingMigrationPlan.Spec.VMMigrationPlans) != 0 {
-		log.Info("Migration plans already added")
 		return nil
 	}
 
@@ -644,6 +642,19 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 
 	// Update the rolling migration plan itself
 	return scope.Client.Update(ctx, rollingMigrationPlan)
+}
+
+// StringSlicesEqual compares two string slices and returns true if they contain the same elements (order sensitive)
+func StringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {

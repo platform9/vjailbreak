@@ -22,7 +22,7 @@ import (
 )
 
 // ClusterMigrationPhase represents the current phase of the cluster migration
-// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed
+// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Paused
 type ClusterMigrationPhase string
 
 const (

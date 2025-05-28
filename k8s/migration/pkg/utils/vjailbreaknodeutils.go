@@ -654,9 +654,13 @@ func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) erro
 }
 
 func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
+	vmk8sName, err := ConvertToK8sName(vmName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert vm name to k8s name")
+	}
 	migration := &vjailbreakv1alpha1.Migration{}
-	err := k3sclient.Get(ctx, client.ObjectKey{
-		Name:      vmName,
+	err = k3sclient.Get(ctx, client.ObjectKey{
+		Name:      MigrationNameFromVMName(vmk8sName),
 		Namespace: rollingMigrationPlan.Namespace,
 	}, migration)
 	if err != nil {

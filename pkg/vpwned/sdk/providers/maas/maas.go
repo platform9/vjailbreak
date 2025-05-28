@@ -2,9 +2,10 @@ package maas
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	ipmi "github.com/bougou/go-ipmi"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
@@ -40,7 +41,7 @@ func (p *MaasProvider) Connect(auth providers.BMAccessInfo) error {
 	// Create MaaS client
 	client, err := NewMaasClient(accessInfo)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create maas client")
 	}
 	p.client = client
 	return nil
@@ -63,11 +64,11 @@ func (p *MaasProvider) GetResourceInfo(ctx context.Context, resourceID string) (
 	}
 	machine, err := p.client.Client.Machine.Get(resourceID)
 	if err != nil {
-		return api.MachineInfo{}, err
+		return api.MachineInfo{}, errors.Wrap(err, "failed to get machine")
 	}
 	powerParams, err := p.client.Client.Machine.GetPowerParameters(resourceID)
 	if err != nil {
-		return api.MachineInfo{}, err
+		return api.MachineInfo{}, errors.Wrap(err, "failed to get power parameters")
 	}
 	pw_val := ""
 	for k, v := range powerParams {
@@ -111,7 +112,7 @@ func (p *MaasProvider) ListBootSource(ctx context.Context, req api.ListBootSourc
 			UseInsecure: req.AccessInfo.UseInsecure,
 		})
 		if err != nil {
-			return nil, errors.Join(err, errors.New("List Boot Source Failed"))
+			return nil, errors.Wrap(err, "List Boot Source Failed")
 		}
 	}
 	return p.client.ListBootSource(ctx)
@@ -137,7 +138,7 @@ func (p *MaasProvider) ReclaimBM(ctx context.Context, req api.ReclaimBMRequest) 
 			UseInsecure: req.AccessInfo.UseInsecure,
 		})
 		if err != nil {
-			return errors.Join(err, errors.New("Reclaim VM Failed"))
+			return errors.Wrap(err, "Reclaim VM Failed")
 		}
 	}
 	//Steps to reclain the host.
@@ -154,12 +155,12 @@ func (p *MaasProvider) DeployMachine(ctx context.Context, req api.DeployMachineR
 	}
 	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
 	if err != nil {
-		return api.DeployMachineResponse{}, errors.Join(err, errors.New("Deploy Machine Failed"))
+		return api.DeployMachineResponse{}, errors.Wrap(err, "Deploy Machine Failed")
 	}
 	logrus.Debugf("machine found")
 	err = p.client.DeployMachine(ctx, m, req.UserData, req.OsReleaseName)
 	if err != nil {
-		return api.DeployMachineResponse{}, errors.Join(err, errors.New("Deploy Machine Failed"))
+		return api.DeployMachineResponse{}, errors.Wrap(err, "Deploy Machine Failed")
 	}
 	return api.DeployMachineResponse{Success: true}, nil
 }
@@ -170,7 +171,7 @@ func (p *MaasProvider) IsBMReady(ctx context.Context, req api.IsBMReadyRequest) 
 	}
 	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
 	if err != nil {
-		return api.IsBMReadyResponse{}, errors.Join(err, errors.New("IsBMReady Failed"))
+		return api.IsBMReadyResponse{}, errors.Wrap(err, "IsBMReady Failed")
 	}
 	return api.IsBMReadyResponse{IsReady: m.StatusName == "Ready"}, nil
 }
@@ -181,7 +182,7 @@ func (p *MaasProvider) IsBMRunning(ctx context.Context, req api.IsBMRunningReque
 	}
 	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
 	if err != nil {
-		return api.IsBMRunningResponse{}, errors.Join(err, errors.New("IsBMRunning Failed"))
+		return api.IsBMRunningResponse{}, errors.Wrap(err, "IsBMRunning Failed")
 	}
 	return api.IsBMRunningResponse{IsRunning: m.StatusName == "Running"}, nil
 }
@@ -192,11 +193,11 @@ func (p *MaasProvider) StartBM(ctx context.Context, req api.StartBMRequest) (api
 	}
 	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
 	if err != nil {
-		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+		return api.StartBMResponse{}, errors.Wrap(err, "StartBM Failed")
 	}
 	powerParams, err := p.client.GetPowerParameters(ctx, m.SystemID)
 	if err != nil {
-		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+		return api.StartBMResponse{}, errors.Wrap(err, "StartBM Failed")
 	}
 	host := powerParams["power_address"]
 	username := powerParams["power_user"]
@@ -206,16 +207,16 @@ func (p *MaasProvider) StartBM(ctx context.Context, req api.StartBMRequest) (api
 	}
 	config, err := p.client.GetIPMIClient(ctx, host.(string), username.(string), password.(string), req.IpmiInterface)
 	if err != nil {
-		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+		return api.StartBMResponse{}, errors.Wrap(err, "StartBM Failed")
 	}
 	err = config.Connect(ctx)
 	if err != nil {
-		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+		return api.StartBMResponse{}, errors.Wrap(err, "StartBM Failed")
 	}
 	defer config.Close(ctx)
 	_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
 	if err != nil {
-		return api.StartBMResponse{}, errors.Join(err, errors.New("StartBM Failed"))
+		return api.StartBMResponse{}, errors.Wrap(err, "StartBM Failed")
 	}
 	return api.StartBMResponse{Success: true}, nil
 }
@@ -226,11 +227,11 @@ func (p *MaasProvider) StopBM(ctx context.Context, req api.StopBMRequest) (api.S
 	}
 	m, err := p.client.GetMachineFromID(ctx, req.ResourceId)
 	if err != nil {
-		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+		return api.StopBMResponse{}, errors.Wrap(err, "StopBM Failed")
 	}
 	powerParams, err := p.client.GetPowerParameters(ctx, m.SystemID)
 	if err != nil {
-		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+		return api.StopBMResponse{}, errors.Wrap(err, "StopBM Failed")
 	}
 	host := powerParams["power_address"]
 	username := powerParams["power_user"]
@@ -240,16 +241,16 @@ func (p *MaasProvider) StopBM(ctx context.Context, req api.StopBMRequest) (api.S
 	}
 	config, err := p.client.GetIPMIClient(ctx, host.(string), username.(string), password.(string), req.IpmiInterface)
 	if err != nil {
-		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+		return api.StopBMResponse{}, errors.Wrap(err, "StopBM Failed")
 	}
 	err = config.Connect(ctx)
 	if err != nil {
-		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+		return api.StopBMResponse{}, errors.Wrap(err, "StopBM Failed")
 	}
 	defer config.Close(ctx)
 	_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerDown)
 	if err != nil {
-		return api.StopBMResponse{}, errors.Join(err, errors.New("StopBM Failed"))
+		return api.StopBMResponse{}, errors.Wrap(err, "StopBM Failed")
 	}
 	return api.StopBMResponse{Success: true}, nil
 }

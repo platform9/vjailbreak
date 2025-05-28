@@ -148,28 +148,17 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, errors.Wrap(err, "failed to convert VM sequence to migration plans")
 	}
 
-	for _, mp := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
-		err := scope.Client.Get(ctx, client.ObjectKey{
-			Name:      mp,
-			Namespace: scope.RollingMigrationPlan.Namespace,
-		}, migrationPlan)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to get migration plan")
-		}
-
-		// Aggregate MigrationPlan statuses and update RollingMigrationPlan status
-		updated, err := r.aggregateAndUpdateMigrationPlanStatuses(ctx, scope)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to aggregate migration plan statuses")
-		}
-		if updated {
-			// Requeue to check status updates
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-		}
+	// Aggregate MigrationPlan statuses and update RollingMigrationPlan status
+	updated, err := r.aggregateAndUpdateMigrationPlanStatuses(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to aggregate migration plan statuses")
+	}
+	if updated {
+		// Requeue to check status updates
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
 func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, scope *scope.RollingMigrationPlanScope) (ctrl.Result, error) {
@@ -309,39 +298,46 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 	}
 
 	// Update the status if it has changed
-	if scope.RollingMigrationPlan.Status.Phase != currentPhase ||
-		scope.RollingMigrationPlan.Status.Message != message {
-		scope.RollingMigrationPlan.Status.Phase = currentPhase
-		scope.RollingMigrationPlan.Status.Message = message
-
-		// Update migrated and failed VMs lists
-		scope.RollingMigrationPlan.Status.MigratedVMs = []string{}
-		scope.RollingMigrationPlan.Status.FailedVMs = []string{}
-
-		for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-			for _, vmName := range cluster.VMSequence {
-				vmMigration, err := utils.GetVMMigration(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						log.Info("MigrationPlan not found, skipping", "vm", vmName.VMName)
-						continue
-					}
-					return false, errors.Wrap(err, "failed to get migration plan")
+	// Build new migrated and failed VMs lists
+	newMigratedVMs := []string{}
+	newFailedVMs := []string{}
+	
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		for _, vmName := range cluster.VMSequence {
+			vmMigration, err := utils.GetVMMigration(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					log.Info("VMMigration not found, skipping", "vm", vmName.VMName, "error", err)
+					continue
 				}
-				if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodSucceeded {
-					scope.RollingMigrationPlan.Status.MigratedVMs = append(
-						scope.RollingMigrationPlan.Status.MigratedVMs, vmName.VMName)
-				} else if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodFailed {
-					scope.RollingMigrationPlan.Status.FailedVMs = append(
-						scope.RollingMigrationPlan.Status.FailedVMs, vmName.VMName)
-				}
+				return false, errors.Wrap(err, "failed to get VMMigration")
+			}
+			if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodSucceeded {
+				newMigratedVMs = append(newMigratedVMs, vmName.VMName)
+			} else if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodFailed {
+				newFailedVMs = append(newFailedVMs, vmName.VMName)
 			}
 		}
-
+	}
+	
+	// Check if any status fields have changed
+	migratedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.MigratedVMs, newMigratedVMs)
+	failedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.FailedVMs, newFailedVMs)
+	phaseChanged := scope.RollingMigrationPlan.Status.VMMigrationsPhase != string(currentPhase)
+	messageChanged := scope.RollingMigrationPlan.Status.Message != message
+	
+	if phaseChanged || messageChanged || migratedVMsChanged || failedVMsChanged {
+		// Update status fields only if there are changes
+		scope.RollingMigrationPlan.Status.VMMigrationsPhase = string(currentPhase)
+		scope.RollingMigrationPlan.Status.Message = message
+		scope.RollingMigrationPlan.Status.MigratedVMs = newMigratedVMs
+		scope.RollingMigrationPlan.Status.FailedVMs = newFailedVMs
+		
 		if err := r.Status().Update(ctx, scope.RollingMigrationPlan); err != nil {
 			return false, errors.Wrap(err, "failed to update RollingMigrationPlan status")
 		}
-		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message)
+		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message, 
+			"migratedVMsChanged", migratedVMsChanged, "failedVMsChanged", failedVMsChanged)
 		return true, nil
 	}
 
@@ -367,7 +363,7 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return errors.Wrap(err, "failed to get vm migration")
+			return errors.Wrap(err, "failed to get VMMigration")
 		}
 		if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
 			scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)

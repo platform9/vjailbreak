@@ -23,6 +23,13 @@ import (
 
 type RollingMigrationPlanPhase string
 
+type ClusterMapping struct {
+	// VMwareClusterName is the name of the vCenter cluster
+	VMwareClusterName string `json:"vmwareClusterName"`
+	// PCDClusterName is the name of the PCD cluster
+	PCDClusterName string `json:"pcdClusterName"`
+}
+
 const (
 	// RollingMigrationPlanPhaseWaiting is the phase for waiting
 	RollingMigrationPlanPhaseWaiting RollingMigrationPlanPhase = "Waiting"
@@ -72,6 +79,9 @@ type RollingMigrationPlanSpec struct {
 	// VMMigrationPlans is the reference to the VM migration plan
 	VMMigrationPlans []string `json:"vmMigrationPlans,omitempty"`
 
+	// ClusterMapping is the mapping of vCenter clusters to PCD clusters
+	ClusterMapping []ClusterMapping `json:"clusterMapping,omitempty"`
+
 	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
 	MigrationPlanSpecPerVM `json:",inline"`
 }
@@ -80,6 +90,8 @@ type RollingMigrationPlanSpec struct {
 type RollingMigrationPlanStatus struct {
 	// Phase is the current phase of the migration
 	Phase RollingMigrationPlanPhase `json:"phase,omitempty"`
+	// VMMigrationsPhase is the list of VM migration plans
+	VMMigrationsPhase string `json:"vmMigrationPhase,omitempty"`
 	// CurrentESXi is the name of the current ESXi host being migrated
 	CurrentESXi string `json:"currentESXi,omitempty"`
 	// CurrentCluster is the name of the current vCenter cluster being migrated
