@@ -737,14 +737,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			}
 		}
 
-		// Update the vmwaremachine object
-		vmwvm.Spec.VMs = *vminfo
-		if err = client.Update(ctx, vmwvm); err != nil {
-			return fmt.Errorf("failed to update VMwareMachine: %w", err)
-		}
 	}
 
 	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
+		vmwvm.Spec.VMs = *vminfo
 		return nil
 	})
 	if err != nil {
