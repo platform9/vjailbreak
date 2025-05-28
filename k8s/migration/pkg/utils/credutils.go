@@ -669,7 +669,7 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 		if err != nil && !strings.Contains(err.Error(), "failed to find vm") {
 			return fmt.Errorf("failed to check vm exists: %w", err)
 		}
-		if !exists {
+		if !exists && !vmwareMachine.Status.Migrated {
 			fmt.Printf(`VM '%s' not found in vsphere environment, 
 			deleting vmwaremachine object\n`, vmwareMachine.Name)
 			if err := client.Delete(ctx, &vmwareMachine); err != nil {
