@@ -369,7 +369,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog("Deleting migration snapshot")
 	err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
-		return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
+		migobj.logMessage(fmt.Sprintf(`Failed to delete snapshot of source VM: %s, since copy is completed, 
+		continuing with the migration`, err))
 	}
 	return vminfo, nil
 }
