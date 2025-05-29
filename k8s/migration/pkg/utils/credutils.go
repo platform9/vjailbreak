@@ -835,7 +835,9 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context,
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
 	for i := range vmList.Items {
 		vm := &vmList.Items[i]
+		ctxlog.Info("Checking VM", "vmwarecreds", vmwcreds.Name, "vm", vm)
 		if !VMExistsInVcenter(vm.Spec.VMs.Name, vcenterVMs) {
+			ctxlog.Info("VM does not exist in vCenter", "vmwarecreds", vmwcreds.Name, "vm", vm)
 			staleVMs = append(staleVMs, *vm)
 		}
 	}
