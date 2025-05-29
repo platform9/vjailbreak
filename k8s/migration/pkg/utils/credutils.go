@@ -371,7 +371,6 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		MinVersion: tls.VersionTLS12,
 	}
 	if openstackCredential.Insecure {
-		ctxlog.Info("Insecure flag is set, skipping certificate verification")
 		tlsConfig.InsecureSkipVerify = true
 	} else {
 		// Get the certificate for the Openstack endpoint
@@ -814,10 +813,11 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client,
 // FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
 func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+	label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 	if err := k8sClient.List(ctx, &vmList,
 		client.InNamespace(constants.NamespaceMigrationSystem),
-		client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
+		client.MatchingLabels{label: "true"}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
 	}
 	return &vmList, nil
@@ -872,7 +872,6 @@ func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bo
 }
 
 func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
 	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting VMs")
 	}
