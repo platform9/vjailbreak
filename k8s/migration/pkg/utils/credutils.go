@@ -815,11 +815,14 @@ func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
 	label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Filtering VMs", "vmwarecreds", vmwcreds.Name, "label", label)
 	if err := k8sClient.List(ctx, &vmList,
 		client.InNamespace(constants.NamespaceMigrationSystem),
 		client.MatchingLabels{label: "true"}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
 	}
+	ctxlog.Info("Found VMs", "vmwarecreds", vmwcreds.Name, "vmList", vmList)
 	return &vmList, nil
 }
 
