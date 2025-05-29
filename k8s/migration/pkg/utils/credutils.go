@@ -371,7 +371,6 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		MinVersion: tls.VersionTLS12,
 	}
 	if openstackCredential.Insecure {
-		ctxlog.Info("Insecure flag is set, skipping certificate verification")
 		tlsConfig.InsecureSkipVerify = true
 	} else {
 		// Get the certificate for the Openstack endpoint
