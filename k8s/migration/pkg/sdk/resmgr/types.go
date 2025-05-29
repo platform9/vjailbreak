@@ -129,20 +129,6 @@ type Host struct {
 			} `json:"data"`
 		} `json:"volumes_present,omitempty"`
 	} `json:"extensions,omitempty"`
-	CertInfo struct {
-		Details struct {
-			Status     string  `json:"status"`
-			Version    string  `json:"version"`
-			ExpiryDate float64 `json:"expiry_date"`
-			StartDate  float64 `json:"start_date"`
-			Timestamp  float64 `json:"timestamp"`
-		} `json:"details,omitempty"`
-		RefreshInfo struct {
-			Status    string `json:"status"`
-			Message   string `json:"message"`
-			Timestamp string `json:"timestamp"`
-		} `json:"refresh_info,omitempty"`
-	} `json:"cert_info,omitempty"`
 	Message      string `json:"message,omitempty"`
 	HostconfigID string `json:"hostconfig_id,omitempty"`
 }

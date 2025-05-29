@@ -30,30 +30,31 @@ import (
 )
 
 type Migrate struct {
-	URL                 string
-	UserName            string
-	Password            string
-	Insecure            bool
-	Networknames        []string
-	Networkports        []string
-	Volumetypes         []string
-	Virtiowin           string
-	Ostype              string
-	Thumbprint          string
-	Convert             bool
-	Openstackclients    openstack.OpenstackOperations
-	Vcclient            vcenter.VCenterOperations
-	VMops               vm.VMOperations
-	Nbdops              []nbd.NBDOperations
-	EventReporter       chan string
-	PodLabelWatcher     chan string
-	InPod               bool
-	MigrationTimes      MigrationTimes
-	MigrationType       string
-	PerformHealthChecks bool
-	HealthCheckPort     string
-	K8sClient           client.Client
-	TargetFlavorId      string
+	URL                    string
+	UserName               string
+	Password               string
+	Insecure               bool
+	Networknames           []string
+	Networkports           []string
+	Volumetypes            []string
+	Virtiowin              string
+	Ostype                 string
+	Thumbprint             string
+	Convert                bool
+	Openstackclients       openstack.OpenstackOperations
+	Vcclient               vcenter.VCenterOperations
+	VMops                  vm.VMOperations
+	Nbdops                 []nbd.NBDOperations
+	EventReporter          chan string
+	PodLabelWatcher        chan string
+	InPod                  bool
+	MigrationTimes         MigrationTimes
+	MigrationType          string
+	PerformHealthChecks    bool
+	HealthCheckPort        string
+	K8sClient              client.Client
+	TargetFlavorId         string
+	TargetAvailabilityZone string
 }
 
 type MigrationTimes struct {
@@ -545,21 +546,21 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) error {
+func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	networknames := migobj.Networknames
 	var flavor *flavors.Flavor
 	var err error
 
-	if flavorId == "" {
+	if migobj.TargetFlavorId == "" {
 		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	} else {
-		flavor, err = openstackops.GetFlavor(flavorId)
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
 		if err != nil {
 			return fmt.Errorf("failed to get OpenStack flavor: %s", err)
 		}
@@ -614,7 +615,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) e
 	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
@@ -835,7 +836,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
+	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors

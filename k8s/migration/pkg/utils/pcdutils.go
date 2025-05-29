@@ -303,18 +303,6 @@ func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client
 	return nil, nil
 }
 
-func WaitForHostOnPCD(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds, hostID string) (bool, error) {
-	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get openstack credentials")
-	}
-	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get resmgr client")
-	}
-	return resmgrClient.HostExists(ctx, hostID)
-}
-
 func GetVMwareHostFromESXiName(ctx context.Context, k8sClient client.Client, esxiName string) (*vjailbreakv1alpha1.VMwareHost, error) {
 	vmwareHost := &vjailbreakv1alpha1.VMwareHost{}
 	esxiK8sName, err := ConvertToK8sName(esxiName)
@@ -365,8 +353,29 @@ func WaitForHypervisorRoleAssignment(ctx context.Context, k8sClient client.Clien
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get host")
 	}
-	if !containsString(pcdHost.Roles, "pf9-ostackhost-neutron") || pcdHost.RoleStatus != "ok" {
+	if !containsString(pcdHost.Roles, "pf9-ostackhost-neutron") || !(pcdHost.RoleStatus == "ok" || pcdHost.RoleStatus == "converging") {
 		return false, nil
 	}
 	return true, nil
+}
+
+func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, openstackCredsName string, pcdHostID string) (bool, error) {
+	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCredsName)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get openstack credentials")
+	}
+	resmgrClient, err := GetResmgrClient(OpenStackCredentials)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get resmgr client")
+	}
+	hostList, err := resmgrClient.ListHosts(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get host")
+	}
+	for _, host := range hostList {
+		if host.ID == pcdHostID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

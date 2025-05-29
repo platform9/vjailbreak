@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -329,14 +330,23 @@ func (m *MaasClient) GetIPMIClient(ctx context.Context, host, username, password
 	case *api.IpmiType_Tool:
 		con_interface = ipmi.InterfaceTool
 	}
+	logrus.Infof("Creating IPMI client for host %s with interface %v", host, con_interface)
+
+	// Create client with extended timeouts to accommodate slower BMCs
 	config, err := ipmi.NewClient(host, 623, username, password)
 	if err != nil {
 		logrus.Errorf("Failed to create IPMI client: %v", err)
 		return nil, errors.Wrap(err, "failed to create ipmi client")
 	}
-	config.WithInterface(con_interface)
-	return config, nil
 
+	// Set longer timeout for operations
+	config = config.WithTimeout(30 * time.Second)
+
+	// Set the interface type
+	config = config.WithInterface(con_interface)
+
+	logrus.Debugf("IPMI client configured with interface %v", con_interface)
+	return config, nil
 }
 
 // TODO:

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -89,7 +90,6 @@ func (r *BMConfigReconciler) reconcileDelete(ctx context.Context, scope *scope.B
 }
 
 func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
-	ctxlog := log.FromContext(ctx).WithName(constants.BMConfigControllerName)
 	bmConfig := scope.BMConfig
 	controllerutil.AddFinalizer(bmConfig, constants.BMConfigFinalizer)
 
@@ -124,9 +124,8 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 			updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'", bmConfig.Name))
 	}
 
-	ctxlog.Info("Successfully connected to MAAS", "bmconfig", bmConfig.Name)
-	// Validate BMConfig
-	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	// TODO(Omkar): Validate BMConfig
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

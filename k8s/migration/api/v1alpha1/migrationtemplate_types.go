@@ -47,6 +47,8 @@ type MigrationTemplateSpec struct {
 	Source MigrationTemplateSource `json:"source"`
 	// Destination is the destination details for the virtual machine
 	Destination MigrationTemplateDestination `json:"destination"`
+	// TargetPCDClusterName is the name of the PCD cluster where the virtual machine will be migrated
+	TargetPCDClusterName string `json:"targetPCDClusterName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
