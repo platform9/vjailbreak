@@ -34,6 +34,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 // ClusterMigrationReconciler reconciles a ClusterMigration object
@@ -74,7 +75,6 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		ctxlog.Error(err, "Failed to get RollingMigrationPlan", "rollingMigrationPlan", rollingMigrationPlanKey)
 		return ctrl.Result{}, err
 	}
-	ctxlog.V(1).Info("Retrieved RollingMigrationPlan", "rollingMigrationPlan", rollingMigrationPlanKey, "resourceVersion", rollingMigrationPlan.ResourceVersion)
 
 	scope, err := scope.NewClusterMigrationScope(scope.ClusterMigrationScopeParams{
 		Logger:               ctxlog,
@@ -134,6 +134,23 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	}
 
+	// count successful esxiMigrations, we want to trigger vm migrations
+	// only if more than one esxi migration is successful
+	successfulESXiMigrations, err := countSuccessfulESXIMigrations(ctx, scope)
+	if err != nil {
+		log.Error(err, "Failed to count successful ESXi migrations")
+		return ctrl.Result{}, errors.Wrap(err, "failed to count successful esxi migrations")
+	}
+
+	log.Info("Counted successful ESXi migrations", "count", successfulESXiMigrations)
+	if successfulESXiMigrations > 1 {
+		err = handleVMMigrations(ctx, scope)
+		if err != nil {
+			log.Error(err, "Failed to handle VM migrations")
+			return ctrl.Result{}, errors.Wrap(err, "failed to handle vm migrations")
+		}
+	}
+
 	for i, esxi := range clusterMigration.Spec.ESXIMigrationSequence {
 		esxiMigration, err := utils.GetESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan)
 		if err != nil {
@@ -162,6 +179,13 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 			return ctrl.Result{}, nil
 		} else if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
 			if i == len(clusterMigration.Spec.ESXIMigrationSequence)-1 {
+				if i == 0 {
+					err = handleVMMigrations(ctx, scope)
+					if err != nil {
+						log.Error(err, "Failed to handle VM migrations")
+						return ctrl.Result{}, errors.Wrap(err, "failed to handle vm migrations")
+					}
+				}
 				log.Info("All ESXIMigrations succeeded, updating ClusterMigration status to succeeded")
 				err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded, "All ESXIMigrations succeeded", "")
 				if err != nil {
@@ -276,4 +300,62 @@ func (r *ClusterMigrationReconciler) CheckAndUpdateClusterMigrationStatus(ctx co
 
 	log.V(1).Info("Retrieved ESXIMigrations", "count", len(esxiMigrationList.Items))
 	return nil
+}
+
+func handleVMMigrations(ctx context.Context, scope *scope.ClusterMigrationScope) error {
+	log := scope.Logger
+	targetClusterName := ""
+	for _, mapping := range scope.RollingMigrationPlan.Spec.ClusterMapping {
+		if mapping.VMwareClusterName == scope.ClusterMigration.Spec.ClusterName {
+			targetClusterName = mapping.PCDClusterName
+			break
+		}
+	}
+	if targetClusterName == "" {
+		log.Info("Target cluster name not found, using default cluster for VM migrations")
+	} else {
+		// update migrationtemplate with target cluster name.
+		// This is possible as all the VMs are migrated to the same cluster.
+		// We disable selection of other VMs from the UI to prevent this.
+		// TODO(vPwned): Add backend validation to prevent this.
+		// This is potentially a problem when we support multiple clusters.
+		migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+		if err := scope.Client.Get(ctx, k8stypes.NamespacedName{
+			Name:      scope.RollingMigrationPlan.Spec.MigrationTemplate,
+			Namespace: constants.NamespaceMigrationSystem},
+			migrationTemplate); err != nil {
+			return errors.Wrap(err, "failed to get migration template")
+		}
+
+		migrationTemplate.Spec.TargetPCDClusterName = targetClusterName
+		if err := scope.Client.Update(ctx, migrationTemplate); err != nil {
+			return errors.Wrap(err, "failed to update migration template")
+		}
+	}
+
+	// execute VM Migrations
+	err := utils.ConvertVMSequenceToMigrationPlans(ctx, scope, 10)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert VM sequence to migration plans")
+	}
+	return nil
+}
+
+func countSuccessfulESXIMigrations(ctx context.Context, scope *scope.ClusterMigrationScope) (int, error) {
+	log := scope.Logger
+	count := 0
+	for _, esxi := range scope.ClusterMigration.Spec.ESXIMigrationSequence {
+		esxiMigration, err := utils.GetESXIMigration(ctx, scope.Client, esxi, scope.RollingMigrationPlan)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			log.Error(err, "Failed to get ESXIMigration", "esxiName", esxi)
+			return 0, errors.Wrap(err, "failed to get esxi migration")
+		}
+		if esxiMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
+			count++
+		}
+	}
+	return count, nil
 }

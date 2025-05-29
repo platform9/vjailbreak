@@ -721,6 +721,10 @@ spec:
                 description: StorageMapping is the storage mapping for the virtual
                   machine
                 type: string
+              targetPCDClusterName:
+                description: TargetPCDClusterName is the name of the PCD cluster where
+                  the virtual machine will be migrated
+                type: string
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine

@@ -414,7 +414,7 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 	return nil
 }
 
-func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.RollingMigrationPlanScope, batchSize int) error {
+func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.ClusterMigrationScope, batchSize int) error {
 
 	if batchSize <= 0 {
 		return fmt.Errorf("batch size must be greater than 0")
@@ -449,7 +449,7 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Rolling
 	return nil
 }
 
-func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, batch []string, i int) error {
+func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrationScope, batch []string, i int) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	// Create a migration plan for this batch
@@ -498,7 +498,7 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.RollingMigrat
 	return nil
 }
 
-func convertVMSequenceToBatches(scope *scope.RollingMigrationPlanScope, batchSize int) ([][]string, error) {
+func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize int) ([][]string, error) {
 	var batches [][]string
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
@@ -658,6 +658,8 @@ func StringSlicesEqual(a, b []string) bool {
 }
 
 func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+	log := scope.Logger
+	log.Info("Resuming rolling migration plan", "rollingMigrationPlan", scope.RollingMigrationPlan.Name)
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	if rollingMigrationPlan.Labels == nil {
 		return nil

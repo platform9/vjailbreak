@@ -222,23 +222,16 @@ func (r *ESXIMigrationReconciler) handleESXiWaitingForPCDHost(ctx context.Contex
 		log.Error(err, "Failed to get VMware host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
 	}
-	onPCD, err := utils.WaitForHostOnPCD(ctx, r.Client, *destOpenstackCreds, vmwareHost.Spec.HardwareUUID)
+	showedUp, err := utils.WaitforHostToShowUpOnPCD(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to wait for host to be on PCD")
+		log.Error(err, "Failed to wait for host to show up on PCD", "hostID", vmwareHost.Spec.HardwareUUID)
+		return ctrl.Result{}, errors.Wrap(err, "failed to wait for host to show up on PCD")
 	}
-	if !onPCD {
-		log.Info("Host is not on PCD, waiting for it to be on PCD", "hostID", vmwareHost.Spec.HardwareUUID)
+	if !showedUp {
+		log.Info("Host did not show up on PCD, waiting for it to show up", "hostID", vmwareHost.Spec.HardwareUUID)
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 	}
-
-	// Remove the ESXi host from vCenter before changing the phase
-	err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
-	if err != nil {
-		log.Error(err, "Failed to remove ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		return ctrl.Result{}, errors.Wrap(err, "failed to remove ESXi from vCenter")
-	}
-	log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-
+	log.Info("Host showed up on PCD", "hostName", vmwareHost.Spec.Name)
 	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseConfiguringPCDHost
 	err = r.Status().Update(ctx, scope.ESXIMigration)
 	if err != nil {
@@ -294,10 +287,10 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 		pcdClusterName = pcdClusterList.Items[0].Name
 	}
 
-	if err := utils.AssignHostConfigToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.Name, vmwareHost.Spec.HostConfigID); err != nil {
+	if err := utils.AssignHostConfigToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID, vmwareHost.Spec.HostConfigID); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to assign host config to PCD host")
 	}
-	if err := utils.AssignHypervisorRoleToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.Name, pcdClusterName); err != nil {
+	if err := utils.AssignHypervisorRoleToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID, pcdClusterName); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to assign hypervisor role to PCD host")
 	}
 	assigned, err := utils.WaitForHypervisorRoleAssignment(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID)
@@ -307,6 +300,7 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	if !assigned {
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 	}
+	log.Info("Assigned Hypervisor Role to PCD Host", "hostName", vmwareHost.Spec.Name)
 
 	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
 	err = r.Status().Update(ctx, scope.ESXIMigration)
@@ -314,6 +308,16 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 		log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 	}
+
+	// TODO(Omkar): Uncomment after testing
+	// Remove the ESXi host from vCenter before changing the phase
+	// err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
+	// if err != nil {
+	// 	log.Error(err, "Failed to remove ESXi from vCenter, retrying after one minute", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	// 	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	// }
+	// log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+
 	return ctrl.Result{}, nil
 }
 
