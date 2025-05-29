@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
@@ -663,6 +665,7 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	return nil
 }
 
+// CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
 	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
@@ -681,19 +684,21 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 	// Try to fetch existing resource
 	err = client.Get(ctx, vmwvmKey, vmwvm)
-	if err != nil && !k8serrors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
 
 	// Check if the object is present or not if not present create a new object and set init to true.
-	if k8serrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
-				Labels:    map[string]string{label: "true"},
+				Labels: map[string]string{
+					label: "true",
+				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMs: *vminfo,
@@ -701,6 +706,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		}
 		init = true
 	} else {
+		// Initialize labels map if needed
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 
 		// Check if label already exists with same value
@@ -709,17 +715,23 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			if vmwvm.Labels == nil {
 				vmwvm.Labels = make(map[string]string)
 			}
-
-			// Set the new label
 			vmwvm.Labels[label] = "true"
+			// Update only if we made changes
+			if err = client.Update(ctx, vmwvm); err != nil {
+				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
+			}
+		}
+
+		if !reflect.DeepEqual(vmwvm.Spec.VMs, *vminfo) {
+			// update vminfo in case the VM has been moved by vMotion
+			vmwvm.Spec.VMs = *vminfo
 
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine labels: %w", err)
+				return fmt.Errorf("failed to update VMwareMachine: %w", err)
 			}
 		}
 	}
-
 	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		return nil
 	})
@@ -749,14 +761,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	return nil
 }
 
-func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	ctxlog := log.FromContext(ctx)
-
-	// Fixed logging with proper string keys
-	ctxlog.Info("Checking flavor requirements",
-		"CPU", cpu,
-		"MemoryMB", memory)
-
+func GetClosestFlavour(cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -782,22 +787,14 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	}
 
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		// Fixed logging with proper string keys and descriptive field names
-		ctxlog.Info("Found matching OpenStack flavor",
-			"flavorName", bestFlavor.Name,
-			"vCPUs", bestFlavor.VCPUs,
-			"RAM_MB", bestFlavor.RAM,
-			"diskGB", bestFlavor.Disk)
 		return bestFlavor, nil
 	}
 
-	ctxlog.Info("No suitable flavor found matching requirements",
-		"required_vCPUs", cpu,
-		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
-func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+func CreateOrUpdateLabel(ctx context.Context, client client.Client,
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		if vmwvm.Labels == nil {
 			vmwvm.Labels = make(map[string]string)
@@ -810,6 +807,110 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create or update VMwareMachine labels: %w", err)
+	}
+	return nil
+}
+
+// FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
+func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+	vmList := vjailbreakv1alpha1.VMwareMachineList{}
+	if err := k8sClient.List(ctx, &vmList,
+		client.InNamespace(constants.NamespaceMigrationSystem),
+		client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
+		return nil, errors.Wrap(err, "Error listing VMs")
+	}
+	return &vmList, nil
+}
+
+// FindVMwareMachinesNotInVcenter finds VMwareMachine objects that are not present in the vCenter
+func FindVMwareMachinesNotInVcenter(ctx context.Context,
+	client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
+	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error filtering VMs")
+	}
+	var staleVMs []vjailbreakv1alpha1.VMwareMachine
+	for i := range vmList.Items {
+		vm := &vmList.Items[i]
+		if !VMExistsInVcenter(vm.Spec.VMs.Name, vcenterVMs) {
+			staleVMs = append(staleVMs, *vm)
+		}
+	}
+	return staleVMs, nil
+}
+
+// DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
+func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
+	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
+	if err != nil {
+		return errors.Wrap(err, "Error finding stale VMs")
+	}
+	for i := range staleVMs {
+		vm := &staleVMs[i]
+		if err := client.Delete(ctx, vm); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
+			}
+		}
+	}
+	return nil
+}
+
+// VMExistsInVcenter checks if a VM exists in the vCenter
+func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
+	for i := range vcenterVMs {
+		vm := &vcenterVMs[i]
+		if vm.Name == vmName {
+			return true
+		}
+	}
+	return false
+}
+
+func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
+	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
+	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
+		return errors.Wrap(err, "Error deleting VMs")
+	}
+
+	if err := DeleteVMwarecredsSecret(ctx, scope); err != nil {
+		return errors.Wrap(err, "Error deleting secret")
+	}
+
+	return nil
+}
+
+func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+	}
+	if err := scope.Client.Delete(ctx, &secret); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete associated secret")
+		}
+	}
+	return nil
+}
+
+func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
+	vmList, err := FilterVMwareMachinesForCreds(ctx, scope.Client, scope.VMwareCreds)
+	if err != nil {
+		return errors.Wrap(err, "Error filtering VMs")
+	}
+	for i := range vmList.Items {
+		vm := &vmList.Items[i]
+		if err := scope.Client.Delete(ctx, vm); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
+			}
+		}
 	}
 	return nil
 }
