@@ -778,7 +778,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			}
 		}
 	}
-
 	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		return nil
 	})
