@@ -142,12 +142,6 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
-	// execute VM Migrations
-	err := utils.ConvertVMSequenceToMigrationPlans(ctx, scope, 10)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to convert VM sequence to migration plans")
-	}
-
 	// Aggregate MigrationPlan statuses and update RollingMigrationPlan status
 	updated, err := r.aggregateAndUpdateMigrationPlanStatuses(ctx, scope)
 	if err != nil {
@@ -301,7 +295,7 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 	// Build new migrated and failed VMs lists
 	newMigratedVMs := []string{}
 	newFailedVMs := []string{}
-	
+
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for _, vmName := range cluster.VMSequence {
 			vmMigration, err := utils.GetVMMigration(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
@@ -319,24 +313,24 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 			}
 		}
 	}
-	
+
 	// Check if any status fields have changed
 	migratedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.MigratedVMs, newMigratedVMs)
 	failedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.FailedVMs, newFailedVMs)
 	phaseChanged := scope.RollingMigrationPlan.Status.VMMigrationsPhase != string(currentPhase)
 	messageChanged := scope.RollingMigrationPlan.Status.Message != message
-	
+
 	if phaseChanged || messageChanged || migratedVMsChanged || failedVMsChanged {
 		// Update status fields only if there are changes
 		scope.RollingMigrationPlan.Status.VMMigrationsPhase = string(currentPhase)
 		scope.RollingMigrationPlan.Status.Message = message
 		scope.RollingMigrationPlan.Status.MigratedVMs = newMigratedVMs
 		scope.RollingMigrationPlan.Status.FailedVMs = newFailedVMs
-		
+
 		if err := r.Status().Update(ctx, scope.RollingMigrationPlan); err != nil {
 			return false, errors.Wrap(err, "failed to update RollingMigrationPlan status")
 		}
-		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message, 
+		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message,
 			"migratedVMsChanged", migratedVMsChanged, "failedVMsChanged", failedVMsChanged)
 		return true, nil
 	}

@@ -274,7 +274,7 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to query the resmgr to assign hypervisor role: (%d) %s", resp.StatusCode, string(body))
 	}
@@ -440,7 +440,7 @@ func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID 
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to query the resmgr to assign host config: (%d) %s", resp.StatusCode, string(body))
 	}

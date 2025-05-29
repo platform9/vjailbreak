@@ -69,18 +69,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vm
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo)
+	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo, availabilityZone)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo, availabilityZone interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo, availabilityZone)
 }
 
 // CreateVolume mocks base method.

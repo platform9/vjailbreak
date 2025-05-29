@@ -201,7 +201,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 		}
 
-		if _, ok := scope.OpenstackCreds.Labels[constants.IsPCDCredsLabel]; ok {
+		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
 			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
