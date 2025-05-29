@@ -799,7 +799,8 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
-func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+func CreateOrUpdateLabel(ctx context.Context, client client.Client,
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		if vmwvm.Labels == nil {
 			vmwvm.Labels = make(map[string]string)
@@ -817,7 +818,8 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 }
 
 // FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
-func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
@@ -826,28 +828,34 @@ func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client, 
 }
 
 // FindVMwareMachinesNotInVcenter finds VMwareMachine objects that are not present in the vCenter
-func FindVMwareMachinesNotInVcenter(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
+func FindVMwareMachinesNotInVcenter(ctx context.Context,
+	client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
 	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error filtering VMs")
 	}
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
-	for _, vm := range vmList.Items {
+	for i := range vmList.Items {
+		vm := &vmList.Items[i]
 		if !VMExistsInVcenter(vm.Spec.VMs.Name, vcenterVMs) {
-			staleVMs = append(staleVMs, vm)
+			staleVMs = append(staleVMs, *vm)
 		}
 	}
 	return staleVMs, nil
 }
 
 // DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
-func DeleteStaleVMwareMachines(ctx context.Context, client client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
+func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
 	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
 	if err != nil {
 		return errors.Wrap(err, "Error finding stale VMs")
 	}
-	for _, vm := range staleVMs {
-		if err := client.Delete(ctx, &vm); err != nil {
+	for i := range staleVMs {
+		vm := &staleVMs[i]
+		if err := client.Delete(ctx, vm); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
 			}
@@ -858,7 +866,8 @@ func DeleteStaleVMwareMachines(ctx context.Context, client client.Client, vmwcre
 
 // VMExistsInVcenter checks if a VM exists in the vCenter
 func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
-	for _, vm := range vcenterVMs {
+	for i := range vcenterVMs {
+		vm := &vcenterVMs[i]
 		if vm.Name == vmName {
 			return true
 		}
@@ -899,22 +908,13 @@ func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMware
 	if err != nil {
 		return errors.Wrap(err, "Error filtering VMs")
 	}
-	for _, vm := range vmList.Items {
-		if err := scope.Client.Delete(ctx, &vm); err != nil {
+	for i := range vmList.Items {
+		vm := &vmList.Items[i]
+		if err := scope.Client.Delete(ctx, vm); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
 			}
 		}
 	}
 	return nil
-}
-
-// containsString checks if a string exists in a slice
-func containsString(slice []string, target string) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }
