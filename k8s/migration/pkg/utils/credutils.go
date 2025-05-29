@@ -815,14 +815,11 @@ func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
 	label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
-	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("Filtering VMs", "vmwarecreds", vmwcreds.Name, "label", label)
 	if err := k8sClient.List(ctx, &vmList,
 		client.InNamespace(constants.NamespaceMigrationSystem),
 		client.MatchingLabels{label: "true"}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
 	}
-	ctxlog.Info("Found VMs", "vmwarecreds", vmwcreds.Name, "vmList", vmList)
 	return &vmList, nil
 }
 
@@ -831,7 +828,6 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context,
 	client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
-	ctxlog := log.FromContext(ctx)
 	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error filtering VMs")
@@ -839,22 +835,17 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context,
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
 	for i := range vmList.Items {
 		vm := &vmList.Items[i]
-		ctxlog.Info("Checking VM", "vmwarecreds", vmwcreds.Name, "vm", vm)
 		if !VMExistsInVcenter(vm.Spec.VMs.Name, vcenterVMs) {
-			ctxlog.Info("VM does not exist in vCenter", "vmwarecreds", vmwcreds.Name, "vm", vm)
 			staleVMs = append(staleVMs, *vm)
 		}
 	}
-	ctxlog.Info("Found stale VMs", "vmwarecreds", vmwcreds.Name, "staleVMs", staleVMs)
 	return staleVMs, nil
 }
 
 // DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
 func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
-	ctxlog := log.FromContext(ctx)
 	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
-	ctxlog.Info("Deleting stale VMs", "vmwarecreds", vmwcreds.Name, "staleVMs", staleVMs)
 	if err != nil {
 		return errors.Wrap(err, "Error finding stale VMs")
 	}
@@ -866,26 +857,21 @@ func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
 			}
 		}
 	}
-	ctxlog.Info("Deleted stale VMs", "vmwarecreds", vmwcreds.Name, "staleVMs", staleVMs)
 	return nil
 }
 
 // VMExistsInVcenter checks if a VM exists in the vCenter
 func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
-	ctxlog := log.FromContext(context.Background())
 	for i := range vcenterVMs {
 		vm := &vcenterVMs[i]
 		if vm.Name == vmName {
-			ctxlog.Info("VM exists in vCenter", "vmName", vmName)
 			return true
 		}
 	}
-	ctxlog.Info("VM does not exist in vCenter", "vmName", vmName)
 	return false
 }
 
 func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
 	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting VMs")
 	}
