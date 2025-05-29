@@ -7,7 +7,8 @@ import {
     styled,
     Button,
     LinearProgress,
-    IconButton
+    IconButton,
+    Tooltip
 } from "@mui/material";
 import {
     DataGrid,
@@ -378,9 +379,24 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
             }}
         >
             <div>
-                <Typography variant="h6" component="h2">
-                    Cluster Migrations
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6" component="h2">
+                        Cluster Conversions
+                    </Typography>
+                    <Tooltip title="Early preview - report any issues" arrow>
+                        <Chip
+                            label="BETA"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            sx={{
+                                fontSize: '0.65rem',
+                                height: '18px',
+                                fontWeight: 600
+                            }}
+                        />
+                    </Tooltip>
+                </Box>
                 {selectedCount > 0 && (
                     <Typography variant="body2" color="text.secondary">
                         {selectedCount} {selectedCount === 1 ? 'row' : 'rows'} selected
@@ -494,8 +510,8 @@ export default function RollingMigrationsTable({
 
             setSelectedRows([]);
         } catch (error) {
-            console.error("Failed to delete cluster migrations:", error);
-            setDeleteError(error instanceof Error ? error.message : "Failed to delete cluster migrations");
+            console.error("Failed to delete cluster conversions:", error);
+            setDeleteError(error instanceof Error ? error.message : "Failed to delete cluster conversions");
             throw error;
         }
     };
@@ -698,8 +714,8 @@ export default function RollingMigrationsTable({
                 title="Confirm Delete"
                 icon={<WarningIcon color="warning" />}
                 message={selectedRows.length > 1
-                    ? "Are you sure you want to delete these cluster migrations?"
-                    : `Are you sure you want to delete the selected cluster migration?`
+                    ? "Are you sure you want to delete these cluster conversions?"
+                    : `Are you sure you want to delete the selected cluster conversion?`
                 }
                 items={clusterMigrations
                     .filter(cm => selectedRows.includes(cm.metadata?.name || ''))

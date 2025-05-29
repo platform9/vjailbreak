@@ -1,4 +1,4 @@
-import { Paper, styled, Tab, Tabs } from "@mui/material"
+import { Paper, styled, Tab, Tabs, Box, Chip } from "@mui/material"
 import { useEffect, useState } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
@@ -10,20 +10,19 @@ import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog"
 import { getMigrationPlan, patchMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
+import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations"
+import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
 import NodesTable from "./NodesTable"
 import CredentialsTable from "./CredentialsTable"
 import BMConfigForm from "./BMConfigForm"
+import { ClusterMigration } from "src/api/clustermigrations/model"
+import { useESXIMigrationsQuery, ESXI_MIGRATIONS_QUERY_KEY } from "../../hooks/api/useESXIMigrationsQuery"
+import { ESXIMigration } from "src/api/esximigrations/model"
+import { deleteESXIMigration } from "src/api/esximigrations/esximigrations"
+import RollingMigrationsTable from "./RollingMigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNodesQuery } from "../../hooks/api/useNodesQuery"
 import { useClusterMigrationsQuery } from "../../hooks/api/useClusterMigrationsQuery"
-// import { useESXIMigrationsQuery } from "../../hooks/api/useESXIMigrationsQuery"
-import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations"
-import { deleteESXIMigration } from "src/api/esximigrations/esximigrations"
-import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
-import { ESXI_MIGRATIONS_QUERY_KEY, useESXIMigrationsQuery } from "src/hooks/api/useESXIMigrationsQuery"
-import RollingMigrationsTable from "./RollingMigrationsTable"
-import { ClusterMigration } from "src/api/clustermigrations/model"
-import { ESXIMigration } from "src/api/esximigrations/model"
 
 
 const DashboardContainer = styled("div")({
@@ -184,7 +183,7 @@ export default function Dashboard() {
     if (deleteType === 'migration') {
       return "Confirm Delete Migration"
     } else if (deleteType === 'clusterMigration') {
-      return "Confirm Delete Cluster Migration"
+      return "Confirm Delete Cluster Conversion"
     } else if (deleteType === 'esxiMigration') {
       return "Confirm Delete ESXi Migration"
     }
@@ -198,8 +197,8 @@ export default function Dashboard() {
         : `Are you sure you want to delete migration "${selectedMigrations[0]?.metadata.name}"?`
     } else if (deleteType === 'clusterMigration') {
       return selectedClusterMigrations.length > 1
-        ? "Are you sure you want to delete these cluster migrations?"
-        : `Are you sure you want to delete cluster migration "${selectedClusterMigrations[0]?.metadata.name}"?`
+        ? "Are you sure you want to delete these cluster conversions?"
+        : `Are you sure you want to delete cluster conversion "${selectedClusterMigrations[0]?.metadata.name}"?`
     } else if (deleteType === 'esxiMigration') {
       return selectedESXIMigrations.length > 1
         ? "Are you sure you want to delete these ESXi migrations?"
@@ -248,16 +247,21 @@ export default function Dashboard() {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
     if (tabParam) {
-      const tabMap = {
+      const tabOrder = {
         'migrations': 0,
-        'clustermigrations': 1,
-        'agents': 2,
-        'credentials': 3,
+        'agents': 1,
+        'credentials': 2,
+        'clusterconversions': 3,
+        'clustermigrations': 3,
         'maasconfig': 4
       };
 
-      if (tabParam in tabMap) {
-        setActiveTab(tabMap[tabParam]);
+      if (tabParam in tabOrder) {
+        setActiveTab(tabOrder[tabParam]);
+        // If using old route, redirect to new route
+        if (tabParam === 'clustermigrations') {
+          navigate('/dashboard?tab=clusterconversions', { replace: true });
+        }
       } else {
         const tabIndex = parseInt(tabParam, 10);
         if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 4) {
@@ -265,15 +269,15 @@ export default function Dashboard() {
         }
       }
     }
-  }, [location]);
+  }, [location, navigate]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue)
     const tabNames = [
       'migrations',
-      'clustermigrations',
       'agents',
       'credentials',
+      'clusterconversions',
       'maasconfig'
     ];
     navigate(`/dashboard?tab=${tabNames[newValue]}`, { replace: true });
@@ -288,10 +292,52 @@ export default function Dashboard() {
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label="Migrations" />
-          <Tab label="Cluster Migrations" />
           <Tab label="Agents" />
           <Tab label="Credentials" />
-          <Tab label="Maas Config" />
+          <Tab
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{
+                  color: 'text.secondary',
+                  fontSize: '1rem',
+                  fontWeight: 300,
+                  mr: 2
+                }}>
+                  |
+                </Box>
+                Cluster Conversions
+                <Chip
+                  label="BETA"
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  sx={{
+                    fontSize: '0.6rem',
+                    height: '16px',
+                    fontWeight: 600
+                  }}
+                />
+              </Box>
+            }
+          />
+          <Tab
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                Maas Config
+                <Chip
+                  label="BETA"
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  sx={{
+                    fontSize: '0.6rem',
+                    height: '16px',
+                    fontWeight: 600
+                  }}
+                />
+              </Box>
+            }
+          />
         </Tabs>
 
         {activeTab === 0 ? (
@@ -302,6 +348,10 @@ export default function Dashboard() {
             onDeleteSelected={handleDeleteSelected}
           />
         ) : activeTab === 1 ? (
+          <NodesTable />
+        ) : activeTab === 2 ? (
+          <CredentialsTable />
+        ) : activeTab === 3 ? (
           <RollingMigrationsTable
             clusterMigrations={clusterMigrations || []}
             esxiMigrations={esxiMigrations || []}
@@ -309,10 +359,6 @@ export default function Dashboard() {
             refetchClusterMigrations={refetchClusterMigrations}
             refetchMigrations={refetchMigrations}
           />
-        ) : activeTab === 2 ? (
-          <NodesTable />
-        ) : activeTab === 3 ? (
-          <CredentialsTable />
         ) : (
           <BMConfigForm />
         )}

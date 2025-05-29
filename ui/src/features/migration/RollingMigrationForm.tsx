@@ -1,4 +1,4 @@
-import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
+import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link } from "@mui/material"
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
@@ -12,7 +12,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
 import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
-import { getVMwareHosts } from "src/api/vmware-hosts/vmwareHosts"
+import { getVMwareHosts, patchVMwareHost } from "src/api/vmware-hosts/vmwareHosts"
 import { getVMwareMachines } from "src/api/vmware-machines/vmwareMachines"
 import { VMwareCreds } from "src/api/vmware-creds/model"
 import { VMwareCluster } from "src/api/vmware-clusters/model"
@@ -42,6 +42,7 @@ import MigrationOptions from "./MigrationOptionsAlt"
 import { CUTOVER_TYPES } from "./constants"
 import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
+import WarningIcon from '@mui/icons-material/Warning';
 
 // Import CDS icons
 import "@cds/core/icon/register.js"
@@ -366,7 +367,7 @@ const CustomESXToolbarWithActions = (props) => {
                     size="small"
                     sx={{ ml: 1 }}
                 >
-                    Add PCD Host ({rowSelectionModel.length})
+                    Add Host Config ({rowSelectionModel.length})
                 </Button>
             )}
             <CustomSearchToolbar {...toolbarProps} />
@@ -977,6 +978,24 @@ export default function RollingMigrationFormDrawer({
                 pcdClusterName: pcdClusterName
             }];
 
+            // Update VMware hosts with their host config IDs
+            const hostsToUpdate = orderedESXHosts.filter(host => host.pcdHostConfigName);
+
+            for (const host of hostsToUpdate) {
+                try {
+                    // Get the host config ID from the mapping
+                    const hostConfigId = esxHostToPcdMapping[host.id] || host.pcdHostConfigName;
+
+                    if (hostConfigId) {
+                        console.log(`Updating host ${host.name} with hostConfigId: ${hostConfigId}`);
+                        await patchVMwareHost(host.id, hostConfigId, VJAILBREAK_DEFAULT_NAMESPACE);
+                    }
+                } catch (error) {
+                    console.error(`Failed to update host config for ${host.name}:`, error);
+                    // Continue with other hosts even if one fails
+                }
+            }
+
             // 1. Create network mapping
             const networkMappingJson = createNetworkMappingJson({
                 networkMappings: networkMappings.map(mapping => ({
@@ -1041,7 +1060,7 @@ export default function RollingMigrationFormDrawer({
 
             console.log("Submitted rolling migration plan", migrationPlanJson);
             onClose();
-            navigate("/dashboard?tab=clustermigrations");
+            navigate("/dashboard?tab=clusterconversions");
         } catch (error) {
             console.error("Failed to submit rolling migration plan:", error);
             const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1193,7 +1212,47 @@ export default function RollingMigrationFormDrawer({
             onClose={handleClose}
             ModalProps={{ keepMounted: false }}
         >
-            <Header title="Rolling Migration Plan" />
+            <Header title="Cluster Conversion " />
+
+            {/* Experimental Feature Banner */}
+            <Box sx={{ p: 3, pb: 0 }}>
+                <Alert
+                    severity="warning"
+                    icon={<WarningIcon />}
+                    sx={{
+                        mb: 2,
+                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                        border: '1px solid rgba(255, 152, 0, 0.3)',
+                        '& .MuiAlert-message': {
+                            width: '100%'
+                        }
+                    }}
+                >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                            <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
+                                🧪 Experimental Feature - Cluster Conversion (Beta)
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                This feature is in beta stage and may have significant limitations. Use with caution in production environments.
+                            </Typography>
+                        </Box>
+                        <Link
+                            href="/docs/rolling-migration-beta"
+                            target="_blank"
+                            sx={{
+                                ml: 2,
+                                textDecoration: 'none',
+                                fontWeight: 500,
+                                fontSize: '0.875rem'
+                            }}
+                        >
+                            Learn More →
+                        </Link>
+                    </Box>
+                </Alert>
+            </Box>
+
             <DrawerContent>
                 <Box sx={{ display: "grid", gap: 4 }}>
                     <Box>
@@ -1643,12 +1702,12 @@ export default function RollingMigrationFormDrawer({
                 maxWidth="sm"
             >
                 <DialogTitle>
-                    Assign PCD Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
+                    Assign Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
                 </DialogTitle>
                 <DialogContent>
                     <Box sx={{ my: 2 }}>
                         <Typography variant="body2" gutterBottom>
-                            Select PCD Host Configuration
+                            Select Host Configuration
                         </Typography>
                         <Select
                             fullWidth
@@ -1659,7 +1718,7 @@ export default function RollingMigrationFormDrawer({
                             displayEmpty
                         >
                             <MenuItem value="">
-                                <em>Select a PCD host configuration</em>
+                                <em>Select a  host configuration</em>
                             </MenuItem>
                             {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
                                 <MenuItem key={config.id} value={config.id}>

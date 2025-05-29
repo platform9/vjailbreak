@@ -47,3 +47,32 @@ export const getVMwareHost = async (
     endpoint,
   })
 }
+
+/**
+ * Update a VMware host's host config ID
+ * @param hostName - The name of the host to update
+ * @param hostConfigId - The ID of the host config to assign
+ * @param namespace - The namespace of the host (defaults to migration-system)
+ */
+export const patchVMwareHost = async (
+  hostName: string,
+  hostConfigId: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<VMwareHost> => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarehosts/${hostName}`
+  const payload = {
+    spec: {
+      hostConfigId: hostConfigId,
+    },
+  }
+
+  return axios.patch<VMwareHost>({
+    endpoint,
+    data: payload,
+    config: {
+      headers: {
+        "Content-Type": "application/merge-patch+json",
+      },
+    },
+  })
+}
