@@ -813,10 +813,11 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client,
 // FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
 func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+	label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 	if err := k8sClient.List(ctx, &vmList,
 		client.InNamespace(constants.NamespaceMigrationSystem),
-		client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
+		client.MatchingLabels{label: "true"}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
 	}
 	return &vmList, nil
