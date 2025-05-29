@@ -149,7 +149,7 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 		lastErr = err
 		if attempt < maxRetries {
 			// Calculate backoff delay: 2^attempt * 500ms (0.5s, 1s, 2s)
-			backoffTime := time.Duration(math.Pow(2, float64(attempt-1))*500) * time.Millisecond
+			backoffTime := time.Duration(math.Pow(2, float64(attempt-1))*5) * time.Second
 			logger := log.FromContext(ctx)
 			logger.Info(
 				"ReclaimBM attempt failed, retrying",
@@ -378,11 +378,14 @@ func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollin
 		&openstackCreds); err != nil {
 		return false, errors.Wrap(err, "failed to get openstack credentials")
 	}
-	if _, ok := openstackCreds.Labels[constants.IsPCDCredsLabel]; !ok {
-		return false, nil
+	return IsOpenstackPCD(openstackCreds), nil
+}
 
+func IsOpenstackPCD(openstackCreds vjailbreakv1alpha1.OpenstackCreds) bool {
+	if _, ok := openstackCreds.Labels[constants.IsPCDCredsLabel]; !ok {
+		return false
 	}
-	return true, nil
+	return true
 }
 
 func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (*keystone.CachedAuthenticator, error) {
