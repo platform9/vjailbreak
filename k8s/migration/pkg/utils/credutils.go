@@ -691,12 +691,13 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
 				Labels: map[string]string{
-					constants.VMwareCredsLabel: vmwcreds.Name,
+					label: "true",
 				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
@@ -706,11 +707,20 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		init = true
 	} else {
 		// Initialize labels map if needed
-		if vmwvm.Labels == nil {
-			vmwvm.Labels = make(map[string]string)
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
+
+		// Check if label already exists with same value
+		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
+			// Initialize labels map if needed
+			if vmwvm.Labels == nil {
+				vmwvm.Labels = make(map[string]string)
+			}
+			vmwvm.Labels[label] = "true"
+			// Update only if we made changes
+			if err = client.Update(ctx, vmwvm); err != nil {
+				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
+			}
 		}
-		// Set the new label
-		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
 		if !reflect.DeepEqual(vmwvm.Spec.VMs, *vminfo) {
 			// update vminfo in case the VM has been moved by vMotion
@@ -752,13 +762,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	ctxlog := log.FromContext(ctx)
-
-	// Fixed logging with proper string keys
-	ctxlog.Info("Checking flavor requirements",
-		"CPU", cpu,
-		"MemoryMB", memory)
-
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -784,18 +787,9 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	}
 
 	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		// Fixed logging with proper string keys and descriptive field names
-		ctxlog.Info("Found matching OpenStack flavor",
-			"flavorName", bestFlavor.Name,
-			"vCPUs", bestFlavor.VCPUs,
-			"RAM_MB", bestFlavor.RAM,
-			"diskGB", bestFlavor.Disk)
 		return bestFlavor, nil
 	}
 
-	ctxlog.Info("No suitable flavor found matching requirements",
-		"required_vCPUs", cpu,
-		"required_RAM_MB", memory)
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
