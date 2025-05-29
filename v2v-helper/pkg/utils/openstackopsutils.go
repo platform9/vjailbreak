@@ -467,7 +467,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}
 
-	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", 60)
+	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", 360)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for server to become active: %s", err)
 	}
