@@ -1,4 +1,4 @@
-import { Box, Drawer, styled } from "@mui/material"
+import { Box, Drawer, styled, Typography, TextField} from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
 import { useEffect, useMemo, useState, useCallback } from "react"
@@ -95,7 +95,15 @@ export interface FormValues extends Record<string, unknown> {
   postMigrationScript?: string
   retryOnFailure?: boolean
   osType?: string
+  // Add postMigrationAction with optional properties
+  postMigrationAction?: {
+    suffix?: string
+    folderName?: string
+    renameVm?: boolean
+    moveToFolder?: boolean
+  }
 }
+
 
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
@@ -386,9 +394,6 @@ export default function MigrationFormDrawer({
         dataCopyStart: params.dataCopyStartTime,
       }),
       ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { adminInitiatedCutOver: true }),
-
-      ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
       ...(selectedMigrationOptions.cutoverOption &&
@@ -614,6 +619,26 @@ export default function MigrationFormDrawer({
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
           />
+          <Box sx={{ display: "grid", gap: 2, mt: 2 }}>
+  <Typography variant="subtitle1">Post-Migration Actions (Required)</Typography>
+  <TextField
+    label="Suffix for Source VM Name"
+    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+    onChange={(e) => getParamsUpdater("postMigrationAction.suffix")(e.target.value)}
+    fullWidth
+    size="small"
+    helperText="This suffix will be appended to the source VM name after migration."
+  />
+  <TextField
+    label="Folder Name in vCenter"
+    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+    onChange={(e) => getParamsUpdater("postMigrationAction.folderName")(e.target.value)}
+    fullWidth
+    size="small"
+    helperText="The source VM will be moved to this folder after migration."
+  />
+</Box>
+
         </Box>
       </DrawerContent>
       <Footer
