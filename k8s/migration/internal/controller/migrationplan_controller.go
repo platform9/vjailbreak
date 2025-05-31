@@ -683,7 +683,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, fmt.Errorf("failed to get OpenStack clients: %w", err)
 			}
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
+			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory, computeClient.ComputeClient)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
@@ -866,7 +866,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		vmMachineObj = nil
 		for i := range vmMachines.Items {
 			if vmMachines.Items[i].Spec.VMs.Name == vm {
-				ctxlog.Info(fmt.Sprintf("Found VMwareMachineobject '%v'", vmMachines.Items[i]))
 				vmMachineObj = &vmMachines.Items[i]
 				break
 			}
