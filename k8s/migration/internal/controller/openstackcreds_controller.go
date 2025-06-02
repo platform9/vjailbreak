@@ -144,7 +144,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
 		}
 		scope.OpenstackCreds.Spec.Flavors = flavors
-		if err = r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+		if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
@@ -171,7 +171,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
 		// This will help us to create the vmwaremachine object with the correct flavor.
 		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
-		if err := r.Client.List(ctx, vmwaremachineList); err != nil {
+		if err := r.List(ctx, vmwaremachineList); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
 		}
 		for i := range vmwaremachineList.Items {
@@ -207,7 +207,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
 			}
 		}
-
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
 	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil

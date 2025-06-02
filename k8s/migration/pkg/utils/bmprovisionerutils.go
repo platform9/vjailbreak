@@ -23,7 +23,10 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
+
+	// Import for side effects - registers the base provider implementation
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
+	// Import for side effects - registers the maas provider implementation
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/maas"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// CloudInitParams holds OpenStack authentication parameters for cloud-init configuration.
+// These parameters are used when generating cloud-init configurations for bare metal nodes.
 type CloudInitParams struct {
 	AuthURL     string
 	Username    string
@@ -46,6 +51,7 @@ type CloudInitParams struct {
 	KeystoneURL string
 }
 
+// ConvertESXiToPCDHost converts an ESXi host to a PCD host by reclaiming the hardware
 func ConvertESXiToPCDHost(ctx context.Context,
 	scope *scope.ESXIMigrationScope,
 	bmProvider providers.BMCProvider) error {
@@ -93,6 +99,7 @@ func ConvertESXiToPCDHost(ctx context.Context,
 	return nil
 }
 
+// PrettyPrint outputs a JSON-formatted representation of the provided value
 func PrettyPrint(v interface{}) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -102,7 +109,8 @@ func PrettyPrint(v interface{}) {
 	fmt.Println(string(b))
 }
 
-func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvider providers.BMCProvider, resourceId string, hostID string) error {
+// ReclaimESXi reclaims an ESXi host as a baremetal resource
+func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvider providers.BMCProvider, resourceID string, hostID string) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	// Get BMConfig for the rolling migration plan
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
@@ -129,7 +137,7 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 			UseInsecure: bmConfig.Spec.Insecure,
 		},
 		UserData:   cloudInit,
-		ResourceId: resourceId,
+		ResourceId: resourceID,
 		PowerCycle: true,
 		BootSource: &service.BootsourceSelections{
 			Release: bmConfig.Spec.BootSource.Release,
@@ -140,7 +148,18 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	maxRetries := 3
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err = bmProvider.ReclaimBM(ctx, reclaimRequest)
+		// Create a new request with same fields to avoid copying mutex
+		newRequest := service.ReclaimBMRequest{
+			AccessInfo:         reclaimRequest.AccessInfo,
+			ResourceId:         reclaimRequest.ResourceId,
+			UserData:           reclaimRequest.UserData,
+			EraseDisk:          reclaimRequest.EraseDisk,
+			BootSource:         reclaimRequest.BootSource,
+			PowerCycle:         reclaimRequest.PowerCycle,
+			ManualPowerControl: reclaimRequest.ManualPowerControl,
+			IpmiInterface:      reclaimRequest.IpmiInterface,
+		}
+		err = bmProvider.ReclaimBM(ctx, newRequest) //nolint:govet // Safe - creating a new struct avoids copying mutex
 		if err == nil {
 			// Success, no need to retry
 			break
@@ -174,9 +193,9 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	return nil
 }
 
-// MergeCloudInit merges two cloud-init YAML configurations
-// userData and cloudInit are expected to be valid YAML strings in cloud-init format
-// The function returns the merged configuration as a YAML string with the #cloud-config directive
+// MergeCloudInit merges two cloud-init YAML configurations.
+// userData and cloudInit are expected to be valid YAML strings in cloud-init format.
+// The function returns the merged configuration as a YAML string with the #cloud-config directive.
 func MergeCloudInit(userData, cloudInit string) (string, error) {
 	// Parse both YAML strings into maps
 	userDataMap := make(map[string]interface{})
@@ -204,6 +223,7 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 	return "#cloud-config\n" + string(result), nil
 }
 
+// MergeCloudInitAndCreateSecret merges cloud-init configurations and creates a secret with the result
 func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	// Get BMConfig for the rolling migration plan
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
@@ -246,7 +266,9 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	}
 
 	// Set the owner reference
-	controllerutil.SetOwnerReference(scope.RollingMigrationPlan, finalCloudInitSecret, scope.Client.Scheme())
+	if err := controllerutil.SetOwnerReference(scope.RollingMigrationPlan, finalCloudInitSecret, scope.Client.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on cloud-init secret")
+	}
 
 	// Create or update the secret
 	if err := scope.Client.Create(ctx, finalCloudInitSecret); err != nil {
@@ -309,10 +331,10 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 	return cloudInitBuffer.String(), nil
 }
 
+// GetBMConfigForRollingMigrationPlan retrieves the BMConfig associated with a RollingMigrationPlan
 func GetBMConfigForRollingMigrationPlan(ctx context.Context,
 	k8sClient client.Client,
 	rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.BMConfig, error) {
-
 	bmConfig := &vjailbreakv1alpha1.BMConfig{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: rollingMigrationPlan.Spec.BMConfigRef.Name, Namespace: constants.NamespaceMigrationSystem}, bmConfig); err != nil {
 		return nil, errors.Wrap(err, "failed to get BMConfig for rolling migration plan")
@@ -320,6 +342,7 @@ func GetBMConfigForRollingMigrationPlan(ctx context.Context,
 	return bmConfig, nil
 }
 
+// GetUserDataForBMConfig retrieves user data configuration for a BMConfig from the RollingMigrationPlan
 func GetUserDataForBMConfig(ctx context.Context, scope *scope.RollingMigrationPlanScope) (string, error) {
 	bmConfig, err := GetBMConfig(ctx, scope.Client, scope.RollingMigrationPlan.Spec.BMConfigRef)
 	if err != nil {
@@ -340,6 +363,7 @@ func GetUserDataForBMConfig(ctx context.Context, scope *scope.RollingMigrationPl
 	return string(userData), nil
 }
 
+// GetUserDataSecretForBMConfig retrieves the secret containing user data for a BMConfig
 func GetUserDataSecretForBMConfig(ctx context.Context, k8sClient client.Client, bmConfig *vjailbreakv1alpha1.BMConfig) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: bmConfig.Spec.UserDataSecretRef.Name, Namespace: constants.NamespaceMigrationSystem}, secret); err != nil {
@@ -348,6 +372,7 @@ func GetUserDataSecretForBMConfig(ctx context.Context, k8sClient client.Client, 
 	return secret, nil
 }
 
+// GetCloudInitSecretFromRollingMigrationPlan retrieves the cloud-init secret from a RollingMigrationPlan
 func GetCloudInitSecretFromRollingMigrationPlan(ctx context.Context,
 	k8sClient client.Client,
 	rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*corev1.Secret, error) {
@@ -358,6 +383,7 @@ func GetCloudInitSecretFromRollingMigrationPlan(ctx context.Context,
 	return secret, nil
 }
 
+// GetBMConfig retrieves a BMConfig by its reference
 func GetBMConfig(ctx context.Context, k8sClient client.Client, bmConfigRef corev1.LocalObjectReference) (*vjailbreakv1alpha1.BMConfig, error) {
 	bmConfig := &vjailbreakv1alpha1.BMConfig{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: bmConfigRef.Name, Namespace: constants.NamespaceMigrationSystem}, bmConfig); err != nil {
@@ -366,6 +392,7 @@ func GetBMConfig(ctx context.Context, k8sClient client.Client, bmConfigRef corev
 	return bmConfig, nil
 }
 
+// ValidateOpenstackIsPCD checks if the OpenStack environment is a Platform9 Distributed Cloud (PCD)
 func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (bool, error) {
 	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
 	if err != nil {
@@ -381,6 +408,7 @@ func ValidateOpenstackIsPCD(ctx context.Context, k8sClient client.Client, rollin
 	return IsOpenstackPCD(openstackCreds), nil
 }
 
+// IsOpenstackPCD determines if OpenStack credentials belong to a Platform9 Distributed Cloud
 func IsOpenstackPCD(openstackCreds vjailbreakv1alpha1.OpenstackCreds) bool {
 	if _, ok := openstackCreds.Labels[constants.IsPCDCredsLabel]; !ok {
 		return false
@@ -408,6 +436,7 @@ func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsIn
 	return authenticator, err
 }
 
+// GetResmgrClient creates a resource manager client from OpenStack credentials
 func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resmgr.Resmgr, error) {
 	ksAuth, err := getKeystoneAuthenticator(openstackCreds)
 	if err != nil {
@@ -416,7 +445,7 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	resmgrHTTPClient := http.DefaultClient
 	if openstackCreds.Insecure {
 		transCfg := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections when needed
 		}
 		resmgrHTTPClient = &http.Client{Transport: transCfg}
 	}
@@ -432,6 +461,7 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	), nil
 }
 
+// GetSourceVMwareCredsFromRollingMigrationPlan retrieves the source VMware credentials from a RollingMigrationPlan
 func GetSourceVMwareCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCreds, error) {
 	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
@@ -445,6 +475,7 @@ func GetSourceVMwareCredsFromRollingMigrationPlan(ctx context.Context, k3sclient
 	return vmwarecreds, nil
 }
 
+// GetSourceVMwareCredsInfoFromRollingMigrationPlan retrieves the source VMware credentials info from a RollingMigrationPlan
 func GetSourceVMwareCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	vmwarecreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
@@ -457,6 +488,7 @@ func GetSourceVMwareCredsInfoFromRollingMigrationPlan(ctx context.Context, k3scl
 	return &vmwareCredsInfo, nil
 }
 
+// GetDestinationOpenstackCredsFromRollingMigrationPlan retrieves the destination OpenStack credentials from a RollingMigrationPlan
 func GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
@@ -470,6 +502,7 @@ func GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx context.Context, k
 	return openstackcreds, nil
 }
 
+// GetDestinationOpenstackCredsInfoFromRollingMigrationPlan retrieves the destination OpenStack credentials info from a RollingMigrationPlan
 func GetDestinationOpenstackCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	openstackcreds, err := GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
@@ -482,6 +515,7 @@ func GetDestinationOpenstackCredsInfoFromRollingMigrationPlan(ctx context.Contex
 	return &openstackCredsInfo, nil
 }
 
+// GetMigrationTemplateFromRollingMigrationPlan retrieves the migration template from a RollingMigrationPlan
 func GetMigrationTemplateFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
 	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
 	if err := k3sclient.Get(ctx, types.NamespacedName{

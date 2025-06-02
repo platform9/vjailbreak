@@ -21,8 +21,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RollingMigrationPlanPhase represents the current phase of a rolling migration plan execution,
+// tracking the state transitions from initial waiting through running, VM migration, and final completion or failure.
 type RollingMigrationPlanPhase string
 
+// ClusterMapping defines the relationship between a VMware vCenter cluster and its corresponding
+// Platform9 Distributed Cloud (PCD) cluster for migration operations. This mapping ensures that
+// virtual machines are properly migrated to the appropriate target infrastructure.
 type ClusterMapping struct {
 	// VMwareClusterName is the name of the vCenter cluster
 	VMwareClusterName string `json:"vmwareClusterName"`
@@ -45,6 +50,9 @@ const (
 	RollingMigrationPlanPhaseMigratingVMs RollingMigrationPlanPhase = "MigratingVMs"
 )
 
+// VMSequenceInfo defines information about a virtual machine in the migration sequence,
+// including its name and the ESXi host where it is located. This information is used to
+// establish the proper order and grouping of VMs during the migration process.
 type VMSequenceInfo struct {
 	// VMName is the name of the virtual machine to be migrated
 	VMName string `json:"vmName"`
@@ -52,6 +60,9 @@ type VMSequenceInfo struct {
 	ESXiName string `json:"esxiName,omitempty"`
 }
 
+// ClusterMigrationInfo defines information about a VMware vCenter cluster migration,
+// including the cluster name and the sequence of virtual machines to be migrated.
+// This structure allows for coordinated migration of multiple related VMs within a cluster.
 type ClusterMigrationInfo struct {
 	// ClusterName is the name of the vCenter cluster to be migrated
 	ClusterName string `json:"clusterName"`
@@ -117,7 +128,10 @@ type RollingMigrationPlanStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// RollingMigrationPlan is the Schema for the rollingmigrationplans API
+// RollingMigrationPlan is the Schema for the rollingmigrationplans API that defines a coordinated
+// migration of multiple VMware clusters and ESXi hosts to Platform9 Distributed Cloud (PCD).
+// It supports sequenced migration of VMs across clusters with configurable batch sizes,
+// cluster-to-cluster mapping, and tracking of migration progress across the entire datacenter migration.
 type RollingMigrationPlan struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

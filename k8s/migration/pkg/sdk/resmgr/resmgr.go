@@ -1,3 +1,5 @@
+// Package resmgr provides a client SDK for interacting with the Platform9 Resource Manager service.
+// It enables management of hosts, clusters, roles, and configurations in a Platform9 Distributed Cloud environment.
 package resmgr
 
 import (
@@ -6,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -14,6 +17,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
+// Resmgr defines the interface for interacting with Platform9 Resource Manager service.
+// It provides operations for managing hosts, clusters, roles, and configurations.
 type Resmgr interface {
 	ListHosts(ctx context.Context) ([]Host, error)
 	ListClusters(ctx context.Context) ([]Cluster, error)
@@ -29,6 +34,8 @@ type Resmgr interface {
 	HostExists(ctx context.Context, hostID string) (bool, error)
 }
 
+// NewResmgrClient creates a new Resource Manager client instance using the provided configuration.
+// It returns an implementation that satisfies the Resmgr interface for interacting with the Platform9 resource manager.
 func NewResmgrClient(config Config) Resmgr {
 	return &Impl{
 		url:           config.DU.URL,
@@ -38,6 +45,8 @@ func NewResmgrClient(config Config) Resmgr {
 	}
 }
 
+// UnmarshalJSON implements the json.Unmarshaler interface for the Host type.
+// It handles custom JSON deserialization, enabling proper parsing of host data.
 func (h *Host) UnmarshalJSON(data []byte) error {
 	// Extension data can be a JSON object, empty string or missing entirely depending on the state of the host.
 	// The missing case is handled by the "omitempty" json tag
@@ -95,7 +104,12 @@ func (r Impl) ListHosts(ctx context.Context) ([]Host, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || err != nil {
@@ -112,6 +126,8 @@ func (r Impl) ListHosts(ctx context.Context) ([]Host, error) {
 	return hosts, nil
 }
 
+// GetHost retrieves detailed information about a specific host identified by its ID.
+// It returns the complete host information including network configuration, status, and roles.
 func (r Impl) GetHost(ctx context.Context, hostID string) (Host, error) {
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s", r.url, hostID)
 	host := Host{}
@@ -126,10 +142,18 @@ func (r Impl) GetHost(ctx context.Context, hostID string) (Host, error) {
 		return host, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return host, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return host, fmt.Errorf("failed to query the resmgr to get host %s: (%d) %s", hostID, resp.StatusCode, string(body))
 	}
 
@@ -156,19 +180,32 @@ func (r Impl) DeauthHost(ctx context.Context, hostID string) error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to deauth host: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
 }
 
+// GenerateSupportBundle triggers the generation of a support bundle for a specific host.
+// Parameters include the host ID, a label for the bundle, and whether to upload the bundle to support.
 func (r Impl) GenerateSupportBundle(ctx context.Context, hostID string, label string, upload bool) error {
 	url := fmt.Sprintf("%s/resmgr/v1/hosts/%s/support/bundle", r.url, hostID)
 	opts := &bundle{Label: label, Upload: strconv.FormatBool(upload)}
-	data, _ := json.Marshal(opts)
+	data, err := json.Marshal(opts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPost, data)
 
@@ -181,10 +218,18 @@ func (r Impl) GenerateSupportBundle(ctx context.Context, hostID string, label st
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to generate bundle: (%d) %s", resp.StatusCode,
 			string(body))
 	}
@@ -207,10 +252,18 @@ func (r Impl) AddRoleVersion(ctx context.Context, details []byte, errIfAlreadyEx
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		if resp.StatusCode == http.StatusConflict {
 			if errIfAlreadyExists {
 				return fmt.Errorf("failed to add role to resmgr. Role already exists: (%d) %s", resp.StatusCode, string(body))
@@ -222,7 +275,9 @@ func (r Impl) AddRoleVersion(ctx context.Context, details []byte, errIfAlreadyEx
 	return nil
 }
 
-func (h *Host) ReadExtensions() (Extensions, error) {
+// ReadExtensions parses the host's extension data from the raw extensions JSON.
+// It returns the structured Extensions object containing network interface information.
+func (h Host) ReadExtensions() (Extensions, error) {
 	var extensions Extensions
 	err := json.Unmarshal(h.RawExtensionData, &extensions)
 	if err != nil {
@@ -231,8 +286,9 @@ func (h *Host) ReadExtensions() (Extensions, error) {
 	return extensions, nil
 }
 
+// AssignRoles assigns the specified roles to a host identified by its ID.
+// It makes an API call to the resource manager to update the host's role configuration.
 func (r Impl) AssignRoles(ctx context.Context, hostID string, roles []string) error {
-
 	if len(roles) == 0 {
 		return fmt.Errorf("no roles provided")
 	}
@@ -250,20 +306,33 @@ func (r Impl) AssignRoles(ctx context.Context, hostID string, roles []string) er
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				log.Printf("failed to close response body: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
 			return fmt.Errorf("failed to query the resmgr to assign role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
 	return nil
 }
 
+// AssignHypervisor assigns a host to a specific hypervisor cluster.
+// It associates the host identified by hostID with the cluster specified by clusterName.
 func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName string) error {
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/roles/hypervisor", r.url, hostID)
 
 	opts := &assignHypervisor{ClusterName: clusterName}
-	data, _ := json.Marshal(opts)
+	data, err := json.Marshal(opts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPut, data)
 	if err != nil {
@@ -273,14 +342,24 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to assign hypervisor role: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
 }
 
+// RemoveRoles removes the specified roles from a host identified by its ID.
+// It updates the host's configuration by removing the specified roles from its assignment.
 func (r Impl) RemoveRoles(ctx context.Context, hostID string, roles []string) error {
 	if len(roles) == 0 {
 		return fmt.Errorf("no roles provided")
@@ -299,16 +378,26 @@ func (r Impl) RemoveRoles(ctx context.Context, hostID string, roles []string) er
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				log.Printf("failed to close response body: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
 			return fmt.Errorf("failed to query the resmgr to remove role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
 	return nil
 }
 
-func (r Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
+// GetRoles retrieves all available host roles from the resource manager.
+// It returns a list of role names that can be assigned to hosts.
+func (r *Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s", r.url, hostID)
 	req, err := r.getResmgrReq(ctx, url, http.MethodGet, nil)
 	if err != nil {
@@ -319,10 +408,18 @@ func (r Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to get roles: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -351,27 +448,9 @@ func (r Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
 	return roleResponse.Roles, nil
 }
 
-func (r Impl) AuthorizeHost(ctx context.Context, hostID string, token string, version string, role string) error {
-	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/roles/%s", r.url, hostID, role)
-	req, err := r.getResmgrReq(ctx, url, http.MethodPost, nil)
-	if err != nil {
-		return fmt.Errorf("unable to create request to authorize host: %w", err)
-	}
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to query the resmgr to authorize host: (%d) %s", resp.StatusCode, string(body))
-	}
-	return nil
-}
-
-func (r Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
+// ListClusters retrieves all clusters from the resource manager.
+// It returns a list of available clusters in the Platform9 environment.
+func (r *Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
 	url := fmt.Sprintf("%s/resmgr/v2/clusters", r.url)
 	req, err := r.getResmgrReq(ctx, url, http.MethodGet, nil)
 	if err != nil {
@@ -382,10 +461,18 @@ func (r Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to list clusters: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -399,7 +486,9 @@ func (r Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
 	return clusters, nil
 }
 
-func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConfig, error) {
+// ListHostConfig retrieves the role configuration for a specific host.
+// It returns the list of roles currently assigned to the host identified by hostUUID.
+func (r *Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConfig, error) {
 	url := fmt.Sprintf("%s/resmgr/v2/hostconfigs", r.url)
 	req, err := r.getResmgrReq(ctx, url, http.MethodGet, nil)
 	if err != nil {
@@ -410,10 +499,18 @@ func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConf
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to list host config: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -427,9 +524,14 @@ func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConf
 	return hostConfig, nil
 }
 
-func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID string) error {
+// AssignHostConfig assigns the specified role configuration to a host.
+// It updates the host identified by hostUUID with the given list of roles.
+func (r *Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID string) error {
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/hostconfig/%s", r.url, hostID, hostConfigID)
-	data, _ := json.Marshal(hostConfigID)
+	data, err := json.Marshal(hostConfigID)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPut, data)
 	if err != nil {
@@ -439,15 +541,25 @@ func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to assign host config: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
 }
 
-func (r Impl) HostExists(ctx context.Context, hostID string) (bool, error) {
+// HostExists checks if a host with the given UUID exists in the resource manager.
+// It returns true if the host exists, false otherwise.
+func (r *Impl) HostExists(ctx context.Context, hostID string) (bool, error) {
 	_, err := r.GetHost(ctx, hostID)
 	if err != nil {
 		if apierrors.IsNotFound(err) {

@@ -11,15 +11,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Type definition for struct encapsulating endpoint manager APIs.
+// EndpointManagerAPI encapsulates the functionality to interact with OpenStack endpoints
+// through the Keystone API. It provides methods to retrieve endpoint information for specific regions.
 type EndpointManagerAPI struct {
 	Client  *http.Client
 	BaseURL string
 	Token   string
 }
 
-// Type definition for services information that is reported as
-// part of the "get endpoints" request.
+// EndpointsInfo represents the response structure from the Keystone API
+// when querying for endpoint information. It contains details about available endpoints
+// including their URLs, regions, and interface types.
 type EndpointsInfo struct {
 	Endpoints []struct {
 		ID        string `json:"id"`
@@ -40,7 +42,8 @@ type EndpointsInfo struct {
 	} `json:"links"`
 }
 
-// Fetches the endpoint for a given region.
+// GetEndpointForRegion retrieves the service endpoint URL for a specified region and service.
+// It uses the provided authentication information to query the Keystone API.
 func GetEndpointForRegion(
 	url string, // DU url
 	auth AuthInfo, // Auth info
@@ -68,12 +71,18 @@ func GetEndpointForRegion(
 	return endpoint, nil
 }
 
+// GetEndpointForRegionAPI implements the specific API call to retrieve an endpoint URL for a specified region and service.
+// It searches through the available endpoints and returns the public interface URL for the specified region.
 func (eAPI *EndpointManagerAPI) GetEndpointForRegionAPI(
 	regionName string,
 	serviceID string,
 ) (string, error) {
 	zap.S().Debug("Fetching endpoints for region ", regionName)
-	req, _ := http.NewRequest("GET", eAPI.BaseURL, nil)
+	req, err := http.NewRequest("GET", eAPI.BaseURL, nil)
+	if err != nil {
+		zap.S().Errorf("Failed to create request for endpoint information for region %s, Error: %s", regionName, err)
+		return "", fmt.Errorf("failed to create request for endpoint information for region %s, Error: %s", regionName, err)
+	}
 
 	// Add keystone token in the header.
 	req.Header.Add("X-Auth-Token", eAPI.Token)
@@ -88,7 +97,11 @@ func (eAPI *EndpointManagerAPI) GetEndpointForRegionAPI(
 		zap.S().Errorf("Failed to fetch endpoint information for region %s, Error: %s", regionName, err)
 		return "", fmt.Errorf("failed to fetch endpoint information for region %s, Error: %s", regionName, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			zap.S().Warnf("Error closing response body: %v", closeErr)
+		}
+	}()
 
 	endpointsInfo := EndpointsInfo{}
 	// Response is received as slice of endpoints.

@@ -39,7 +39,11 @@ type VMwareHostStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// VMwareHost is the Schema for the vmwarehosts API
+// VMwareHost is the Schema for the vmwarehosts API that represents a VMware ESXi host
+// in the source environment. It tracks host configuration, hardware identification, and cluster membership
+// as part of the VMware to Platform9 Distributed Cloud migration process. VMwareHost resources are
+// source components that are migrated to PCDHost resources in the target environment and are automatically
+// removed from vCenter inventory after all VMs have been migrated off and the host is in maintenance mode.
 type VMwareHost struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
