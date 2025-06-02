@@ -84,6 +84,7 @@ func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_
 	return r.reconcileNormal(ctx, scope)
 }
 
+// nolint:unparam
 func (r *BMConfigReconciler) reconcileDelete(_ context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
 	bmConfig := scope.BMConfig
 	controllerutil.RemoveFinalizer(bmConfig, constants.BMConfigFinalizer)

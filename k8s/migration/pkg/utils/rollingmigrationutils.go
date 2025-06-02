@@ -443,10 +443,7 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Cluster
 	}
 
 	// Collect all VM names from all clusters
-	batches, err := convertVMSequenceToBatches(scope, batchSize)
-	if err != nil {
-		return errors.Wrap(err, "failed to convert VM sequence to batches")
-	}
+	batches := convertVMSequenceToBatches(scope, batchSize)
 
 	// Create a MigrationPlan for each batch
 	for i, batch := range batches {
@@ -514,7 +511,7 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrat
 	return nil
 }
 
-func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize int) ([][]string, error) {
+func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize int) [][]string {
 	var batches [][]string
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
@@ -533,7 +530,7 @@ func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize in
 			batches = append(batches, allVMs[i:end])
 		}
 	}
-	return batches, nil
+	return batches
 }
 
 // IsRollingMigrationPlanPaused checks if a rolling migration plan is currently paused

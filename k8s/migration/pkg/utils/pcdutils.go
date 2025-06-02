@@ -284,8 +284,10 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 	return nil
 }
 
+// nolint:unparam
 func filterPCDClustersOnOpenstackCreds(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) ([]vjailbreakv1alpha1.PCDCluster, error) {
-	err := k8sClient.List(ctx, &vjailbreakv1alpha1.PCDClusterList{}, &client.ListOptions{
+	clusterList := vjailbreakv1alpha1.PCDClusterList{}
+	err := k8sClient.List(ctx, &clusterList, &client.ListOptions{
 		Namespace: constants.NamespaceMigrationSystem,
 		LabelSelector: labels.SelectorFromSet(labels.Set{
 			constants.OpenstackCredsLabel: openstackCreds.Name,
@@ -294,11 +296,13 @@ func filterPCDClustersOnOpenstackCreds(ctx context.Context, k8sClient client.Cli
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list PCD clusters")
 	}
-	return nil, nil
+	return clusterList.Items, nil
 }
 
+// nolint:unparam
 func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) ([]vjailbreakv1alpha1.PCDHost, error) {
-	err := k8sClient.List(ctx, &vjailbreakv1alpha1.PCDHostList{}, &client.ListOptions{
+	hostList := vjailbreakv1alpha1.PCDHostList{}
+	err := k8sClient.List(ctx, &hostList, &client.ListOptions{
 		Namespace: constants.NamespaceMigrationSystem,
 		LabelSelector: labels.SelectorFromSet(labels.Set{
 			constants.OpenstackCredsLabel: openstackCreds.Name,
@@ -307,7 +311,7 @@ func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list PCD hosts")
 	}
-	return nil, nil
+	return hostList.Items, nil
 }
 
 // GetVMwareHostFromESXiName retrieves a VMwareHost resource based on the ESXi host name

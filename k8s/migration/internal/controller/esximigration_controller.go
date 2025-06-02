@@ -172,6 +172,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
+// nolint:unparam
 func (r *ESXIMigrationReconciler) reconcileDelete(_ context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling deletion", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
