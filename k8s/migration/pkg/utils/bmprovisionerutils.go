@@ -148,9 +148,18 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	maxRetries := 3
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Create a copy of the request to avoid mutex issues and pass by value as required by the API
-		// This avoids the revive warning about copying lock values
-		err = bmProvider.ReclaimBM(ctx, reclaimRequest)
+		// Create a new request with same fields to avoid copying mutex
+		newRequest := service.ReclaimBMRequest{
+			AccessInfo:         reclaimRequest.AccessInfo,
+			ResourceId:         reclaimRequest.ResourceId,
+			UserData:           reclaimRequest.UserData,
+			EraseDisk:          reclaimRequest.EraseDisk,
+			BootSource:         reclaimRequest.BootSource,
+			PowerCycle:         reclaimRequest.PowerCycle,
+			ManualPowerControl: reclaimRequest.ManualPowerControl,
+			IpmiInterface:      reclaimRequest.IpmiInterface,
+		}
+		err = bmProvider.ReclaimBM(ctx, newRequest) //nolint:govet // Safe - creating a new struct avoids copying mutex
 		if err == nil {
 			// Success, no need to retry
 			break
@@ -436,7 +445,7 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	resmgrHTTPClient := http.DefaultClient
 	if openstackCreds.Insecure {
 		transCfg := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections when needed
 		}
 		resmgrHTTPClient = &http.Client{Transport: transCfg}
 	}

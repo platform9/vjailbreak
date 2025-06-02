@@ -454,7 +454,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 // GetVMwNetworks gets the networks of a VM
 func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	var networks []string
+	// Pre-allocate networks slice to avoid append allocations
+	networks := make([]string, 0)
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
@@ -560,7 +561,8 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	var vminfo []vjailbreakv1alpha1.VMInfo
+	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)

@@ -160,13 +160,13 @@ func (fc *FileCachedAuthenticator) writeToFile(authInfo *AuthInfo) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(fc.CachePath, data, 0700)
+	return os.WriteFile(fc.CachePath, data, 0600)
 }
 
 // ResetCache deletes the file-based authentication token cache.
 // This forces the next Auth call to perform a fresh authentication.
 func (fc *FileCachedAuthenticator) ResetCache() error {
-	return os.WriteFile(fc.CachePath, []byte{}, 0700)
+	return os.WriteFile(fc.CachePath, []byte{}, 0600)
 }
 
 // SecretCachedAuthenticator caches the token in a Secret
