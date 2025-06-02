@@ -335,12 +335,13 @@ export default function MigrationOptionsAlt({
   onChange={e => {
     updateSelectedMigrationOptions("suffixEnabled")(e.target.checked);
     if (e.target.checked) {
-      onChange("postMigrationAction.suffix")("_migrated_to_pcd"); // set value immediately!
+      onChange("postMigrationAction.suffix")("_migrated_to_pcd");
     } else {
       onChange("postMigrationAction.suffix")("");
     }
   }}
 />
+
 
     }
   />
@@ -365,7 +366,7 @@ export default function MigrationOptionsAlt({
   onChange={e => {
     updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked);
     if (e.target.checked) {
-      onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+      onChange("postMigrationAction.folderName")("vJailbreakedVMs");
     } else {
       onChange("postMigrationAction.folderName")("");
     }
