@@ -79,15 +79,15 @@ jobs:
           if [[ "${{ github.event_name }}" == "release" ]]; then
             # In case of release event the tag will be the next version
             # build version will be the same as tag
-            TAG=v0.1.12
-            BUILD_VERSION=v0.1.12
+            TAG="v0.1.12"
+            BUILD_VERSION="v0.1.12"
           else
             BUILD_VERSION=${{ github.run_number }}
             # build release version as version-branch-sha
             VERSION=${BUILD_VERSION}-${GIT_SHA}
             # Since this is a merge or pull-request 
             # use the TAG as the version
-            TAG= v0.1.12
+            TAG="v0.1.12"
           fi
           release_found=true
           echo "release_found=${release_found}" >> $GITHUB_OUTPUT
