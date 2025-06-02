@@ -196,17 +196,17 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 
 	// 4. Extract credentials
 	ctxlog.Info("🔍 Extracting vCenter credentials...")
-	username, ok := secret.Data["username"]
+	username, ok := secret.Data["VCENTER_USERNAME"]
 	if !ok {
 		ctxlog.Error(nil, "❌ Username not found in secret")
 		return fmt.Errorf("username not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
 	}
-	password, ok := secret.Data["password"]
+	password, ok := secret.Data["VCENTER_PASSWORD"]
 	if !ok {
 		ctxlog.Error(nil, "❌ Password not found in secret")
 		return fmt.Errorf("password not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
 	}
-	hostData, ok := secret.Data["host"]
+	hostData, ok := secret.Data["VCENTER_HOST"]
 	if !ok {
 		ctxlog.Error(nil, "❌ vCenter host not found in secret")
 		return fmt.Errorf("vCenter host not found in Secret '%s'", vmwcreds.Spec.SecretRef.Name)
