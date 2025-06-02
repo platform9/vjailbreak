@@ -77,7 +77,7 @@ func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_
 		}
 	}()
 
-	if !bmConfig.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !bmConfig.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
 	}
 

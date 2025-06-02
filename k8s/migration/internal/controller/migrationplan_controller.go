@@ -761,7 +761,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	)
 
 	nodeList := &corev1.NodeList{}
-	err := r.Client.List(ctx, nodeList)
+	err := r.List(ctx, nodeList)
 	if err != nil {
 		return errors.Wrap(err, "failed to list nodes")
 	}
@@ -769,7 +769,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
 
-	err = r.Client.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
+	err = r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
 	if err != nil {
 		return errors.Wrap(err, "failed to list vmwaremachines")
 	}

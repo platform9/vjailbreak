@@ -95,7 +95,7 @@ func (r *ClusterMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}()
 
-	if !clusterMigration.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !clusterMigration.DeletionTimestamp.IsZero() {
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "clustermigration", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
@@ -290,7 +290,7 @@ func (r *ClusterMigrationReconciler) UpdateClusterMigrationStatus(ctx context.Co
 func (r *ClusterMigrationReconciler) CheckAndUpdateClusterMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope) error {
 	log := scope.Logger
 	esxiMigrationList := &vjailbreakv1alpha1.ESXIMigrationList{}
-	if err := r.Client.List(ctx, esxiMigrationList, client.InNamespace(scope.ClusterMigration.Namespace),
+	if err := r.List(ctx, esxiMigrationList, client.InNamespace(scope.ClusterMigration.Namespace),
 		client.MatchingLabels{constants.ClusterMigrationLabel: scope.ClusterMigration.Name}); err != nil {
 		return err
 	}

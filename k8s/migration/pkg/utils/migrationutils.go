@@ -128,7 +128,7 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "failed to")) {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "failed to") {
 			continue
 		}
 

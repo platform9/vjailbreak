@@ -13,7 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -252,7 +252,7 @@ func (sc *SecretCachedAuthenticator) writeToSecret(ctx context.Context, authInfo
 			"projectID": []byte(authInfo.ProjectID),
 			"expiresAt": []byte(authInfo.ExpiresAt.Format(time.RFC3339)),
 		},
-		Immutable: pointer.Bool(true),
+		Immutable: ptr.To(true),
 	}
 	err := sc.Client.Update(ctx, tokenSecret)
 	if err != nil && !apierrors.IsNotFound(err) {

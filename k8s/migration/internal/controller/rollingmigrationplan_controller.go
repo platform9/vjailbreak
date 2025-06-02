@@ -77,7 +77,7 @@ func (r *RollingMigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}()
 
-	if !rollingmigrationplan.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !rollingmigrationplan.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
 	}
 	return r.reconcileNormal(ctx, scope)
@@ -362,9 +362,10 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 			}
 			return errors.Wrap(err, "failed to get VMMigration")
 		}
-		if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+		switch migration.Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 			scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
-		} else if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 			scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
 		}
 	}

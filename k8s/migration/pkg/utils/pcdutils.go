@@ -365,7 +365,7 @@ func WaitForHypervisorRoleAssignment(ctx context.Context, k8sClient client.Clien
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get host")
 	}
-	if !containsString(pcdHost.Roles, "pf9-ostackhost-neutron") || !(pcdHost.RoleStatus == "ok" || pcdHost.RoleStatus == "converging") {
+	if !containsString(pcdHost.Roles, "pf9-ostackhost-neutron") || (pcdHost.RoleStatus != "ok" && pcdHost.RoleStatus != "converging") {
 		return false, nil
 	}
 	return true, nil

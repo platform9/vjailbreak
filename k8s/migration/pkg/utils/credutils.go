@@ -955,7 +955,8 @@ func HostExistsInVcenter(hostName string, clusterInfo []VMwareClusterInfo) bool 
 
 // DeleteDependantObjectsForVMwareCreds removes all objects dependent on a VMwareCreds resource
 func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
+	log := scope.Logger
+	log.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
 	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting VMs")
 	}

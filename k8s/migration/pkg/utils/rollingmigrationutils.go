@@ -109,6 +109,7 @@ func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm strin
 	}
 	return migrationTemplate, nil
 }
+
 // CreateESXIMigration creates a new ESXIMigration object for the given ESXi host using the cluster migration scope
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
@@ -586,6 +587,7 @@ func IsMigrationPlanPaused(ctx context.Context, name string, client client.Clien
 
 // PauseRollingMigrationPlan pauses all migration operations for a rolling migration plan
 func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+	log := scope.Logger
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	if rollingMigrationPlan.Labels == nil {
 		rollingMigrationPlan.Labels = make(map[string]string)
@@ -599,7 +601,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		// Get the cluster migration
 		clusterMigration, err := GetClusterMigration(ctx, scope.Client, cluster.ClusterName, rollingMigrationPlan)
 		if err != nil {
-			scope.Logger.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
+			log.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
 			continue
 		}
 
@@ -610,7 +612,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		clusterMigration.Labels[constants.PauseMigrationLabel] = trueString
 		err = scope.Client.Update(ctx, clusterMigration)
 		if err != nil {
-			scope.Logger.Error(err, "failed to update cluster migration with pause label", "cluster", cluster.ClusterName)
+			log.Error(err, "failed to update cluster migration with pause label", "cluster", cluster.ClusterName)
 		}
 
 		// Get unique ESXi hosts from the VM sequence
@@ -625,7 +627,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		for esxi := range esxiHosts {
 			esxiMigration, err := GetESXIMigration(ctx, scope.Client, esxi, rollingMigrationPlan)
 			if err != nil {
-				scope.Logger.Error(err, "failed to get ESXi migration", "esxi", esxi)
+				log.Error(err, "failed to get ESXi migration", "esxi", esxi)
 				continue
 			}
 
@@ -636,7 +638,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 			esxiMigration.Labels[constants.PauseMigrationLabel] = trueString
 			err = scope.Client.Update(ctx, esxiMigration)
 			if err != nil {
-				scope.Logger.Error(err, "failed to update ESXi migration with pause label", "esxi", esxi)
+				log.Error(err, "failed to update ESXi migration with pause label", "esxi", esxi)
 			}
 		}
 	}
@@ -646,7 +648,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
 		err := scope.Client.Get(ctx, types.NamespacedName{Name: planName, Namespace: rollingMigrationPlan.Namespace}, migrationPlan)
 		if err != nil {
-			scope.Logger.Error(err, "failed to get migration plan", "plan", planName)
+			log.Error(err, "failed to get migration plan", "plan", planName)
 			continue
 		}
 
@@ -657,7 +659,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		migrationPlan.Labels[constants.PauseMigrationLabel] = trueString
 		err = scope.Client.Update(ctx, migrationPlan)
 		if err != nil {
-			scope.Logger.Error(err, "failed to update migration plan with pause label", "plan", planName)
+			log.Error(err, "failed to update migration plan with pause label", "plan", planName)
 		}
 	}
 
@@ -696,7 +698,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 		// Get the cluster migration
 		clusterMigration, err := GetClusterMigration(ctx, scope.Client, cluster.ClusterName, rollingMigrationPlan)
 		if err != nil {
-			scope.Logger.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
+			log.Error(err, "failed to get cluster migration", "cluster", cluster.ClusterName)
 			continue
 		}
 
@@ -705,7 +707,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 			delete(clusterMigration.Labels, constants.PauseMigrationLabel)
 			err = scope.Client.Update(ctx, clusterMigration)
 			if err != nil {
-				scope.Logger.Error(err, "failed to update cluster migration to remove pause label", "cluster", cluster.ClusterName)
+				log.Error(err, "failed to update cluster migration to remove pause label", "cluster", cluster.ClusterName)
 			}
 		}
 
@@ -721,7 +723,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 		for esxi := range esxiHosts {
 			esxiMigration, err := GetESXIMigration(ctx, scope.Client, esxi, rollingMigrationPlan)
 			if err != nil {
-				scope.Logger.Error(err, "failed to get ESXi migration", "esxi", esxi)
+				log.Error(err, "failed to get ESXi migration", "esxi", esxi)
 				continue
 			}
 
@@ -730,7 +732,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 				delete(esxiMigration.Labels, constants.PauseMigrationLabel)
 				err = scope.Client.Update(ctx, esxiMigration)
 				if err != nil {
-					scope.Logger.Error(err, "failed to update ESXi migration to remove pause label", "esxi", esxi)
+					log.Error(err, "failed to update ESXi migration to remove pause label", "esxi", esxi)
 				}
 			}
 		}
@@ -741,7 +743,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 		migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
 		err := scope.Client.Get(ctx, types.NamespacedName{Name: planName, Namespace: rollingMigrationPlan.Namespace}, migrationPlan)
 		if err != nil {
-			scope.Logger.Error(err, "failed to get migration plan", "plan", planName)
+			log.Error(err, "failed to get migration plan", "plan", planName)
 			continue
 		}
 
@@ -750,7 +752,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 			delete(migrationPlan.Labels, constants.PauseMigrationLabel)
 			err = scope.Client.Update(ctx, migrationPlan)
 			if err != nil {
-				scope.Logger.Error(err, "failed to update migration plan to remove pause label", "plan", planName)
+				log.Error(err, "failed to update migration plan to remove pause label", "plan", planName)
 			}
 		}
 	}
