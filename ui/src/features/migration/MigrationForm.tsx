@@ -622,25 +622,7 @@ export default function MigrationFormDrawer({
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
           />
-          <Box sx={{ display: "grid", gap: 2, mt: 2 }}>
-  <Typography variant="subtitle1">Post-Migration Actions (Required)</Typography>
-  <TextField
-    label="Suffix for Source VM Name"
-    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-    onChange={(e) => getParamsUpdater("postMigrationAction.suffix")(e.target.value)}
-    fullWidth
-    size="small"
-    helperText="This suffix will be appended to the source VM name after migration."
-  />
-  <TextField
-    label="Folder Name in vCenter"
-    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-    onChange={(e) => getParamsUpdater("postMigrationAction.folderName")(e.target.value)}
-    fullWidth
-    size="small"
-    helperText="The source VM will be moved to this folder after migration."
-  />
-</Box>
+
 
         </Box>
       </DrawerContent>

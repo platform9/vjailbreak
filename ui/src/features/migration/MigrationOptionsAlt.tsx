@@ -326,6 +326,48 @@ export default function MigrationOptionsAlt({
                 Select this option to retry the migration incase of failure
               </Typography>
             </Fields>
+            <Fields>
+  <FormControl fullWidth size="small">
+    <InputLabel id="suffix-label">Suffix for Source VM Name</InputLabel>
+    <Select
+      labelId="suffix-label"
+      id="suffix-select"
+      value={params.postMigrationAction?.suffix || ""}
+      label="Suffix for Source VM Name"
+      onChange={(e) => onChange("postMigrationAction.suffix")(e.target.value)}
+      displayEmpty
+    >
+      <MenuItem value=""><em>None</em></MenuItem>
+      <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
+      {/* Add more options if desired */}
+    </Select>
+    <Typography variant="caption">
+      Optional: This suffix will be appended to the source VM name after migration.
+    </Typography>
+  </FormControl>
+</Fields>
+
+<Fields>
+  <FormControl fullWidth size="small">
+    <InputLabel id="folder-label">Folder Name in vCenter</InputLabel>
+    <Select
+      labelId="folder-label"
+      id="folder-select"
+      value={params.postMigrationAction?.folderName || ""}
+      label="Folder Name in vCenter"
+      onChange={(e) => onChange("postMigrationAction.folderName")(e.target.value)}
+      displayEmpty
+    >
+      <MenuItem value=""><em>None</em></MenuItem>
+      <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
+      {/* Add more options if desired */}
+    </Select>
+    <Typography variant="caption">
+      Optional: The source VM will be moved to this folder after migration.
+    </Typography>
+  </FormControl>
+</Fields>
+
 
             {/* Pre and Post Web Hooks */}
             {/* {PrePostWebHooksList.map((hook) => (
