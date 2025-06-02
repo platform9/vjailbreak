@@ -24,7 +24,9 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkMapping is the Schema for the networkmappings API
+        description: |-
+          NetworkMapping is the Schema for the networkmappings API that defines
+          mappings between VMware and OpenStack networks to be used during migration
         properties:
           apiVersion:
             description: |-
@@ -44,11 +46,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkMappingSpec defines the desired state of NetworkMapping
+            description: |-
+              NetworkMappingSpec defines the desired state of NetworkMapping including
+              mappings between VMware and OpenStack networks
             properties:
               networks:
                 description: Networks is the list of network mappings between source
-                  and target environments
+                  (VMware) and target (OpenStack) environments
                 items:
                   description: Network represents a mapping between source and target
                     networks
@@ -71,12 +75,14 @@ spec:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
             properties:
               networkMappingValidationMessage:
-                description: NetworkmappingValidationMessage provides detailed validation
-                  information
+                description: |-
+                  NetworkmappingValidationMessage provides detailed validation information including
+                  information about available networks and any validation errors
                 type: string
               networkMappingValidationStatus:
-                description: NetworkmappingValidationStatus indicates the validation
-                  status of the network mapping
+                description: |-
+                  NetworkmappingValidationStatus indicates the validation status of the network mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
                 type: string
             type: object
         type: object

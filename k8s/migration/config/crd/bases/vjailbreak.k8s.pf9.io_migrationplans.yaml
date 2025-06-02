@@ -21,7 +21,11 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MigrationPlan is the Schema for the migrationplans API
+        description: |-
+          MigrationPlan is the Schema for the migrationplans API that defines
+          how to migrate virtual machines from VMware to OpenStack including migration strategy and scheduling.
+          It allows administrators to configure migration parameters such as timing, health checks,
+          and VM-specific settings for bulk VM migration operations between environments.
         properties:
           apiVersion:
             description: |-
@@ -41,7 +45,9 @@ spec:
           metadata:
             type: object
           spec:
-            description: MigrationPlanSpec defines the desired state of MigrationPlan
+            description: |-
+              MigrationPlanSpec defines the desired state of MigrationPlan including
+              the migration template, strategy, and the list of virtual machines to migrate
             properties:
               advancedOptions:
                 description: AdvancedOptions is a list of advanced options for the
@@ -117,13 +123,17 @@ spec:
             - virtualMachines
             type: object
           status:
-            description: MigrationPlanStatus defines the observed state of MigrationPlan
+            description: |-
+              MigrationPlanStatus defines the observed state of MigrationPlan including
+              the current status and progress of the migration
             properties:
               migrationMessage:
                 description: MigrationMessage is the message associated with the migration
                 type: string
               migrationStatus:
-                description: MigrationStatus is the status of the migration
+                description: |-
+                  MigrationStatus is the status of the migration using Kubernetes PodPhase states
+                  (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
             required:
             - migrationMessage

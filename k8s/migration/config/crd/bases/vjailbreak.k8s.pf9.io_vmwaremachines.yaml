@@ -17,7 +17,13 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareMachine is the Schema for the vmwaremachines API
+        description: |-
+          VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
+          in the VMware source environment targeted for migration. It tracks VM configuration,
+          resource allocation, migration status, and target environment specifications.
+          VMwareMachine resources are the primary workloads migrated from VMware to OpenStack
+          as part of the migration process and contain all necessary information to recreate
+          equivalent virtual machines in the target environment.
         properties:
           apiVersion:
             description: |-
