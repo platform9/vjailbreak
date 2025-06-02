@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -95,7 +96,12 @@ func (r Impl) ListHosts(ctx context.Context) ([]Host, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || err != nil {
@@ -126,10 +132,18 @@ func (r Impl) GetHost(ctx context.Context, hostID string) (Host, error) {
 		return host, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return host, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return host, fmt.Errorf("failed to query the resmgr to get host %s: (%d) %s", hostID, resp.StatusCode, string(body))
 	}
 
@@ -156,10 +170,18 @@ func (r Impl) DeauthHost(ctx context.Context, hostID string) error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to deauth host: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
@@ -168,7 +190,10 @@ func (r Impl) DeauthHost(ctx context.Context, hostID string) error {
 func (r Impl) GenerateSupportBundle(ctx context.Context, hostID string, label string, upload bool) error {
 	url := fmt.Sprintf("%s/resmgr/v1/hosts/%s/support/bundle", r.url, hostID)
 	opts := &bundle{Label: label, Upload: strconv.FormatBool(upload)}
-	data, _ := json.Marshal(opts)
+	data, err := json.Marshal(opts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPost, data)
 
@@ -181,10 +206,18 @@ func (r Impl) GenerateSupportBundle(ctx context.Context, hostID string, label st
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to generate bundle: (%d) %s", resp.StatusCode,
 			string(body))
 	}
@@ -207,10 +240,18 @@ func (r Impl) AddRoleVersion(ctx context.Context, details []byte, errIfAlreadyEx
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		if resp.StatusCode == http.StatusConflict {
 			if errIfAlreadyExists {
 				return fmt.Errorf("failed to add role to resmgr. Role already exists: (%d) %s", resp.StatusCode, string(body))
@@ -250,9 +291,17 @@ func (r Impl) AssignRoles(ctx context.Context, hostID string, roles []string) er
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 			return fmt.Errorf("failed to query the resmgr to assign role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
@@ -263,7 +312,10 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/roles/hypervisor", r.url, hostID)
 
 	opts := &assignHypervisor{ClusterName: clusterName}
-	data, _ := json.Marshal(opts)
+	data, err := json.Marshal(opts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPut, data)
 	if err != nil {
@@ -273,9 +325,17 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 		return fmt.Errorf("failed to query the resmgr to assign hypervisor role: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
@@ -299,9 +359,17 @@ func (r Impl) RemoveRoles(ctx context.Context, hostID string, roles []string) er
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 			return fmt.Errorf("failed to query the resmgr to remove role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
@@ -319,10 +387,18 @@ func (r Impl) GetRoles(ctx context.Context, hostID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to get roles: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -362,10 +438,18 @@ func (r Impl) AuthorizeHost(ctx context.Context, hostID string, token string, ve
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to authorize host: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
@@ -382,10 +466,18 @@ func (r Impl) ListClusters(ctx context.Context) ([]Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to list clusters: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -410,10 +502,18 @@ func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConf
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", err)
+		}
 		return nil, fmt.Errorf("failed to query the resmgr to list host config: (%d) %s", resp.StatusCode, string(body))
 	}
 
@@ -429,7 +529,10 @@ func (r Impl) ListHostConfig(ctx context.Context) ([]vjailbreakv1alpha1.HostConf
 
 func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID string) error {
 	url := fmt.Sprintf("%s/resmgr/v2/hosts/%s/hostconfig/%s", r.url, hostID, hostConfigID)
-	data, _ := json.Marshal(hostConfigID)
+	data, err := json.Marshal(hostConfigID)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
 
 	req, err := r.getResmgrReq(ctx, url, http.MethodPut, data)
 	if err != nil {
@@ -439,9 +542,17 @@ func (r Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 		return fmt.Errorf("failed to query the resmgr to assign host config: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
