@@ -389,8 +389,8 @@ func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 		if srcIsSlice && dstIsSlice {
 			// Simple merge: just append elements from src to dst
 			// Another option could be to replace, or do a merge based on specific rules
-			combined := append(dstSlice, srcSlice...)
-			dst[key] = combined
+			dstSlice = append(dstSlice, srcSlice...)
+			dst[key] = dstSlice
 			continue
 		}
 

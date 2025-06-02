@@ -107,17 +107,18 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	log := scope.Logger
 	log.Info("Starting normal reconciliation", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 	controllerutil.AddFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
-	if scope.ESXIMigration.Status.Phase == "" {
+	switch scope.ESXIMigration.Status.Phase {
+	case "":
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaiting
 		err := r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status")
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
-	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
+	case vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded:
 		log.Info("ESXIMigration already succeeded")
 		return ctrl.Result{}, nil
-	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
+	case vjailbreakv1alpha1.ESXIMigrationPhaseFailed:
 		log.Info("ESXIMigration already failed")
 		return ctrl.Result{}, nil
 	}

@@ -178,11 +178,11 @@ type SecretCachedAuthenticator struct {
 }
 
 // NewSecretCachedAuthenticator creates a new SecretCachedAuthenticator that wraps another authenticator
-func NewSecretCachedAuthenticator(client client.Client, SecretRef metav1.ObjectMeta, authenticator Authenticator) *SecretCachedAuthenticator {
+func NewSecretCachedAuthenticator(client client.Client, secretRef metav1.ObjectMeta, authenticator Authenticator) *SecretCachedAuthenticator {
 	return &SecretCachedAuthenticator{
 		authenticator: authenticator,
 		Client:        client,
-		SecretRef:     SecretRef,
+		SecretRef:     secretRef,
 		RenewBefore:   10 * time.Minute,
 	}
 }
