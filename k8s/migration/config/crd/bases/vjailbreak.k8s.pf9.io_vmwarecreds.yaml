@@ -21,7 +21,11 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareCreds is the Schema for the vmwarecreds API
+        description: |-
+          VMwareCreds is the Schema for the vmwarecreds API that defines authentication
+          and connection details for VMware vSphere environments. It provides a secure way to
+          store and validate vCenter credentials for use in migration operations, including
+          connection parameters, authentication information, and datacenter configuration.
         properties:
           apiVersion:
             description: |-

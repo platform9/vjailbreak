@@ -17,8 +17,11 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: RollingMigrationPlan is the Schema for the rollingmigrationplans
-          API
+        description: |-
+          RollingMigrationPlan is the Schema for the rollingmigrationplans API that defines a coordinated
+          migration of multiple VMware clusters and ESXi hosts to Platform9 Distributed Cloud (PCD).
+          It supports sequenced migration of VMs across clusters with configurable batch sizes,
+          cluster-to-cluster mapping, and tracking of migration progress across the entire datacenter migration.
         properties:
           apiVersion:
             description: |-
@@ -93,6 +96,10 @@ spec:
                 description: ClusterMapping is the mapping of vCenter clusters to
                   PCD clusters
                 items:
+                  description: |-
+                    ClusterMapping defines the relationship between a VMware vCenter cluster and its corresponding
+                    Platform9 Distributed Cloud (PCD) cluster for migration operations. This mapping ensures that
+                    virtual machines are properly migrated to the appropriate target infrastructure.
                   properties:
                     pcdClusterName:
                       description: PCDClusterName is the name of the PCD cluster
@@ -109,6 +116,10 @@ spec:
                 description: ClusterSequence is the sequence of vCenter clusters to
                   be migrated
                 items:
+                  description: |-
+                    ClusterMigrationInfo defines information about a VMware vCenter cluster migration,
+                    including the cluster name and the sequence of virtual machines to be migrated.
+                    This structure allows for coordinated migration of multiple related VMs within a cluster.
                   properties:
                     clusterName:
                       description: ClusterName is the name of the vCenter cluster
@@ -126,6 +137,10 @@ spec:
                       description: VMSequence is the sequence of virtual machines
                         to be migrated
                       items:
+                        description: |-
+                          VMSequenceInfo defines information about a virtual machine in the migration sequence,
+                          including its name and the ESXi host where it is located. This information is used to
+                          establish the proper order and grouping of VMs during the migration process.
                         properties:
                           esxiName:
                             description: ESXiName is the name of the ESXi host where

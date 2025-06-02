@@ -25,7 +25,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: BMConfig is the Schema for the bmconfigs API
+        description: |-
+          BMConfig is the Schema for the bmconfigs API that defines authentication and configuration
+          details for Bare Metal Controller (BMC) providers such as MAAS. It contains credentials,
+          connection information, and boot source configurations needed to provision physical hosts
+          for use during the ESXi to PCD migration process. BMConfig enables the automatic
+          provisioning of PCD hosts as replacement infrastructure for migrated ESXi hosts.
         properties:
           apiVersion:
             description: |-
@@ -58,6 +63,8 @@ spec:
                 properties:
                   release:
                     default: jammy
+                    description: Release is the OS release version to be used (e.g.,
+                      "jammy" for Ubuntu 22.04)
                     type: string
                 required:
                 - release
@@ -141,7 +148,13 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ClusterMigration is the Schema for the clustermigrations API
+        description: |-
+          ClusterMigration is the Schema for the clustermigrations API that orchestrates the migration
+          of an entire VMware vCenter cluster to Platform9 Distributed Cloud (PCD).
+          It manages the ordered migration of ESXi hosts within a cluster, tracking progress
+          and maintaining references to required credentials and migration plans.
+          ClusterMigration resources coordinate with ESXIMigration resources to ensure
+          hosts are migrated in the correct sequence with proper dependency management.
         properties:
           apiVersion:
             description: |-
@@ -271,7 +284,10 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ESXIMigration is the Schema for the esximigrations API
+        description: |-
+          ESXIMigration is the Schema for the esximigrations API that defines
+          the process of migrating an ESXi host to PCD, including putting it in maintenance mode,
+          migrating all VMs, and finally removing it from vCenter inventory after completion
         properties:
           apiVersion:
             description: |-
@@ -291,7 +307,9 @@ spec:
           metadata:
             type: object
           spec:
-            description: ESXIMigrationSpec defines the desired state of ESXIMigration
+            description: |-
+              ESXIMigrationSpec defines the desired state of ESXIMigration including
+              the ESXi host to migrate and the references to credentials and migration plan
             properties:
               esxiName:
                 description: ESXiName is the name of the ESXi host to be migrated
@@ -345,14 +363,19 @@ spec:
             - vmwareCredsRef
             type: object
           status:
-            description: ESXIMigrationStatus defines the observed state of ESXIMigration
+            description: |-
+              ESXIMigrationStatus defines the observed state of ESXIMigration including
+              the list of VMs on the host, current phase, and status messages
             properties:
               message:
                 description: Message is the message associated with the current state
                   of the migration
                 type: string
               phase:
-                description: Phase is the current phase of the migration
+                description: |-
+                  Phase is the current phase of the migration lifecycle
+                  The final phases include 'Succeeded' when the ESXi host has been successfully
+                  removed from vCenter inventory after migration is complete
                 type: string
               vms:
                 description: VMs is the list of VMs present on the ESXi host
@@ -388,7 +411,11 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MigrationPlan is the Schema for the migrationplans API
+        description: |-
+          MigrationPlan is the Schema for the migrationplans API that defines
+          how to migrate virtual machines from VMware to OpenStack including migration strategy and scheduling.
+          It allows administrators to configure migration parameters such as timing, health checks,
+          and VM-specific settings for bulk VM migration operations between environments.
         properties:
           apiVersion:
             description: |-
@@ -408,7 +435,9 @@ spec:
           metadata:
             type: object
           spec:
-            description: MigrationPlanSpec defines the desired state of MigrationPlan
+            description: |-
+              MigrationPlanSpec defines the desired state of MigrationPlan including
+              the migration template, strategy, and the list of virtual machines to migrate
             properties:
               advancedOptions:
                 description: AdvancedOptions is a list of advanced options for the
@@ -484,13 +513,17 @@ spec:
             - virtualMachines
             type: object
           status:
-            description: MigrationPlanStatus defines the observed state of MigrationPlan
+            description: |-
+              MigrationPlanStatus defines the observed state of MigrationPlan including
+              the current status and progress of the migration
             properties:
               migrationMessage:
                 description: MigrationMessage is the message associated with the migration
                 type: string
               migrationStatus:
-                description: MigrationStatus is the status of the migration
+                description: |-
+                  MigrationStatus is the status of the migration using Kubernetes PodPhase states
+                  (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
             required:
             - migrationMessage
@@ -530,7 +563,13 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Migration is the Schema for the migrations API
+        description: |-
+          Migration is the Schema for the migrations API that represents a single virtual machine
+          migration job from VMware to OpenStack. It tracks the complete migration lifecycle
+          including validation, data transfer, disk conversion, and cutover phases. Migration resources
+          provide detailed status monitoring, error handling, and manual intervention points like
+          cutover initiation. Each Migration is associated with a MigrationPlan and executes on a specific
+          VjailbreakNode agent, tracking progress via status updates and condition changes.
         properties:
           apiVersion:
             description: |-
@@ -666,7 +705,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MigrationTemplate is the Schema for the migrationtemplates API
+        description: |-
+          MigrationTemplate is the Schema for the migrationtemplates API that defines how VMs should be migrated
+          from VMware to OpenStack including network and storage mappings. It serves as a reusable template
+          that can be referenced by multiple migration plans, providing configuration for source and destination
+          environments, OS-specific settings, and network/storage mappings. Migration templates enable consistent
+          configuration across multiple VM migrations and simplify the definition of migration plans.
         properties:
           apiVersion:
             description: |-
@@ -687,20 +731,22 @@ spec:
             type: object
           spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
+              including source/destination environments and mappings
             properties:
               destination:
                 description: Destination is the destination details for the virtual
                   machine
                 properties:
                   openstackRef:
-                    description: OpenstackRef is the reference for the virtual machine
+                    description: OpenstackRef is the reference to the OpenStack credentials
+                      to be used as the destination environment
                     type: string
                 required:
                 - openstackRef
                 type: object
               networkMapping:
-                description: NetworkMapping is the network mapping for the virtual
-                  machine
+                description: NetworkMapping is the reference to the NetworkMapping
+                  resource that defines source to destination network mappings
                 type: string
               osType:
                 description: OSType is the OS type of the virtual machine
@@ -712,14 +758,15 @@ spec:
                 description: Source is the source details for the virtual machine
                 properties:
                   vmwareRef:
-                    description: VMwareRef is the reference for the virtual machine
+                    description: VMwareRef is the reference to the VMware credentials
+                      to be used as the source environment
                     type: string
                 required:
                 - vmwareRef
                 type: object
               storageMapping:
-                description: StorageMapping is the storage mapping for the virtual
-                  machine
+                description: StorageMapping is the reference to the StorageMapping
+                  resource that defines source to destination storage mappings
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
@@ -766,7 +813,9 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NetworkMapping is the Schema for the networkmappings API
+        description: |-
+          NetworkMapping is the Schema for the networkmappings API that defines
+          mappings between VMware and OpenStack networks to be used during migration
         properties:
           apiVersion:
             description: |-
@@ -786,11 +835,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkMappingSpec defines the desired state of NetworkMapping
+            description: |-
+              NetworkMappingSpec defines the desired state of NetworkMapping including
+              mappings between VMware and OpenStack networks
             properties:
               networks:
                 description: Networks is the list of network mappings between source
-                  and target environments
+                  (VMware) and target (OpenStack) environments
                 items:
                   description: Network represents a mapping between source and target
                     networks
@@ -813,12 +864,14 @@ spec:
             description: NetworkMappingStatus defines the observed state of NetworkMapping
             properties:
               networkMappingValidationMessage:
-                description: NetworkmappingValidationMessage provides detailed validation
-                  information
+                description: |-
+                  NetworkmappingValidationMessage provides detailed validation information including
+                  information about available networks and any validation errors
                 type: string
               networkMappingValidationStatus:
-                description: NetworkmappingValidationStatus indicates the validation
-                  status of the network mapping
+                description: |-
+                  NetworkmappingValidationStatus indicates the validation status of the network mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
                 type: string
             type: object
         type: object
@@ -849,7 +902,11 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OpenstackCreds is the Schema for the openstackcreds API
+        description: |-
+          OpenstackCreds is the Schema for the OpenStack credentials API that defines authentication
+          and connection details for OpenStack environments. It provides a secure way to store and validate
+          OpenStack credentials for use in migration operations, including authentication information,
+          available compute flavors, volume types, networks, and Platform9 Distributed Cloud host configurations.
         properties:
           apiVersion:
             description: |-
@@ -926,6 +983,8 @@ spec:
               pcdHostConfig:
                 description: PCDHostConfig is the list of available clusters in openstack
                 items:
+                  description: HostConfig defines the configuration for a Platform9
+                    Distributed Cloud host
                   properties:
                     clusterName:
                       type: string
@@ -998,7 +1057,7 @@ spec:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
             properties:
               openstack:
-                description: Openstack is the Openstack configuration for the openstackcreds
+                description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
                   networks:
                     items:
@@ -1042,7 +1101,13 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PCDCluster is the Schema for the pcdclusters API
+        description: |-
+          PCDCluster is the Schema for the pcdclusters API that represents a Platform9 Distributed Cloud
+          cluster in the migration system. It defines cluster configuration including host membership,
+          high availability settings, and resource rebalancing policies. PCDCluster resources track both
+          the desired state of clusters as part of migration planning and the observed state of actual
+          PCD clusters in the target environment. They serve as destination targets for VM migrations
+          from VMware ESXi environments.
         properties:
           apiVersion:
             description: |-
@@ -1128,7 +1193,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PCDHost is the Schema for the pcdhosts API
+        description: |-
+          PCDHost is the Schema for the pcdhosts API that represents a physical or virtual host
+          in a Platform9 Distributed Cloud environment. It tracks the host's configuration,
+          network interfaces, assigned roles, and operational status. PCDHost resources are created
+          as part of the migration process when converting ESXi hosts to PCD hosts or when provisioning
+          new infrastructure to replace migrated VMware hosts.
         properties:
           apiVersion:
             description: |-
@@ -1163,6 +1233,10 @@ spec:
                 type: string
               interfaces:
                 items:
+                  description: |-
+                    PCDHostInterface defines the network interface configuration for a Platform9 Distributed Cloud host,
+                    including IP addresses, MAC address, and interface name. It's used to configure proper network
+                    connectivity for PCD hosts created during the migration process.
                   properties:
                     ipAddresses:
                       items:
@@ -1216,8 +1290,11 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: RollingMigrationPlan is the Schema for the rollingmigrationplans
-          API
+        description: |-
+          RollingMigrationPlan is the Schema for the rollingmigrationplans API that defines a coordinated
+          migration of multiple VMware clusters and ESXi hosts to Platform9 Distributed Cloud (PCD).
+          It supports sequenced migration of VMs across clusters with configurable batch sizes,
+          cluster-to-cluster mapping, and tracking of migration progress across the entire datacenter migration.
         properties:
           apiVersion:
             description: |-
@@ -1292,6 +1369,10 @@ spec:
                 description: ClusterMapping is the mapping of vCenter clusters to
                   PCD clusters
                 items:
+                  description: |-
+                    ClusterMapping defines the relationship between a VMware vCenter cluster and its corresponding
+                    Platform9 Distributed Cloud (PCD) cluster for migration operations. This mapping ensures that
+                    virtual machines are properly migrated to the appropriate target infrastructure.
                   properties:
                     pcdClusterName:
                       description: PCDClusterName is the name of the PCD cluster
@@ -1308,6 +1389,10 @@ spec:
                 description: ClusterSequence is the sequence of vCenter clusters to
                   be migrated
                 items:
+                  description: |-
+                    ClusterMigrationInfo defines information about a VMware vCenter cluster migration,
+                    including the cluster name and the sequence of virtual machines to be migrated.
+                    This structure allows for coordinated migration of multiple related VMs within a cluster.
                   properties:
                     clusterName:
                       description: ClusterName is the name of the vCenter cluster
@@ -1325,6 +1410,10 @@ spec:
                       description: VMSequence is the sequence of virtual machines
                         to be migrated
                       items:
+                        description: |-
+                          VMSequenceInfo defines information about a virtual machine in the migration sequence,
+                          including its name and the ESXi host where it is located. This information is used to
+                          establish the proper order and grouping of VMs during the migration process.
                         properties:
                           esxiName:
                             description: ESXiName is the name of the ESXi host where
@@ -1489,7 +1578,9 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: StorageMapping is the Schema for the storagemappings API
+        description: |-
+          StorageMapping is the Schema for the storagemappings API that defines
+          mappings between VMware and OpenStack storage types to be used during migration
         properties:
           apiVersion:
             description: |-
@@ -1509,11 +1600,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: StorageMappingSpec defines the desired state of StorageMapping
+            description: |-
+              StorageMappingSpec defines the desired state of StorageMapping including
+              mappings between VMware and OpenStack storage types
             properties:
               storages:
                 description: Storages is a list of storage mappings between source
-                  and target environments
+                  (VMware) and target (OpenStack) environments
                 items:
                   description: Storage represents a mapping between source and target
                     storage types
@@ -1538,12 +1631,14 @@ spec:
             description: StorageMappingStatus defines the observed state of StorageMapping
             properties:
               storageMappingValidationMessage:
-                description: StoragemappingValidationMessage provides detailed validation
-                  information
+                description: |-
+                  StoragemappingValidationMessage provides detailed validation information including
+                  information about available storage types and any validation errors
                 type: string
               storageMappingValidationStatus:
-                description: StoragemappingValidationStatus indicates the validation
-                  status of the storage mapping
+                description: |-
+                  StoragemappingValidationStatus indicates the validation status of the storage mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
                 type: string
             type: object
         type: object
@@ -1577,7 +1672,10 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VjailbreakNode is the Schema for the vjailbreaknodes API
+        description: |-
+          VjailbreakNode is the Schema for the vjailbreaknodes API that represents
+          a node in the migration infrastructure with configuration, resource limits,
+          and statistics for monitoring migration progress
         properties:
           apiVersion:
             description: |-
@@ -1600,10 +1698,13 @@ spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
               nodeRole:
-                description: NodeRole is the role assigned to the node
+                description: NodeRole is the role assigned to the node (e.g., "migration-worker",
+                  "controller")
                 type: string
               openstackCreds:
-                description: OpenstackCreds is the credentials for Openstack Environment
+                description: |-
+                  OpenstackCreds is the reference to the credentials for the OpenStack environment
+                  where the node will be provisioned
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -1661,8 +1762,9 @@ spec:
             description: Status defines the observed state of VjailbreakNode
             properties:
               activeMigrations:
-                description: ActiveMigrations is the list of active migrations happening
-                  on the node
+                description: |-
+                  ActiveMigrations is the list of active migrations currently being processed on this node,
+                  containing references to MigrationPlan resources
                 items:
                   type: string
                 type: array
@@ -1670,7 +1772,9 @@ spec:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
               phase:
-                description: Phase is the current phase of the node
+                description: |-
+                  Phase is the current lifecycle phase of the node
+                  (e.g., Provisioning, Ready, Error, Decommissioning)
                 type: string
               vmIP:
                 description: VMIP is the IP address of the VM
@@ -1702,7 +1806,11 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareCluster is the Schema for the vmwareclusters API
+        description: |-
+          VMwareCluster is the Schema for the vmwareclusters API that represents a VMware vSphere cluster
+          in the source environment. It tracks cluster configuration, member hosts, and migration status
+          as part of the VMware to Platform9 Distributed Cloud migration process. VMwareCluster resources
+          serve as source components that are migrated to corresponding PCDCluster resources in the target environment.
         properties:
           apiVersion:
             description: |-
@@ -1768,7 +1876,11 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareCreds is the Schema for the vmwarecreds API
+        description: |-
+          VMwareCreds is the Schema for the vmwarecreds API that defines authentication
+          and connection details for VMware vSphere environments. It provides a secure way to
+          store and validate vCenter credentials for use in migration operations, including
+          connection parameters, authentication information, and datacenter configuration.
         properties:
           apiVersion:
             description: |-
@@ -1875,7 +1987,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareHost is the Schema for the vmwarehosts API
+        description: |-
+          VMwareHost is the Schema for the vmwarehosts API that represents a VMware ESXi host
+          in the source environment. It tracks host configuration, hardware identification, and cluster membership
+          as part of the VMware to Platform9 Distributed Cloud migration process. VMwareHost resources are
+          source components that are migrated to PCDHost resources in the target environment and are automatically
+          removed from vCenter inventory after all VMs have been migrated off and the host is in maintenance mode.
         properties:
           apiVersion:
             description: |-
@@ -1937,7 +2054,13 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VMwareMachine is the Schema for the vmwaremachines API
+        description: |-
+          VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
+          in the VMware source environment targeted for migration. It tracks VM configuration,
+          resource allocation, migration status, and target environment specifications.
+          VMwareMachine resources are the primary workloads migrated from VMware to OpenStack
+          as part of the migration process and contain all necessary information to recreate
+          equivalent virtual machines in the target environment.
         properties:
           apiVersion:
             description: |-

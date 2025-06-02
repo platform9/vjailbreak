@@ -17,7 +17,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: BMConfig is the Schema for the bmconfigs API
+        description: |-
+          BMConfig is the Schema for the bmconfigs API that defines authentication and configuration
+          details for Bare Metal Controller (BMC) providers such as MAAS. It contains credentials,
+          connection information, and boot source configurations needed to provision physical hosts
+          for use during the ESXi to PCD migration process. BMConfig enables the automatic
+          provisioning of PCD hosts as replacement infrastructure for migrated ESXi hosts.
         properties:
           apiVersion:
             description: |-
@@ -50,6 +55,8 @@ spec:
                 properties:
                   release:
                     default: jammy
+                    description: Release is the OS release version to be used (e.g.,
+                      "jammy" for Ubuntu 22.04)
                     type: string
                 required:
                 - release

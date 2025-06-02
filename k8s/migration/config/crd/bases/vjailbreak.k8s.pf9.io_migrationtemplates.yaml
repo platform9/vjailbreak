@@ -17,7 +17,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MigrationTemplate is the Schema for the migrationtemplates API
+        description: |-
+          MigrationTemplate is the Schema for the migrationtemplates API that defines how VMs should be migrated
+          from VMware to OpenStack including network and storage mappings. It serves as a reusable template
+          that can be referenced by multiple migration plans, providing configuration for source and destination
+          environments, OS-specific settings, and network/storage mappings. Migration templates enable consistent
+          configuration across multiple VM migrations and simplify the definition of migration plans.
         properties:
           apiVersion:
             description: |-
@@ -38,20 +43,22 @@ spec:
             type: object
           spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
+              including source/destination environments and mappings
             properties:
               destination:
                 description: Destination is the destination details for the virtual
                   machine
                 properties:
                   openstackRef:
-                    description: OpenstackRef is the reference for the virtual machine
+                    description: OpenstackRef is the reference to the OpenStack credentials
+                      to be used as the destination environment
                     type: string
                 required:
                 - openstackRef
                 type: object
               networkMapping:
-                description: NetworkMapping is the network mapping for the virtual
-                  machine
+                description: NetworkMapping is the reference to the NetworkMapping
+                  resource that defines source to destination network mappings
                 type: string
               osType:
                 description: OSType is the OS type of the virtual machine
@@ -63,14 +70,15 @@ spec:
                 description: Source is the source details for the virtual machine
                 properties:
                   vmwareRef:
-                    description: VMwareRef is the reference for the virtual machine
+                    description: VMwareRef is the reference to the VMware credentials
+                      to be used as the source environment
                     type: string
                 required:
                 - vmwareRef
                 type: object
               storageMapping:
-                description: StorageMapping is the storage mapping for the virtual
-                  machine
+                description: StorageMapping is the reference to the StorageMapping
+                  resource that defines source to destination storage mappings
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
