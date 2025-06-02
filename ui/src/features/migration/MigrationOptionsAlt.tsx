@@ -330,53 +330,55 @@ export default function MigrationOptionsAlt({
   <FormControlLabel
     label="Suffix for Source VM Name"
     control={
-<Checkbox
-  checked={Boolean(selectedMigrationOptions.suffixEnabled)}
-  onChange={e =>
-    updateSelectedMigrationOptions("suffixEnabled")(e.target.checked)
-  }
-/>
+      <Checkbox
+        checked={Boolean(selectedMigrationOptions.suffixEnabled)}
+        onChange={e => {
+          updateSelectedMigrationOptions("suffixEnabled")(e.target.checked);
+          if (e.target.checked) {
+            onChange("postMigrationAction.suffix")("_migrated_to_pcd");
+          } else {
+            onChange("postMigrationAction.suffix")("");
+          }
+        }}
+      />
     }
   />
   <Select
     size="small"
     disabled={!selectedMigrationOptions.suffixEnabled}
-    value={params.postMigrationAction?.suffix || ""}
+    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
     onChange={e => onChange("postMigrationAction.suffix")(e.target.value)}
-    displayEmpty
   >
-    <MenuItem value=""><em>None</em></MenuItem>
     <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-    {/* Add more options if needed */}
   </Select>
   <Typography variant="caption">
     Optional: This suffix will be appended to the source VM name after migration.
   </Typography>
 </Fields>
-
-
 <Fields>
   <FormControlLabel
     label="Folder Name in vCenter"
     control={
-<Checkbox
-  checked={Boolean(selectedMigrationOptions.folderNameEnabled)}
-  onChange={e =>
-    updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked)
-  }
-/>
+      <Checkbox
+        checked={Boolean(selectedMigrationOptions.folderNameEnabled)}
+        onChange={e => {
+          updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked);
+          if (e.target.checked) {
+            onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+          } else {
+            onChange("postMigrationAction.folderName")("");
+          }
+        }}
+      />
     }
   />
   <Select
     size="small"
     disabled={!selectedMigrationOptions.folderNameEnabled}
-    value={params.postMigrationAction?.folderName || ""}
+    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
     onChange={e => onChange("postMigrationAction.folderName")(e.target.value)}
-    displayEmpty
   >
-    <MenuItem value=""><em>None</em></MenuItem>
     <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-    {/* Add more options if needed */}
   </Select>
   <Typography variant="caption">
     Optional: The source VM will be moved to this folder after migration.
