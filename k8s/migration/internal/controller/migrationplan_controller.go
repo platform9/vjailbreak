@@ -165,7 +165,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	ctxlog.Info("🚀 START: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
+	ctxlog.Info("START: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
 	defer ctxlog.Info("🏁 END: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
 
 	migrationtemplate, err := r.getMigrationTemplate(ctx, migrationplan)
@@ -189,21 +189,19 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(
 	}
 
 	if reflect.DeepEqual(migrationplan.Spec.PostMigrationAction, vjailbreakv1alpha1.PostMigrationAction{}) {
-		ctxlog.Info("⚠️ No post-migration actions configured")
+		ctxlog.Info("No post-migration actions configured")
 		return nil
 	}
 
 	return handlePostMigrationActions(ctx, vcClient, dc, migrationplan, vm)
 }
 
-// --- Helper Functions ---
-
 func (r *MigrationPlanReconciler) getMigrationTemplate(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 ) (*vjailbreakv1alpha1.MigrationTemplate, error) {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("🔍 Fetching MigrationTemplate...", "template", migrationplan.Spec.MigrationTemplate)
+	ctxlog.Info("Fetching MigrationTemplate...", "template", migrationplan.Spec.MigrationTemplate)
 
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	err := r.Get(
@@ -215,10 +213,10 @@ func (r *MigrationPlanReconciler) getMigrationTemplate(
 		migrationtemplate,
 	)
 	if err != nil {
-		ctxlog.Error(err, "❌ Failed to get MigrationTemplate")
+		ctxlog.Error(err, "Failed to get MigrationTemplate")
 		return nil, fmt.Errorf("failed to get MigrationTemplate for post-migration actions: %w", err)
 	}
-	ctxlog.Info("✅ MigrationTemplate fetched successfully")
+	ctxlog.Info("MigrationTemplate fetched successfully")
 	return migrationtemplate, nil
 }
 
@@ -238,10 +236,10 @@ func (r *MigrationPlanReconciler) getVMwareCreds(
 		vmwcreds,
 	)
 	if !ok {
-		ctxlog.Error(err, "❌ VMwareCreds validation failed")
+		ctxlog.Error(err, "VMwareCreds validation failed")
 		return nil, fmt.Errorf("VMwareCreds not validated for post-migration actions: %w", err)
 	}
-	ctxlog.Info("✅ VMwareCreds validated successfully")
+	ctxlog.Info("VMwareCreds validated successfully")
 	return vmwcreds, nil
 }
 
@@ -251,7 +249,7 @@ func (r *MigrationPlanReconciler) getVCenterSecret(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 ) (*corev1.Secret, error) {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("🔍 Fetching vCenter Secret...", "secret", vmwcreds.Spec.SecretRef.Name)
+	ctxlog.Info("Fetching vCenter Secret...", "secret", vmwcreds.Spec.SecretRef.Name)
 
 	secret := &corev1.Secret{}
 	err := r.Get(
@@ -263,10 +261,10 @@ func (r *MigrationPlanReconciler) getVCenterSecret(
 		secret,
 	)
 	if err != nil {
-		ctxlog.Error(err, "❌ Failed to get vCenter Secret")
+		ctxlog.Error(err, "Failed to get vCenter Secret")
 		return nil, fmt.Errorf("failed to get Secret '%s' for vCenter credentials: %w", vmwcreds.Spec.SecretRef.Name, err)
 	}
-	ctxlog.Info("✅ Secret retrieved successfully")
+	ctxlog.Info("Secret retrieved successfully")
 	return secret, nil
 }
 
@@ -280,24 +278,24 @@ func createVCenterClientAndDC(
 	if err != nil {
 		return nil, nil, err
 	}
-	ctxlog.Info("✅ Credentials extracted", "host", host, "user", username)
+	ctxlog.Info("Credentials extracted", "host", host, "user", username)
 
 	ctxlog.Info("🔌 Creating vCenter client...", "host", host, "insecure", true)
 	vcClient, err := vcenter.VCenterClientBuilder(ctx, username, password, host, true)
 	if err != nil {
-		ctxlog.Error(err, "❌ Failed to create vCenter client")
+		ctxlog.Error(err, "Failed to create vCenter client")
 		return nil, nil, fmt.Errorf("failed to create vCenter client for post-migration actions: %w", err)
 	}
-	ctxlog.Info("✅ vCenter client created successfully")
+	ctxlog.Info("vCenter client created successfully")
 
 	datacenterName := vmwcreds.Spec.DataCenter
 	ctxlog.Info("📍 Using datacenter", "datacenter", datacenterName)
 	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
 	if err != nil {
-		ctxlog.Error(err, "❌ Failed to find datacenter")
+		ctxlog.Error(err, "Failed to find datacenter")
 		return nil, nil, fmt.Errorf("failed to find datacenter '%s': %w", datacenterName, err)
 	}
-	ctxlog.Info("✅ Datacenter located", "datacenter", dc)
+	ctxlog.Info("Datacenter located", "datacenter", dc)
 
 	return vcClient, dc, nil
 }
@@ -317,10 +315,10 @@ func handlePostMigrationActions(
 
 		ctxlog.Info("🔄 Renaming VM", "oldName", vm, "newName", newVMName)
 		if err := vcClient.RenameVM(ctx, vm, newVMName); err != nil {
-			ctxlog.Error(err, "❌ VM rename failed")
+			ctxlog.Error(err, "VM rename failed")
 			return fmt.Errorf("failed to rename VM '%s': %w", vm, err)
 		}
-		ctxlog.Info("✅ VM renamed successfully", "newName", newVMName)
+		ctxlog.Info("VM renamed successfully", "newName", newVMName)
 		vm = newVMName
 	}
 
@@ -329,17 +327,17 @@ func handlePostMigrationActions(
 
 		ctxlog.Info("📂 Ensuring folder exists...", "folder", folderName)
 		if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
-			ctxlog.Error(err, "❌ Folder creation/verification failed")
+			ctxlog.Error(err, "Folder creation/verification failed")
 			return fmt.Errorf("failed to ensure folder '%s' exists: %w", folderName, err)
 		}
-		ctxlog.Info("✅ Folder ensured", "folder", folderName)
+		ctxlog.Info("Folder ensured", "folder", folderName)
 
-		ctxlog.Info("🚚 Moving VM to folder", "vm", vm, "folder", folderName)
+		ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName)
 		if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
-			ctxlog.Error(err, "❌ VM move failed")
+			ctxlog.Error(err, "VM move failed")
 			return fmt.Errorf("failed to move VM '%s' to folder '%s': %w", vm, folderName, err)
 		}
-		ctxlog.Info("✅ VM moved successfully", "folder", folderName)
+		ctxlog.Info("VM moved successfully", "folder", folderName)
 	}
 
 	return nil
