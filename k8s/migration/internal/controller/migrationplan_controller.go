@@ -34,7 +34,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/go-logr/logr"
-	"github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	// "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -157,120 +157,139 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, scope *scope.MigrationPlanScope, vm string) error {
+func (r *MigrationPlanReconciler) reconcilePostMigration(
+	ctx context.Context,
+	scope *scope.MigrationPlanScope,
+	vm string,
+) error {
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
 	ctxlog.Info("🚀 START: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
 	defer ctxlog.Info("🏁 END: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
 
-	// 1. Fetch MigrationTemplate
 	migrationtemplate, err := r.getMigrationTemplate(ctx, migrationplan)
 	if err != nil {
 		return err
 	}
 
-	// 2. Fetch VMwareCreds
-	vmwcreds, err := r.getVMwareCreds(ctx, migrationtemplate, migrationplan)
+	vmwcreds, err := r.getVMwareCreds(ctx, migrationtemplate)
 	if err != nil {
 		return err
 	}
 
-	// 3. Fetch and extract credentials
 	secret, err := r.getVCenterSecret(ctx, vmwcreds, migrationplan)
 	if err != nil {
 		return err
 	}
 
-	// 4. Create vCenter client and get datacenter
-	vcClient, dc, err := r.createVCenterClientAndDC(ctx, secret, vmwcreds)
+	vcClient, dc, err := createVCenterClientAndDC(ctx, secret, vmwcreds)
 	if err != nil {
 		return err
 	}
 
-	// Check for post-migration actions
-	if reflect.DeepEqual(migrationplan.Spec.PostMigrationAction, v1alpha1.PostMigrationAction{}) {
+	if reflect.DeepEqual(migrationplan.Spec.PostMigrationAction, vjailbreakv1alpha1.PostMigrationAction{}) {
 		ctxlog.Info("⚠️ No post-migration actions configured")
 		return nil
 	}
 
-	// Handle post-migration actions
-	return r.handlePostMigrationActions(ctx, vcClient, dc, migrationplan, vm)
+	return handlePostMigrationActions(ctx, vcClient, dc, migrationplan, vm)
 }
 
-// Helper functions
+// --- Helper Functions ---
 
-func (r *MigrationPlanReconciler) getMigrationTemplate(ctx context.Context, migrationplan *v1alpha1.MigrationPlan) (*v1alpha1.MigrationTemplate, error) {
+func (r *MigrationPlanReconciler) getMigrationTemplate(
+	ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+) (*vjailbreakv1alpha1.MigrationTemplate, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("🔍 Fetching MigrationTemplate...", "template", migrationplan.Spec.MigrationTemplate)
 
-	migrationtemplate := &v1alpha1.MigrationTemplate{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      migrationplan.Spec.MigrationTemplate,
-		Namespace: migrationplan.Namespace,
-	}, migrationtemplate)
-
+	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+	err := r.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      migrationplan.Spec.MigrationTemplate,
+			Namespace: migrationplan.Namespace,
+		},
+		migrationtemplate,
+	)
 	if err != nil {
-		ctxlog.Error(err, "Failed to get MigrationTemplate")
+		ctxlog.Error(err, "❌ Failed to get MigrationTemplate")
 		return nil, fmt.Errorf("failed to get MigrationTemplate for post-migration actions: %w", err)
 	}
-	ctxlog.Info("MigrationTemplate fetched successfully")
+	ctxlog.Info("✅ MigrationTemplate fetched successfully")
 	return migrationtemplate, nil
 }
 
-func (r *MigrationPlanReconciler) getVMwareCreds(ctx context.Context, migrationtemplate *v1alpha1.MigrationTemplate, migrationplan *v1alpha1.MigrationPlan) (*v1alpha1.VMwareCreds, error) {
+func (r *MigrationPlanReconciler) getVMwareCreds(
+	ctx context.Context,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+) (*vjailbreakv1alpha1.VMwareCreds, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("🔍 Fetching VMwareCreds...", "vmwareRef", migrationtemplate.Spec.Source.VMwareRef)
 
-	vmwcreds := &v1alpha1.VMwareCreds{}
-	ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds)
-
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+	ok, err := r.checkStatusSuccess(
+		ctx,
+		migrationtemplate.Namespace,
+		migrationtemplate.Spec.Source.VMwareRef,
+		true,
+		vmwcreds,
+	)
 	if !ok {
-		ctxlog.Error(err, "VMwareCreds validation failed")
+		ctxlog.Error(err, "❌ VMwareCreds validation failed")
 		return nil, fmt.Errorf("VMwareCreds not validated for post-migration actions: %w", err)
 	}
-	ctxlog.Info("VMwareCreds validated successfully")
+	ctxlog.Info("✅ VMwareCreds validated successfully")
 	return vmwcreds, nil
 }
 
-func (r *MigrationPlanReconciler) getVCenterSecret(ctx context.Context, vmwcreds *v1alpha1.VMwareCreds, migrationplan *v1alpha1.MigrationPlan) (*corev1.Secret, error) {
+func (r *MigrationPlanReconciler) getVCenterSecret(
+	ctx context.Context,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+) (*corev1.Secret, error) {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("Fetching vCenter Secret...", "secret", vmwcreds.Spec.SecretRef.Name)
+	ctxlog.Info("🔍 Fetching vCenter Secret...", "secret", vmwcreds.Spec.SecretRef.Name)
 
 	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      vmwcreds.Spec.SecretRef.Name,
-		Namespace: migrationplan.Namespace,
-	}, secret)
-
+	err := r.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      vmwcreds.Spec.SecretRef.Name,
+			Namespace: migrationplan.Namespace,
+		},
+		secret,
+	)
 	if err != nil {
-		ctxlog.Error(err, "Failed to get vCenter Secret")
+		ctxlog.Error(err, "❌ Failed to get vCenter Secret")
 		return nil, fmt.Errorf("failed to get Secret '%s' for vCenter credentials: %w", vmwcreds.Spec.SecretRef.Name, err)
 	}
-	ctxlog.Info("Secret retrieved successfully")
+	ctxlog.Info("✅ Secret retrieved successfully")
 	return secret, nil
 }
 
-func (r *MigrationPlanReconciler) createVCenterClientAndDC(ctx context.Context, secret *corev1.Secret, vmwcreds *v1alpha1.VMwareCreds) (*vcenter.VCenterClient, *object.Datacenter, error) {
+func createVCenterClientAndDC(
+	ctx context.Context,
+	secret *corev1.Secret,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+) (*vcenter.VCenterClient, *object.Datacenter, error) {
 	ctxlog := log.FromContext(ctx)
-
-	// Extract credentials
 	username, password, host, err := extractVCenterCredentials(secret)
 	if err != nil {
 		return nil, nil, err
 	}
-	ctxlog.Info("Credentials extracted", "host", host, "user", username)
+	ctxlog.Info("✅ Credentials extracted", "host", host, "user", username)
 
-	// Create vCenter client
-	ctxlog.Info("Creating vCenter client...", "host", host, "insecure", true)
+	ctxlog.Info("🔌 Creating vCenter client...", "host", host, "insecure", true)
 	vcClient, err := vcenter.VCenterClientBuilder(ctx, username, password, host, true)
 	if err != nil {
 		ctxlog.Error(err, "❌ Failed to create vCenter client")
 		return nil, nil, fmt.Errorf("failed to create vCenter client for post-migration actions: %w", err)
 	}
-	ctxlog.Info("vCenter client created successfully")
+	ctxlog.Info("✅ vCenter client created successfully")
 
-	// Get datacenter
 	datacenterName := vmwcreds.Spec.DataCenter
 	ctxlog.Info("📍 Using datacenter", "datacenter", datacenterName)
 	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
@@ -278,29 +297,33 @@ func (r *MigrationPlanReconciler) createVCenterClientAndDC(ctx context.Context, 
 		ctxlog.Error(err, "❌ Failed to find datacenter")
 		return nil, nil, fmt.Errorf("failed to find datacenter '%s': %w", datacenterName, err)
 	}
-	ctxlog.Info("Datacenter located", "datacenter", dc)
+	ctxlog.Info("✅ Datacenter located", "datacenter", dc)
 
 	return vcClient, dc, nil
 }
 
-func (r *MigrationPlanReconciler) handlePostMigrationActions(ctx context.Context, vcClient *vcenter.VCenterClient, dc *object.Datacenter, migrationplan *v1alpha1.MigrationPlan, vm string) error {
+func handlePostMigrationActions(
+	ctx context.Context,
+	vcClient *vcenter.VCenterClient,
+	dc *object.Datacenter,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	vm string,
+) error {
 	ctxlog := log.FromContext(ctx)
 
-	// Handle VM renaming
 	if migrationplan.Spec.PostMigrationAction.Suffix != "" {
 		suffix := migrationplan.Spec.PostMigrationAction.Suffix
 		newVMName := vm + suffix
 
-		ctxlog.Info("Renaming VM", "oldName", vm, "newName", newVMName)
+		ctxlog.Info("🔄 Renaming VM", "oldName", vm, "newName", newVMName)
 		if err := vcClient.RenameVM(ctx, vm, newVMName); err != nil {
 			ctxlog.Error(err, "❌ VM rename failed")
 			return fmt.Errorf("failed to rename VM '%s': %w", vm, err)
 		}
-		ctxlog.Info("VM renamed successfully", "newName", newVMName)
+		ctxlog.Info("✅ VM renamed successfully", "newName", newVMName)
 		vm = newVMName
 	}
 
-	// Handle folder move
 	if migrationplan.Spec.PostMigrationAction.FolderName != "" {
 		folderName := migrationplan.Spec.PostMigrationAction.FolderName
 
@@ -309,33 +332,39 @@ func (r *MigrationPlanReconciler) handlePostMigrationActions(ctx context.Context
 			ctxlog.Error(err, "❌ Folder creation/verification failed")
 			return fmt.Errorf("failed to ensure folder '%s' exists: %w", folderName, err)
 		}
-		ctxlog.Info("Folder ensured", "folder", folderName)
+		ctxlog.Info("✅ Folder ensured", "folder", folderName)
 
 		ctxlog.Info("🚚 Moving VM to folder", "vm", vm, "folder", folderName)
 		if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
 			ctxlog.Error(err, "❌ VM move failed")
 			return fmt.Errorf("failed to move VM '%s' to folder '%s': %w", vm, folderName, err)
 		}
-		ctxlog.Info("VM moved successfully", "folder", folderName)
+		ctxlog.Info("✅ VM moved successfully", "folder", folderName)
 	}
 
 	return nil
 }
 
-func extractVCenterCredentials(secret *corev1.Secret) (string, string, string, error) {
-	username, ok := secret.Data["VCENTER_USERNAME"]
+func extractVCenterCredentials(secret *corev1.Secret) (username, password, host string, err error) {
+	u, ok := secret.Data["VCENTER_USERNAME"]
 	if !ok {
-		return "", "", "", fmt.Errorf("username not found in secret")
+		err = fmt.Errorf("username not found in secret")
+		return
 	}
-	password, ok := secret.Data["VCENTER_PASSWORD"]
+	p, ok := secret.Data["VCENTER_PASSWORD"]
 	if !ok {
-		return "", "", "", fmt.Errorf("password not found in secret")
+		err = fmt.Errorf("password not found in secret")
+		return
 	}
-	hostData, ok := secret.Data["VCENTER_HOST"]
+	h, ok := secret.Data["VCENTER_HOST"]
 	if !ok {
-		return "", "", "", fmt.Errorf("vCenter host not found in secret")
+		err = fmt.Errorf("host not found in secret")
+		return
 	}
-	return string(username), string(password), string(hostData), nil
+	username = string(u)
+	password = string(p)
+	host = string(h)
+	return
 }
 
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
