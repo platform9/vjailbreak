@@ -371,7 +371,11 @@ func (c *HTTPClient) Auth(ctx context.Context, credentials Credentials) (AuthInf
 		return AuthInfo{}, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -419,7 +423,11 @@ func (c *HTTPClient) GetTokenInfo(ctx context.Context, token string) (AuthRespon
 		return AuthResponse{}, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -476,7 +484,11 @@ func (c *HTTPClient) GetProjects(ctx context.Context, token string) ([]Project, 
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -509,7 +521,11 @@ func (c *HTTPClient) GetAllTenantsAllUsers(ctx context.Context, token string) ([
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -550,7 +566,11 @@ func (c *HTTPClient) ListProjects(ctx context.Context, token, filter string) ([]
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -592,7 +612,11 @@ func (c *HTTPClient) CreateProject(ctx context.Context, token string, input Crea
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -638,7 +662,11 @@ func (c *HTTPClient) ListRoles(ctx context.Context, token, filter string) ([]Rol
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -676,7 +704,11 @@ func (c *HTTPClient) CheckRoleAssignForUserOnProject(ctx context.Context, token,
 		return false
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	// Status code 204 refers to specified role is assigned to user on given project.
 	return resp.StatusCode < 400
@@ -697,7 +729,11 @@ func (c *HTTPClient) AssignRoleToUserOnProject(ctx context.Context, token string
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -730,7 +766,11 @@ func (c *HTTPClient) CreateUser(ctx context.Context, token string, input CreateU
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -775,7 +815,11 @@ func (c *HTTPClient) ListUser(ctx context.Context, token, filter string) ([]User
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -808,7 +852,11 @@ func (c *HTTPClient) DeleteUser(ctx context.Context, token string, userID string
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

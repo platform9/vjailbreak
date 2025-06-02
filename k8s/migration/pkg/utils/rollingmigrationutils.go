@@ -58,7 +58,9 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 			},
 		},
 	}
-	controllerutil.SetOwnerReference(rollingMigrationPlan, clusterMigration, k8sClient.Scheme())
+	if err := controllerutil.SetOwnerReference(rollingMigrationPlan, clusterMigration, k8sClient.Scheme()); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference on ClusterMigration: %w", err)
+	}
 
 	if err := k8sClient.Create(ctx, clusterMigration); err != nil {
 		return nil, err
@@ -136,7 +138,9 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 			VMwareCredsRef:    scope.ClusterMigration.Spec.VMwareCredsRef,
 		},
 	}
-	controllerutil.SetOwnerReference(scope.RollingMigrationPlan, esxiMigration, scope.Client.Scheme())
+	if err := controllerutil.SetOwnerReference(scope.RollingMigrationPlan, esxiMigration, scope.Client.Scheme()); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference on ESXiMigration: %w", err)
+	}
 	if err := scope.Client.Create(ctx, esxiMigration); err != nil {
 		return nil, err
 	}

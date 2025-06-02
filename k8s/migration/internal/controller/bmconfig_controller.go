@@ -118,7 +118,11 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 		}
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, err
 	}
-	defer provider.Disconnect()
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			scope.Error(err, "Error disconnecting from MAAS provider")
+		}
+	}()
 
 	bmConfig.Status.ValidationStatus = string(corev1.PodSucceeded)
 	bmConfig.Status.ValidationMessage = "Successfully connected to MAAS"

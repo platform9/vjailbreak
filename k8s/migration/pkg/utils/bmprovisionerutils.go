@@ -257,7 +257,9 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	}
 
 	// Set the owner reference
-	controllerutil.SetOwnerReference(scope.RollingMigrationPlan, finalCloudInitSecret, scope.Client.Scheme())
+	if err := controllerutil.SetOwnerReference(scope.RollingMigrationPlan, finalCloudInitSecret, scope.Client.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on cloud-init secret")
+	}
 
 	// Create or update the secret
 	if err := scope.Client.Create(ctx, finalCloudInitSecret); err != nil {

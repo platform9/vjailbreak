@@ -78,7 +78,11 @@ func (eAPI *EndpointManagerAPI) GetEndpointForRegionAPI(
 	serviceID string,
 ) (string, error) {
 	zap.S().Debug("Fetching endpoints for region ", regionName)
-	req, _ := http.NewRequest("GET", eAPI.BaseURL, nil)
+	req, err := http.NewRequest("GET", eAPI.BaseURL, nil)
+	if err != nil {
+		zap.S().Errorf("Failed to create request for endpoint information for region %s, Error: %s", regionName, err)
+		return "", fmt.Errorf("failed to create request for endpoint information for region %s, Error: %s", regionName, err)
+	}
 
 	// Add keystone token in the header.
 	req.Header.Add("X-Auth-Token", eAPI.Token)
@@ -93,7 +97,11 @@ func (eAPI *EndpointManagerAPI) GetEndpointForRegionAPI(
 		zap.S().Errorf("Failed to fetch endpoint information for region %s, Error: %s", regionName, err)
 		return "", fmt.Errorf("failed to fetch endpoint information for region %s, Error: %s", regionName, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			zap.S().Warnf("Error closing response body: %v", closeErr)
+		}
+	}()
 
 	endpointsInfo := EndpointsInfo{}
 	// Response is received as slice of endpoints.

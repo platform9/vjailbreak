@@ -73,7 +73,11 @@ func (sAPI *ServiceManagerAPI) GetServiceIDAPI(
 	name string,
 ) (string, error) {
 	zap.S().Debug("Fetching service ID for ", name)
-	req, _ := http.NewRequest("GET", sAPI.BaseURL, nil)
+	req, err := http.NewRequest("GET", sAPI.BaseURL, nil)
+	if err != nil {
+		zap.S().Errorf("Failed to create request for service ID for %s, Error: %s", name, err)
+		return "", fmt.Errorf("failed to create request for service ID for %s, Error: %s", name, err)
+	}
 
 	// Add keystone token in the header.
 	req.Header.Add("X-Auth-Token", sAPI.Token)
@@ -88,7 +92,11 @@ func (sAPI *ServiceManagerAPI) GetServiceIDAPI(
 		zap.S().Errorf("Failed to fetch service information for service %s, Error: %s", name, err)
 		return "", fmt.Errorf("failed to fetch service information for service %s, Error: %s", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	serviceInfo := ServicesInfo{}
 	// Response is received as slice of services.
