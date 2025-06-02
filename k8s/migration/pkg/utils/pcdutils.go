@@ -211,7 +211,6 @@ func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.Open
 
 // DeleteStalePCDHosts removes PCDHost resources that no longer exist in the upstream resmgr
 func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
-
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials")

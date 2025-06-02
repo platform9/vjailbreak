@@ -289,7 +289,6 @@ func (h Host) ReadExtensions() (Extensions, error) {
 // AssignRoles assigns the specified roles to a host identified by its ID.
 // It makes an API call to the resource manager to update the host's role configuration.
 func (r Impl) AssignRoles(ctx context.Context, hostID string, roles []string) error {
-
 	if len(roles) == 0 {
 		return fmt.Errorf("no roles provided")
 	}
@@ -308,16 +307,16 @@ func (r Impl) AssignRoles(ctx context.Context, hostID string, roles []string) er
 			return err
 		}
 		defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			log.Printf("failed to close response body: %v", err)
-		}
-	}()
+			err := resp.Body.Close()
+			if err != nil {
+				log.Printf("failed to close response body: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+			if err != nil {
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
 			return fmt.Errorf("failed to query the resmgr to assign role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
@@ -351,9 +350,9 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to assign hypervisor role: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
@@ -380,16 +379,16 @@ func (r Impl) RemoveRoles(ctx context.Context, hostID string, roles []string) er
 			return err
 		}
 		defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			log.Printf("failed to close response body: %v", err)
-		}
-	}()
+			err := resp.Body.Close()
+			if err != nil {
+				log.Printf("failed to close response body: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+			if err != nil {
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
 			return fmt.Errorf("failed to query the resmgr to remove role %s: (%d) %s", role, resp.StatusCode, string(body))
 		}
 	}
@@ -550,9 +549,9 @@ func (r *Impl) AssignHostConfig(ctx context.Context, hostID string, hostConfigID
 	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("failed to query the resmgr to assign host config: (%d) %s", resp.StatusCode, string(body))
 	}
 	return nil
