@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
@@ -774,7 +775,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	)
 
 	nodeList := &corev1.NodeList{}
-	err := r.Client.List(ctx, nodeList)
+	err := r.List(ctx, nodeList)
 	if err != nil {
 		return errors.Wrap(err, "failed to list nodes")
 	}
@@ -782,7 +783,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
 
-	err = r.Client.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
+	err = r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
 	if err != nil {
 		return errors.Wrap(err, "failed to list vmwaremachines")
 	}
@@ -928,6 +929,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	return nil
 }
 
+// MergeLabels combines two label maps into a single map, with values from b overriding values from a if keys conflict.
+// This function is used to create a complete set of labels for Kubernetes resources created during migration.
 func MergeLabels(a, b map[string]string) map[string]string {
 	result := make(map[string]string)
 	for k, v := range a {

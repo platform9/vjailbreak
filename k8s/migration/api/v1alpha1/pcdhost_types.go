@@ -20,6 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// PCDHostInterface defines the network interface configuration for a Platform9 Distributed Cloud host,
+// including IP addresses, MAC address, and interface name. It's used to configure proper network
+// connectivity for PCD hosts created during the migration process.
 type PCDHostInterface struct {
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 	MACAddress  string   `json:"macAddress,omitempty"`
@@ -52,7 +55,11 @@ type PCDHostStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// PCDHost is the Schema for the pcdhosts API
+// PCDHost is the Schema for the pcdhosts API that represents a physical or virtual host
+// in a Platform9 Distributed Cloud environment. It tracks the host's configuration,
+// network interfaces, assigned roles, and operational status. PCDHost resources are created
+// as part of the migration process when converting ESXi hosts to PCD hosts or when provisioning
+// new infrastructure to replace migrated VMware hosts.
 type PCDHost struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

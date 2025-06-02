@@ -1,3 +1,6 @@
+// Package utils provides utility functions for handling migration-related operations.
+// It includes functions for working with VMware environments, ESXi hosts, VM management,
+// and integration with Platform9 components for migration workflows.
 package utils
 
 import (
@@ -187,6 +190,8 @@ func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, 
 	return nil
 }
 
+// DeleteStaleVMwareClustersAndHosts removes VMware cluster and host resources that no longer exist in vCenter.
+// This helps maintain synchronization between Kubernetes resources and the actual infrastructure state.
 func DeleteStaleVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
 	clusters, err := GetVMwareClustersAndHosts(ctx, k3sclient, scope)
 	if err != nil {

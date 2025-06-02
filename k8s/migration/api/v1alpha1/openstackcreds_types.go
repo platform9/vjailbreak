@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// HostConfig defines the configuration for a Platform9 Distributed Cloud host
 type HostConfig struct {
 	ID                   string            `json:"id,omitempty"`
 	Name                 string            `json:"name,omitempty"`
@@ -52,6 +53,7 @@ type OpenStackCredsInfo struct {
 	DomainName string
 }
 
+// OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
 	VolumeTypes []string `json:"volumeTypes,omitempty"`
 	Networks    []string `json:"networks,omitempty"`
@@ -71,7 +73,7 @@ type OpenstackCredsSpec struct {
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
-	// Openstack is the Openstack configuration for the openstackcreds
+	// Openstack is the OpenStack configuration for the openstackcreds
 	Openstack OpenstackInfo `json:"openstack,omitempty"`
 	// OpenStackValidationStatus is the status of the OpenStack validation
 	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
@@ -83,7 +85,10 @@ type OpenstackCredsStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.openstackValidationStatus`,name=Status,type=string
 
-// OpenstackCreds is the Schema for the openstackcreds API
+// OpenstackCreds is the Schema for the OpenStack credentials API that defines authentication
+// and connection details for OpenStack environments. It provides a secure way to store and validate
+// OpenStack credentials for use in migration operations, including authentication information,
+// available compute flavors, volume types, networks, and Platform9 Distributed Cloud host configurations.
 type OpenstackCreds struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -20,28 +20,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MigrationTemplateSource defines the source details for the migrationtemplate
+// MigrationTemplateSource defines the source environment details for the migration template
 type MigrationTemplateSource struct {
-	// VMwareRef is the reference for the virtual machine
+	// VMwareRef is the reference to the VMware credentials to be used as the source environment
 	VMwareRef string `json:"vmwareRef"`
 }
 
-// MigrationTemplateDestination defines the destination details for the migrationtemplate
+// MigrationTemplateDestination defines the destination environment details for the migration template
 type MigrationTemplateDestination struct {
-	// OpenstackRef is the reference for the virtual machine
+	// OpenstackRef is the reference to the OpenStack credentials to be used as the destination environment
 	OpenstackRef string `json:"openstackRef"`
 }
 
-// MigrationTemplateSpec defines the desired state of MigrationTemplate
+// MigrationTemplateSpec defines the desired state of MigrationTemplate including source/destination environments and mappings
 type MigrationTemplateSpec struct {
 	// OSType is the OS type of the virtual machine
 	// +kubebuilder:validation:Enum=windows;linux
 	OSType string `json:"osType,omitempty"`
 	// VirtioWinDriver is the driver to be used for the virtual machine
 	VirtioWinDriver string `json:"virtioWinDriver,omitempty"`
-	// NetworkMapping is the network mapping for the virtual machine
+	// NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings
 	NetworkMapping string `json:"networkMapping"`
-	// StorageMapping is the storage mapping for the virtual machine
+	// StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
 	StorageMapping string `json:"storageMapping"`
 	// Source is the source details for the virtual machine
 	Source MigrationTemplateSource `json:"source"`
@@ -54,7 +54,11 @@ type MigrationTemplateSpec struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// MigrationTemplate is the Schema for the migrationtemplates API
+// MigrationTemplate is the Schema for the migrationtemplates API that defines how VMs should be migrated
+// from VMware to OpenStack including network and storage mappings. It serves as a reusable template
+// that can be referenced by multiple migration plans, providing configuration for source and destination
+// environments, OS-specific settings, and network/storage mappings. Migration templates enable consistent
+// configuration across multiple VM migrations and simplify the definition of migration plans.
 type MigrationTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

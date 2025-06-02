@@ -5,16 +5,21 @@ import (
 	"time"
 )
 
+// FakeClient provides a test implementation of the Client interface
+// that returns predefined values without making actual API calls to Keystone.
 type FakeClient struct {
 }
 
+// NewFakeClient creates a new instance of FakeClient for testing purposes.
 func NewFakeClient() *FakeClient {
 	return &FakeClient{}
 }
 
 var _ Client = (*FakeClient)(nil)
 
-func (f FakeClient) Auth(ctx context.Context, credentials Credentials) (AuthInfo, error) {
+// Auth implements the Client interface's Auth method for testing purposes.
+// It returns a fake authentication response without making actual API calls.
+func (f *FakeClient) Auth(_ context.Context, _ Credentials) (AuthInfo, error) {
 	return AuthInfo{
 		Token:     "faketoken",
 		UserID:    "fakeuserid",
@@ -23,34 +28,50 @@ func (f FakeClient) Auth(ctx context.Context, credentials Credentials) (AuthInfo
 	}, nil
 }
 
-func (f FakeClient) GetTokenInfo(ctx context.Context, token string) (AuthResponse, error) {
+// GetTokenInfo implements the Client interface's GetTokenInfo method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) GetTokenInfo(_ context.Context, _ string) (AuthResponse, error) {
 	panic("implement me")
 }
 
-func (f FakeClient) GetProjects(ctx context.Context, token string) ([]Project, error) {
+// GetProjects implements the Client interface's GetProjects method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) GetProjects(_ context.Context, _ string) ([]Project, error) {
 	panic("implement me")
 }
 
-func (f FakeClient) CreateUser(ctx context.Context, token string, input CreateUserRequest) (*CreateUserResponse, error) {
+// CreateUser implements the Client interface's CreateUser method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) CreateUser(_ context.Context, _ string, _ CreateUserRequest) (*CreateUserResponse, error) {
 	panic("implement me")
 }
 
-func (f FakeClient) DeleteUser(ctx context.Context, token string, userID string) error {
+// DeleteUser implements the Client interface's DeleteUser method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) DeleteUser(_ context.Context, _ string, _ string) error {
 	panic("implement me")
 }
 
-func (f FakeClient) ListUser(ctx context.Context, token, filter string) ([]User, error) {
+// ListUser implements the Client interface's ListUser method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) ListUser(_ context.Context, _ string, _ string) ([]User, error) {
 	panic("implement me")
 }
 
-func (f FakeClient) ListRoles(ctx context.Context, token, filter string) ([]Role, error) {
+// ListRoles implements the Client interface's ListRoles method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) ListRoles(_ context.Context, _ string, _ string) ([]Role, error) {
 	panic("implement me")
 }
 
-func (f FakeClient) AssignRoleToUserOnProject(ctx context.Context, token string, projectID string, userID string, roleID string) error {
+// AssignRoleToUserOnProject implements the Client interface's AssignRoleToUserOnProject method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) AssignRoleToUserOnProject(_ context.Context, _ string, _ string, _ string, _ string) error {
 	panic("implement me")
 }
 
-func (f FakeClient) ListProjects(ctx context.Context, token, filter string) ([]Project, error) {
+// ListProjects implements the Client interface's ListProjects method for testing.
+// This test implementation is not fully implemented and will panic when called.
+func (f *FakeClient) ListProjects(_ context.Context, _ string, _ string) ([]Project, error) {
 	panic("implement me")
 }

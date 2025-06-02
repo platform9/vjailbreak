@@ -51,7 +51,12 @@ type PCDClusterStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// PCDCluster is the Schema for the pcdclusters API
+// PCDCluster is the Schema for the pcdclusters API that represents a Platform9 Distributed Cloud
+// cluster in the migration system. It defines cluster configuration including host membership,
+// high availability settings, and resource rebalancing policies. PCDCluster resources track both
+// the desired state of clusters as part of migration planning and the observed state of actual
+// PCD clusters in the target environment. They serve as destination targets for VM migrations
+// from VMware ESXi environments.
 type PCDCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

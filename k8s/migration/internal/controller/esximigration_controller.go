@@ -76,7 +76,7 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
 	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
 		if apierrors.IsNotFound(err) {
-			if !esxiMigration.ObjectMeta.DeletionTimestamp.IsZero() {
+			if !esxiMigration.DeletionTimestamp.IsZero() {
 				ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
 				return r.reconcileDelete(ctx, scope)
 			}
@@ -95,7 +95,7 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}()
 
-	if !esxiMigration.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !esxiMigration.DeletionTimestamp.IsZero() {
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
 		return r.reconcileDelete(ctx, scope)
 	}
@@ -107,17 +107,18 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	log := scope.Logger
 	log.Info("Starting normal reconciliation", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 	controllerutil.AddFinalizer(scope.ESXIMigration, constants.ESXIMigrationFinalizer)
-	if scope.ESXIMigration.Status.Phase == "" {
+	switch scope.ESXIMigration.Status.Phase {
+	case "":
 		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseWaiting
 		err := r.Status().Update(ctx, scope.ESXIMigration)
 		if err != nil {
 			log.Error(err, "Failed to update ESXIMigration status")
 			return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 		}
-	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded {
+	case vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded:
 		log.Info("ESXIMigration already succeeded")
 		return ctrl.Result{}, nil
-	} else if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseFailed {
+	case vjailbreakv1alpha1.ESXIMigrationPhaseFailed:
 		log.Info("ESXIMigration already failed")
 		return ctrl.Result{}, nil
 	}
@@ -160,19 +161,20 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	}
 	if inMaintenance {
 		return r.handleESXiInMaintenanceMode(ctx, scope)
-	} else {
-		log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
-		if err != nil {
-			log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
-		}
-		log.Info("Successfully updated ESXIMigration status to maintenance")
 	}
+	
+	log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
+	if err != nil {
+		log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
+	}
+	log.Info("Successfully updated ESXIMigration status to maintenance")
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+// nolint:unparam
+func (r *ESXIMigrationReconciler) reconcileDelete(_ context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling deletion", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 
@@ -259,7 +261,7 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	if vmwareHost.Spec.HostConfigID == "" {
 		log.Info("Host config ID is empty, pausing ESXi migration. please assign host config to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = "true"
-		err = r.Client.Update(ctx, scope.RollingMigrationPlan)
+		err = r.Update(ctx, scope.RollingMigrationPlan)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")
 		}

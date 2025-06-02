@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// VMwareCredeInfo holds the actual credentials after decoding
+// VMwareCredsInfo holds the actual VMware credentials after decoding from secret
 type VMwareCredsInfo struct {
 	// Host is the vCenter host
 	Host string
@@ -55,7 +55,10 @@ type VMwareCredsStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.vmwareValidationStatus`,name=Status,type=string
 
-// VMwareCreds is the Schema for the vmwarecreds API
+// VMwareCreds is the Schema for the vmwarecreds API that defines authentication
+// and connection details for VMware vSphere environments. It provides a secure way to
+// store and validate vCenter credentials for use in migration operations, including
+// connection parameters, authentication information, and datacenter configuration.
 type VMwareCreds struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

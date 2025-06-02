@@ -174,6 +174,7 @@ func main() {
 	select {}
 }
 
+// GetManager creates and configures a controller manager with the specified options
 func GetManager(metricsAddr string,
 	secureMetrics bool,
 	tlsOpts []func(*tls.Config),
@@ -194,6 +195,7 @@ func GetManager(metricsAddr string,
 	})
 }
 
+// SetupControllers initializes and sets up all controllers with the manager
 func SetupControllers(mgr ctrl.Manager, local bool) error {
 	if err := (&controller.MigrationReconciler{
 		Client: mgr.GetClient(),

@@ -1,3 +1,9 @@
+// Package utils provides utility functions for migration plan management and validation.
+// It includes functions for generating Kubernetes-compatible resource names, validating
+// migration plans between VMware and OpenStack environments, managing migration-related
+// resources like config maps, and ensuring proper resource naming conventions.
+// These utilities support the core migration planning process, including name conversion,
+// path handling, and validation of migration specifications.
 package utils
 
 import (

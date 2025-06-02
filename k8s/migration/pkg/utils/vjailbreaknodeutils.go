@@ -653,6 +653,8 @@ func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) erro
 	return nil
 }
 
+// GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
+// It returns the Migration resource associated with the VM or an error if not found.
 func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
 	vmk8sName, err := ConvertToK8sName(vmName)
 	if err != nil {

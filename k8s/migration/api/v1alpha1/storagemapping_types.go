@@ -20,9 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// StorageMappingSpec defines the desired state of StorageMapping
+// StorageMappingSpec defines the desired state of StorageMapping including
+// mappings between VMware and OpenStack storage types
 type StorageMappingSpec struct {
-	// Storages is a list of storage mappings between source and target environments
+	// Storages is a list of storage mappings between source (VMware) and target (OpenStack) environments
 	Storages []Storage `json:"storages"`
 }
 
@@ -37,8 +38,10 @@ type Storage struct {
 // StorageMappingStatus defines the observed state of StorageMapping
 type StorageMappingStatus struct {
 	// StoragemappingValidationStatus indicates the validation status of the storage mapping
+	// Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
 	StoragemappingValidationStatus string `json:"storageMappingValidationStatus,omitempty"`
-	// StoragemappingValidationMessage provides detailed validation information
+	// StoragemappingValidationMessage provides detailed validation information including
+	// information about available storage types and any validation errors
 	StoragemappingValidationMessage string `json:"storageMappingValidationMessage,omitempty"`
 }
 
@@ -47,7 +50,8 @@ type StorageMappingStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.storageMappingValidationStatus"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// StorageMapping is the Schema for the storagemappings API
+// StorageMapping is the Schema for the storagemappings API that defines
+// mappings between VMware and OpenStack storage types to be used during migration
 type StorageMapping struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

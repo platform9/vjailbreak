@@ -77,7 +77,7 @@ func (r *RollingMigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}()
 
-	if !rollingmigrationplan.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !rollingmigrationplan.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
 	}
 	return r.reconcileNormal(ctx, scope)
@@ -102,12 +102,13 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, nil
 	}
 
-	if migrationPlan.Status.Phase == "" {
+	switch migrationPlan.Status.Phase {
+	case "":
 		migrationPlan.Status.Phase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
-	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded {
+	case vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded:
 		log.Info("RollingMigrationPlan already succeeded")
 		return ctrl.Result{}, nil
-	} else if migrationPlan.Status.Phase == vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed {
+	case vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed:
 		log.Info("RollingMigrationPlan already failed")
 		return ctrl.Result{}, nil
 	}
@@ -117,10 +118,10 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 			return ctrl.Result{}, errors.Wrap(err, "failed to pause rolling migration plan")
 		}
 		return ctrl.Result{}, nil
-	} else {
-		if err := utils.ResumeRollingMigrationPlan(ctx, scope); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to resume rolling migration plan")
-		}
+	}
+
+	if err := utils.ResumeRollingMigrationPlan(ctx, scope); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to resume rolling migration plan")
 	}
 
 	if migrationPlan.Spec.CloudInitConfigRef == nil {
@@ -271,22 +272,24 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 	var currentPhase vjailbreakv1alpha1.RollingMigrationPlanPhase
 	var message string
 
-	if failedPlans > 0 {
+	// Determine the phase based on the migration plan statuses
+	switch {
+	case failedPlans > 0:
 		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed
 		message = fmt.Sprintf("Failed to complete migration: %d/%d plans failed. %s",
 			failedPlans, totalPlans, strings.Join(statusMessages, "; "))
-	} else if runningPlans > 0 {
+	case runningPlans > 0:
 		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning
 		message = fmt.Sprintf("Migration in progress: %d/%d plans succeeded, %d running, %d waiting",
 			succeededPlans, totalPlans, runningPlans, waitingPlans)
-	} else if waitingPlans > 0 {
+	case waitingPlans > 0:
 		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
 		message = fmt.Sprintf("Waiting for migration to start: %d/%d plans succeeded, %d waiting",
 			succeededPlans, totalPlans, waitingPlans)
-	} else if succeededPlans == totalPlans {
+	case succeededPlans == totalPlans:
 		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded
 		message = fmt.Sprintf("Migration completed successfully: all %d plans succeeded", totalPlans)
-	} else {
+	default:
 		currentPhase = vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting
 		message = "Preparing for migration"
 	}
@@ -338,12 +341,15 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 	return false, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *RollingMigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.RollingMigrationPlan{}).
 		Complete(r)
 }
 
+// UpdateRollingMigrationPlanStatus updates the status fields of a RollingMigrationPlan resource including phase, message, and current targets.
+// It also updates statistics about migrated and failed VMs by checking the status of related VMMigration resources.
 func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx context.Context, scope *scope.RollingMigrationPlanScope, status vjailbreakv1alpha1.RollingMigrationPlanPhase, message, currentCluster, currentESXi string) error {
 	scope.RollingMigrationPlan.Status.Phase = status
 	scope.RollingMigrationPlan.Status.Message = message
@@ -359,15 +365,18 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 			}
 			return errors.Wrap(err, "failed to get VMMigration")
 		}
-		if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+		switch migration.Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 			scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
-		} else if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 			scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
 		}
 	}
 	return r.Status().Update(ctx, scope.RollingMigrationPlan)
 }
 
+// ExecuteRollingMigrationPlan handles the execution of the rolling migration plan by creating and managing ClusterMigration resources.
+// It processes one cluster at a time based on the order defined in the migration plan and tracks the progress of each cluster migration.
 func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, error) {
 	log := scope.Logger
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
@@ -380,32 +389,33 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 					return false, errors.Wrap(createErr, "failed to create cluster migration")
 				}
 				return true, nil
-			} else {
-				return false, errors.Wrap(err, "failed to get cluster migration")
 			}
+			
+			return false, errors.Wrap(err, "failed to get cluster migration")
 		}
-		if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseFailed {
+		switch clusterMigration.Status.Phase {
+		case vjailbreakv1alpha1.ClusterMigrationPhaseFailed:
 			log.Info("Cluster migration is in failed state, aborting rolling migration plan", "cluster", cluster, "message", clusterMigration.Status.Message)
 			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseFailed, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return false, nil
-		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded {
+		case vjailbreakv1alpha1.ClusterMigrationPhaseSucceeded:
 			continue
-		} else if clusterMigration.Status.Phase == vjailbreakv1alpha1.ClusterMigrationPhaseRunning {
+		case vjailbreakv1alpha1.ClusterMigrationPhaseRunning:
 			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 			if err != nil {
 				return false, errors.Wrap(err, "failed to update rolling migration plan status")
 			}
 			return false, nil
-		} else {
-			err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
-			if err != nil {
-				return false, errors.Wrap(err, "failed to update rolling migration plan status")
-			}
-			return false, nil
 		}
+		
+		err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
+		if err != nil {
+			return false, errors.Wrap(err, "failed to update rolling migration plan status")
+		}
+		return false, nil
 	}
 	return false, nil
 }
