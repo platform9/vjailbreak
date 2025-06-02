@@ -432,7 +432,6 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 
 // ConvertVMSequenceToMigrationPlans converts a VM sequence into multiple migration plans based on batch size
 func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.ClusterMigrationScope, batchSize int) error {
-
 	if batchSize <= 0 {
 		return fmt.Errorf("batch size must be greater than 0")
 	}

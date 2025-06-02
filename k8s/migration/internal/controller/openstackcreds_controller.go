@@ -207,7 +207,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
 			}
 		}
-
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
 	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil

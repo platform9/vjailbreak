@@ -23,6 +23,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
+
 	// Import for side effects - registers the base provider implementation
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
 	// Import for side effects - registers the maas provider implementation
@@ -323,7 +324,6 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 func GetBMConfigForRollingMigrationPlan(ctx context.Context,
 	k8sClient client.Client,
 	rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.BMConfig, error) {
-
 	bmConfig := &vjailbreakv1alpha1.BMConfig{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: rollingMigrationPlan.Spec.BMConfigRef.Name, Namespace: constants.NamespaceMigrationSystem}, bmConfig); err != nil {
 		return nil, errors.Wrap(err, "failed to get BMConfig for rolling migration plan")
