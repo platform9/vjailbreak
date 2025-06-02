@@ -330,17 +330,18 @@ export default function MigrationOptionsAlt({
   <FormControlLabel
     label="Suffix for Source VM Name"
     control={
-      <Checkbox
-        checked={Boolean(selectedMigrationOptions.suffixEnabled)}
-        onChange={e => {
-          updateSelectedMigrationOptions("suffixEnabled")(e.target.checked);
-          if (e.target.checked) {
-            onChange("postMigrationAction.suffix")("_migrated_to_pcd");
-          } else {
-            onChange("postMigrationAction.suffix")("");
-          }
-        }}
-      />
+<Checkbox
+  checked={Boolean(selectedMigrationOptions.suffixEnabled)}
+  onChange={e => {
+    updateSelectedMigrationOptions("suffixEnabled")(e.target.checked);
+    if (e.target.checked) {
+      onChange("postMigrationAction.suffix")("_migrated_to_pcd"); // set value immediately!
+    } else {
+      onChange("postMigrationAction.suffix")("");
+    }
+  }}
+/>
+
     }
   />
   <Select
@@ -359,17 +360,18 @@ export default function MigrationOptionsAlt({
   <FormControlLabel
     label="Folder Name in vCenter"
     control={
-      <Checkbox
-        checked={Boolean(selectedMigrationOptions.folderNameEnabled)}
-        onChange={e => {
-          updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked);
-          if (e.target.checked) {
-            onChange("postMigrationAction.folderName")("vjailbreakedVMs");
-          } else {
-            onChange("postMigrationAction.folderName")("");
-          }
-        }}
-      />
+ <Checkbox
+  checked={Boolean(selectedMigrationOptions.folderNameEnabled)}
+  onChange={e => {
+    updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked);
+    if (e.target.checked) {
+      onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+    } else {
+      onChange("postMigrationAction.folderName")("");
+    }
+  }}
+/>
+
     }
   />
   <Select
