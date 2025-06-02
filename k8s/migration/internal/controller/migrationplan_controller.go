@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
@@ -914,6 +915,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	return nil
 }
 
+// MergeLabels combines two label maps into a single map, with values from b overriding values from a if keys conflict.
+// This function is used to create a complete set of labels for Kubernetes resources created during migration.
 func MergeLabels(a, b map[string]string) map[string]string {
 	result := make(map[string]string)
 	for k, v := range a {

@@ -160,19 +160,19 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	}
 	if inMaintenance {
 		return r.handleESXiInMaintenanceMode(ctx, scope)
-	} else {
-		log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
-		if err != nil {
-			log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-			return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
-		}
-		log.Info("Successfully updated ESXIMigration status to maintenance")
 	}
+	
+	log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
+	if err != nil {
+		log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
+	}
+	log.Info("Successfully updated ESXIMigration status to maintenance")
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-func (r *ESXIMigrationReconciler) reconcileDelete(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+func (r *ESXIMigrationReconciler) reconcileDelete(_ context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling deletion", "esximigration", scope.ESXIMigration.Name, "namespace", scope.ESXIMigration.Namespace)
 

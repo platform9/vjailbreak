@@ -21,11 +21,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MigrationPhase represents the current phase of the VM migration process
+// VMMigrationPhase represents the current phase of the VM migration process from VMware to OpenStack,
+// tracking the detailed progression through various stages including validation, data copying,
+// disk conversion, and cutover. Each phase provides visibility into the migration's progress,
+// enabling precise monitoring and troubleshooting of the migration workflow.
 // +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
 type VMMigrationPhase string
 
-// MigrationConditionType represents the type of condition for a migration
+// MigrationConditionType represents the type of condition for a migration, used to track
+// specific state conditions that may affect the migration process, such as resource availability,
+// network connectivity, or authentication status.
 type MigrationConditionType string
 
 const (
@@ -86,7 +91,12 @@ type MigrationStatus struct {
 // +kubebuilder:printcolumn:name="Agent Name",type="string",JSONPath=".status.agentName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// Migration is the Schema for the migrations API
+// Migration is the Schema for the migrations API that represents a single virtual machine
+// migration job from VMware to OpenStack. It tracks the complete migration lifecycle
+// including validation, data transfer, disk conversion, and cutover phases. Migration resources
+// provide detailed status monitoring, error handling, and manual intervention points like
+// cutover initiation. Each Migration is associated with a MigrationPlan and executes on a specific
+// VjailbreakNode agent, tracking progress via status updates and condition changes.
 type Migration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

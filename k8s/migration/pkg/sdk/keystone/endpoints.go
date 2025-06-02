@@ -11,15 +11,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Type definition for struct encapsulating endpoint manager APIs.
+// EndpointManagerAPI encapsulates the functionality to interact with OpenStack endpoints
+// through the Keystone API. It provides methods to retrieve endpoint information for specific regions.
 type EndpointManagerAPI struct {
 	Client  *http.Client
 	BaseURL string
 	Token   string
 }
 
-// Type definition for services information that is reported as
-// part of the "get endpoints" request.
+// EndpointsInfo represents the response structure from the Keystone API
+// when querying for endpoint information. It contains details about available endpoints
+// including their URLs, regions, and interface types.
 type EndpointsInfo struct {
 	Endpoints []struct {
 		ID        string `json:"id"`
@@ -40,7 +42,8 @@ type EndpointsInfo struct {
 	} `json:"links"`
 }
 
-// Fetches the endpoint for a given region.
+// GetEndpointForRegion retrieves the service endpoint URL for a specified region and service.
+// It uses the provided authentication information to query the Keystone API.
 func GetEndpointForRegion(
 	url string, // DU url
 	auth AuthInfo, // Auth info
@@ -68,6 +71,8 @@ func GetEndpointForRegion(
 	return endpoint, nil
 }
 
+// GetEndpointForRegionAPI implements the specific API call to retrieve an endpoint URL for a specified region and service.
+// It searches through the available endpoints and returns the public interface URL for the specified region.
 func (eAPI *EndpointManagerAPI) GetEndpointForRegionAPI(
 	regionName string,
 	serviceID string,

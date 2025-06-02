@@ -214,17 +214,17 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 			log.Info("Successfully updated ClusterMigration status to running")
 			log.Info("Requeuing ClusterMigration for further processing", "requeueAfter", "1m")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-		} else {
-			log.Info("ESXIMigration is in another state, updating ClusterMigration status to pending", "esxiName", esxi, "esxiPhase", esxiMigration.Status.Phase)
-			err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhasePending, esxiMigration.Status.Message, esxi)
-			if err != nil {
-				log.Error(err, "Failed to update ClusterMigration status", "desiredPhase", vjailbreakv1alpha1.ClusterMigrationPhasePending)
-				return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
-			}
-			log.Info("Successfully updated ClusterMigration status to pending")
-			log.Info("Requeuing ClusterMigration for further processing", "requeueAfter", "1m")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
+		
+		log.Info("ESXIMigration is in another state, updating ClusterMigration status to pending", "esxiName", esxi, "esxiPhase", esxiMigration.Status.Phase)
+		err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhasePending, esxiMigration.Status.Message, esxi)
+		if err != nil {
+			log.Error(err, "Failed to update ClusterMigration status", "desiredPhase", vjailbreakv1alpha1.ClusterMigrationPhasePending)
+			return ctrl.Result{}, errors.Wrap(err, "failed to update cluster migration status")
+		}
+		log.Info("Successfully updated ClusterMigration status to pending")
+		log.Info("Requeuing ClusterMigration for further processing", "requeueAfter", "1m")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -270,6 +270,8 @@ func (r *ClusterMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// UpdateClusterMigrationStatus updates the status, message, and current ESXi host for a ClusterMigration resource.
+// It logs the status change and persists the update to the Kubernetes API server.
 func (r *ClusterMigrationReconciler) UpdateClusterMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope, status vjailbreakv1alpha1.ClusterMigrationPhase, message, currentESXi string) error {
 	log := scope.Logger
 	log.V(1).Info("Updating ClusterMigration status",
@@ -283,6 +285,8 @@ func (r *ClusterMigrationReconciler) UpdateClusterMigrationStatus(ctx context.Co
 	return r.Status().Update(ctx, scope.ClusterMigration)
 }
 
+// CheckAndUpdateClusterMigrationStatus examines all related ESXIMigration resources and updates the ClusterMigration status accordingly.
+// It aggregates the state of all ESXi migrations to determine the overall cluster migration status.
 func (r *ClusterMigrationReconciler) CheckAndUpdateClusterMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope) error {
 	log := scope.Logger
 	esxiMigrationList := &vjailbreakv1alpha1.ESXIMigrationList{}

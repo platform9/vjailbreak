@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// CreateClusterMigration creates a new ClusterMigration object from the given cluster info and rolling migration plan
 func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluster vjailbreakv1alpha1.ClusterMigrationInfo, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
 	ESXiSequence := GetESXiSequenceFromVMSequence(ctx, cluster.VMSequence)
 	if len(ESXiSequence) == 0 {
@@ -65,6 +66,7 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	return clusterMigration, nil
 }
 
+// GetClusterMigration retrieves a ClusterMigration object for the given cluster name and rolling migration plan
 func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
 	clusterK8sName, err := ConvertToK8sName(clusterName)
 	if err != nil {
@@ -77,6 +79,7 @@ func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterNa
 	return clusterMigration, nil
 }
 
+// GetESXIMigration retrieves an ESXIMigration object for the given ESXi host name and rolling migration plan
 func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
@@ -89,6 +92,7 @@ func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string,
 	return esxiMigration, nil
 }
 
+// GetMigrationPlan retrieves a MigrationPlan object by name
 func GetMigrationPlan(ctx context.Context, k8sClient client.Client, migrationPlanName string) (*vjailbreakv1alpha1.MigrationPlan, error) {
 	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: migrationPlanName, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
@@ -97,13 +101,15 @@ func GetMigrationPlan(ctx context.Context, k8sClient client.Client, migrationPla
 	return migrationPlan, nil
 }
 
-func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
+// GetMigrationTemplate retrieves a MigrationTemplate object for the given VM
+func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm string, _ *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
 	migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: vm, Namespace: constants.NamespaceMigrationSystem}, migrationTemplate); err != nil {
 		return nil, err
 	}
 	return migrationTemplate, nil
 }
+// CreateESXIMigration creates a new ESXIMigration object for the given ESXi host using the cluster migration scope
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
@@ -136,7 +142,8 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 	return esxiMigration, nil
 }
 
-func GetESXiSequenceFromVMSequence(ctx context.Context, vmSequence []vjailbreakv1alpha1.VMSequenceInfo) []string {
+// GetESXiSequenceFromVMSequence extracts a unique sequence of ESXi host names from the VM sequence information
+func GetESXiSequenceFromVMSequence(_ context.Context, vmSequence []vjailbreakv1alpha1.VMSequenceInfo) []string {
 	esxiSequence := []string{}
 	for _, vm := range vmSequence {
 		esxiSequence = AppendUnique(esxiSequence, vm.ESXiName)
@@ -145,6 +152,7 @@ func GetESXiSequenceFromVMSequence(ctx context.Context, vmSequence []vjailbreakv
 	return esxiSequence
 }
 
+// AddVMsToESXIMigrationStatus adds the list of VM names to the ESXIMigration status for tracking
 func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) error {
 	esxiK8sName, err := ConvertToK8sName(esxi)
 	if err != nil {
@@ -199,6 +207,7 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	return hostSystem, c, nil
 }
 
+// PutESXiInMaintenanceMode places the ESXi host into maintenance mode to prepare for migration
 func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
 	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
@@ -242,6 +251,7 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scop
 	return nil
 }
 
+// CheckESXiInMaintenanceMode checks if the ESXi host is currently in maintenance mode
 func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (bool, error) {
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: scope.ESXIMigration.Spec.VMwareCredsRef.Name}, vmwarecreds)
@@ -261,6 +271,7 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, sc
 	return false, nil
 }
 
+// GetESXiSummary retrieves detailed host system information for the given ESXi host
 func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) (mo.HostSystem, error) {
 	// Create a temporary reference to use with our common function
 	vmwareCredsRef := corev1.LocalObjectReference{
@@ -324,6 +335,7 @@ func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *
 	return nil
 }
 
+// CountVMsOnESXi counts the number of virtual machines currently hosted on the ESXi host
 func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (int, error) {
 	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
 	if err != nil {
@@ -384,14 +396,17 @@ func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
+// GenerateRollingMigrationObjectName creates a unique name for migration objects based on the rolling migration plan
 func GenerateRollingMigrationObjectName(objectName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) string {
 	return fmt.Sprintf("%s-%s", objectName, rollingMigrationPlan.Name)
 }
 
+// GenerateVMwareCredsDependantObjectName creates a unique name for objects that depend on VMware credentials
 func GenerateVMwareCredsDependantObjectName(objectName string, vmwareCredsName string) string {
 	return fmt.Sprintf("%s-%s", objectName, vmwareCredsName)
 }
 
+// UpdateESXiNamesInRollingMigrationPlan updates the ESXi host names in the rolling migration plan
 func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
@@ -414,6 +429,7 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 	return nil
 }
 
+// ConvertVMSequenceToMigrationPlans converts a VM sequence into multiple migration plans based on batch size
 func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.ClusterMigrationScope, batchSize int) error {
 
 	if batchSize <= 0 {
@@ -520,6 +536,7 @@ func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize in
 	return batches, nil
 }
 
+// IsRollingMigrationPlanPaused checks if a rolling migration plan is currently paused
 func IsRollingMigrationPlanPaused(ctx context.Context, name string, client client.Client) bool {
 	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
 	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, rollingMigrationPlan); err != nil {
@@ -531,6 +548,7 @@ func IsRollingMigrationPlanPaused(ctx context.Context, name string, client clien
 	return rollingMigrationPlan.Labels[constants.PauseMigrationLabel] == trueString
 }
 
+// IsClusterMigrationPaused checks if a cluster migration is currently paused
 func IsClusterMigrationPaused(ctx context.Context, name string, client client.Client) bool {
 	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{}
 	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
@@ -542,6 +560,7 @@ func IsClusterMigrationPaused(ctx context.Context, name string, client client.Cl
 	return clusterMigration.Labels[constants.PauseMigrationLabel] == trueString
 }
 
+// IsESXIMigrationPaused checks if an ESXi migration is currently paused
 func IsESXIMigrationPaused(ctx context.Context, name string, client client.Client) bool {
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
 	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
@@ -553,6 +572,7 @@ func IsESXIMigrationPaused(ctx context.Context, name string, client client.Clien
 	return esxiMigration.Labels[constants.PauseMigrationLabel] == trueString
 }
 
+// IsMigrationPlanPaused checks if a migration plan is currently paused
 func IsMigrationPlanPaused(ctx context.Context, name string, client client.Client) bool {
 	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
 	if err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, migrationPlan); err != nil {
@@ -564,6 +584,7 @@ func IsMigrationPlanPaused(ctx context.Context, name string, client client.Clien
 	return migrationPlan.Labels[constants.PauseMigrationLabel] == trueString
 }
 
+// PauseRollingMigrationPlan pauses all migration operations for a rolling migration plan
 func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	rollingMigrationPlan := scope.RollingMigrationPlan
 	if rollingMigrationPlan.Labels == nil {
@@ -657,6 +678,7 @@ func StringSlicesEqual(a, b []string) bool {
 	return true
 }
 
+// ResumeRollingMigrationPlan resumes all migration operations for a previously paused rolling migration plan
 func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 	log := scope.Logger
 	log.Info("Resuming rolling migration plan", "rollingMigrationPlan", scope.RollingMigrationPlan.Name)

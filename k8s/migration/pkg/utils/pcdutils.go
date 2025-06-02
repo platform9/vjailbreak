@@ -1,3 +1,7 @@
+// Package utils provides utility functions for Platform9 Distributed Cloud (PCD) operations.
+// It includes functions for syncing, creating, updating, and deleting PCD resources,
+// managing ESXi hosts, cluster operations, and other infrastructure management tasks
+// related to VMware to OpenStack migrations.
 package utils
 
 import (
@@ -98,6 +102,7 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 	return nil
 }
 
+// UpdatePCDHostFromResmgrHost updates an existing PCDHost with data from resmgr Host
 func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, host resmgr.Host, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	pcdHost := generatePCDHostFromResmgrHost(openstackCreds, host)
 	oldPCDHost := vjailbreakv1alpha1.PCDHost{}
@@ -115,6 +120,7 @@ func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, h
 	return nil
 }
 
+// UpdatePCDClusterFromResmgrCluster updates an existing PCDCluster with data from resmgr Cluster
 func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	oldPCDCluster := vjailbreakv1alpha1.PCDCluster{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: cluster.Name, Namespace: constants.NamespaceMigrationSystem}, &oldPCDCluster); err != nil {
@@ -203,6 +209,7 @@ func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.Open
 	}
 }
 
+// DeleteStalePCDHosts removes PCDHost resources that no longer exist in the upstream resmgr
 func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
 
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
@@ -240,6 +247,7 @@ func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstack
 	return nil
 }
 
+// DeleteStalePCDClusters removes PCDCluster resources that no longer exist in the upstream resmgr
 func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
@@ -303,6 +311,7 @@ func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client
 	return nil, nil
 }
 
+// GetVMwareHostFromESXiName retrieves a VMwareHost resource based on the ESXi host name
 func GetVMwareHostFromESXiName(ctx context.Context, k8sClient client.Client, esxiName string) (*vjailbreakv1alpha1.VMwareHost, error) {
 	vmwareHost := &vjailbreakv1alpha1.VMwareHost{}
 	esxiK8sName, err := ConvertToK8sName(esxiName)
@@ -316,6 +325,7 @@ func GetVMwareHostFromESXiName(ctx context.Context, k8sClient client.Client, esx
 	return vmwareHost, nil
 }
 
+// AssignHypervisorRoleToHost assigns the hypervisor role to a PCD host in the specified cluster
 func AssignHypervisorRoleToHost(ctx context.Context, k8sClient client.Client, openstackCredsName, pcdHost, clusterName string) error {
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCredsName)
 	if err != nil {
@@ -328,6 +338,7 @@ func AssignHypervisorRoleToHost(ctx context.Context, k8sClient client.Client, op
 	return resmgrClient.AssignHypervisor(ctx, pcdHost, clusterName)
 }
 
+// AssignHostConfigToHost assigns a host configuration to a PCD host
 func AssignHostConfigToHost(ctx context.Context, k8sClient client.Client, openstackCredsName string, pcdHost string, hostConfigID string) error {
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCredsName)
 	if err != nil {
@@ -340,6 +351,7 @@ func AssignHostConfigToHost(ctx context.Context, k8sClient client.Client, openst
 	return resmgrClient.AssignHostConfig(ctx, pcdHost, hostConfigID)
 }
 
+// WaitForHypervisorRoleAssignment checks if hypervisor role assignment has completed for a PCD host
 func WaitForHypervisorRoleAssignment(ctx context.Context, k8sClient client.Client, openstackCredsName string, pcdHostID string) (bool, error) {
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCredsName)
 	if err != nil {
@@ -359,6 +371,7 @@ func WaitForHypervisorRoleAssignment(ctx context.Context, k8sClient client.Clien
 	return true, nil
 }
 
+// WaitforHostToShowUpOnPCD checks if a host has appeared in the PCD system
 func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, openstackCredsName string, pcdHostID string) (bool, error) {
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCredsName)
 	if err != nil {
