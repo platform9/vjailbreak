@@ -240,7 +240,7 @@ func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope
 	}
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
 		return err
 	}
 

@@ -1,3 +1,8 @@
+// Package utils provides utility functions for VMware to OpenStack migration operations.
+// It includes functions for managing migration status conditions, tracking migration progress,
+// handling events related to migrations, and other migration lifecycle management functions.
+// These utilities support the core migration process between VMware and OpenStack environments,
+// including validation, data copying, migration execution, and failure handling.
 package utils
 
 import (
@@ -118,10 +123,12 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
+// CreateFailedCondition creates or updates a failed condition for a migration based on events.
+// It analyzes event logs to identify failure reasons and updates the migration's status conditions accordingly.
 func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if !(eventList.Items[i].Reason == constants.MigrationReason && strings.Contains(eventList.Items[i].Message, "failed to")) {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "failed to") {
 			continue
 		}
 

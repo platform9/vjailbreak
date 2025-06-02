@@ -49,7 +49,7 @@ const (
 	OpenstackCredsLabel = "vjailbreak.k8s.pf9.io/openstackcreds" //nolint:gosec // not a password string
 
 	// IsPCDCredsLabel is the label for pcd credentials
-	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"
+	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd" //nolint:gosec // not a password string
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"

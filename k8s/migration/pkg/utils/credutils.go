@@ -329,7 +329,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
 	if providerClient == nil {
-		return nil, errors.New(fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName)) //nolint:revive // preferred over revive
+		return nil, fmt.Errorf("failed to get provider client for region '%s'", openstackCredential.RegionName)
 	}
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
@@ -454,7 +454,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 // GetVMwNetworks gets the networks of a VM
 func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	var networks []string
+	// Pre-allocate networks slice to avoid append allocations
+	networks := make([]string, 0)
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
@@ -560,7 +561,8 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	var vminfo []vjailbreakv1alpha1.VMInfo
+	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
@@ -807,7 +809,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 // GetClosestFlavour gets the closest flavor for the given CPU and memory
-func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+func GetClosestFlavour(_ context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -838,7 +840,9 @@ func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *goph
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
-func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+// CreateOrUpdateLabel creates or updates a label on a VMwareMachine resource
+func CreateOrUpdateLabel(ctx context.Context, client client.Client,
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		if vmwvm.Labels == nil {
 			vmwvm.Labels = make(map[string]string)
@@ -855,8 +859,9 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client, vmwvm *vjail
 	return nil
 }
 
-// FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
-func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+// FilterVMwareMachinesForCreds returns all VMwareMachine objects associated with a VMwareCreds resource
+func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
@@ -950,8 +955,10 @@ func HostExistsInVcenter(hostName string, clusterInfo []VMwareClusterInfo) bool 
 	return false
 }
 
+// DeleteDependantObjectsForVMwareCreds removes all objects dependent on a VMwareCreds resource
 func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
-	scope.Logger.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
+	log := scope.Logger
+	log.Info("Deleting dependant objects for VMwareCreds", "vmwarecreds", scope.Name())
 	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting VMs")
 	}
@@ -969,6 +976,7 @@ func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwa
 	return nil
 }
 
+// DeleteVMwarecredsSecret removes the secret associated with a VMwareCreds resource
 func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -984,6 +992,7 @@ func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope)
 	return nil
 }
 
+// DeleteVMwareMachinesForVMwareCreds removes all VMwareMachine objects associated with a VMwareCreds resource
 func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	vmList, err := FilterVMwareMachinesForCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
@@ -992,13 +1001,14 @@ func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMware
 	for _, vm := range vmList.Items {
 		if err := scope.Client.Delete(ctx, &vm); err != nil {
 			if !apierrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
+				return errors.Wrap(err, fmt.Sprintf("error deleting VM '%s'", vm.Name))
 			}
 		}
 	}
 	return nil
 }
 
+// DeleteVMwareClustersForVMwareCreds removes all VMwareCluster objects associated with a VMwareCreds resource
 func DeleteVMwareClustersForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	clusterList, err := FilterVMwareClustersForCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
@@ -1007,13 +1017,14 @@ func DeleteVMwareClustersForVMwareCreds(ctx context.Context, scope *scope.VMware
 	for _, cluster := range clusterList.Items {
 		if err := scope.Client.Delete(ctx, &cluster); err != nil {
 			if !apierrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", cluster.Name))
+				return errors.Wrap(err, fmt.Sprintf("error deleting VM '%s'", cluster.Name))
 			}
 		}
 	}
 	return nil
 }
 
+// DeleteVMwareHostsForVMwareCreds removes all VMwareHost objects associated with a VMwareCreds resource
 func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	hostList, err := FilterVMwareHostsForCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
@@ -1022,7 +1033,7 @@ func DeleteVMwareHostsForVMwareCreds(ctx context.Context, scope *scope.VMwareCre
 	for _, host := range hostList.Items {
 		if err := scope.Client.Delete(ctx, &host); err != nil {
 			if !apierrors.IsNotFound(err) {
-				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", host.Name))
+				return errors.Wrap(err, fmt.Sprintf("error deleting VM '%s'", host.Name))
 			}
 		}
 	}

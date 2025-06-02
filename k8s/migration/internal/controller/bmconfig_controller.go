@@ -45,6 +45,8 @@ type BMConfigReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/finalizers,verbs=update
 
+// Reconcile processes a BMConfig resource and reconciles the desired state with the actual state.
+// It handles both normal reconciliation and deletion reconciliation.
 func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.BMConfigControllerName)
 	ctxlog.Info(fmt.Sprintf("Reconciling BMConfig '%s'", req.Name))
@@ -75,14 +77,15 @@ func (r *BMConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_
 		}
 	}()
 
-	if !bmConfig.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !bmConfig.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, scope)
 	}
 
 	return r.reconcileNormal(ctx, scope)
 }
 
-func (r *BMConfigReconciler) reconcileDelete(ctx context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
+// nolint:unparam
+func (r *BMConfigReconciler) reconcileDelete(_ context.Context, scope *scope.BMConfigScope) (ctrl.Result, error) {
 	bmConfig := scope.BMConfig
 	controllerutil.RemoveFinalizer(bmConfig, constants.BMConfigFinalizer)
 
@@ -115,7 +118,11 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 		}
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, err
 	}
-	defer provider.Disconnect()
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			scope.Error(err, "Error disconnecting from MAAS provider")
+		}
+	}()
 
 	bmConfig.Status.ValidationStatus = string(corev1.PodSucceeded)
 	bmConfig.Status.ValidationMessage = "Successfully connected to MAAS"

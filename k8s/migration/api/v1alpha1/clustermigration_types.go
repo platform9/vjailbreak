@@ -69,7 +69,12 @@ type ClusterMigrationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// ClusterMigration is the Schema for the clustermigrations API
+// ClusterMigration is the Schema for the clustermigrations API that orchestrates the migration
+// of an entire VMware vCenter cluster to Platform9 Distributed Cloud (PCD).
+// It manages the ordered migration of ESXi hosts within a cluster, tracking progress
+// and maintaining references to required credentials and migration plans.
+// ClusterMigration resources coordinate with ESXIMigration resources to ensure
+// hosts are migrated in the correct sequence with proper dependency management.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"

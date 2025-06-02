@@ -1,4 +1,4 @@
-// Copyright © 021 The Platform9 Systems Inc.
+// Copyright © 2021 The Platform9 Systems Inc.
 
 package keystone
 
@@ -10,15 +10,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Type definition for struct encapsulating service manager APIs.
+// ServiceManagerAPI encapsulates the functionality to interact with OpenStack service catalog
+// through the Keystone API. It provides methods to retrieve service information and IDs.
 type ServiceManagerAPI struct {
 	Client  *http.Client
 	BaseURL string
 	Token   string
 }
 
-// Type definition for services information that is reported as
-// part of the "get services" request.
+// ServicesInfo represents the response structure from the Keystone API
+// when querying for service information. It contains details about available services
+// including their IDs, types, and names.
 type ServicesInfo struct {
 	Services []struct {
 		Description string `json:"description"`
@@ -37,7 +39,8 @@ type ServicesInfo struct {
 	} `json:"links"`
 }
 
-// Fetches the ID for service registered in the keystone database.
+// GetServiceID retrieves the service ID for a specified service name from the Keystone service catalog.
+// It uses the provided authentication information to query the Keystone API.
 func GetServiceID(
 	url string, // DU URL
 	auth AuthInfo, // Auth info
@@ -64,12 +67,17 @@ func GetServiceID(
 	return ID, nil
 }
 
-// Service manager function to fetch service ID
+// GetServiceIDAPI implements the specific API call to retrieve a service ID by name.
+// It handles the HTTP request construction, execution, and response parsing.
 func (sAPI *ServiceManagerAPI) GetServiceIDAPI(
 	name string,
 ) (string, error) {
 	zap.S().Debug("Fetching service ID for ", name)
-	req, _ := http.NewRequest("GET", sAPI.BaseURL, nil)
+	req, err := http.NewRequest("GET", sAPI.BaseURL, nil)
+	if err != nil {
+		zap.S().Errorf("Failed to create request for service ID for %s, Error: %s", name, err)
+		return "", fmt.Errorf("failed to create request for service ID for %s, Error: %s", name, err)
+	}
 
 	// Add keystone token in the header.
 	req.Header.Add("X-Auth-Token", sAPI.Token)
@@ -84,7 +92,11 @@ func (sAPI *ServiceManagerAPI) GetServiceIDAPI(
 		zap.S().Errorf("Failed to fetch service information for service %s, Error: %s", name, err)
 		return "", fmt.Errorf("failed to fetch service information for service %s, Error: %s", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	serviceInfo := ServicesInfo{}
 	// Response is received as slice of services.

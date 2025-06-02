@@ -19,11 +19,15 @@ import (
 )
 
 var (
-	ErrUserNotFound         = errors.New("user not found")
-	ErrUserAlreadyExists    = errors.New("user already exists")
+	// ErrUserNotFound is returned when a requested user is not found
+	ErrUserNotFound = errors.New("user not found")
+	// ErrUserAlreadyExists is returned when attempting to create a user that already exists
+	ErrUserAlreadyExists = errors.New("user already exists")
+	// ErrProjectAlreadyExists is returned when attempting to create a project that already exists
 	ErrProjectAlreadyExists = errors.New("project already exists")
 )
 
+// Client defines the interface for interacting with the OpenStack Keystone API
 type Client interface {
 	Auth(ctx context.Context, credentials Credentials) (AuthInfo, error)
 	GetTokenInfo(ctx context.Context, token string) (AuthResponse, error)
@@ -36,6 +40,7 @@ type Client interface {
 	ListProjects(ctx context.Context, token, filter string) ([]Project, error)
 }
 
+// Credentials contains the authentication information needed to access the OpenStack Keystone API
 type Credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -43,6 +48,7 @@ type Credentials struct {
 	Region   string `json:"region,omitempty"`
 }
 
+// AuthInfo contains the authentication information returned after a successful login
 type AuthInfo struct {
 	Token     string
 	UserID    string
@@ -50,47 +56,57 @@ type AuthInfo struct {
 	ExpiresAt time.Time
 }
 
+// AuthRequest represents the request structure for authenticating with Keystone
 type AuthRequest struct {
 	Auth AuthRequestAuth `json:"auth"`
 }
 
+// AuthRequestAuth defines the auth field structure in an authentication request
 type AuthRequestAuth struct {
 	Identity AuthRequestAuthIdentity `json:"identity"`
 	Scope    AuthRequestAuthScope    `json:"scope"`
 }
 
+// AuthRequestAuthIdentity defines the identity field structure in an authentication request
 type AuthRequestAuthIdentity struct {
 	Password AuthRequestAuthIdentityPassword `json:"password"`
 	Methods  []string                        `json:"methods"`
 }
 
+// AuthRequestAuthIdentityPassword defines the password field structure in an authentication identity
 type AuthRequestAuthIdentityPassword struct {
 	User AuthRequestAuthIdentityPasswordUser `json:"user"`
 }
 
+// AuthRequestAuthIdentityPasswordUser defines the user field structure for password authentication
 type AuthRequestAuthIdentityPasswordUser struct {
 	Domain   map[string]string `json:"domain"`
 	Password string            `json:"password"`
 	Name     string            `json:"name"`
 }
 
+// AuthRequestAuthScope defines the scope field structure in an authentication request
 type AuthRequestAuthScope struct {
 	Project AuthRequestAuthScopeProject `json:"project"`
 }
 
+// AuthRequestAuthScopeProject defines the project field structure in an authentication scope
 type AuthRequestAuthScopeProject struct {
 	Name   string                            `json:"name"`
 	Domain AuthRequestAuthScopeProjectDomain `json:"domain"`
 }
 
+// AuthRequestAuthScopeProjectDomain defines the domain field structure in a project scope
 type AuthRequestAuthScopeProjectDomain struct {
 	ID string `json:"id"`
 }
 
+// AuthResponse represents the response structure received after authentication
 type AuthResponse struct {
 	Token AuthResponseToken `json:"token"`
 }
 
+// AuthResponseToken represents the token information in an authentication response
 type AuthResponseToken struct {
 	// Note: this is just a partial implementation
 	ExpiresAt time.Time                `json:"expires_at"`
@@ -101,6 +117,7 @@ type AuthResponseToken struct {
 	Methods   []string                 `json:"methods"`
 }
 
+// AuthResponseTokenUser contains user information included in the authentication token
 type AuthResponseTokenUser struct {
 	ID                string                            `json:"id"`
 	Name              string                            `json:"name"`
@@ -108,22 +125,26 @@ type AuthResponseTokenUser struct {
 	PasswordExpiresAt time.Time                         `json:"password_expires_at"`
 }
 
+// AuthResponseTokenProject contains project information included in the authentication token
 type AuthResponseTokenProject struct {
 	ID     string                            `json:"id"`
 	Name   string                            `json:"service"`
 	Domain AuthRequestAuthScopeProjectDomain `json:"domain"`
 }
 
+// AuthResponseTokenProjectDomain contains domain information for a project in the authentication token
 type AuthResponseTokenProjectDomain struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
+// GetProjectsResponse represents the response structure when retrieving projects
 type GetProjectsResponse struct {
 	// Note: this is just a partial implementation
 	Projects []Project `json:"projects"`
 }
 
+// Project represents an OpenStack project (tenant) entity
 type Project struct {
 	// Note: this is just a partial implementation
 	ID      string `json:"id"`
@@ -131,10 +152,12 @@ type Project struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// GetAllTenantsAllUsersResponse represents the response structure when retrieving all tenants and users
 type GetAllTenantsAllUsersResponse struct {
 	Tenants []TenantUsersMap `json:"tenants"`
 }
 
+// TenantUsersMap represents the mapping between a tenant and its users
 type TenantUsersMap struct {
 	TenantID    string       `json:"id"`
 	Name        string       `json:"name"`
@@ -143,6 +166,7 @@ type TenantUsersMap struct {
 	Users       []UserConfig `json:"users"`
 }
 
+// UserConfig contains configuration information for a user
 type UserConfig struct {
 	UserName    string `json:"username"`
 	Name        string `json:"name"`
@@ -151,10 +175,12 @@ type UserConfig struct {
 	Email       string `json:"email,omitempty"`
 }
 
+// CreateUserRequest represents the request structure for creating a new user
 type CreateUserRequest struct {
 	User CreateUserRequestUser `json:"user"`
 }
 
+// CreateUserRequestUser contains the user details for creating a new user
 type CreateUserRequestUser struct {
 	Name             string `json:"name"`
 	Password         string `json:"password"`
@@ -165,10 +191,12 @@ type CreateUserRequestUser struct {
 	Description      string `json:"description,omitempty"`
 }
 
+// CreateUserResponse represents the response structure after creating a new user
 type CreateUserResponse struct {
 	User CreateUserResponseUser `json:"user"`
 }
 
+// CreateUserResponseUser contains the user details returned after creating a new user
 type CreateUserResponseUser struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
@@ -179,10 +207,12 @@ type CreateUserResponseUser struct {
 	Description       string `json:"description"`
 }
 
+// CreateProjectRequest represents the request structure for creating a new project
 type CreateProjectRequest struct {
 	Project CreateProjectRequestProject `json:"project"`
 }
 
+// CreateProjectRequestProject contains the project details for creating a new project
 type CreateProjectRequestProject struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -194,10 +224,12 @@ type CreateProjectRequestProject struct {
 	IsDomain bool `json:"is_domain,omitempty"`
 }
 
+// CreateProjectResponse represents the response structure after creating a new project
 type CreateProjectResponse struct {
 	Project CreateProjectResponseProject `json:"project"`
 }
 
+// CreateProjectResponseProject contains the project details returned after creating a new project
 type CreateProjectResponseProject struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -212,10 +244,12 @@ type CreateProjectResponseProject struct {
 	} `json:"links"`
 }
 
+// ListUsersResponse represents the response structure when listing users
 type ListUsersResponse struct {
 	Users []User `json:"users"`
 }
 
+// User represents an OpenStack user entity
 type User struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
@@ -223,16 +257,19 @@ type User struct {
 	Enabled           bool   `json:"enabled"`
 }
 
+// ListRolesResponse represents the response structure when listing roles
 type ListRolesResponse struct {
 	Roles []Role `json:"roles"`
 }
 
+// Role represents an OpenStack role entity used for permissions
 type Role struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
 
+// HTTPClient implements the Client interface for interacting with Keystone API
 type HTTPClient struct {
 
 	// endpoint should contain the base path of keystone.
@@ -245,6 +282,7 @@ type HTTPClient struct {
 	log *zap.Logger
 }
 
+// NewClient creates a new HTTPClient instance for interacting with the Keystone API
 func NewClient(endpoint string, insecure bool) *HTTPClient {
 	client := http.DefaultClient
 
@@ -253,7 +291,7 @@ func NewClient(endpoint string, insecure bool) *HTTPClient {
 	if pmkEnv == "airgap" || insecure {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
 		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections for airgap environments
 		}
 		client = &http.Client{Transport: transport}
 	}
@@ -333,7 +371,11 @@ func (c *HTTPClient) Auth(ctx context.Context, credentials Credentials) (AuthInf
 		return AuthInfo{}, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -365,6 +407,7 @@ func (c *HTTPClient) Auth(ctx context.Context, credentials Credentials) (AuthInf
 	return tokenInfo, nil
 }
 
+// GetTokenInfo retrieves detailed information about a Keystone token.
 func (c *HTTPClient) GetTokenInfo(ctx context.Context, token string) (AuthResponse, error) {
 	keystoneAuthEndpoint := c.endpoint + "/v3/auth/tokens?nocatalog"
 	c.log.Debug("Looking up Keystone token info from " + keystoneAuthEndpoint)
@@ -380,7 +423,11 @@ func (c *HTTPClient) GetTokenInfo(ctx context.Context, token string) (AuthRespon
 		return AuthResponse{}, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -437,7 +484,11 @@ func (c *HTTPClient) GetProjects(ctx context.Context, token string) ([]Project, 
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -457,6 +508,7 @@ func (c *HTTPClient) GetProjects(ctx context.Context, token string) ([]Project, 
 	return projectsResp.Projects, nil
 }
 
+// GetAllTenantsAllUsers retrieves a mapping of all tenants to their associated users.
 func (c *HTTPClient) GetAllTenantsAllUsers(ctx context.Context, token string) ([]TenantUsersMap, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"/v3/PF9-KSADM/all_tenants_all_users", nil)
 	if err != nil {
@@ -469,7 +521,11 @@ func (c *HTTPClient) GetAllTenantsAllUsers(ctx context.Context, token string) ([
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -489,13 +545,14 @@ func (c *HTTPClient) GetAllTenantsAllUsers(ctx context.Context, token string) ([
 	return allTenantsMapResp.Tenants, nil
 }
 
+// ListProjects retrieves a list of projects with optional filtering criteria.
 func (c *HTTPClient) ListProjects(ctx context.Context, token, filter string) ([]Project, error) {
 	var projectsEndpoint string
 
 	if filter != "" {
 		projectsEndpoint = fmt.Sprintf(c.endpoint+"/v3/projects?%s", filter)
 	} else {
-		projectsEndpoint = fmt.Sprintf(c.endpoint + "/v3/projects")
+		projectsEndpoint = c.endpoint + "/v3/projects"
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, projectsEndpoint, nil)
@@ -509,7 +566,11 @@ func (c *HTTPClient) ListProjects(ctx context.Context, token, filter string) ([]
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -529,7 +590,8 @@ func (c *HTTPClient) ListProjects(ctx context.Context, token, filter string) ([]
 	return projectsResp.Projects, nil
 }
 
-// To create a project (tenant).
+// CreateProject creates a new project (tenant) in Keystone.
+// It makes an API call to the OpenStack Identity service to create a project resource.
 // Ref: https://docs.openstack.org/api-ref/identity/v3/?expanded=create-user-detail,create-project-detail#projects
 func (c *HTTPClient) CreateProject(ctx context.Context, token string, input CreateProjectRequest) (*CreateProjectResponse, error) {
 	reqBody, err := json.Marshal(input)
@@ -550,7 +612,11 @@ func (c *HTTPClient) CreateProject(ctx context.Context, token string, input Crea
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -575,13 +641,14 @@ func (c *HTTPClient) CreateProject(ctx context.Context, token string, input Crea
 	return createProjectResp, nil
 }
 
+// ListRoles retrieves a list of roles with optional filtering criteria.
 func (c *HTTPClient) ListRoles(ctx context.Context, token, filter string) ([]Role, error) {
 	var rolesEndpoint string
 
 	if filter != "" {
 		rolesEndpoint = fmt.Sprintf(c.endpoint+"/v3/roles?%s", filter)
 	} else {
-		rolesEndpoint = fmt.Sprintf(c.endpoint + "/v3/roles")
+		rolesEndpoint = c.endpoint + "/v3/roles"
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rolesEndpoint, nil)
@@ -595,7 +662,11 @@ func (c *HTTPClient) ListRoles(ctx context.Context, token, filter string) ([]Rol
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -615,6 +686,8 @@ func (c *HTTPClient) ListRoles(ctx context.Context, token, filter string) ([]Rol
 	return rolesList.Roles, nil
 }
 
+// CheckRoleAssignForUserOnProject verifies if a user has a specific role assignment on a project.
+// It checks if the user identified by userID has the role identified by roleID on the project identified by projectID.
 // Ref: https://docs.openstack.org/api-ref/identity/v3/index.html?expanded=list-roles-detail#check-whether-user-has-role-assignment-on-project
 func (c *HTTPClient) CheckRoleAssignForUserOnProject(ctx context.Context, token, projectID, userID, roleID string) bool {
 	checkRoleEndpoint := fmt.Sprintf(c.endpoint+"/v3/projects/%s/users/%s/roles/%s", projectID, userID, roleID)
@@ -631,12 +704,17 @@ func (c *HTTPClient) CheckRoleAssignForUserOnProject(ctx context.Context, token,
 		return false
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	// Status code 204 refers to specified role is assigned to user on given project.
 	return resp.StatusCode < 400
 }
 
+// AssignRoleToUserOnProject grants a specific role to a user on a project.
 func (c *HTTPClient) AssignRoleToUserOnProject(ctx context.Context, token string, projectID string, userID string, roleID string) error {
 	url := fmt.Sprintf("%s/v3/projects/%s/users/%s/roles/%s", c.endpoint, projectID, userID, roleID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, nil)
@@ -651,7 +729,11 @@ func (c *HTTPClient) AssignRoleToUserOnProject(ctx context.Context, token string
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -665,6 +747,7 @@ func (c *HTTPClient) AssignRoleToUserOnProject(ctx context.Context, token string
 	return nil
 }
 
+// CreateUser creates a new user in Keystone with the provided details.
 func (c *HTTPClient) CreateUser(ctx context.Context, token string, input CreateUserRequest) (*CreateUserResponse, error) {
 	reqBody, err := json.Marshal(input)
 	if err != nil {
@@ -683,7 +766,11 @@ func (c *HTTPClient) CreateUser(ctx context.Context, token string, input CreateU
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -707,13 +794,14 @@ func (c *HTTPClient) CreateUser(ctx context.Context, token string, input CreateU
 	return createUserResponse, nil
 }
 
+// ListUser retrieves a list of users with optional filtering criteria.
 func (c *HTTPClient) ListUser(ctx context.Context, token, filter string) ([]User, error) {
 	var usersEndpoint string
 
 	if filter != "" {
 		usersEndpoint = fmt.Sprintf(c.endpoint+"/v3/users?%s", filter)
 	} else {
-		usersEndpoint = fmt.Sprintf(c.endpoint + "/v3/users")
+		usersEndpoint = c.endpoint + "/v3/users"
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, usersEndpoint, nil)
@@ -727,7 +815,11 @@ func (c *HTTPClient) ListUser(ctx context.Context, token, filter string) ([]User
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -747,6 +839,7 @@ func (c *HTTPClient) ListUser(ctx context.Context, token, filter string) ([]User
 	return usersList.Users, nil
 }
 
+// DeleteUser removes a user from Keystone using their unique identifier.
 func (c *HTTPClient) DeleteUser(ctx context.Context, token string, userID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.endpoint+"/v3/users/"+userID, nil)
 	if err != nil {
@@ -759,7 +852,11 @@ func (c *HTTPClient) DeleteUser(ctx context.Context, token string, userID string
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -777,6 +874,8 @@ func (c *HTTPClient) DeleteUser(ctx context.Context, token string, userID string
 	return nil
 }
 
+// credentialsToKeystoneAuthRequest converts Credentials into an AuthRequest structure
+// for use with the Keystone API authentication endpoints.
 func credentialsToKeystoneAuthRequest(credentials Credentials) *AuthRequest {
 	return &AuthRequest{
 		Auth: AuthRequestAuth{

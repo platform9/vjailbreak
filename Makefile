@@ -63,8 +63,8 @@ docker-build-image: generate-manifests
 	cp -r k8s/kube-prometheus image_builder/deploy/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
-.PHONY: lint-check
-lint-check:
+.PHONY: lint
+lint:
 	make -C k8s/migration/ lint
 
 .PHONY: build-image
