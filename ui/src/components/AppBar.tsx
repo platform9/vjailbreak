@@ -1,4 +1,4 @@
-import { Typography } from "@mui/material"
+import { Typography, Chip, Tooltip } from "@mui/material"
 import AppBar from "@mui/material/AppBar"
 import Box from "@mui/material/Box"
 import Button from "@mui/material/Button"
@@ -84,7 +84,23 @@ export default function ButtonAppBar({ setOpenMigrationForm, hide = false }) {
                 Start Migration
               </MenuItem>
               <MenuItem onClick={() => handleMigrationSelect('rolling')}>
-                Start Rolling Migration
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span>Start Cluster Conversion</span>
+                  <Tooltip title="Early preview - report any issues" arrow>
+                    <Chip
+                      label="BETA"
+                      size="small"
+                      color="warning"
+                      variant="outlined"
+                      sx={{
+                        ml: 1,
+                        fontSize: '0.65rem',
+                        height: '18px',
+                        fontWeight: 600
+                      }}
+                    />
+                  </Tooltip>
+                </Box>
               </MenuItem>
             </Menu>
           </Box>

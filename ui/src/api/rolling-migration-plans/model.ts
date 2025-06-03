@@ -31,9 +31,12 @@ export interface ItemMetadata {
 
 export interface RollingMigrationPlanSpec {
   clusterSequence: ClusterSequence[]
-  vmwareCredsRef: ResourceRef
-  openstackCredsRef: ResourceRef
-  bmConfigRef: ResourceRef
+  clusterMapping: ClusterMapping[]
+  bmConfigRef: BMConfigRef
+  advancedOptions?: Record<string, unknown>
+  firstBootScript?: string
+  migrationStrategy?: MigrationStrategy
+  migrationTemplate?: string
 }
 
 export interface ClusterSequence {
@@ -41,24 +44,28 @@ export interface ClusterSequence {
   vmSequence: VMSequence[]
 }
 
+export interface ClusterMapping {
+  vmwareClusterName: string
+  pcdClusterName: string
+}
+
 export interface VMSequence {
   vmName: string
   esxiName: string
 }
 
-export interface ResourceRef {
+export interface BMConfigRef {
   name: string
-  namespace?: string
 }
 
-export interface NetworkMapping {
-  source: string
-  destination: string
-}
-
-export interface StorageMapping {
-  source: string
-  destination: string
+export interface MigrationStrategy {
+  type: string
+  adminInitiatedCutOver?: boolean
+  healthCheckPort?: string
+  performHealthChecks?: boolean
+  dataCopyStart?: string
+  vmCutoverStart?: string
+  vmCutoverEnd?: string
 }
 
 export interface RollingMigrationPlanStatus {

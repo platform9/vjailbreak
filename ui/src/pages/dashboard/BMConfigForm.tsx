@@ -385,7 +385,7 @@ runcmd:
                     <Section sx={{ mb: 2 }}>
                         <Grid container columnSpacing={4} rowSpacing={2}>
                             {/* First row - MAAS URL and Insecure*/}
-                            <Grid item xs={12} md={8}>
+                            <Grid item xs={12} md={6}>
                                 <FormField>
                                     <Typography variant="subtitle2" gutterBottom>MAAS URL</Typography>
                                     <TextField
@@ -401,7 +401,7 @@ runcmd:
                                     />
                                 </FormField>
                             </Grid>
-                            <Grid item xs={12} md={4}>
+                            <Grid item xs={12} md={2}>
                                 <FormField>
                                     <Typography variant="subtitle2" gutterBottom>Insecure</Typography>
                                     <Switch
@@ -412,6 +412,7 @@ runcmd:
                                     />
                                 </FormField>
                             </Grid>
+                            <Grid item md={4} /> {/* Spacer */}
 
                             {/* Second row - API Key with info icon */}
                             <Grid item xs={12} md={6}>

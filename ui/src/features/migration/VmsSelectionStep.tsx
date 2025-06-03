@@ -55,6 +55,15 @@ const FieldsContainer = styled("div")(({ theme }) => ({
   marginLeft: theme.spacing(6),
 }));
 
+// Style for Clarity icons
+const CdsIconWrapper = styled('div')({
+  marginRight: 8,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+});
+
+
 const CustomToolbarWithActions = (props) => {
   const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
 
@@ -89,18 +98,16 @@ const columns: GridColDef[] = [
     flex: 2,
     renderCell: (params) => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
-          <Box
-            sx={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              backgroundColor: params.row.vmState === "running" ? 'success.main' : 'error.main',
-              display: 'inline-block'
-            }}
-          />
-        </Tooltip>
-        <Box sx={{ ml: 0.5 }}>{params.value}</Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
+            <CdsIconWrapper>
+              {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+              {/* @ts-ignore */}
+              <cds-icon shape="vm" size="md" badge={params.row.vmState === "running" ? "success" : "danger"}></cds-icon>
+            </CdsIconWrapper>
+          </Tooltip>
+          <Box>{params.value}</Box>
+        </Box>
         {params.row.isMigrated && (
           <Chip
             variant="outlined"
@@ -111,11 +118,11 @@ const columns: GridColDef[] = [
         )}
         {params.row.flavorNotFound && (
           <Box display="flex" alignItems="center" gap={0.5}>
-          <WarningIcon color="warning" fontSize="small" />
-          <Typography variant="body2" color="warning.main">
-            Flavor not found
-          </Typography>
-        </Box>
+            <WarningIcon color="warning" fontSize="small" />
+            <Typography variant="body2" color="warning.main">
+              Flavor not found
+            </Typography>
+          </Box>
         )}
       </Box>
     ),
@@ -171,6 +178,12 @@ const columns: GridColDef[] = [
     headerName: "Memory (MB)",
     flex: 0.9,
     valueGetter: (value) => value || "- ",
+  },
+  {
+    field: "esxHost",
+    headerName: "ESX Host",
+    flex: 1,
+    valueGetter: (value) => value || "—",
   },
   {
     field: "flavor",
@@ -388,7 +401,6 @@ export default function VmsSelectionStep({
     return params.row.vmState === "running";
   };
 
-  // Message to display when credentials aren't validated yet
   const getNoRowsLabel = () => {
     return "No VMs discovered";
   };
@@ -420,6 +432,7 @@ export default function VmsSelectionStep({
               rowSelectionModel={rowSelectionModel}
               getRowId={(row) => row.name}
               isRowSelectable={isRowSelectable}
+              disableRowSelectionOnClick
               slots={{
                 toolbar: (props) => (
                   <CustomToolbarWithActions
@@ -472,7 +485,7 @@ export default function VmsSelectionStep({
                 } else {
                   return "";
                 }
-              }}             
+              }}
             />
           </Paper>
         </FormControl>

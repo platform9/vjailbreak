@@ -47,4 +47,3 @@ resources:
 - openstackcreds_viewer_role.yaml
 - migration_editor_role.yaml
 - migration_viewer_role.yaml
-
