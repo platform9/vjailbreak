@@ -334,10 +334,7 @@ export default function MigrationOptionsAlt({
       <Checkbox
         checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
         onChange={e => {
-          updateSelectedMigrationOptions("postMigrationAction")({
-            ...selectedMigrationOptions.postMigrationAction,
-            suffix: e.target.checked
-          });
+          updateSelectedMigrationOptions("postMigrationAction.suffix")(e.target.checked);
           if (e.target.checked) {
             onChange("postMigrationAction.suffix")("_migrated_to_pcd");
           } else {
@@ -367,10 +364,7 @@ export default function MigrationOptionsAlt({
       <Checkbox
         checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
         onChange={e => {
-          updateSelectedMigrationOptions("postMigrationAction")({
-            ...selectedMigrationOptions.postMigrationAction,
-            folderName: e.target.checked
-          });
+          updateSelectedMigrationOptions("postMigrationAction.folderName")(e.target.checked);
           if (e.target.checked) {
             onChange("postMigrationAction.folderName")("vjailbreakedVMs");
           } else {
