@@ -36,7 +36,6 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -332,7 +331,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
 	if providerClient == nil {
-		return nil, errors.New(fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName)) //nolint:revive // preferred over revive
+		return nil, fmt.Errorf("failed to get provider client for region '%s'", openstackCredential.RegionName)
 	}
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {

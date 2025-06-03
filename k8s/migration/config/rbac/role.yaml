@@ -4,122 +4,122 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-      - pods
-      - secrets
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - events
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - nodes
-    verbs:
-      - delete
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - pods/status
-    verbs:
-      - get
-      - patch
-      - update
-  - apiGroups:
-      - batch
-    resources:
-      - jobs
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs
-      - clustermigrations
-      - esximigrations
-      - migrationplans
-      - migrations
-      - migrationtemplates
-      - networkmappings
-      - openstackcreds
-      - pcdclusters
-      - pcdhosts
-      - rollingmigrationplans
-      - storagemappings
-      - vjailbreaknodes
-      - vmwareclusters
-      - vmwarecreds
-      - vmwarehosts
-      - vmwaremachines
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs/finalizers
-      - clustermigrations/finalizers
-      - esximigrations/finalizers
-      - migrationplans/finalizers
-      - migrationtemplates/finalizers
-      - networkmappings/finalizers
-      - openstackcreds/finalizers
-      - pcdclusters/finalizers
-      - pcdhosts/finalizers
-      - rollingmigrationplans/finalizers
-      - storagemappings/finalizers
-      - vjailbreaknodes/finalizers
-      - vmwarecreds/finalizers
-    verbs:
-      - update
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs/status
-      - clustermigrations/status
-      - esximigrations/status
-      - migrationplans/status
-      - migrations/status
-      - migrationtemplates/status
-      - networkmappings/status
-      - openstackcreds/status
-      - pcdclusters/status
-      - pcdhosts/status
-      - rollingmigrationplans/status
-      - storagemappings/status
-      - vjailbreaknodes/status
-      - vmwarecreds/status
-      - vmwaremachines/status
-    verbs:
-      - get
-      - patch
-      - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs
+  - clustermigrations
+  - esximigrations
+  - migrationplans
+  - migrations
+  - migrationtemplates
+  - networkmappings
+  - openstackcreds
+  - pcdclusters
+  - pcdhosts
+  - rollingmigrationplans
+  - storagemappings
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarecreds
+  - vmwarehosts
+  - vmwaremachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs/finalizers
+  - clustermigrations/finalizers
+  - esximigrations/finalizers
+  - migrationplans/finalizers
+  - migrationtemplates/finalizers
+  - networkmappings/finalizers
+  - openstackcreds/finalizers
+  - pcdclusters/finalizers
+  - pcdhosts/finalizers
+  - rollingmigrationplans/finalizers
+  - storagemappings/finalizers
+  - vjailbreaknodes/finalizers
+  - vmwarecreds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs/status
+  - clustermigrations/status
+  - esximigrations/status
+  - migrationplans/status
+  - migrations/status
+  - migrationtemplates/status
+  - networkmappings/status
+  - openstackcreds/status
+  - pcdclusters/status
+  - pcdhosts/status
+  - rollingmigrationplans/status
+  - storagemappings/status
+  - vjailbreaknodes/status
+  - vmwarecreds/status
+  - vmwaremachines/status
+  verbs:
+  - get
+  - patch
+  - update

@@ -1,8 +1,8 @@
 resources:
-  - manager.yaml
+- manager.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
-  - name: controller
-    newName: docker.io/omkardeshpande7/vjailbreak-controller
-    newTag: resmgr2
+- name: controller
+  newName: docker.io/omkardeshpande7/vjailbreak-controller
+  newTag: resmgr2

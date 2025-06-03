@@ -519,9 +519,7 @@ spec:
                   description: VirtualMachines is a list of virtual machines to be migrated
                   items:
                     items:
-                      items:
-                        type: string
-                      type: array
+                      type: string
                     type: array
                   type: array
               required:
@@ -969,44 +967,52 @@ spec:
                       Flavor represent (virtual) hardware configurations for server resources
                       in a region.
                     properties:
-                      apiVersion:
-                        description: API version of the referent.
-                        type: string
-                      fieldPath:
+                      OS-FLV-EXT-DATA:ephemeral:
+                        description:
+                          Ephemeral is the amount of ephemeral disk space,
+                          measured in GB.
+                        type: integer
+                      description:
                         description: |-
-                          If referring to a piece of an object instead of an entire object, this string
-                          should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                          For example, if the object reference is to a container within a pod, this would take on a value like:
-                          "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                          the event) or if no container name is specified "spec.containers[2]" (container with
-                          index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                          referencing a part of an object.
+                          Description is a free form description of the flavor. Limited to
+                          65535 characters in length. Only printable characters are allowed.
+                          New in version 2.55
                         type: string
-                      kind:
-                        description: |-
-                          Kind of the referent.
-                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                      disk:
+                        description: Disk is the amount of root disk, measured in GB.
+                        type: integer
+                      id:
+                        description: ID is the flavor's unique ID.
                         type: string
                       name:
-                        description: |-
-                          Name of the referent.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        description: Name is the name of the flavor.
                         type: string
-                      namespace:
-                        description: |-
-                          Namespace of the referent.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                        type: string
-                      resourceVersion:
-                        description: |-
-                          Specific resourceVersion to which this reference is made, if any.
-                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                        type: string
-                      uid:
-                        description: |-
-                          UID of the referent.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                        type: string
+                      os-flavor-access:is_public:
+                        description: IsPublic indicates whether the flavor is public.
+                        type: boolean
+                      ram:
+                        description: RAM is the amount of memory, measured in MB.
+                        type: integer
+                      rxtx_factor:
+                        description:
+                          RxTxFactor describes bandwidth alterations of the
+                          flavor.
+                        type: number
+                      vcpus:
+                        description:
+                          VCPUs indicates how many (virtual) CPUs are available
+                          for this flavor.
+                        type: integer
+                    required:
+                      - OS-FLV-EXT-DATA:ephemeral
+                      - description
+                      - disk
+                      - id
+                      - name
+                      - os-flavor-access:is_public
+                      - ram
+                      - rxtx_factor
+                      - vcpus
                     type: object
                   type: array
                 pcdHostConfig:
@@ -1093,17 +1099,9 @@ spec:
                     networks:
                       items:
                         type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                  cloudInitConfigRef:
-                    description:
-                      CloudInitConfigRef is the reference to the cloud-init
-                      configuration
-                    properties:
-                      name:
-                        description:
-                          name is unique within a namespace to reference a
-                          secret resource.
+                      type: array
+                    volumeTypes:
+                      items:
                         type: string
                       type: array
                   type: object
@@ -2435,156 +2433,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-bmconfig-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-bmconfig-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - bmconfigs/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-clustermigration-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - clustermigrations
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - clustermigrations/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-clustermigration-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - clustermigrations
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - clustermigrations/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-esximigration-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - esximigrations
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - esximigrations/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-esximigration-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - esximigrations
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - esximigrations/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
   name: migration-manager-role
 rules:
   - apiGroups:
@@ -2963,56 +2811,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: migration
-  name: migration-rollingmigrationplan-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - rollingmigrationplans
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - rollingmigrationplans/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-rollingmigrationplan-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - rollingmigrationplans
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - rollingmigrationplans/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
   name: migration-pcdcluster-editor-role
 rules:
   - apiGroups:
@@ -3313,56 +3111,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: migration
-  name: migration-vmwarecluster-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwareclusters
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwareclusters/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-vmwarecluster-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwareclusters
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwareclusters/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
   name: migration-vmwarecreds-editor-role
 rules:
   - apiGroups:
@@ -3404,56 +3152,6 @@ rules:
       - vjailbreak.k8s.pf9.io
     resources:
       - vmwarecreds/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-vmwarehost-editor-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwarehosts
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwarehosts/status
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: migration
-  name: migration-vmwarehost-viewer-role
-rules:
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwarehosts
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - vjailbreak.k8s.pf9.io
-    resources:
-      - vmwarehosts/status
     verbs:
       - get
 ---

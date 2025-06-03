@@ -2,23 +2,23 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-  - bases/vjailbreak.k8s.pf9.io_migrations.yaml
-  - bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml
-  - bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml
-  - bases/vjailbreak.k8s.pf9.io_networkmappings.yaml
-  - bases/vjailbreak.k8s.pf9.io_storagemappings.yaml
-  - bases/vjailbreak.k8s.pf9.io_migrationplans.yaml
-  - bases/vjailbreak.k8s.pf9.io_migrationtemplates.yaml
-  - bases/vjailbreak.k8s.pf9.io_vjailbreaknodes.yaml
-  - bases/vjailbreak.k8s.pf9.io_vmwaremachines.yaml
-  - bases/vjailbreak.k8s.pf9.io_vmwareclusters.yaml
-  - bases/vjailbreak.k8s.pf9.io_vmwarehosts.yaml
-  - bases/vjailbreak.k8s.pf9.io_rollingmigrationplans.yaml
-  - bases/vjailbreak.k8s.pf9.io_esximigrations.yaml
-  - bases/vjailbreak.k8s.pf9.io_clustermigrations.yaml
-  - bases/vjailbreak.k8s.pf9.io_bmconfigs.yaml
-  - bases/vjailbreak.k8s.pf9.io_pcdclusters.yaml
-  - bases/vjailbreak.k8s.pf9.io_pcdhosts.yaml
+- bases/vjailbreak.k8s.pf9.io_migrations.yaml
+- bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml
+- bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml
+- bases/vjailbreak.k8s.pf9.io_networkmappings.yaml
+- bases/vjailbreak.k8s.pf9.io_storagemappings.yaml
+- bases/vjailbreak.k8s.pf9.io_migrationplans.yaml
+- bases/vjailbreak.k8s.pf9.io_migrationtemplates.yaml
+- bases/vjailbreak.k8s.pf9.io_vjailbreaknodes.yaml
+- bases/vjailbreak.k8s.pf9.io_vmwaremachines.yaml
+- bases/vjailbreak.k8s.pf9.io_vmwareclusters.yaml
+- bases/vjailbreak.k8s.pf9.io_vmwarehosts.yaml
+- bases/vjailbreak.k8s.pf9.io_rollingmigrationplans.yaml
+- bases/vjailbreak.k8s.pf9.io_esximigrations.yaml
+- bases/vjailbreak.k8s.pf9.io_clustermigrations.yaml
+- bases/vjailbreak.k8s.pf9.io_bmconfigs.yaml
+- bases/vjailbreak.k8s.pf9.io_pcdclusters.yaml
+- bases/vjailbreak.k8s.pf9.io_pcdhosts.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
