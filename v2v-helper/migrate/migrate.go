@@ -64,10 +64,10 @@ type MigrationTimes struct {
 }
 
 func (migobj *Migrate) logMessage(message string) {
-	utils.PrintLog(message)
 	if migobj.InPod {
 		migobj.EventReporter <- message
 	}
+	utils.PrintLog(message)
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
