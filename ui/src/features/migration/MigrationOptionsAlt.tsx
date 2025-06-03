@@ -328,68 +328,90 @@ export default function MigrationOptionsAlt({
               </Typography>
             </Fields>
             <Fields>
-  <FormControlLabel
-    label="Suffix for Source VM Name"
-    control={
-      <Checkbox
-        checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
-        onChange={e => {
-          updateSelectedMigrationOptions("postMigrationAction.suffix")(e.target.checked);
-          if (e.target.checked) {
-            onChange("postMigrationAction.suffix")("_migrated_to_pcd");
-          } else {
-            onChange("postMigrationAction.suffix")("");
-          }
-        }}
-      />
-    }
-  />
-  <Select
-    size="small"
-    disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
-    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-    onChange={e => onChange("postMigrationAction.suffix")(e.target.value)}
-  >
-    <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-  </Select>
-  <Typography variant="caption">
-    Optional: This suffix will be appended to the source VM name after migration.
-  </Typography>
-</Fields>
+              <FormControlLabel
+                label="Suffix for Source VM Name"
+                control={
+                  <Checkbox
+                    checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
+                    onChange={(e) => {
+                      // Initialize postMigrationAction object if it doesn't exist
+                      if (!params.postMigrationAction) {
+                        onChange("postMigrationAction")({ suffix: "", folderName: "" });
+                      }
+                      updateSelectedMigrationOptions("postMigrationAction.suffix")(e.target.checked);
+                      if (e.target.checked) {
+                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                          ...prev,
+                          suffix: "_migrated_to_pcd"
+                        }));
+                      } else {
+                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                          ...prev,
+                          suffix: ""
+                        }));
+                      }
+                    }}
+                  />
+                }
+              />
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
+                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+                onChange={(e) => onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                  ...prev,
+                  suffix: e.target.value
+                }))}
+              >
+                <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
+              </Select>
+              <Typography variant="caption">
+                Optional: This suffix will be appended to the source VM name after migration.
+              </Typography>
+            </Fields>
 
-<Fields>
-  <FormControlLabel
-    label="Folder Name in vCenter"
-    control={
-      <Checkbox
-        checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
-        onChange={e => {
-          updateSelectedMigrationOptions("postMigrationAction.folderName")(e.target.checked);
-          if (e.target.checked) {
-            onChange("postMigrationAction.folderName")("vjailbreakedVMs");
-          } else {
-            onChange("postMigrationAction.folderName")("");
-          }
-        }}
-      />
-    }
-  />
-  <Select
-    size="small"
-    disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
-    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-    onChange={e => onChange("postMigrationAction.folderName")(e.target.value)}
-  >
-    <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-  </Select>
-  <Typography variant="caption">
-    Optional: The source VM will be moved to this folder after migration.
-  </Typography>
-</Fields>
-
-
-
-
+            <Fields>
+              <FormControlLabel
+                label="Folder Name in vCenter"
+                control={
+                  <Checkbox
+                    checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
+                    onChange={(e) => {
+                      // Initialize postMigrationAction object if it doesn't exist
+                      if (!params.postMigrationAction) {
+                        onChange("postMigrationAction")({ suffix: "", folderName: "" });
+                      }
+                      updateSelectedMigrationOptions("postMigrationAction.folderName")(e.target.checked);
+                      if (e.target.checked) {
+                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                          ...prev,
+                          folderName: "vjailbreakedVMs"
+                        }));
+                      } else {
+                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                          ...prev,
+                          folderName: ""
+                        }));
+                      }
+                    }}
+                  />
+                }
+              />
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
+                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+                onChange={(e) => onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                  ...prev,
+                  folderName: e.target.value
+                }))}
+              >
+                <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
+              </Select>
+              <Typography variant="caption">
+                Optional: The source VM will be moved to this folder after migration.
+              </Typography>
+            </Fields>
 
             {/* Pre and Post Web Hooks */}
             {/* {PrePostWebHooksList.map((hook) => (
