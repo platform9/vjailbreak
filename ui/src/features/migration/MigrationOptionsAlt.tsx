@@ -332,26 +332,24 @@ export default function MigrationOptionsAlt({
     label="Suffix for Source VM Name"
     control={
       <Checkbox
-  checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
-  onChange={e => {
-    // Update nested state
-    updateSelectedMigrationOptions("postMigrationAction")({
-      ...selectedMigrationOptions.postMigrationAction,
-      suffix: e.target.checked
-    });
-    // Set value in params
-    if (e.target.checked) {
-      onChange("postMigrationAction.suffix")("_migrated_to_pcd");
-    } else {
-      onChange("postMigrationAction.suffix")("");
-    }
-  }}
-/>
+        checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
+        onChange={e => {
+          updateSelectedMigrationOptions("postMigrationAction")({
+            ...selectedMigrationOptions.postMigrationAction,
+            suffix: e.target.checked
+          });
+          if (e.target.checked) {
+            onChange("postMigrationAction.suffix")("_migrated_to_pcd");
+          } else {
+            onChange("postMigrationAction.suffix")("");
+          }
+        }}
+      />
     }
   />
   <Select
     size="small"
-    disabled={!selectedMigrationOptions.suffixEnabled}
+    disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
     value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
     onChange={e => onChange("postMigrationAction.suffix")(e.target.value)}
   >
@@ -361,31 +359,30 @@ export default function MigrationOptionsAlt({
     Optional: This suffix will be appended to the source VM name after migration.
   </Typography>
 </Fields>
+
 <Fields>
   <FormControlLabel
     label="Folder Name in vCenter"
     control={
       <Checkbox
-  checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
-  onChange={e => {
-    // Update nested state
-    updateSelectedMigrationOptions("postMigrationAction")({
-      ...selectedMigrationOptions.postMigrationAction,
-      folderName: e.target.checked
-    });
-    // Set value in params
-    if (e.target.checked) {
-      onChange("postMigrationAction.folderName")("vjailbreakedVMs");
-    } else {
-      onChange("postMigrationAction.folderName")("");
-    }
-  }}
-/>
+        checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
+        onChange={e => {
+          updateSelectedMigrationOptions("postMigrationAction")({
+            ...selectedMigrationOptions.postMigrationAction,
+            folderName: e.target.checked
+          });
+          if (e.target.checked) {
+            onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+          } else {
+            onChange("postMigrationAction.folderName")("");
+          }
+        }}
+      />
     }
   />
   <Select
     size="small"
-    disabled={!selectedMigrationOptions.folderNameEnabled}
+    disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
     value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
     onChange={e => onChange("postMigrationAction.folderName")(e.target.value)}
   >
@@ -395,6 +392,7 @@ export default function MigrationOptionsAlt({
     Optional: The source VM will be moved to this folder after migration.
   </Typography>
 </Fields>
+
 
 
 
