@@ -336,7 +336,7 @@ export default function MigrationOptionsAlt({
                     onChange={(e) => {
                       // Initialize postMigrationAction object if it doesn't exist
                       if (!params.postMigrationAction) {
-                        onChange("postMigrationAction")({ suffix: "", folderName: "" });
+                        onChange("postMigrationAction")({ suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" });
                       }
                       updateSelectedMigrationOptions("postMigrationAction.suffix")(e.target.checked);
                       if (e.target.checked) {
@@ -345,9 +345,9 @@ export default function MigrationOptionsAlt({
                           suffix: "_migrated_to_pcd"
                         }));
                       } else {
-                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                        onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
                           ...prev,
-                          suffix: ""
+                          suffix: undefined
                         }));
                       }
                     }}
@@ -358,7 +358,7 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
                 value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-                onChange={(e) => onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                onChange={(e) => onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
                   ...prev,
                   suffix: e.target.value
                 }))}
@@ -379,18 +379,18 @@ export default function MigrationOptionsAlt({
                     onChange={(e) => {
                       // Initialize postMigrationAction object if it doesn't exist
                       if (!params.postMigrationAction) {
-                        onChange("postMigrationAction")({ suffix: "", folderName: "" });
+                        onChange("postMigrationAction")({ suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" });
                       }
                       updateSelectedMigrationOptions("postMigrationAction.folderName")(e.target.checked);
                       if (e.target.checked) {
-                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                        onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
                           ...prev,
                           folderName: "vjailbreakedVMs"
                         }));
                       } else {
-                        onChange("postMigrationAction")((prev = { suffix: "", folderName: "" }) => ({
+                        onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
                           ...prev,
-                          folderName: ""
+                          folderName: undefined
                         }));
                       }
                     }}
