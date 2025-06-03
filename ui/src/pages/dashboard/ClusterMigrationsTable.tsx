@@ -91,7 +91,7 @@ const columns: GridColDef[] = [
             const isDisabled = !phase || phase === "Running" || phase === "Pending";
 
             return (
-                <Tooltip title={isDisabled ? "Cannot delete while migration is in progress" : "Delete cluster migration"} >
+                <Tooltip title={isDisabled ? "Cannot delete while conversion is in progress" : "Delete cluster conversion"} >
                     <IconButton
                         onClick={(e) => {
                             e.stopPropagation();
@@ -130,7 +130,7 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchClusterMigrations
         >
             <div>
                 <Typography variant="h6" component="h2">
-                    Cluster Migrations
+                    Cluster Conversions
                 </Typography>
             </div>
             <Box sx={{ display: 'flex', gap: 2 }}>
@@ -194,7 +194,7 @@ export default function ClusterMigrationsTable({
                 },
             }}
             pageSizeOptions={[25, 50, 100]}
-            localeText={{ noRowsLabel: "No Cluster Migrations Available" }}
+            localeText={{ noRowsLabel: "No Cluster Conversions Available" }}
             getRowId={(row) => row.metadata?.name}
             checkboxSelection
             isRowSelectable={isRowSelectable}

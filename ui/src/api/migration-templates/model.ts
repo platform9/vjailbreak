@@ -65,6 +65,7 @@ export interface VmData {
   vmState?: string
   memory?: number
   cpuCount?: number
+  esxHost?: string
   ipAddress?: string
   targetFlavorId?: string
   disks?: string[]

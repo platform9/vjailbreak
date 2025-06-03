@@ -1,4 +1,4 @@
-export interface VMwareHost {
+export interface PCDCluster {
   apiVersion: string
   kind: string
   metadata: {
@@ -13,18 +13,19 @@ export interface VMwareHost {
     }
   }
   spec: {
-    name: string
-    hardwareUuid: string
-    hostConfigId?: string
+    clusterName: string
+    hosts: string[]
+    rebalancingFrequencyMins?: number
   }
+  status?: Record<string, unknown>
 }
 
-export interface VMwareHostList {
+export interface PCDClusterList {
   apiVersion: string
   kind: string
   metadata: {
     continue: string
     resourceVersion: string
   }
-  items: VMwareHost[]
+  items: PCDCluster[]
 }
