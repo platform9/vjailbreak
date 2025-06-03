@@ -46,6 +46,12 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -97,7 +103,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
-	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
+	ctxlog := scope.Logger
 	ctxlog.Info("Starting normal reconciliation", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 
 	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
@@ -115,33 +121,29 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		ctxlog.Info("Successfully updated status to failed")
 	} else {
-		ctxlog.Info("Updating master node image ID")
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
-			if strings.Contains(err.Error(), "404") {
-				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-			} else {
-				ctxlog.Error(err, "Failed to update master node image ID")
-				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
-			}
-		} else {
-			ctxlog.Info("Successfully updated master node image ID")
+			// TODO(vpwned): Handle the error
+			// if strings.Contains(err.Error(), "404") {
+			// 	ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
+			// } else {
+			// 	return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			// }
+			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 		}
-		ctxlog.Info("Getting OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
-		ctxlog.Info("Getting flavors for OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
 		}
 		scope.OpenstackCreds.Spec.Flavors = flavors
-		if err = r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+		if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
@@ -168,20 +170,20 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
 		// This will help us to create the vmwaremachine object with the correct flavor.
 		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
-		if err := r.Client.List(ctx, vmwaremachineList); err != nil {
+		if err := r.List(ctx, vmwaremachineList); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
 		}
 		for i := range vmwaremachineList.Items {
 			vmwaremachine := &vmwaremachineList.Items[i]
 			// Get the cpu and memory of the vmwaremachine object
-			cpu := vmwaremachine.Spec.VMs.CPU
-			memory := vmwaremachine.Spec.VMs.Memory
-			computeClient, err := utils.GetOpenStackClients(context.TODO(), scope.OpenstackCreds)
+			cpu := vmwaremachine.Spec.VMInfo.CPU
+			memory := vmwaremachine.Spec.VMInfo.Memory
+			computeClient, err := utils.GetOpenStackClients(context.TODO(), r.Client, scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
 			}
 			// Now get the closest flavor based on the cpu and memory
-			flavor, err := utils.GetClosestFlavour(context.TODO(), cpu, memory, computeClient.ComputeClient)
+			flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
 			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
@@ -197,14 +199,21 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				}
 			}
 		}
+
+		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
+			}
+		}
 	}
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: constants.OpenstackCredsRequeueAfter}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
-	ctxlog := log.FromContext(ctx)
+	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling deletion", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 	// Delete the associated secret
 	client := r.Client

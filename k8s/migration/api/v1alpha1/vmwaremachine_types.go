@@ -20,6 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VMInfo contains detailed information about a VMware virtual machine to be migrated,
+// including resource allocation, network configuration, storage details, and host placement.
+// This comprehensive data is necessary for accurately recreating the VM in the target environment.
 type VMInfo struct {
 	// Name is the name of the virtual machine
 	Name string `json:"name"`
@@ -68,7 +71,12 @@ type VMwareMachineStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// VMwareMachine is the Schema for the vmwaremachines API
+// VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
+// in the VMware source environment targeted for migration. It tracks VM configuration,
+// resource allocation, migration status, and target environment specifications.
+// VMwareMachine resources are the primary workloads migrated from VMware to OpenStack
+// as part of the migration process and contain all necessary information to recreate
+// equivalent virtual machines in the target environment.
 type VMwareMachine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

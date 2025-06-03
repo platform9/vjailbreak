@@ -22,7 +22,7 @@ import (
 )
 
 // ClusterMigrationPhase represents the current phase of the cluster migration
-// +kubebuilder:validation:Enum=Pending;Running;Completed;Failed
+// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Paused
 type ClusterMigrationPhase string
 
 const (
@@ -34,6 +34,8 @@ const (
 	ClusterMigrationPhaseSucceeded ClusterMigrationPhase = "Succeeded"
 	// ClusterMigrationPhaseFailed indicates the migration has failed
 	ClusterMigrationPhaseFailed ClusterMigrationPhase = "Failed"
+	// ClusterMigrationPhasePaused indicates the migration is paused
+	ClusterMigrationPhasePaused ClusterMigrationPhase = "Paused"
 )
 
 // ClusterMigrationSpec defines the desired state of ClusterMigration
@@ -67,7 +69,12 @@ type ClusterMigrationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// ClusterMigration is the Schema for the clustermigrations API
+// ClusterMigration is the Schema for the clustermigrations API that orchestrates the migration
+// of an entire VMware vCenter cluster to Platform9 Distributed Cloud (PCD).
+// It manages the ordered migration of ESXi hosts within a cluster, tracking progress
+// and maintaining references to required credentials and migration plans.
+// ClusterMigration resources coordinate with ESXIMigration resources to ensure
+// hosts are migrated in the correct sequence with proper dependency management.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"

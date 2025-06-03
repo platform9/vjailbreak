@@ -518,7 +518,6 @@ export default function RollingMigrationFormDrawer({
                 setLoading(false);
                 return;
             }
-
             const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
                 const credName = cred.metadata.name;
                 const datacenter = cred.spec.datacenter || credName;
@@ -1559,7 +1558,6 @@ export default function RollingMigrationFormDrawer({
                         )}
                     </Box>
                 </Box>
-
             </DrawerContent>
             <Footer
                 submitButtonLabel="Run"

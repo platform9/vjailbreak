@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
@@ -165,24 +166,29 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	// Fetch VMwareCreds CR
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		return ctrl.Result{}, err
 	}
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
 		false, openstackcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		return ctrl.Result{}, err
 	}
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
-		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodRunning), "Migration(s) in progress")
+		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress")
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 		}
+	}
+
+	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
+		migrationplan.Status.MigrationStatus = "Paused"
+		migrationplan.Status.MigrationMessage = "Migration plan is paused"
+		if err := r.Update(ctx, migrationplan); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
@@ -197,7 +203,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 		for i := 0; i < len(migrationobjs.Items); i++ {
 			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.MigrationPhaseFailed:
+			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if migrationplan.Spec.Retry {
 					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
@@ -215,13 +221,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					}
 					return ctrl.Result{}, nil
 				}
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, string(corev1.PodFailed),
+				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
 					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
 				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
+			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 				continue
 			default:
 				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
@@ -230,7 +236,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
-	migrationplan.Status.MigrationStatus = string(corev1.PodSucceeded)
+	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
 	err := r.Status().Update(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
@@ -241,7 +247,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, status, message string) error {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
 	migrationplan.Status.MigrationStatus = status
 	migrationplan.Status.MigrationMessage = message
 	err := r.Status().Update(ctx, migrationplan)
@@ -284,6 +290,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				InitiateCutover: !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 			},
 		}
+		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
 		err = r.createResource(ctx, migrationplan, migrationobj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Migration for VM %s: %w", vm, err)
@@ -574,6 +581,10 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 			},
 		}
+		if utils.IsOpenstackPCD(*openstackcreds) {
+			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
+		}
+
 		// Check if target flavor is set
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
@@ -590,7 +601,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
 			if flavor == nil {
-				return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMs.CPU, vmMachine.Spec.VMs.Memory)
+				return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
@@ -764,7 +775,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	)
 
 	nodeList := &corev1.NodeList{}
-	err := r.Client.List(ctx, nodeList)
+	err := r.List(ctx, nodeList)
 	if err != nil {
 		return errors.Wrap(err, "failed to list nodes")
 	}
@@ -772,7 +783,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
 
-	err = r.Client.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
+	err = r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
 	if err != nil {
 		return errors.Wrap(err, "failed to list vmwaremachines")
 	}
@@ -782,7 +793,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		vmMachineObj = nil
 		for i := range vmMachines.Items {
 			if vmMachines.Items[i].Spec.VMInfo.Name == vm {
-				ctxlog.Info(fmt.Sprintf("Found VMwareMachineobject '%v'", vmMachines.Items[i]))
 				vmMachineObj = &vmMachines.Items[i]
 				break
 			}
@@ -792,7 +802,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
-			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.MigrationPhaseSucceeded {
+			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
 				continue
 			}
@@ -856,7 +866,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	if err != nil {
 		logger.Error(err, "VDDK directory could not be read")
 
-		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 		setCondition := corev1.PodCondition{
 			Type:               "VDDKCheck",
 			Status:             corev1.ConditionFalse,
@@ -886,7 +896,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			"path", VDDKDirectory,
 			"whoami", whoami)
 
-		migrationobj.Status.Phase = vjailbreakv1alpha1.MigrationPhasePending
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
 			Type:               "VDDKCheck",
 			Status:             corev1.ConditionFalse,
@@ -910,10 +920,24 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		}
 	}
 
+	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 	migrationobj.Status.Conditions = cleanedConditions
 
 	if err = r.Status().Update(ctx, migrationobj); err != nil {
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 	}
 	return nil
+}
+
+// MergeLabels combines two label maps into a single map, with values from b overriding values from a if keys conflict.
+// This function is used to create a complete set of labels for Kubernetes resources created during migration.
+func MergeLabels(a, b map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range a {
+		result[k] = v
+	}
+	for k, v := range b {
+		result[k] = v
+	}
+	return result
 }

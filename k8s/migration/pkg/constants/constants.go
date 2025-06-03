@@ -45,8 +45,11 @@ const (
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
 
+	// OpenstackCredsLabel is the label for openstack credentials
+	OpenstackCredsLabel = "vjailbreak.k8s.pf9.io/openstackcreds" //nolint:gosec // not a password string
+
 	// IsPCDCredsLabel is the label for pcd credentials
-	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd"
+	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd" //nolint:gosec // not a password string
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
@@ -62,6 +65,15 @@ const (
 
 	// ClusterNameLabel is the label for cluster name
 	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
+
+	// ClusterMigrationLabel is the label for cluster migration
+	ClusterMigrationLabel = "vjailbreak.k8s.pf9.io/clustermigration"
+
+	// RollingMigrationPlanLabel is the label for rolling migration plan
+	RollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/rollingmigrationplan"
+
+	// PauseMigrationLabel is the label for pausing rolling migration plan
+	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
@@ -114,9 +126,8 @@ const (
 	// K3sTokenFileLocation is the location of the k3s token file
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 
-	MigrationTriggerDelay      = 5 * time.Second
-	VMwareCredsRequeueAfter    = 1 * time.Minute
-	OpenstackCredsRequeueAfter = 1 * time.Minute
+	// CredsRequeueAfter is the time to requeue after
+	CredsRequeueAfter = 1 * time.Minute
 
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
@@ -165,19 +176,19 @@ runcmd:
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
-	// StatesEnum is a map of migration phase to state
-	StatesEnum = map[vjailbreakv1alpha1.MigrationPhase]int{
-		vjailbreakv1alpha1.MigrationPhasePending:                  0,
-		vjailbreakv1alpha1.MigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.MigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.MigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.MigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.MigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.MigrationPhaseUnknown:                  10,
+	// VMMigrationStatesEnum is a map of migration phase to state
+	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
+		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
+		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

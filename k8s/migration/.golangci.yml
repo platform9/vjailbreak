@@ -36,6 +36,15 @@ linters:
       - path: pkg/scope
         linters:
           - dupl
+      - path: pkg/sdk/keystone/keystone\.go
+        linters:
+          - dupl
+      - path: pkg/sdk/resmgr/resmgr\.go
+        linters:
+          - dupl
+      - path: pkg/utils/pcdutils\.go
+        linters:
+          - dupl
     paths:
       - test
   settings:

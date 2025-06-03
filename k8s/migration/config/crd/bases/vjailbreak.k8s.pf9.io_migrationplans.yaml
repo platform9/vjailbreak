@@ -14,123 +14,137 @@ spec:
     singular: migrationplan
   scope: Namespaced
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.migrationStatus
-      name: Status
-      type: string
-    name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: MigrationPlan is the Schema for the migrationplans API
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: MigrationPlanSpec defines the desired state of MigrationPlan
-            properties:
-              advancedOptions:
-                description: AdvancedOptions is a list of advanced options for the
-                  migration
-                properties:
-                  granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
-                    items:
+    - additionalPrinterColumns:
+        - jsonPath: .status.migrationStatus
+          name: Status
+          type: string
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: |-
+            MigrationPlan is the Schema for the migrationplans API that defines
+            how to migrate virtual machines from VMware to OpenStack including migration strategy and scheduling.
+            It allows administrators to configure migration parameters such as timing, health checks,
+            and VM-specific settings for bulk VM migration operations between environments.
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: |-
+                MigrationPlanSpec defines the desired state of MigrationPlan including
+                the migration template, strategy, and the list of virtual machines to migrate
+              properties:
+                advancedOptions:
+                  description:
+                    AdvancedOptions is a list of advanced options for the
+                    migration
+                  properties:
+                    granularNetworks:
+                      description: GranularNetworks is a list of networks to be migrated
+                      items:
+                        type: string
+                      type: array
+                    granularPorts:
+                      description: GranularPorts is a list of ports to be migrated
+                      items:
+                        type: string
+                      type: array
+                    granularVolumeTypes:
+                      description:
+                        GranularVolumeTypes is a list of volume types to
+                        be migrated
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                firstBootScript:
+                  default: echo "Add your startup script here!"
+                  type: string
+                migrationStrategy:
+                  description:
+                    MigrationStrategy is the strategy to be used for the
+                    migration
+                  properties:
+                    adminInitiatedCutOver:
+                      default: false
+                      type: boolean
+                    dataCopyStart:
+                      format: date-time
                       type: string
-                    type: array
-                  granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
-                    items:
+                    healthCheckPort:
+                      default: "443"
                       type: string
-                    type: array
-                  granularVolumeTypes:
-                    description: GranularVolumeTypes is a list of volume types to
-                      be migrated
-                    items:
+                    performHealthChecks:
+                      default: false
+                      type: boolean
+                    type:
+                      enum:
+                        - hot
+                        - cold
                       type: string
-                    type: array
-                type: object
-              firstBootScript:
-                default: echo "Add your startup script here!"
-                type: string
-              migrationStrategy:
-                description: MigrationStrategy is the strategy to be used for the
-                  migration
-                properties:
-                  adminInitiatedCutOver:
-                    default: false
-                    type: boolean
-                  dataCopyStart:
-                    format: date-time
-                    type: string
-                  healthCheckPort:
-                    default: "443"
-                    type: string
-                  performHealthChecks:
-                    default: false
-                    type: boolean
-                  type:
-                    enum:
-                    - hot
-                    - cold
-                    type: string
-                  vmCutoverEnd:
-                    format: date-time
-                    type: string
-                  vmCutoverStart:
-                    format: date-time
-                    type: string
-                required:
-                - type
-                type: object
-              migrationTemplate:
-                description: MigrationTemplate is the template to be used for the
-                  migration
-                type: string
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
-              virtualMachines:
-                description: VirtualMachines is a list of virtual machines to be migrated
-                items:
+                    vmCutoverEnd:
+                      format: date-time
+                      type: string
+                    vmCutoverStart:
+                      format: date-time
+                      type: string
+                  required:
+                    - type
+                  type: object
+                migrationTemplate:
+                  description:
+                    MigrationTemplate is the template to be used for the
+                    migration
+                  type: string
+                retry:
+                  description: Retry the migration if it fails
+                  type: boolean
+                virtualMachines:
+                  description: VirtualMachines is a list of virtual machines to be migrated
                   items:
-                    type: string
+                    items:
+                      type: string
+                    type: array
                   type: array
-                type: array
-            required:
-            - migrationStrategy
-            - migrationTemplate
-            - virtualMachines
-            type: object
-          status:
-            description: MigrationPlanStatus defines the observed state of MigrationPlan
-            properties:
-              migrationMessage:
-                description: MigrationMessage is the message associated with the migration
-                type: string
-              migrationStatus:
-                description: MigrationStatus is the status of the migration
-                type: string
-            required:
-            - migrationMessage
-            - migrationStatus
-            type: object
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
+              required:
+                - migrationStrategy
+                - migrationTemplate
+                - virtualMachines
+              type: object
+            status:
+              description: |-
+                MigrationPlanStatus defines the observed state of MigrationPlan including
+                the current status and progress of the migration
+              properties:
+                migrationMessage:
+                  description: MigrationMessage is the message associated with the migration
+                  type: string
+                migrationStatus:
+                  description: |-
+                    MigrationStatus is the status of the migration using Kubernetes PodPhase states
+                    (Pending, Running, Succeeded, Failed, Unknown)
+                  type: string
+              required:
+                - migrationMessage
+                - migrationStatus
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

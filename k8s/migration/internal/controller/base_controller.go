@@ -32,7 +32,6 @@ func (r *BaseReconciler) ReconcileMapping(ctx context.Context, obj client.Object
 	}
 
 	if obj.GetDeletionTimestamp().IsZero() {
-		ctxlog.Info(fmt.Sprintf("Reconciling resource '%s'", obj.GetName()))
 		if err := updateStatus(); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Failed to update resource '%s' object", obj.GetName()))
 			return ctrl.Result{}, err

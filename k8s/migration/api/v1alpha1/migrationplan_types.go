@@ -17,13 +17,14 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// MigrationPlanStrategy defines the strategy for executing a migration plan
+
+// MigrationPlanStrategy defines the strategy for executing a migration plan including
+// scheduling options and migration type (hot or cold)
 type MigrationPlanStrategy struct {
 	// +kubebuilder:validation:Enum=hot;cold
 	Type string `json:"type"`
@@ -44,7 +45,8 @@ type MigrationPlanStrategy struct {
 	HealthCheckPort string `json:"healthCheckPort,omitempty"`
 }
 
-// AdvancedOptions defines advanced configuration options for the migration
+// AdvancedOptions defines advanced configuration options for the migration process
+// including granular selection of volumes, networks, and ports
 type AdvancedOptions struct {
 	// GranularVolumeTypes is a list of volume types to be migrated
 	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
@@ -54,26 +56,35 @@ type AdvancedOptions struct {
 	GranularPorts []string `json:"granularPorts,omitempty"`
 }
 
-// MigrationPlanSpec defines the desired state of MigrationPlan
+// MigrationPlanSpec defines the desired state of MigrationPlan including
+// the migration template, strategy, and the list of virtual machines to migrate
 type MigrationPlanSpec struct {
+	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
+	MigrationPlanSpecPerVM `json:",inline"`
+	// VirtualMachines is a list of virtual machines to be migrated
+	VirtualMachines [][]string `json:"virtualMachines"`
+}
+
+// MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
+type MigrationPlanSpecPerVM struct {
 	// MigrationTemplate is the template to be used for the migration
 	MigrationTemplate string `json:"migrationTemplate"`
 	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
 	// Retry the migration if it fails
 	Retry bool `json:"retry,omitempty"`
-	// VirtualMachines is a list of virtual machines to be migrated
-	VirtualMachines [][]string `json:"virtualMachines"`
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript string `json:"firstBootScript,omitempty"`
 }
 
-// MigrationPlanStatus defines the observed state of MigrationPlan
+// MigrationPlanStatus defines the observed state of MigrationPlan including
+// the current status and progress of the migration
 type MigrationPlanStatus struct {
-	// MigrationStatus is the status of the migration
-	MigrationStatus string `json:"migrationStatus"`
+	// MigrationStatus is the status of the migration using Kubernetes PodPhase states
+	// (Pending, Running, Succeeded, Failed, Unknown)
+	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
 }
@@ -82,7 +93,10 @@ type MigrationPlanStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.migrationStatus`,name=Status,type=string
 
-// MigrationPlan is the Schema for the migrationplans API
+// MigrationPlan is the Schema for the migrationplans API that defines
+// how to migrate virtual machines from VMware to OpenStack including migration strategy and scheduling.
+// It allows administrators to configure migration parameters such as timing, health checks,
+// and VM-specific settings for bulk VM migration operations between environments.
 type MigrationPlan struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

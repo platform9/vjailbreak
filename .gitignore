@@ -6,6 +6,7 @@ k8s/migration/manager
 v2v-helper/vendor/*
 v2v-helper/manager
 pkg/vpwned/vendor/*
+k8s/migration/manager
 bin/*
 pkg/vpwned/vendor/*
 bin/*

@@ -20,7 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// VMwareClusterPhase represents the phase of a VMwareCluster
+// VMwareClusterPhase represents the lifecycle phase of a VMware cluster during the migration process,
+// tracking its progression from initial discovery through running state to completion or failure.
+// This status tracking enables monitoring of the overall migration progress at the cluster level.
 type VMwareClusterPhase string
 
 const (
@@ -51,7 +53,10 @@ type VMwareClusterStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// VMwareCluster is the Schema for the vmwareclusters API
+// VMwareCluster is the Schema for the vmwareclusters API that represents a VMware vSphere cluster
+// in the source environment. It tracks cluster configuration, member hosts, and migration status
+// as part of the VMware to Platform9 Distributed Cloud migration process. VMwareCluster resources
+// serve as source components that are migrated to corresponding PCDCluster resources in the target environment.
 type VMwareCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

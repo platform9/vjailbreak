@@ -21,7 +21,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RollingMigrationPlanPhase represents the current phase of a rolling migration plan execution,
+// tracking the state transitions from initial waiting through running, VM migration, and final completion or failure.
 type RollingMigrationPlanPhase string
+
+// ClusterMapping defines the relationship between a VMware vCenter cluster and its corresponding
+// Platform9 Distributed Cloud (PCD) cluster for migration operations. This mapping ensures that
+// virtual machines are properly migrated to the appropriate target infrastructure.
+type ClusterMapping struct {
+	// VMwareClusterName is the name of the vCenter cluster
+	VMwareClusterName string `json:"vmwareClusterName"`
+	// PCDClusterName is the name of the PCD cluster
+	PCDClusterName string `json:"pcdClusterName"`
+}
 
 const (
 	// RollingMigrationPlanPhaseWaiting is the phase for waiting
@@ -32,8 +44,15 @@ const (
 	RollingMigrationPlanPhaseFailed RollingMigrationPlanPhase = "Failed"
 	// RollingMigrationPlanPhaseSucceeded is the phase for succeeded
 	RollingMigrationPlanPhaseSucceeded RollingMigrationPlanPhase = "Succeeded"
+	// RollingMigrationPlanPhaseDeleting is the phase for deleting
+	RollingMigrationPlanPhaseDeleting RollingMigrationPlanPhase = "Deleting"
+	// RollingMigrationPlanPhaseMigratingVMs is the phase for migrating VMs
+	RollingMigrationPlanPhaseMigratingVMs RollingMigrationPlanPhase = "MigratingVMs"
 )
 
+// VMSequenceInfo defines information about a virtual machine in the migration sequence,
+// including its name and the ESXi host where it is located. This information is used to
+// establish the proper order and grouping of VMs during the migration process.
 type VMSequenceInfo struct {
 	// VMName is the name of the virtual machine to be migrated
 	VMName string `json:"vmName"`
@@ -41,11 +60,20 @@ type VMSequenceInfo struct {
 	ESXiName string `json:"esxiName,omitempty"`
 }
 
+// ClusterMigrationInfo defines information about a VMware vCenter cluster migration,
+// including the cluster name and the sequence of virtual machines to be migrated.
+// This structure allows for coordinated migration of multiple related VMs within a cluster.
 type ClusterMigrationInfo struct {
 	// ClusterName is the name of the vCenter cluster to be migrated
 	ClusterName string `json:"clusterName"`
 	// VMSequence is the sequence of virtual machines to be migrated
 	VMSequence []VMSequenceInfo `json:"vmSequence"`
+	// VMMigrationBatchSize is the number of VMs in one batch for migration
+	// batches will be processed sequentially, but all VMs in a batch
+	// will be migrated in parallel. Default is 10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	VMMigrationBatchSize int `json:"vmMigrationBatchSize,omitempty"`
 }
 
 // RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
@@ -53,23 +81,28 @@ type RollingMigrationPlanSpec struct {
 	// ClusterSequence is the sequence of vCenter clusters to be migrated
 	ClusterSequence []ClusterMigrationInfo `json:"clusterSequence"`
 
-	// VMwareCredsRef is the reference to the VMware credentials
-	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
-
-	// OpenstackCredsRef is the reference to the OpenStack credentials
-	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
-
 	// BMConfigRef is the reference to the BMC credentials
 	BMConfigRef corev1.LocalObjectReference `json:"bmConfigRef"`
 
 	// CloudInitConfigRef is the reference to the cloud-init configuration
 	CloudInitConfigRef *corev1.SecretReference `json:"cloudInitConfigRef,omitempty"`
+
+	// VMMigrationPlans is the reference to the VM migration plan
+	VMMigrationPlans []string `json:"vmMigrationPlans,omitempty"`
+
+	// ClusterMapping is the mapping of vCenter clusters to PCD clusters
+	ClusterMapping []ClusterMapping `json:"clusterMapping,omitempty"`
+
+	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
+	MigrationPlanSpecPerVM `json:",inline"`
 }
 
 // RollingMigrationPlanStatus defines the observed state of RollingMigrationPlan
 type RollingMigrationPlanStatus struct {
 	// Phase is the current phase of the migration
 	Phase RollingMigrationPlanPhase `json:"phase,omitempty"`
+	// VMMigrationsPhase is the list of VM migration plans
+	VMMigrationsPhase string `json:"vmMigrationPhase,omitempty"`
 	// CurrentESXi is the name of the current ESXi host being migrated
 	CurrentESXi string `json:"currentESXi,omitempty"`
 	// CurrentCluster is the name of the current vCenter cluster being migrated
@@ -82,12 +115,23 @@ type RollingMigrationPlanStatus struct {
 	MigratedVMs []string `json:"migratedVMs,omitempty"`
 	// FailedVMs is the list of virtual machines that have failed to migrate
 	FailedVMs []string `json:"failedVMs,omitempty"`
+	// MigratedESXi is the list of ESXi hosts that have been migrated
+	MigratedESXi []string `json:"migratedESXi,omitempty"`
+	// FailedESXi is the list of ESXi hosts that have failed to migrate
+	FailedESXi []string `json:"failedESXi,omitempty"`
+	// MigratedClusters is the list of vCenter clusters that have been migrated
+	MigratedClusters []string `json:"migratedClusters,omitempty"`
+	// FailedClusters is the list of vCenter clusters that have failed to migrate
+	FailedClusters []string `json:"failedClusters,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// RollingMigrationPlan is the Schema for the rollingmigrationplans API
+// RollingMigrationPlan is the Schema for the rollingmigrationplans API that defines a coordinated
+// migration of multiple VMware clusters and ESXi hosts to Platform9 Distributed Cloud (PCD).
+// It supports sequenced migration of VMs across clusters with configurable batch sizes,
+// cluster-to-cluster mapping, and tracking of migration progress across the entire datacenter migration.
 type RollingMigrationPlan struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

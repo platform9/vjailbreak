@@ -21,14 +21,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// BMCProviderName represents the supported Bare Metal Controller provider types
+// that can be used for provisioning physical hosts during migration.
 type BMCProviderName string
 
+// BootSource defines the operating system boot source configuration for provisioning
+// physical hosts through the BMC provider.
 type BootSource struct {
 	//+kubebuilder:default="jammy"
+	// Release is the OS release version to be used (e.g., "jammy" for Ubuntu 22.04)
 	Release string `json:"release"`
 }
 
 const (
+	// MAASProvider represents the Metal As A Service provider for bare metal provisioning
 	MAASProvider BMCProviderName = "MAAS"
 )
 
@@ -65,7 +71,11 @@ type BMConfigStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// BMConfig is the Schema for the bmconfigs API
+// BMConfig is the Schema for the bmconfigs API that defines authentication and configuration
+// details for Bare Metal Controller (BMC) providers such as MAAS. It contains credentials,
+// connection information, and boot source configurations needed to provision physical hosts
+// for use during the ESXi to PCD migration process. BMConfig enables the automatic
+// provisioning of PCD hosts as replacement infrastructure for migrated ESXi hosts.
 type BMConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
