@@ -79,7 +79,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
-
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
@@ -88,7 +87,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{}, err
 	}
-
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
@@ -98,7 +96,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
 		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidating
 	}
-
 	// Check if the pod is in a valid state only then continue
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
 		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
@@ -108,7 +105,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed getting pod events")
 	}
-
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
@@ -116,17 +112,14 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
-
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-
 	if err := r.Status().Update(ctx, migration); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
-
 	// Always close the scope when exiting this function such that we can persist any Migration changes.
 	defer func() {
 		if err := migrationScope.Close(); err != nil && reterr == nil {
@@ -138,7 +131,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
-
 	return ctrl.Result{}, nil
 }
 

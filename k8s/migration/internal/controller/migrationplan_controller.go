@@ -862,6 +862,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		whoami = currentUser.Username
 	}
 
+	oldConditions := migrationobj.Status.Conditions
+
 	files, err := os.ReadDir(VDDKDirectory)
 	if err != nil {
 		logger.Error(err, "VDDK directory could not be read")
@@ -905,8 +907,10 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			LastTransitionTime: metav1.Now(),
 		})
 
-		if err = r.Status().Update(ctx, migrationobj); err != nil {
-			return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
+		if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
+			if err = r.Status().Update(ctx, migrationobj); err != nil {
+				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
+			}
 		}
 
 		return errors.Wrapf(errors.New("VDDK_MISSING"), "vddk directory is empty")
@@ -923,8 +927,10 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 	migrationobj.Status.Conditions = cleanedConditions
 
-	if err = r.Status().Update(ctx, migrationobj); err != nil {
-		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
+	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
+		}
 	}
 	return nil
 }
