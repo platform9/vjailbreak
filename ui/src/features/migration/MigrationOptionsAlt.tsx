@@ -58,8 +58,9 @@ interface MigrationOptionsPropsInterface {
   onChange: (key: string) => (value: unknown) => void
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-    key: keyof SelectedMigrationOptionsType
-  ) => (value: unknown) => void
+  key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+) => (value: unknown) => void
+
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
 }
@@ -330,10 +331,15 @@ export default function MigrationOptionsAlt({
   <FormControlLabel
     label="Suffix for Source VM Name"
     control={
-<Checkbox
-  checked={Boolean(selectedMigrationOptions.suffixEnabled)}
+      <Checkbox
+  checked={Boolean(selectedMigrationOptions.postMigrationAction?.suffix)}
   onChange={e => {
-    updateSelectedMigrationOptions("suffixEnabled")(e.target.checked);
+    // Update nested state
+    updateSelectedMigrationOptions("postMigrationAction")({
+      ...selectedMigrationOptions.postMigrationAction,
+      suffix: e.target.checked
+    });
+    // Set value in params
     if (e.target.checked) {
       onChange("postMigrationAction.suffix")("_migrated_to_pcd");
     } else {
@@ -341,8 +347,6 @@ export default function MigrationOptionsAlt({
     }
   }}
 />
-
-
     }
   />
   <Select
@@ -361,18 +365,22 @@ export default function MigrationOptionsAlt({
   <FormControlLabel
     label="Folder Name in vCenter"
     control={
- <Checkbox
-  checked={Boolean(selectedMigrationOptions.folderNameEnabled)}
+      <Checkbox
+  checked={Boolean(selectedMigrationOptions.postMigrationAction?.folderName)}
   onChange={e => {
-    updateSelectedMigrationOptions("folderNameEnabled")(e.target.checked);
+    // Update nested state
+    updateSelectedMigrationOptions("postMigrationAction")({
+      ...selectedMigrationOptions.postMigrationAction,
+      folderName: e.target.checked
+    });
+    // Set value in params
     if (e.target.checked) {
-      onChange("postMigrationAction.folderName")("vJailbreakedVMs");
+      onChange("postMigrationAction.folderName")("vjailbreakedVMs");
     } else {
       onChange("postMigrationAction.folderName")("");
     }
   }}
 />
-
     }
   />
   <Select

@@ -113,7 +113,12 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osType: boolean
+  postMigrationAction: {
+    suffix: boolean       
+    folderName: boolean   
+  }
 }
+
 
 // Default state for checkboxes
 const defaultMigrationOptions = {
@@ -486,26 +491,25 @@ export default function MigrationFormDrawer({
 
   // Validate Selected Migration Options
   const migrationOptionValidated = useMemo(
-    () =>
-      Object.keys(selectedMigrationOptions).every((key) => {
-        if (selectedMigrationOptions[key]) {
-          if (
-            key === "cutoverOption" &&
-            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-          ) {
-            return (
-              params.cutoverStartTime &&
-              params.cutoverEndTime &&
-              !fieldErrors["cutoverStartTime"] &&
-              !fieldErrors["cutoverEndTime"]
-            )
+  () =>
+    Object.keys(selectedMigrationOptions).every((key) => {
+      if (key === "postMigrationAction") {
+      
+        return Object.keys(selectedMigrationOptions.postMigrationAction).every(subKey => {
+          if (selectedMigrationOptions.postMigrationAction[subKey]) {
+            return params.postMigrationAction?.[subKey] && !fieldErrors[`postMigrationAction.${subKey}`];
           }
-          return params?.[key] && !fieldErrors[key]
-        }
-        return true
-      }),
-    [selectedMigrationOptions, params, fieldErrors]
-  )
+          return true;
+        });
+      }
+      if (selectedMigrationOptions[key]) {
+        return params?.[key] && !fieldErrors[key];
+      }
+      return true;
+    }),
+  [selectedMigrationOptions, params, fieldErrors]
+)
+
 
   const disableSubmit =
     !vmwareCredsValidated ||
