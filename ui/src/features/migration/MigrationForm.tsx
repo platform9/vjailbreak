@@ -129,7 +129,12 @@ const defaultMigrationOptions = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osType: false,
-}
+  postMigrationAction: {        
+    suffix: false,
+    folderName: false,
+  }
+};
+
 
 const defaultValues: Partial<FormValues> = {}
 
