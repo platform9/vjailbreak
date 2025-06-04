@@ -89,7 +89,7 @@ build {
       "sudo systemctl enable --now containerd",
 
       # download images
-      "sudo -E /tmp/download_images.sh", 
+      "sudo /tmp/download_images.sh", 
 
       # uninstall containerd 
       "sudo apt remove -y containerd",
@@ -107,12 +107,5 @@ build {
       "sudo chmod 644 /etc/pf9/env",
       "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
-    environment_vars = [
-      "AIRGAPPED=${var.airgapped}"
-    ]
   }
-}
-variable "airgapped" {
-  type    = bool
-  default = false
 }

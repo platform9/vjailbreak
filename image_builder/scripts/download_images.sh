@@ -44,21 +44,6 @@ done
 
 echo "[✔] All images downloaded and exported as tar files."
 
-# Pull vjailbreak ui, controller and v2v images only if airgap is enabled
-if [ "${AIRGAPPED:-false}" = "true" ]; then
-  echo "[*] Pulling vjailbreak ui, controller and v2v images for airgapped environment"
-  sudo ctr i pull "${REGISTRY}/${REPO}/vjailbreak-ui:${VERSION}"
-  sudo ctr i pull "${REGISTRY}/${REPO}/vjailbreak-controller:${VERSION}"
-  sudo ctr i pull "${REGISTRY}/${REPO}/vjailbreak-v2v-helper:${VERSION}"
-  
-  # Export these images as well if needed
-  for img in "vjailbreak-ui" "vjailbreak-controller" "vjailbreak-v2v-helper"; do
-    fname="${REGISTRY}_${REPO}_${img}_${VERSION}"
-    echo "[*] Exporting ${img} to ${fname}.tar"
-    sudo ctr i export "${fname}.tar" "${REGISTRY}/${REPO}/${img}:${VERSION}"
-  done
-fi
-
 # install k3s binaries and airgap images
 # move files to /etc/pf9  and set permissions
 sudo mkdir -p /etc/pf9

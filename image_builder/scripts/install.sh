@@ -39,8 +39,6 @@ log "IS_MASTER: ${IS_MASTER}"
 log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
 
-# Specify the desired K3s version here
-K3S_VERSION="v1.31.5+k3s1" 
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {

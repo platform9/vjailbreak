@@ -79,18 +79,17 @@ jobs:
           if [[ "${{ github.event_name }}" == "release" ]]; then
             # In case of release event the tag will be the next version
             # build version will be the same as tag
-            TAG="v0.1.12"
-            BUILD_VERSION="v0.1.12"
+            TAG=${{ github.event.release.tag_name }}
+            BUILD_VERSION=${TAG}
           else
             BUILD_VERSION=${{ github.run_number }}
             # build release version as version-branch-sha
             VERSION=${BUILD_VERSION}-${GIT_SHA}
             # Since this is a merge or pull-request 
             # use the TAG as the version
-            TAG="v0.1.12"
+            TAG=${VERSION}
           fi
-          release_found=true
-          echo "release_found=${release_found}" >> $GITHUB_OUTPUT
+
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "qcow2_img=${{ env.QCOW2_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "ui_img=${{ env.UI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
@@ -217,7 +216,7 @@ jobs:
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
           else
-            echo "release_found=true" >> $GITHUB_ENV
+            echo "release_found=false" >> $GITHUB_ENV
           fi
 
       - name: Substitue image tags in manifests
@@ -278,25 +277,12 @@ jobs:
       - name: Run packer build
         if: env.release_found == 'true'
         id: build
-        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl --var 'airgapped=false'"
-      
+        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'
         run: |
-          oras push ${{ env.QCOW2_IMG }}+airgapped=false \
-          --artifact-type="application/qcow2" \
-          ./vjailbreak_qcow2/vjailbreak-image.qcow2
-
-      - name: Run packer build
-        if: env.release_found == 'true'
-        id: build
-        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl --var 'airgapped=true'"
-
-      - name: Upload vjailbreak qcow2 to quay
-        if: env.release_found == 'true'
-        run: |
-          oras push ${{ env.QCOW2_IMG }}+airgapped=true \
+          oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
