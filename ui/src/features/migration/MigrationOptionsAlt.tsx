@@ -335,18 +335,19 @@ export default function MigrationOptionsAlt({
                     checked={!!selectedMigrationOptions.postMigrationAction?.suffix}
                     onChange={(e) => {
                       const isChecked = e.target.checked;
-                      // Update the checkbox state in selectedMigrationOptions
-                      updateSelectedMigrationOptions("postMigrationAction.suffix")(isChecked);
-                      // Update the actual value in params
+                      // First update the selectedMigrationOptions state
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        suffix: isChecked
+                      });
+                      
+                      // Then update the params state
                       if (isChecked) {
-                        // Only update the suffix, keep other values in postMigrationAction
-                        const currentPostAction = params.postMigrationAction || {};
                         onChange("postMigrationAction")({
-                          ...currentPostAction,
-                          suffix: "_migrated_to_pcd"
+                          ...params.postMigrationAction,
+                          suffix: params.postMigrationAction?.suffix || "_migrated_to_pcd"
                         });
                       } else {
-                        // Only remove the suffix, keep other values
                         const { suffix, ...rest } = params.postMigrationAction || {};
                         onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
                       }
@@ -359,14 +360,10 @@ export default function MigrationOptionsAlt({
                 disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
                 value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
                 onChange={(e) => {
-                  // Only update the value if the checkbox is checked
-                  if (selectedMigrationOptions.postMigrationAction?.suffix) {
-                    const currentPostAction = params.postMigrationAction || {};
-                    onChange("postMigrationAction")({
-                      ...currentPostAction,
-                      suffix: e.target.value
-                    });
-                  }
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    suffix: e.target.value
+                  });
                 }}
               >
                 <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
@@ -384,18 +381,19 @@ export default function MigrationOptionsAlt({
                     checked={!!selectedMigrationOptions.postMigrationAction?.folderName}
                     onChange={(e) => {
                       const isChecked = e.target.checked;
-                      // Update the checkbox state in selectedMigrationOptions
-                      updateSelectedMigrationOptions("postMigrationAction.folderName")(isChecked);
-                      // Update the actual value in params
+                      // First update the selectedMigrationOptions state
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        folderName: isChecked
+                      });
+                      
+                      // Then update the params state
                       if (isChecked) {
-                        // Only update the folderName, keep other values in postMigrationAction
-                        const currentPostAction = params.postMigrationAction || {};
                         onChange("postMigrationAction")({
-                          ...currentPostAction,
-                          folderName: "vjailbreakedVMs"
+                          ...params.postMigrationAction,
+                          folderName: params.postMigrationAction?.folderName || "vjailbreakedVMs"
                         });
                       } else {
-                        // Only remove the folderName, keep other values
                         const { folderName, ...rest } = params.postMigrationAction || {};
                         onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
                       }
@@ -408,14 +406,10 @@ export default function MigrationOptionsAlt({
                 disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
                 value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
                 onChange={(e) => {
-                  // Only update the value if the checkbox is checked
-                  if (selectedMigrationOptions.postMigrationAction?.folderName) {
-                    const currentPostAction = params.postMigrationAction || {};
-                    onChange("postMigrationAction")({
-                      ...currentPostAction,
-                      folderName: e.target.value
-                    });
-                  }
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    folderName: e.target.value
+                  });
                 }}
               >
                 <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
