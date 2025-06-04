@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/bash 
+# This script downloads the ingress-nginx controller and kube-webhook-certgen images and exports them as tar files.
+# But this script has been run already in base image, so this is just a placeholder for now.
+# In case in the future we need to download images, we can use this script.
 set -euo pipefail
 
 REGISTRY="quay.io"
@@ -18,7 +21,7 @@ curl -sL "$values_url" -o "$values_file"
 controller_digest=$(awk '/controller:/{f=1} f && /digest:/{print $2; exit}' "$values_file")
 certgen_digest=$(awk '/kube-webhook-certgen/{f=1} f && /digest:/{print $2; exit}' "$values_file")
 
-# Full image references
+# pull image references for nginx
 controller_image="registry.k8s.io/ingress-nginx/controller@${controller_digest}"
 certgen_image="registry.k8s.io/ingress-nginx/kube-webhook-certgen@${certgen_digest}"
 
