@@ -40,10 +40,12 @@ RUN dnf install -y \
     nbdkit \
     nbdkit-vddk-plugin \
     libnbd \
-    virt-v2v-2.7.13 \
+    virt-v2v \
     virtio-win && \
     dnf clean all && \
-    rm -rf /var/cache/dnf
+    rm -rf /var/cache/dnf && \
+    # Verify virt-v2v installation
+    virt-v2v --version
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
