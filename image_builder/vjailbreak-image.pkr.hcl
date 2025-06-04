@@ -83,8 +83,7 @@ build {
 
       "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
       "helm repo update",
-      "helm pull ingress-nginx/ingress-nginx --untar",
-      "sudo mv ingress-nginx /etc/pf9/",
+      "helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
 
       # install ctr
       "sudo apt install -y containerd",
