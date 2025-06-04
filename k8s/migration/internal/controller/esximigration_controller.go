@@ -162,7 +162,7 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	if inMaintenance {
 		return r.handleESXiInMaintenanceMode(ctx, scope)
 	}
-	
+
 	log.Info("Putting ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
 	if err != nil {
@@ -192,7 +192,6 @@ func (r *ESXIMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ESXIMigrationReconciler) handleESXiCordoned(ctx context.Context, scope *scope.ESXIMigrationScope, bmConfig *vjailbreakv1alpha1.BMConfig) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("ESXi is cordoned", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-	// TODO:Omkar Assume this will be done by vPwned
 	provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
 	if err != nil {
 		return ctrl.Result{}, err
@@ -311,14 +310,13 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 	}
 
-	// TODO(Omkar): Uncomment after testing
 	// Remove the ESXi host from vCenter before changing the phase
-	// err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
-	// if err != nil {
-	// 	log.Error(err, "Failed to remove ESXi from vCenter, retrying after one minute", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-	// 	return ctrl.Result{RequeueAfter: time.Minute}, nil
-	// }
-	// log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+	err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
+	if err != nil {
+		log.Error(err, "Failed to remove ESXi from vCenter, retrying after one minute", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+	log.Info("Successfully removed ESXi from vCenter", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 
 	return ctrl.Result{}, nil
 }

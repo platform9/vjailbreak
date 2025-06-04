@@ -131,7 +131,6 @@ func (r *BMConfigReconciler) reconcileNormal(ctx context.Context, scope *scope.B
 			updateErr, fmt.Sprintf("Error updating status of BMConfig '%s'", bmConfig.Name))
 	}
 
-	// TODO(Omkar): Validate BMConfig
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
