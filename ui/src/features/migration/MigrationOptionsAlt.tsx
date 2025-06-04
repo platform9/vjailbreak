@@ -332,17 +332,17 @@ export default function MigrationOptionsAlt({
                 label="Suffix for Source VM Name"
                 control={
                   <Checkbox
-                    checked={selectedMigrationOptions.postMigrationAction?.suffix === true}
+                    checked={!!selectedMigrationOptions.postMigrationAction?.suffix}
                     onChange={(e) => {
-                      // Initialize postMigrationAction if it doesn't exist
-                      if (!params.postMigrationAction) {
-                        onChange("postMigrationAction")({ suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" });
+                      const isChecked = e.target.checked;
+                      // Update the checkbox state in selectedMigrationOptions
+                      updateSelectedMigrationOptions("postMigrationAction.suffix")(isChecked);
+                      // Update the actual value in params
+                      if (isChecked) {
+                        onChange("postMigrationAction.suffix")("_migrated_to_pcd");
+                      } else {
+                        onChange("postMigrationAction.suffix")(undefined);
                       }
-                      updateSelectedMigrationOptions("postMigrationAction.suffix")(e.target.checked);
-                      onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
-                        ...prev,
-                        suffix: e.target.checked ? "_migrated_to_pcd" : undefined
-                      }));
                     }}
                   />
                 }
@@ -351,7 +351,12 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
                 value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-                onChange={(e) => onChange("postMigrationAction.suffix")(e.target.value)}
+                onChange={(e) => {
+                  // Only update the value if the checkbox is checked
+                  if (selectedMigrationOptions.postMigrationAction?.suffix) {
+                    onChange("postMigrationAction.suffix")(e.target.value);
+                  }
+                }}
               >
                 <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
               </Select>
@@ -365,17 +370,17 @@ export default function MigrationOptionsAlt({
                 label="Folder Name in vCenter"
                 control={
                   <Checkbox
-                    checked={selectedMigrationOptions.postMigrationAction?.folderName === true}
+                    checked={!!selectedMigrationOptions.postMigrationAction?.folderName}
                     onChange={(e) => {
-                      // Initialize postMigrationAction if it doesn't exist
-                      if (!params.postMigrationAction) {
-                        onChange("postMigrationAction")({ suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" });
+                      const isChecked = e.target.checked;
+                      // Update the checkbox state in selectedMigrationOptions
+                      updateSelectedMigrationOptions("postMigrationAction.folderName")(isChecked);
+                      // Update the actual value in params
+                      if (isChecked) {
+                        onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+                      } else {
+                        onChange("postMigrationAction.folderName")(undefined);
                       }
-                      updateSelectedMigrationOptions("postMigrationAction.folderName")(e.target.checked);
-                      onChange("postMigrationAction")((prev = { suffix: "_migrated_to_pcd", folderName: "vjailbreakedVMs" }) => ({
-                        ...prev,
-                        folderName: e.target.checked ? "vjailbreakedVMs" : undefined
-                      }));
                     }}
                   />
                 }
@@ -384,7 +389,12 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
                 value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-                onChange={(e) => onChange("postMigrationAction.folderName")(e.target.value)}
+                onChange={(e) => {
+                  // Only update the value if the checkbox is checked
+                  if (selectedMigrationOptions.postMigrationAction?.folderName) {
+                    onChange("postMigrationAction.folderName")(e.target.value);
+                  }
+                }}
               >
                 <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
               </Select>
