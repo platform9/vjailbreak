@@ -97,10 +97,6 @@ build {
       "sudo helm repo update",
       "sudo helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
 
-      # uninstall containerd 
-      "sudo apt remove -y containerd",
-      "sudo systemctl disable --now containerd",
-
       "sudo mv /tmp/install.sh /etc/pf9/install.sh",
       "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
       "sudo mv /tmp/yamls /etc/pf9/yamls",

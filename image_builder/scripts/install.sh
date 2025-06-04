@@ -78,15 +78,12 @@ if [ "$IS_MASTER" == "true" ]; then
   mkdir -p ~/.kube
   sudo kubectl config view --raw > ~/.kube/config
   check_command "Moving kubeconfig"
-  # install containerd
-  sudo apt install -y containerd
-  check_command "Installing containerd"
 
   # Load images
   log "Loading images..."
-  sudo ctr --address /run/k3s/containerd/containerd.sock images import /etc/pf9/images/registry.k8s.io_ingress-nginx_controller.tar
+  sudo ctr --address /run/k3s/containerd/containerd.sock -n k8s.io images import /etc/pf9/images/registry.k8s.io_ingress-nginx_controller.tar
   check_command "Loading ingress-nginx controller image"
-  sudo ctr --address /run/k3s/containerd/containerd.sock images import /etc/pf9/images/registry.k8s.io_ingress-nginx_kube-webhook-certgen.tar
+  sudo ctr --address /run/k3s/containerd/containerd.sock -n k8s.io  images import /etc/pf9/images/registry.k8s.io_ingress-nginx_kube-webhook-certgen.tar
   check_command "Loading ingress-nginx webhook image"
 
   log "YAML file 'values.yaml' has been created with the master IP."
