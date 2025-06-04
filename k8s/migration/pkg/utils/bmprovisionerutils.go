@@ -89,7 +89,6 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		}
 	}
 
-	// TODO(vPwned): Update ESXi migration status after checking host on PCD
 	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
 	err = scope.Client.Status().Update(ctx, scope.ESXIMigration)
 	if err != nil {

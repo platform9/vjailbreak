@@ -22,7 +22,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: tapassharma/vpwned:v1
+      - image: vpwned:latest
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -65,7 +65,7 @@ spec:
   rules:
   - http:
       paths:
-      - path: /sdk/(.*)
+      - path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
         backend:
           service:

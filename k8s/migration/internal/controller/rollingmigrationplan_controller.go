@@ -380,8 +380,8 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, error) {
 	log := scope.Logger
 	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		// TODO(vPwned): poweroff vms cannot be moved by the vmware vcenter
-		// TODO(vPwned): DRS needs to be enabled and on fully automated mode
+		// TODO(vPwned): VALIDATE: poweroff vms cannot be moved by the vmware vcenter
+		// TODO(vPwned): VALIDATE: DRS needs to be enabled and on fully automated mode
 		clusterMigration, err := utils.GetClusterMigration(ctx, scope.Client, cluster.ClusterName, scope.RollingMigrationPlan)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -390,7 +390,7 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 				}
 				return true, nil
 			}
-			
+
 			return false, errors.Wrap(err, "failed to get cluster migration")
 		}
 		switch clusterMigration.Status.Phase {
@@ -410,7 +410,7 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 			}
 			return false, nil
 		}
-		
+
 		err = r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseWaiting, clusterMigration.Status.Message, cluster.ClusterName, clusterMigration.Status.CurrentESXi)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to update rolling migration plan status")

@@ -9,6 +9,11 @@ GIT_TAG := $(shell git describe --exact-match --tags $(git log -n1 --pretty='%h'
 SWAGGER_UI_VER := 5.17.14
 BUF_VERSION := 1.42.0
 
+REPO ?= platform9
+REGISTRY ?= quay.io
+TAG ?= 1.0.4
+export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
+
 ifeq ($(BUILD_VERSION),)
 	RELEASE_VER=$(GIT_PARENT)
 ifneq ($(GIT_TAG),)
@@ -67,6 +72,14 @@ get-googleapis-submodule:
 vpwctl:
 	@echo "Running make vpwctl"
 	cd cmd && CGO_ENABLED=0 go build -mod=vendor $(BUILD_OPTIONS) -o $(BIN_DIR)/vpwctl -v
+
+.PHONY: docker-build
+docker-build: ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${VPWNED_IMG} .
+
+.PHONY: docker-push
+docker-push: ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push ${VPWNED_IMG}
 
 proto: 
 	@echo "Building proto"
