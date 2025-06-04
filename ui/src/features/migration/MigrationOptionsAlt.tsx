@@ -339,9 +339,16 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions("postMigrationAction.suffix")(isChecked);
                       // Update the actual value in params
                       if (isChecked) {
-                        onChange("postMigrationAction.suffix")("_migrated_to_pcd");
+                        // Only update the suffix, keep other values in postMigrationAction
+                        const currentPostAction = params.postMigrationAction || {};
+                        onChange("postMigrationAction")({
+                          ...currentPostAction,
+                          suffix: "_migrated_to_pcd"
+                        });
                       } else {
-                        onChange("postMigrationAction.suffix")(undefined);
+                        // Only remove the suffix, keep other values
+                        const { suffix, ...rest } = params.postMigrationAction || {};
+                        onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
                       }
                     }}
                   />
@@ -354,7 +361,11 @@ export default function MigrationOptionsAlt({
                 onChange={(e) => {
                   // Only update the value if the checkbox is checked
                   if (selectedMigrationOptions.postMigrationAction?.suffix) {
-                    onChange("postMigrationAction.suffix")(e.target.value);
+                    const currentPostAction = params.postMigrationAction || {};
+                    onChange("postMigrationAction")({
+                      ...currentPostAction,
+                      suffix: e.target.value
+                    });
                   }
                 }}
               >
@@ -377,9 +388,16 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions("postMigrationAction.folderName")(isChecked);
                       // Update the actual value in params
                       if (isChecked) {
-                        onChange("postMigrationAction.folderName")("vjailbreakedVMs");
+                        // Only update the folderName, keep other values in postMigrationAction
+                        const currentPostAction = params.postMigrationAction || {};
+                        onChange("postMigrationAction")({
+                          ...currentPostAction,
+                          folderName: "vjailbreakedVMs"
+                        });
                       } else {
-                        onChange("postMigrationAction.folderName")(undefined);
+                        // Only remove the folderName, keep other values
+                        const { folderName, ...rest } = params.postMigrationAction || {};
+                        onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
                       }
                     }}
                   />
@@ -392,7 +410,11 @@ export default function MigrationOptionsAlt({
                 onChange={(e) => {
                   // Only update the value if the checkbox is checked
                   if (selectedMigrationOptions.postMigrationAction?.folderName) {
-                    onChange("postMigrationAction.folderName")(e.target.value);
+                    const currentPostAction = params.postMigrationAction || {};
+                    onChange("postMigrationAction")({
+                      ...currentPostAction,
+                      folderName: e.target.value
+                    });
                   }
                 }}
               >
