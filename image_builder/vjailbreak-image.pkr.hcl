@@ -68,12 +68,33 @@ build {
     destination = "/tmp/env"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/scripts/download_images.sh"
+    destination = "/tmp/download_images.sh"
+  }
+
   provisioner "shell" {
     inline = [
+      # install helm
       "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
       "sudo chmod 700 get_helm.sh",
       "sudo ./get_helm.sh",
-      "sudo mkdir -p /etc/pf9",
+
+      "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
+      "helm repo update",
+      "helm pull ingress-nginx/ingress-nginx --untar",
+
+      # install ctr
+      "sudo apt install -y containerd",
+      "sudo systemctl enable --now containerd",
+
+      # download images
+      "sudo -E /tmp/download_images.sh", 
+
+      # uninstall containerd 
+      "sudo apt remove -y containerd",
+      "sudo systemctl disable --now containerd",
+
       "sudo mv /tmp/install.sh /etc/pf9/install.sh",
       "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
       "sudo mv /tmp/yamls /etc/pf9/yamls",
@@ -86,5 +107,12 @@ build {
       "sudo chmod 644 /etc/pf9/env",
       "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
+    environment_vars = [
+      "AIRGAPPED=${var.airgapped}"
+    ]
   }
+}
+variable "airgapped" {
+  type    = bool
+  default = false
 }
