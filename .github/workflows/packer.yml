@@ -240,7 +240,7 @@ jobs:
 
       - name: Download ubuntu base image
         if: env.release_found == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base
+        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
 
       - name: Enable KVM group perms
         if: env.release_found == 'true'
