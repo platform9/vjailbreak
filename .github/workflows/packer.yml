@@ -274,10 +274,11 @@ jobs:
         if: env.release_found == 'true'
         uses: oras-project/setup-oras@v1.2.1
 
-      - name: Run packer build
+      - name: Run packer build for normal image
         if: env.release_found == 'true'
         id: build
-        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl -var 'airgapped=false'"
+
 
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'
@@ -285,6 +286,28 @@ jobs:
           oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Delete vjailbreak qcow2
+        if: env.release_found == 'true'
+        run: |
+          rm -rf ./vjailbreak_qcow2
+
+      - name: Run packer build for airgapped image
+        if: env.release_found == 'true'
+        id: build
+        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl -var 'airgapped=true'"
+
+      - name: Upload vjailbreak qcow2 to quay
+        if: env.release_found == 'true'
+        run: |
+          oras push ${{ env.QCOW2_IMG }}+airgapped \
+          --artifact-type="application/qcow2" \
+          ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Delete vjailbreak qcow2
+        if: env.release_found == 'true'
+        run: |
+          rm -rf ./vjailbreak_qcow2
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

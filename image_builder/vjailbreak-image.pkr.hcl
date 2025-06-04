@@ -68,6 +68,11 @@ build {
     destination = "/tmp/env"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/scripts/air_gap_download.sh"
+    destination = "/tmp/air_gap_download.sh"
+  }
+
   provisioner "shell" {
     inline = [
       "sudo mv /tmp/install.sh /etc/pf9/install.sh",
@@ -80,7 +85,20 @@ build {
       "sudo chown root:root /etc/pf9/k3s.env",
       "sudo chmod 644 /etc/pf9/k3s.env",
       "sudo chmod 644 /etc/pf9/env",
+
+      "if [ "${var.AIRGAPPED}" = "true" ]; then",
+      "sudo bash /tmp/air_gap_download.sh",
+      "fi",
+
       "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
+    environment_vars = [
+      "AIRGAPPED=${var.AIRGAPPED}"
+    ]
   }
+}
+
+variable "AIRGAPPED" {
+  type    = string
+  default = "false"
 }
