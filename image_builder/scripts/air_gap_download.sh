@@ -1,8 +1,12 @@
-#!/bin/bash 
+#!/bin/bash
 # This script downloads the ingress-nginx controller and kube-webhook-certgen images and exports them as tar files.
 # But this script has been run already in base image, so this is just a placeholder for now.
 # In case in the future we need to download images, we can use this script.
 set -euo pipefail
+
+
+# get tag from /etc/pf9/yamls/01ui.yaml
+TAG=$(awk '/image:/ {split($0,a,":"); print a[3]}' /etc/pf9/yamls/01ui.yaml)
 
 REGISTRY="quay.io"
 REPO="platform9"
@@ -16,6 +20,9 @@ pushgateway="quay.io/prometheus/pushgateway:v1.5.0"
 kube_rbac_proxy="quay.io/brancz/kube-rbac-proxy:v0.19.1"
 prometheus_config_reloader="quay.io/prometheus-operator/prometheus-config-reloader:v0.76.0"
 prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.76.0"
+v2v_helper="quay.io/platform9/v2v-helper:$TAG"
+controller="quay.io/platform9/vjailbreak-controller:$TAG"
+ui="quay.io/platform9/vjailbreak-ui:$TAG"
 
 # Download and export images
 images=(
@@ -26,14 +33,16 @@ images=(
   "$blackbox_exporter"
   "$node_exporter"
   "$pushgateway"
-  "$kube_rbac_proxy"
   "$prometheus_config_reloader"
   "$prometheus_operator"
+  "$v2v_helper"
+  "$controller"
+  "$ui"
 )
 
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  sudo ctr i pull "$img"
+  sudo ctr  i pull "$img"
 
   tag=$(echo "$img" | cut -d'@' -f1)
   fname=$(echo "$tag" | tr '/:@' '_')
@@ -42,4 +51,8 @@ for img in "${images[@]}"; do
   sudo ctr i export "/etc/pf9/images/$fname.tar" "$img"
 done
 
+ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
+ctr images export "/etc/pf9/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
+
 echo "[✔] All images downloaded and exported as tar files."
+
