@@ -86,7 +86,6 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo ctr --address /run/k3s/containerd/containerd.sock -n k8s.io  images import /etc/pf9/images/registry.k8s.io_ingress-nginx_kube-webhook-certgen.tar
   check_command "Loading ingress-nginx webhook image"
 
-  log "YAML file 'values.yaml' has been created with the master IP."
 
   # Using helm to install nginx-ingress-controller.
   helm install nginx-ingress /etc/pf9/ingress-nginx --namespace nginx-ingress --create-namespace 
