@@ -216,7 +216,7 @@ jobs:
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
 
       - name: Build vpwned image
-        run: make -o build-vpwned
+        run: make build-vpwned
 
   post-build:
     runs-on: ubuntu-latest
