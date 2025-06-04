@@ -4,9 +4,6 @@ set -euo pipefail
 REGISTRY="quay.io"
 REPO="platform9"
 
-# get version from /etc/pf9/yamls/01ui.yaml image: quay.io/platform9/vjailbreak-ui:<version>
-VERSION=$(cat /etc/pf9/yamls/01ui.yaml | grep -oP 'quay.io/platform9/vjailbreak-ui:\K[^ ]+')
-echo "[*] Version: $VERSION"
 
 echo "[*] Fetching latest ingress-nginx controller tag from GitHub..."
 controller_tag=$(curl -s https://api.github.com/repos/kubernetes/ingress-nginx/releases/latest | jq -r .tag_name)
@@ -39,7 +36,7 @@ for img in "${images[@]}"; do
   fname=$(echo "$tag" | tr '/:@' '_')
 
   echo "[*] Exporting to $fname.tar"
-  sudo ctr i export "$fname.tar" "$img"
+  sudo ctr i export "/etc/pf9/images/$fname.tar" "$img"
 done
 
 echo "[✔] All images downloaded and exported as tar files."

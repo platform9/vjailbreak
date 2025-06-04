@@ -75,6 +75,7 @@ build {
 
   provisioner "shell" {
     inline = [
+      "sudo apt update && sudo apt install -y curl jq",
       # install helm
       "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
       "sudo chmod 700 get_helm.sh",
@@ -83,13 +84,18 @@ build {
       "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
       "helm repo update",
       "helm pull ingress-nginx/ingress-nginx --untar",
+      "sudo mv ingress-nginx /etc/pf9/ingress-nginx",
 
       # install ctr
       "sudo apt install -y containerd",
       "sudo systemctl enable --now containerd",
 
       # download images
-      "sudo /tmp/download_images.sh", 
+      "sudo mkdir -p /etc/pf9",
+      "sudo mkdir -p /etc/pf9/images",
+      "sudo mv /tmp/download_images.sh /etc/pf9/download_images.sh",
+      "sudo chmod +x /etc/pf9/download_images.sh",
+      "sudo /etc/pf9/download_images.sh", 
 
       # uninstall containerd 
       "sudo apt remove -y containerd",

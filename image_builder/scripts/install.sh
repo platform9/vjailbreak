@@ -68,7 +68,7 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
 
   # Install K3s master with the specific version
-  sudo /etc/pf9/k3s-setup/k3s-install.sh | INSTALL_K3S_SKIP_DOWNLOAD=true sh -s - --disable traefik
+  INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh --disable traefik
   check_command "Installing K3s master"
 
   # Wait for K3s to be ready
@@ -78,12 +78,21 @@ if [ "$IS_MASTER" == "true" ]; then
   mkdir -p ~/.kube
   sudo kubectl config view --raw > ~/.kube/config
   check_command "Moving kubeconfig"
+  # install containerd
+  sudo apt install -y containerd
+  check_command "Installing containerd"
 
+  # Load images
+  log "Loading images..."
+  sudo ctr --address /run/k3s/containerd/containerd.sock images import /etc/pf9/images/registry.k8s.io_ingress-nginx_controller.tar
+  check_command "Loading ingress-nginx controller image"
+  sudo ctr --address /run/k3s/containerd/containerd.sock images import /etc/pf9/images/registry.k8s.io_ingress-nginx_kube-webhook-certgen.tar
+  check_command "Loading ingress-nginx webhook image"
 
   log "YAML file 'values.yaml' has been created with the master IP."
 
   # Using helm to install nginx-ingress-controller.
-  helm install nginx-ingress ./ingress-nginx --namespace nginx-ingress --create-namespace 
+  helm install nginx-ingress /etc/pf9/ingress-nginx --namespace nginx-ingress --create-namespace 
   check_command "Installing NGINX Ingress Controller"
 
   # Wait for NGINX Ingress Controller to be ready
