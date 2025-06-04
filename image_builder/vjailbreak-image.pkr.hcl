@@ -7,6 +7,12 @@ packer {
   }
 }
 
+variable "AIRGAPPED" {
+  type    = bool
+  default = false
+}
+
+
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
@@ -75,30 +81,19 @@ build {
 
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/install.sh /etc/pf9/install.sh",
-      "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-      "sudo mv /tmp/yamls /etc/pf9/yamls",
-      "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
-      "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
-      "sudo mv /tmp/env /etc/pf9/env",
-      "sudo chmod +x /etc/pf9/install.sh",
-      "sudo chown root:root /etc/pf9/k3s.env",
-      "sudo chmod 644 /etc/pf9/k3s.env",
-      "sudo chmod 644 /etc/pf9/env",
-
-      "if [ "${var.AIRGAPPED}" = "true" ]; then",
-      "sudo bash /tmp/air_gap_download.sh",
-      "fi",
-
-      "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
-    ]
-    environment_vars = [
-      "AIRGAPPED=${var.AIRGAPPED}"
+    "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+    "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+    "sudo mv /tmp/yamls /etc/pf9/yamls",
+    "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
+    "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
+    "sudo mv /tmp/env /etc/pf9/env",
+    "sudo chmod +x /etc/pf9/install.sh",
+    "sudo chown root:root /etc/pf9/k3s.env",
+    "sudo chmod 644 /etc/pf9/k3s.env",
+    "sudo chmod 644 /etc/pf9/env",
+    "if [ ${var.AIRGAPPED} = true ]; then sudo /etc/pf9/download_images.sh; fi",
+    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
   }
 }
 
-variable "AIRGAPPED" {
-  type    = string
-  default = "false"
-}
