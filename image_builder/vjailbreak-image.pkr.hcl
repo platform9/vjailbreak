@@ -93,9 +93,9 @@ build {
       "sudo /etc/pf9/download_images.sh", 
 
 
-      "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
-      "helm repo update",
-      "helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
+      "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
+      "sudo helm repo update",
+      "sudo helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
 
       # uninstall containerd 
       "sudo apt remove -y containerd",
