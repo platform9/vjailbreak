@@ -81,10 +81,6 @@ build {
       "sudo chmod 700 get_helm.sh",
       "sudo ./get_helm.sh",
 
-      "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
-      "helm repo update",
-      "helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
-
       # install ctr
       "sudo apt install -y containerd",
       "sudo systemctl enable --now containerd",
@@ -95,6 +91,11 @@ build {
       "sudo mv /tmp/download_images.sh /etc/pf9/download_images.sh",
       "sudo chmod +x /etc/pf9/download_images.sh",
       "sudo /etc/pf9/download_images.sh", 
+
+
+      "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
+      "helm repo update",
+      "helm pull ingress-nginx/ingress-nginx --untar --destination /etc/pf9",
 
       # uninstall containerd 
       "sudo apt remove -y containerd",
