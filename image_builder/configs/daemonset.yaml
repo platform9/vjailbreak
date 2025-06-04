@@ -17,7 +17,7 @@ spec:
       hostNetwork: true
       initContainers:
         - name: fix-perms
-          image: alpine:latest
+          image: alpine:3.22.0
           securityContext:
             privileged: true
             runAsUser: 0
@@ -37,7 +37,7 @@ spec:
               mountPath: /home/ubuntu/virtio-win
       containers:
         - name: sync-container
-          image: alpine:latest
+          image: alpine:3.22.0
           securityContext:
             privileged: true
             runAsUser: 0
