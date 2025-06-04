@@ -73,7 +73,7 @@ spec:
   rules:
   - http:
       paths:
-      - path: /sdk/(.*)
+      - path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
         backend:
           service:

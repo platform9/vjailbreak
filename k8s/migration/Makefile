@@ -6,6 +6,8 @@ TAG ?= 1.0.4
 
 export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-v2v:${TAG}
+export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 
@@ -123,7 +125,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${REGISTRY}/${REPO}/vjailbreak-controller:$$TAG
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
+	cd config/addons && $(KUSTOMIZE) edit set image vpwned=${VPWNED_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	cp dist/install.yaml ../../deploy/00crds.yaml
 

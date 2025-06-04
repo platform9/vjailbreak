@@ -124,12 +124,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	} else {
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
-			// TODO(vpwned): Handle the error
-			// if strings.Contains(err.Error(), "404") {
-			// 	ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-			// } else {
-			// 	return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
-			// }
+			if strings.Contains(err.Error(), "404") {
+				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
+			} else {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			}
 			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 		}
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
