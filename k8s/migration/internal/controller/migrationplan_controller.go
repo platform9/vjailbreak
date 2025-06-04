@@ -165,9 +165,14 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	ctxlog.Info("START: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
-	defer ctxlog.Info("🏁 END: Post-migration actions for VM", "vm", vm, "migrationPlan", migrationplan.Name)
+	// Check if any post-migration actions are enabled
+	if !migrationplan.Spec.PostMigrationAction.RenameVM &&
+		!migrationplan.Spec.PostMigrationAction.MoveToFolder {
+		ctxlog.Info("No post-migration actions enabled")
+		return nil
+	}
 
+	// Rest of the function remains the same...
 	migrationtemplate, err := r.getMigrationTemplate(ctx, migrationplan)
 	if err != nil {
 		return err
@@ -186,11 +191,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(
 	vcClient, dc, err := createVCenterClientAndDC(ctx, secret, vmwcreds)
 	if err != nil {
 		return err
-	}
-
-	if reflect.DeepEqual(migrationplan.Spec.PostMigrationAction, vjailbreakv1alpha1.PostMigrationAction{}) {
-		ctxlog.Info("No post-migration actions configured")
-		return nil
 	}
 
 	return handlePostMigrationActions(ctx, vcClient, dc, migrationplan, vm)
@@ -300,6 +300,8 @@ func createVCenterClientAndDC(
 	return vcClient, dc, nil
 }
 
+// In migrationplan_controller.go, update handlePostMigrationActions function
+
 func handlePostMigrationActions(
 	ctx context.Context,
 	vcClient *vcenter.VCenterClient,
@@ -309,7 +311,8 @@ func handlePostMigrationActions(
 ) error {
 	ctxlog := log.FromContext(ctx)
 
-	if migrationplan.Spec.PostMigrationAction.Suffix != "" {
+	// Check if RenameVM is enabled and suffix is provided
+	if migrationplan.Spec.PostMigrationAction.RenameVM && migrationplan.Spec.PostMigrationAction.Suffix != "" {
 		suffix := migrationplan.Spec.PostMigrationAction.Suffix
 		newVMName := vm + suffix
 
@@ -319,10 +322,11 @@ func handlePostMigrationActions(
 			return fmt.Errorf("failed to rename VM '%s': %w", vm, err)
 		}
 		ctxlog.Info("VM renamed successfully", "newName", newVMName)
-		vm = newVMName
+		vm = newVMName // Update vm variable for subsequent operations
 	}
 
-	if migrationplan.Spec.PostMigrationAction.FolderName != "" {
+	// Check if MoveToFolder is enabled and folderName is provided
+	if migrationplan.Spec.PostMigrationAction.MoveToFolder && migrationplan.Spec.PostMigrationAction.FolderName != "" {
 		folderName := migrationplan.Spec.PostMigrationAction.FolderName
 
 		ctxlog.Info("📂 Ensuring folder exists...", "folder", folderName)
