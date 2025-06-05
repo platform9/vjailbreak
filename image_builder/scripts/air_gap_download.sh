@@ -25,7 +25,7 @@ grafana="docker.io/grafana/grafana:11.2.0"
 v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:v0.1.12"
 controller="quay.io/platform9/vjailbreak-controller:v0.1.12"
 ui="quay.io/platform9/vjailbreak-ui:v0.1.12"
-alpine="docker.io/library/alpine:latest"
+alpine="docker.io/library/alpine:3.22.0"
 
 # Download and export images
 images=(
