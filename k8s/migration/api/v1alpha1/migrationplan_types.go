@@ -49,7 +49,6 @@ type AdvancedOptions struct {
 	GranularPorts       []string `json:"granularPorts,omitempty"`
 }
 
-// NEW: Define PostMigrationAction struct for post-migration actions
 type PostMigrationAction struct {
 	// +kubebuilder:default:=true
 	RenameVM bool `json:"renameVm"`
