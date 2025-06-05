@@ -193,6 +193,11 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
+	if migrationplan.Spec.PostMigrationAction == nil {
+		ctxlog.Info("No post-migration actions configured")
+		return nil
+	}
+
 	if migrationplan.Spec.PostMigrationAction.RenameVM == nil &&
 		migrationplan.Spec.PostMigrationAction.MoveToFolder == nil {
 		ctxlog.Info("No post-migration actions enabled")
