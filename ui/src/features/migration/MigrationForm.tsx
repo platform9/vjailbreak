@@ -396,46 +396,111 @@ export default function MigrationFormDrawer({
   }
 
   const createMigrationPlan = async (updatedMigrationTemplate) => {
-    const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
+    console.log('=== Migration Plan Creation Debug ===');
+    console.log('Selected Migration Options:', JSON.stringify(selectedMigrationOptions, null, 2));
+    console.log('Current params:', JSON.stringify(params, (key, value) => 
+        key === 'password' || key === 'OS_PASSWORD' ? '***' : value, 2));
+
+    const vmsToMigrate = (params.vms || []).map((vm) => vm.name);
+    
     const migrationFields = {
-      migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-      virtualMachines: vmsToMigrate,
-      type:
-        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-          ? params.dataCopyMethod
-          : "hot",
-      ...(selectedMigrationOptions.dataCopyStartTime &&
-        params?.dataCopyStartTime && {
-        dataCopyStart: params.dataCopyStartTime,
-      }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { adminInitiatedCutOver: true }),
+        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+        virtualMachines: vmsToMigrate,
+        type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+            ? params.dataCopyMethod
+            : "hot",
+        ...(selectedMigrationOptions.dataCopyStartTime &&
+            params?.dataCopyStartTime && {
+                dataCopyStart: params.dataCopyStartTime,
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { 
+                adminInitiatedCutOver: true 
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            params.cutoverStartTime && { 
+                vmCutoverStart: params.cutoverStartTime 
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            params.cutoverEndTime && { 
+                vmCutoverEnd: params.cutoverEndTime 
+            }),
+        retry: params.retryOnFailure,
+        // Add postMigrationAction if any options are enabled
+        ...((selectedMigrationOptions.postMigrationAction?.renameVm || 
+            selectedMigrationOptions.postMigrationAction?.moveToFolder) && {
+            postMigrationAction: {
+                renameVm: selectedMigrationOptions.postMigrationAction.renameVm || false,
+                moveToFolder: selectedMigrationOptions.postMigrationAction.moveToFolder || false,
+                ...(selectedMigrationOptions.postMigrationAction.suffix && {
+                    suffix: params.postMigrationAction?.suffix
+                }),
+                ...(selectedMigrationOptions.postMigrationAction.folderName && {
+                    folderName: params.postMigrationAction?.folderName
+                })
+            }
+        })
+    };
 
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
-      retry: params.retryOnFailure,
-    }
-    const body = createMigrationPlanJson(migrationFields)
+    console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
+    
+    const body = createMigrationPlanJson(migrationFields);
+    console.log('Final Request Body:', JSON.stringify(body, null, 2));
+    
     try {
-      const data = await postMigrationPlan(body)
-      return data
-    } catch (err) {
-      // Handle error
-      console.error("Error creating migration plan", err)
-      setError({
-        title: "Error creating migration plan",
-        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
-      })
-      getFieldErrorsUpdater("migrationPlan")(
-        "Error creating migration plan : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
-      )
-
+        console.log('Sending migration plan creation request...');
+        const data = await postMigrationPlan(body);
+        console.log('Migration plan created successfully:', data);
+        return data;
+      } catch (error: unknown) {
+        console.error("Error creating migration plan", error);
+        
+        let errorMessage = "An unknown error occurred";
+        let errorResponse: {
+            status?: number;
+            statusText?: string;
+            data?: any;
+            config?: {
+                url?: string;
+                method?: string;
+                data?: any;
+            };
+        } = {};
+    
+        if (axios.isAxiosError(error)) {
+            errorMessage = error.response?.data?.message || error.message || String(error);
+            errorResponse = {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                config: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    data: error.config?.data
+                }
+            };
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
+        } else {
+            errorMessage = String(error);
+        }
+    
+        console.error('Error details:', errorResponse);
+    
+        setError({
+            title: "Error creating migration plan",
+            message: errorMessage,
+        });
+        
+        getFieldErrorsUpdater("migrationPlan")(
+            `Error creating migration plan: ${errorMessage}`
+        );
+        throw error;
     }
-  }
+
+};
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
