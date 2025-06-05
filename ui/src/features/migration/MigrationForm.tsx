@@ -564,20 +564,22 @@ export default function MigrationFormDrawer({
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
-  // Validate Selected Migration Options
   const migrationOptionValidated = useMemo(() => {
     return Object.keys(selectedMigrationOptions).every((key) => {
       if (key === "postMigrationAction") {
-        return Object.keys(selectedMigrationOptions.postMigrationAction).every(subKey => {
-          if (selectedMigrationOptions.postMigrationAction[subKey]) {
-            // If checkbox is checked, we need to ensure the value exists in params
-            return params.postMigrationAction?.[subKey] !== undefined && !fieldErrors[`postMigrationAction.${subKey}`];
+        const postMigrationAction = selectedMigrationOptions.postMigrationAction || {};
+        return Object.keys(postMigrationAction).every(subKey => {
+          if (postMigrationAction[subKey as keyof typeof postMigrationAction]) {
+            // If checkbox is checked, ensure the value exists in params
+            return params.postMigrationAction?.[subKey] !== undefined && 
+                   !fieldErrors[`postMigrationAction.${subKey}`];
           }
           return true;
         });
       }
-      if (selectedMigrationOptions[key]) {
-        return params?.[key] !== undefined && !fieldErrors[key];
+      if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
+        return params?.[key as keyof typeof params] !== undefined && 
+               !fieldErrors[key];
       }
       return true;
     });

@@ -239,7 +239,12 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	return nil
 }
 
-func (_ *MigrationPlanReconciler) renameVM(ctx context.Context, vcClient *vcenter.VCenterClient, migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) error {
+func (*MigrationPlanReconciler) renameVM(
+	ctx context.Context,
+	vcClient *vcenter.VCenterClient,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	vm string,
+) error {
 	ctxlog := log.FromContext(ctx)
 	suffix := migrationplan.Spec.PostMigrationAction.Suffix
 	if suffix == "" {
@@ -251,8 +256,13 @@ func (_ *MigrationPlanReconciler) renameVM(ctx context.Context, vcClient *vcente
 	return vcClient.RenameVM(ctx, vm, newVMName)
 }
 
-func (_ *MigrationPlanReconciler) moveVMToFolder(ctx context.Context, vcClient *vcenter.VCenterClient, dc *object.Datacenter,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) error {
+func (*MigrationPlanReconciler) moveVMToFolder(
+	ctx context.Context,
+	vcClient *vcenter.VCenterClient,
+	dc *object.Datacenter,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	vm string,
+) error {
 	ctxlog := log.FromContext(ctx)
 	folderName := migrationplan.Spec.PostMigrationAction.FolderName
 	if folderName == "" {
