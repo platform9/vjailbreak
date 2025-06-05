@@ -115,7 +115,9 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   osType: boolean
   postMigrationAction: {
     suffix: boolean       
-    folderName: boolean   
+    folderName: boolean  
+    renameVm: boolean
+    moveToFolder: boolean 
   }
 }
 
@@ -130,8 +132,10 @@ const defaultMigrationOptions = {
   postMigrationScript: false,
   osType: false,
   postMigrationAction: {        
-    suffix: false,
+    suffix: false,    
     folderName: false,
+    renameVm: false,
+    moveToFolder: false
   }
 };
 

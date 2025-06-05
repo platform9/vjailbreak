@@ -327,97 +327,86 @@ export default function MigrationOptionsAlt({
                 Select this option to retry the migration incase of failure
               </Typography>
             </Fields>
-            <Fields>
-              <FormControlLabel
-                label="Suffix for Source VM Name"
-                control={
-                  <Checkbox
-                    checked={!!selectedMigrationOptions.postMigrationAction?.suffix}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      // First update the selectedMigrationOptions state
-                      updateSelectedMigrationOptions("postMigrationAction")({
-                        ...selectedMigrationOptions.postMigrationAction,
-                        suffix: isChecked
-                      });
-                      
-                      // Then update the params state
-                      if (isChecked) {
-                        onChange("postMigrationAction")({
-                          ...params.postMigrationAction,
-                          suffix: params.postMigrationAction?.suffix || "_migrated_to_pcd"
-                        });
-                      } else {
-                        const { suffix, ...rest } = params.postMigrationAction || {};
-                        onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
-                      }
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.suffix}
-                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    suffix: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                Optional: This suffix will be appended to the source VM name after migration.
-              </Typography>
-            </Fields>
+<Fields>
+  <FormControlLabel
+    label="Rename VM"
+    control={
+      <Checkbox
+        checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
+        onChange={(e) => {
+          const isChecked = e.target.checked;
+          updateSelectedMigrationOptions("postMigrationAction")({
+            ...selectedMigrationOptions.postMigrationAction,
+            renameVm: isChecked,
+            suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
+          });
+          onChange("postMigrationAction")({
+            ...params.postMigrationAction,
+            renameVm: isChecked,
+            suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
+          });
+        }}
+      />
+    }
+  />
+  <Select
+    size="small"
+    disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
+    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+    onChange={(e) => {
+      onChange("postMigrationAction")({
+        ...params.postMigrationAction,
+        suffix: e.target.value
+      });
+    }}
+  >
+    <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
+  </Select>
+  <Typography variant="caption">
+    Optional: This suffix will be appended to the source VM name after migration.
+  </Typography>
+</Fields>
 
-            <Fields>
-              <FormControlLabel
-                label="Folder Name in vCenter"
-                control={
-                  <Checkbox
-                    checked={!!selectedMigrationOptions.postMigrationAction?.folderName}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      // First update the selectedMigrationOptions state
-                      updateSelectedMigrationOptions("postMigrationAction")({
-                        ...selectedMigrationOptions.postMigrationAction,
-                        folderName: isChecked
-                      });
-                      
-                      // Then update the params state
-                      if (isChecked) {
-                        onChange("postMigrationAction")({
-                          ...params.postMigrationAction,
-                          folderName: params.postMigrationAction?.folderName || "vjailbreakedVMs"
-                        });
-                      } else {
-                        const { folderName, ...rest } = params.postMigrationAction || {};
-                        onChange("postMigrationAction")(Object.keys(rest).length > 0 ? rest : undefined);
-                      }
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.folderName}
-                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    folderName: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                Optional: This folder name will be used to organize the migrated VMs in vCenter.
-              </Typography>
-            </Fields>
+<Fields>
+  <FormControlLabel
+    label="Move to Folder"
+    control={
+      <Checkbox
+        checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+        onChange={(e) => {
+          const isChecked = e.target.checked;
+          updateSelectedMigrationOptions("postMigrationAction")({
+            ...selectedMigrationOptions.postMigrationAction,
+            moveToFolder: isChecked,
+            folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
+          });
+          onChange("postMigrationAction")({
+            ...params.postMigrationAction,
+            moveToFolder: isChecked,
+            folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
+          });
+        }}
+      />
+    }
+  />
+  <Select
+    size="small"
+    disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+    onChange={(e) => {
+      onChange("postMigrationAction")({
+        ...params.postMigrationAction,
+        folderName: e.target.value
+      });
+    }}
+  >
+    <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
+  </Select>
+  <Typography variant="caption">
+    Optional: This folder name will be used to organize the migrated VMs in vCenter.
+  </Typography>
+</Fields>
+
 {/* 
             Pre and Post Web Hooks 
 // ...

@@ -98,10 +98,10 @@ spec:
                     default: vjailbreakedVMs
                     type: string
                   moveToFolder:
-                    default: true
+                    default: false  
                     type: boolean
                   renameVm:
-                    default: true
+                    default: false  
                     type: boolean
                   suffix:
                     default: _migrated_to_pcd
