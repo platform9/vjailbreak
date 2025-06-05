@@ -22,9 +22,10 @@ prometheus_config_reloader="quay.io/prometheus-operator/prometheus-config-reload
 prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.76.0"
 configmap_reload="ghcr.io/jimmidyson/configmap-reload:v0.13.1"
 grafana="docker.io/grafana/grafana:11.2.0"
-v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
-controller="quay.io/platform9/vjailbreak-controller:$TAG"
-ui="quay.io/platform9/vjailbreak-ui:$TAG"
+v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:v0.1.12"
+controller="quay.io/platform9/vjailbreak-controller:v0.1.12"
+ui="quay.io/platform9/vjailbreak-ui:v0.1.12"
+alpine="docker.io/library/alpine:latest"
 
 # Download and export images
 images=(
@@ -42,6 +43,7 @@ images=(
   "$ui"
   "$configmap_reload"
   "$grafana"
+  "$alpine"
 )
 
 for img in "${images[@]}"; do
