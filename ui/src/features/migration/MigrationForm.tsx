@@ -249,7 +249,7 @@ export default function MigrationFormDrawer({
     if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
-    getFieldErrorsUpdater("openstackCreds")("")
+    getFieldErrorsUpdater("opeanstackCreds")("")
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
@@ -403,6 +403,19 @@ export default function MigrationFormDrawer({
 
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name);
     
+    // Prepare postMigrationAction only if at least one action is enabled
+    const postMigrationAction = (selectedMigrationOptions.postMigrationAction?.renameVm || 
+        selectedMigrationOptions.postMigrationAction?.moveToFolder) ? {
+        renameVm: Boolean(selectedMigrationOptions.postMigrationAction?.renameVm),
+        moveToFolder: Boolean(selectedMigrationOptions.postMigrationAction?.moveToFolder),
+        ...(selectedMigrationOptions.postMigrationAction?.suffix && {
+            suffix: params.postMigrationAction?.suffix || ''
+        }),
+        ...(selectedMigrationOptions.postMigrationAction?.folderName && {
+            folderName: params.postMigrationAction?.folderName || ''
+        })
+    } : undefined;
+
     const migrationFields = {
         migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
         virtualMachines: vmsToMigrate,
@@ -428,20 +441,7 @@ export default function MigrationFormDrawer({
                 vmCutoverEnd: params.cutoverEndTime 
             }),
         retry: params.retryOnFailure,
-        // Add postMigrationAction if any options are enabled
-        ...((selectedMigrationOptions.postMigrationAction?.renameVm || 
-            selectedMigrationOptions.postMigrationAction?.moveToFolder) && {
-            postMigrationAction: {
-                renameVm: selectedMigrationOptions.postMigrationAction.renameVm || false,
-                moveToFolder: selectedMigrationOptions.postMigrationAction.moveToFolder || false,
-                ...(selectedMigrationOptions.postMigrationAction.suffix && {
-                    suffix: params.postMigrationAction?.suffix
-                }),
-                ...(selectedMigrationOptions.postMigrationAction.folderName && {
-                    folderName: params.postMigrationAction?.folderName
-                })
-            }
-        })
+        ...(postMigrationAction && { postMigrationAction })
     };
 
     console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
@@ -454,7 +454,7 @@ export default function MigrationFormDrawer({
         const data = await postMigrationPlan(body);
         console.log('Migration plan created successfully:', data);
         return data;
-      } catch (error: unknown) {
+    } catch (error: unknown) {
         console.error("Error creating migration plan", error);
         
         let errorMessage = "An unknown error occurred";
@@ -499,7 +499,6 @@ export default function MigrationFormDrawer({
         );
         throw error;
     }
-
 };
 
   const handleSubmit = useCallback(async () => {
@@ -567,15 +566,8 @@ export default function MigrationFormDrawer({
   const migrationOptionValidated = useMemo(() => {
     return Object.keys(selectedMigrationOptions).every((key) => {
       if (key === "postMigrationAction") {
-        const postMigrationAction = selectedMigrationOptions.postMigrationAction || {};
-        return Object.keys(postMigrationAction).every(subKey => {
-          if (postMigrationAction[subKey as keyof typeof postMigrationAction]) {
-            // If checkbox is checked, ensure the value exists in params
-            return params.postMigrationAction?.[subKey] !== undefined && 
-                   !fieldErrors[`postMigrationAction.${subKey}`];
-          }
-          return true;
-        });
+        // Post-migration actions are optional, so we don't validate them here
+        return true;
       }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
         return params?.[key as keyof typeof params] !== undefined && 
@@ -584,7 +576,6 @@ export default function MigrationFormDrawer({
       return true;
     });
   }, [selectedMigrationOptions, params, fieldErrors]);
-
 
   const disableSubmit =
     !vmwareCredsValidated ||
