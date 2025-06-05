@@ -158,7 +158,10 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-func (r *MigrationPlanReconciler) getMigrationTemplateAndCreds(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, *vjailbreakv1alpha1.VMwareCreds, *corev1.Secret, error) {
+func (r *MigrationPlanReconciler) getMigrationTemplateAndCreds(
+	ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+) (*vjailbreakv1alpha1.MigrationTemplate, *vjailbreakv1alpha1.VMwareCreds, *corev1.Secret, error) {
 	ctxlog := log.FromContext(ctx)
 
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
@@ -190,9 +193,9 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	if !migrationplan.Spec.PostMigrationAction.RenameVM &&
-		!migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		ctxlog.Info("No post-migration actions enabled", "vm", vm)
+	if migrationplan.Spec.PostMigrationAction.RenameVM == nil &&
+		migrationplan.Spec.PostMigrationAction.MoveToFolder == nil {
+		ctxlog.Info("No post-migration actions enabled")
 		return nil
 	}
 
@@ -220,15 +223,14 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		}
 	}()
 
-	// Execute post-migration actions
-	if migrationplan.Spec.PostMigrationAction.RenameVM {
+	if migrationplan.Spec.PostMigrationAction.RenameVM != nil && *migrationplan.Spec.PostMigrationAction.RenameVM {
 		if err := r.renameVM(ctx, vcClient, migrationplan, vm); err != nil {
 			return fmt.Errorf("failed to rename VM: %w", err)
 		}
-		vm = vm + migrationplan.Spec.PostMigrationAction.Suffix
+		vm += migrationplan.Spec.PostMigrationAction.Suffix
 	}
 
-	if migrationplan.Spec.PostMigrationAction.MoveToFolder {
+	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
 		if err := r.moveVMToFolder(ctx, vcClient, dc, migrationplan, vm); err != nil {
 			return fmt.Errorf("failed to move VM to folder: %w", err)
 		}
@@ -237,7 +239,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	return nil
 }
 
-func (r *MigrationPlanReconciler) renameVM(ctx context.Context, vcClient *vcenter.VCenterClient, migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) error {
+func (_ *MigrationPlanReconciler) renameVM(ctx context.Context, vcClient *vcenter.VCenterClient, migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) error {
 	ctxlog := log.FromContext(ctx)
 	suffix := migrationplan.Spec.PostMigrationAction.Suffix
 	if suffix == "" {
@@ -249,7 +251,7 @@ func (r *MigrationPlanReconciler) renameVM(ctx context.Context, vcClient *vcente
 	return vcClient.RenameVM(ctx, vm, newVMName)
 }
 
-func (r *MigrationPlanReconciler) moveVMToFolder(ctx context.Context, vcClient *vcenter.VCenterClient, dc *object.Datacenter,
+func (_ *MigrationPlanReconciler) moveVMToFolder(ctx context.Context, vcClient *vcenter.VCenterClient, dc *object.Datacenter,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) error {
 	ctxlog := log.FromContext(ctx)
 	folderName := migrationplan.Spec.PostMigrationAction.FolderName

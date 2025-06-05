@@ -113,11 +113,11 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osType: boolean
-  postMigrationAction: {
-    suffix: boolean       
-    folderName: boolean  
-    renameVm: boolean
-    moveToFolder: boolean 
+  postMigrationAction?: {
+    suffix?: boolean       
+    folderName?: boolean  
+    renameVm?: boolean
+    moveToFolder?: boolean 
   }
 }
 

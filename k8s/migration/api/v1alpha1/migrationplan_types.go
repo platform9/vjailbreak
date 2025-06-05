@@ -50,14 +50,10 @@ type AdvancedOptions struct {
 }
 
 type PostMigrationAction struct {
-	// +kubebuilder:default:=true
-	RenameVM bool `json:"renameVm"`
-	// +kubebuilder:default:="_migrated_to_pcd"
-	Suffix string `json:"suffix"`
-	// +kubebuilder:default:=true
-	MoveToFolder bool `json:"moveToFolder"`
-	// +kubebuilder:default:="vjailbreakedVMs"
-	FolderName string `json:"folderName"`
+	RenameVM     *bool  `json:"renameVm,omitempty"`
+	Suffix       string `json:"suffix,omitempty"`
+	MoveToFolder *bool  `json:"moveToFolder,omitempty"`
+	FolderName   string `json:"folderName,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan
@@ -68,9 +64,8 @@ type MigrationPlanSpec struct {
 	VirtualMachines   [][]string            `json:"virtualMachines"`
 	AdvancedOptions   AdvancedOptions       `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
-	FirstBootScript string `json:"firstBootScript,omitempty"`
-	// NEW: Add post-migration action field
-	PostMigrationAction PostMigrationAction `json:"postMigrationAction,omitempty"`
+	FirstBootScript     string               `json:"firstBootScript,omitempty"`
+	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan
