@@ -216,7 +216,7 @@ jobs:
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
           else
-            echo "release_found=false" >> $GITHUB_ENV
+            echo "release_found=true" >> $GITHUB_ENV
           fi
 
       - name: Substitue image tags in manifests
@@ -240,7 +240,7 @@ jobs:
 
       - name: Download ubuntu base image
         if: env.release_found == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base
+        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
 
       - name: Enable KVM group perms
         if: env.release_found == 'true'
@@ -274,10 +274,11 @@ jobs:
         if: env.release_found == 'true'
         uses: oras-project/setup-oras@v1.2.1
 
-      - name: Run packer build
+      - name: Run packer build for normal image
         if: env.release_found == 'true'
-        id: build
-        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+        id: build-1
+        run: "PACKER_LOG=1 packer build -var 'AIRGAPPED=false' ./image_builder/vjailbreak-image.pkr.hcl"
+
 
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'
@@ -285,6 +286,28 @@ jobs:
           oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Delete vjailbreak qcow2
+        if: env.release_found == 'true'
+        run: |
+          rm -rf ./vjailbreak_qcow2
+
+      - name: Run packer build for airgapped image
+        if: env.release_found == 'true'
+        id: build-2
+        run: "PACKER_LOG=1 packer build -var 'AIRGAPPED=true' ./image_builder/vjailbreak-image.pkr.hcl"
+
+      - name: Upload vjailbreak qcow2 to quay
+        if: env.release_found == 'true'
+        run: |
+          oras push ${{ env.QCOW2_IMG }}-airgapped \
+          --artifact-type="application/qcow2" \
+          ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Delete vjailbreak qcow2
+        if: env.release_found == 'true'
+        run: |
+          rm -rf ./vjailbreak_qcow2
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

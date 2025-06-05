@@ -7,15 +7,21 @@ packer {
   }
 }
 
+variable "AIRGAPPED" {
+  type    = bool
+  default = false
+}
+
+
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
   iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:4691136dbabceb37d9d03ff10cf717f37cd8076b248c6d74d4ef316f4d4b6f50"
+  iso_checksum         = "sha256:b8e8d09b6414959e9a9231b869095d6a930749ca3ba19c2fe550b8f8e5c79343"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
-  disk_size            = "10G"
+  disk_size            = "15G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
@@ -68,23 +74,28 @@ build {
     destination = "/tmp/env"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/scripts/air_gap_download.sh"
+    destination = "/tmp/air_gap_download.sh"
+  }
+
   provisioner "shell" {
     inline = [
-      "sudo curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
-      "sudo chmod 700 get_helm.sh",
-      "sudo ./get_helm.sh",
-      "sudo mkdir -p /etc/pf9",
-      "sudo mv /tmp/install.sh /etc/pf9/install.sh",
-      "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-      "sudo mv /tmp/yamls /etc/pf9/yamls",
-      "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
-      "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
-      "sudo mv /tmp/env /etc/pf9/env",
-      "sudo chmod +x /etc/pf9/install.sh",
-      "sudo chown root:root /etc/pf9/k3s.env",
-      "sudo chmod 644 /etc/pf9/k3s.env",
-      "sudo chmod 644 /etc/pf9/env",
-      "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+    "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+    "sudo mv /tmp/air_gap_download.sh /etc/pf9/download_images.sh",
+    "sudo mv /tmp/yamls /etc/pf9/yamls",
+    "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
+    "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
+    "sudo mv /tmp/env /etc/pf9/env",
+    "sudo chmod +x /etc/pf9/install.sh",
+    "sudo chown root:root /etc/pf9/k3s.env",
+    "sudo chmod 644 /etc/pf9/k3s.env",
+    "sudo chmod 644 /etc/pf9/env",
+    "sudo chmod +x /etc/pf9/download_images.sh",
+    "if [ ${var.AIRGAPPED} = true ]; then sudo /etc/pf9/download_images.sh; fi",
+    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
   }
 }
+
