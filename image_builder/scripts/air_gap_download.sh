@@ -20,7 +20,7 @@ pushgateway="quay.io/prometheus/pushgateway:v1.5.0"
 kube_rbac_proxy="quay.io/brancz/kube-rbac-proxy:v0.19.1"
 prometheus_config_reloader="quay.io/prometheus-operator/prometheus-config-reloader:v0.76.0"
 prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.76.0"
-v2v_helper="quay.io/platform9/v2v-helper:$TAG"
+v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
 controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 
