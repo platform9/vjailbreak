@@ -300,7 +300,7 @@ jobs:
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'
         run: |
-          oras push ${{ env.QCOW2_IMG }}+airgapped \
+          oras push ${{ env.QCOW2_IMG }}-airgapped \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
