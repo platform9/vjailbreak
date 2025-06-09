@@ -169,7 +169,7 @@ func (r *MigrationPlanReconciler) getMigrationTemplateAndCreds(
 		Name:      migrationplan.Spec.MigrationTemplate,
 		Namespace: migrationplan.Namespace,
 	}, migrationtemplate); err != nil {
-		ctxlog.Error(err, "❌ Failed to get MigrationTemplate")
+		ctxlog.Error(err, "Failed to get MigrationTemplate")
 		return nil, nil, nil, fmt.Errorf("failed to get MigrationTemplate: %w", err)
 	}
 
