@@ -40,6 +40,9 @@ type VMwareMachineSpec struct {
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
+
+	// ManualIP is the manual IP to be used to create the target VM on openstack
+	ManualIP string `json:"manualIP,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine

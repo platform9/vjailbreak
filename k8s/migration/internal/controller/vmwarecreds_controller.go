@@ -89,7 +89,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	entries, ok := scope.VMwareCreds.Labels[constants.VMwareCredsValidationLabel]
 	if ok && entries != "" {
 		entry := strings.Split(entries, ",")
-
 		for _, values := range entry {
 			part := strings.Split(values, "::")
 			if len(part) < 3 {
@@ -130,6 +129,13 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
 				if err := r.Get(ctx, client.ObjectKey{Name: vmName}, vmwareMachine); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "failed to get vmware machine")
+				}
+
+				vmwareMachine.Spec.ManualIP = ip
+				if updateErr := r.Update(ctx, vmwareMachine); updateErr != nil {
+					return ctrl.Result{}, errors.Wrap(updateErr,
+						errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareMachine '%s'",
+							vmwareMachine.Name)).Error())
 				}
 
 				vmwareMachine.Status.Conditions = append([]corev1.PodCondition{}, corev1.PodCondition{
