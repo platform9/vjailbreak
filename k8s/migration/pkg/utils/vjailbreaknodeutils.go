@@ -13,6 +13,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -593,4 +594,32 @@ func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
 
 func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) error {
 	return handleFinalizerForCreds(ctx, k3sclient, false)
+}
+
+func CheckIpExistsInOpenstack(ctx context.Context, k3sclient client.Client, ip string) (bool, error) {
+	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get openstack creds")
+	}
+	openstackClients, err := GetOpenStackClients(ctx, creds)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get compute client")
+	}
+
+	allPages, err := ports.List(openstackClients.NetworkingClient, ports.ListOpts{}).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list ports")
+	}
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract ports")
+	}
+	for _, port := range allPorts {
+		for _, fixedIP := range port.FixedIPs {
+			if fixedIP.IPAddress == ip {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -50,6 +51,15 @@ type VMwareMachineStatus struct {
 	// +kubebuilder:default=false
 	// +kubebuilder:validation:Required
 	Migrated bool `json:"migrated,omitempty"`
+
+	// VMwareValidationStatus is the status of the VMwareMachine validation
+	VMwareValidationStatus string `json:"vmwareValidationStatus,omitempty"`
+
+	// VMwareValidationMessage is the message of the VMwareMachine validation
+	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
+
+	// Conditions is the list of conditions of the vmware machine object
+	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

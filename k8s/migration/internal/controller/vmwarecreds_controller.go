@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -84,6 +85,82 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			reterr = err
 		}
 	}()
+
+	entries, ok := scope.VMwareCreds.Labels[constants.VMwareCredsValidationLabel]
+	if ok && entries != "" {
+		entry := strings.Split(entries, ",")
+
+		for _, values := range entry {
+			part := strings.Split(values, "::")
+			if len(part) < 3 {
+				return ctrl.Result{}, errors.New("invalid label for ip check")
+			}
+			vmName := part[0]
+			ip := part[1]
+
+			// Check if the ip is available in the openstack
+			exists, err := utils.CheckIpExistsInOpenstack(ctx, r.Client, ip)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to check ip exists in openstack")
+			}
+
+			if exists {
+				// If the ip exists update the corresponding vmware machine status
+				vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
+				if err := r.Get(ctx, client.ObjectKey{Name: vmName}, vmwareMachine); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to get vmware machine")
+				}
+
+				vmwareMachine.Status.Conditions = append([]corev1.PodCondition{}, corev1.PodCondition{
+					Type:               "IPAssignment",
+					Status:             corev1.ConditionFalse,
+					Reason:             "InvalidIPAssignment",
+					Message:            fmt.Sprintf("The manual IP address is invalid or not assignable or not available in openstack: %s", err),
+					LastTransitionTime: metav1.Now(),
+				})
+				vmwareMachine.Status.VMwareValidationStatus = string(corev1.PodFailed)
+				vmwareMachine.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
+				if updateErr := r.Status().Update(ctx, vmwareMachine); updateErr != nil {
+					return ctrl.Result{}, errors.Wrap(err,
+						errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareMachine '%s'",
+							vmwareMachine.Name)).Error())
+				}
+			} else {
+				// If the ip does not exist update the corresponding vmware machine status
+				vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
+				if err := r.Get(ctx, client.ObjectKey{Name: vmName}, vmwareMachine); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "failed to get vmware machine")
+				}
+
+				vmwareMachine.Status.Conditions = append([]corev1.PodCondition{}, corev1.PodCondition{
+					Type:               "IPAssignment",
+					Status:             corev1.ConditionTrue,
+					Reason:             "ValidIPAssignment",
+					Message:            fmt.Sprintf("The manual IP address is valid and assignable"),
+					LastTransitionTime: metav1.Now(),
+				})
+				vmwareMachine.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
+				vmwareMachine.Status.VMwareValidationMessage = fmt.Sprintf("Successfully validated VMwareCreds '%s'", scope.Name())
+				if updateErr := r.Status().Update(ctx, vmwareMachine); updateErr != nil {
+					return ctrl.Result{}, errors.Wrap(err,
+						errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareMachine '%s'",
+							vmwareMachine.Name)).Error())
+				}
+			}
+			// Remove the value from the label
+			if len(entries) == 1 {
+				delete(scope.VMwareCreds.Labels, constants.VMwareCredsValidationLabel)
+			} else {
+				entries = strings.ReplaceAll(entries, values+",", "")
+			}
+			if updateErr := r.Update(ctx, scope.VMwareCreds); updateErr != nil {
+				return ctrl.Result{}, errors.Wrap(updateErr,
+					errors.Wrap(updateErr, fmt.Sprintf("Error updating labels of VMwareCreds '%s'",
+						scope.Name())).Error())
+			}
+		}
+		return ctrl.Result{}, nil
+	}
 	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
 	}

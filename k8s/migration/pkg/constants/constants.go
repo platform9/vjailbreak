@@ -20,8 +20,9 @@ const (
 	NodeRoleMaster          = "master"
 	InternalIPAnnotation    = "k3s.io/internal-ip"
 
-	NumberOfDisksLabel = "vjailbreak.k8s.pf9.io/disk-count"
-	VMwareCredsLabel   = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+	NumberOfDisksLabel         = "vjailbreak.k8s.pf9.io/disk-count"
+	VMwareCredsLabel           = "vmwarecreds.k8s.pf9.io" //nolint:gosec // not a password string
+	VMwareCredsValidationLabel = "vmwarecreds.k8s.pf9.io/validation"
 
 	OpenstackCredsFinalizer = "openstackcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 	VMwareCredsFinalizer    = "vmwarecreds.k8s.pf9.io/finalizer"    //nolint:gosec // not a password string
