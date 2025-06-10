@@ -70,7 +70,7 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
 
   # Install K3s master with the specific version
-  sudo /etc/pf9/k3s-setup/k3s-install.sh | INSTALL_K3S_SKIP_DOWNLOAD=true sh -s - --disable traefik
+  sudo curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$K3S_VERSION sh -s - --disable traefik
   check_command "Installing K3s master"
 
   # Wait for K3s to be ready
@@ -81,11 +81,20 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo kubectl config view --raw > ~/.kube/config
   check_command "Moving kubeconfig"
 
+  # Create a configuration YAML file with the master IP populated
+  cat <<EOF > values.yaml
+controller:
+  service:
+    loadBalancerIP: "$MASTER_IP"
+    ingressClass: nginx
+EOF
 
   log "YAML file 'values.yaml' has been created with the master IP."
 
   # Using helm to install nginx-ingress-controller.
-  helm install nginx-ingress ./ingress-nginx --namespace nginx-ingress --create-namespace 
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+  helm repo update
+  helm install nginx-ingress ingress-nginx/ingress-nginx --namespace nginx-ingress --create-namespace --values=values.yaml
   check_command "Installing NGINX Ingress Controller"
 
   # Wait for NGINX Ingress Controller to be ready
@@ -137,7 +146,7 @@ else
   log "K3S_TOKEN: $K3S_TOKEN"
 
   # Install K3s worker
-  sudo /etc/pf9/k3s-setup/k3s-install.sh | K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_SKIP_DOWNLOAD=true sh -
+  curl -sfL https://get.k3s.io | K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_VERSION=$K3S_VERSION sh -
   check_command "Installing K3s worker"
 
   log "K3s worker setup completed."
