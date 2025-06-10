@@ -233,7 +233,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
 
-	vminfo, err = vmops.UpdateDiskInfo(vminfo)
+	err = vmops.UpdateDisksInfo(&vminfo)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 	}
@@ -306,7 +306,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
+						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
+						continue
+					}
+
+					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx])
+					if err != nil {
+						return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 					}
 					migobj.logMessage("Finished copying changed blocks")
 					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
@@ -335,10 +342,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
-		vminfo, err = vmops.UpdateDiskInfo(vminfo)
-		if err != nil {
-			return vminfo, fmt.Errorf("failed to update disk info: %s", err)
-		}
+
 		err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
