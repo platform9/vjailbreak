@@ -763,3 +763,41 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 	// Update the rolling migration plan itself
 	return scope.Client.Update(ctx, rollingMigrationPlan)
 }
+
+func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+
+	// validate vMotion is enabled
+
+	// validate there is enough extra capacity on vcenter
+
+	// verify ESXis are added as Machines in MAAS
+
+	// verify these machines are in Deployed or Allocated state
+
+	// validate vmwarecreds have enough permissions
+
+	// validate there is enough space on underlying storage array
+
+	// Ensure PCD has at-least one Cluster configured
+
+	// Ensure the ESXis have no VMs that are vMotion incompatible
+
+	if !isBMConfigValid(ctx, scope.Client, scope.RollingMigrationPlan.Spec.BMConfigRef.Name) {
+		return errors.New("BMConfig is not valid")
+	}
+
+	return nil
+}
+
+func isBMConfigValid(ctx context.Context, client client.Client, name string) bool {
+	bmConfig := &vjailbreakv1alpha1.BMConfig{}
+	err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: constants.NamespaceMigrationSystem}, bmConfig)
+	if err != nil {
+		return false
+	}
+	if bmConfig.Status.ValidationStatus != string(corev1.PodSucceeded) {
+		return false
+	}
+
+	return true
+}
