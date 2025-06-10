@@ -5,6 +5,7 @@ package vm
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -279,6 +280,11 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk) error {
 				vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 				vminfo.VMDisks[idx].Snapname = snapname[idx]
 				vminfo.VMDisks[idx].ChangeID = snapid[idx]
+				log.Println(fmt.Sprintf("Updated disk info for %s", disk.Name))
+				log.Println(fmt.Sprintf("Snapshot backing disk: %s", snapbackingdisk[idx]))
+				log.Println(fmt.Sprintf("Snapshot name: %s", snapname[idx]))
+				log.Println(fmt.Sprintf("Change ID: %s", snapid[idx]))
+				break
 			}
 		}
 	}
