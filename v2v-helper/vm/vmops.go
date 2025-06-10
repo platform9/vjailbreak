@@ -5,10 +5,15 @@ package vm
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/canonical/gomaasclient/client"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/vmware/govmomi/object"
@@ -35,17 +40,18 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU     int32
-	Memory  int32
-	State   types.VirtualMachinePowerState
-	Mac     []string
-	IPs     []string
-	UUID    string
-	Host    string
-	VMDisks []VMDisk
-	UEFI    bool
-	Name    string
-	OSType  string
+	CPU      int32
+	Memory   int32
+	State    types.VirtualMachinePowerState
+	Mac      []string
+	IPs      []string
+	UUID     string
+	Host     string
+	VMDisks  []VMDisk
+	UEFI     bool
+	Name     string
+	OSType   string
+	RDMDisks []RDMDisk
 }
 
 type ChangeID struct {
@@ -67,12 +73,36 @@ type VMDisk struct {
 }
 
 type VMOps struct {
-	vcclient *vcenter.VCenterClient
-	VMObj    *object.VirtualMachine
-	ctx      context.Context
+	vcclient  *vcenter.VCenterClient
+	VMObj     *object.VirtualMachine
+	ctx       context.Context
+	k8sClient client.Client
 }
 
-func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string) (*VMOps, error) {
+type RDMDisk struct {
+	// DiskName is the name of the disk
+	DiskName string `json:"diskName,omitempty"`
+	// DiskSize is the size of the disk in GB
+	DiskSize int64 `json:"diskSize,omitempty"`
+	// UUID is the unique identifier of the disk
+	UUID string `json:"uuid,omitempty"`
+	// DisplayName is the display name of the disk
+	DisplayName string `json:"displayName,omitempty"`
+	// CinderBackendPool is the cinder backend pool of the disk
+	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+	// VolumeType is the volume type of the disk
+	VolumeType string `json:"volumeType,omitempty"`
+	// Bootable indicates if the disk is bootable
+	Bootable bool `json:"bootable,omitempty"`
+	// Bootable indicates if the disk is bootable
+	Path string `json:"path,omitempty"`
+	// VolumeId is the ID of the volume
+	VolumeId string `json:"volumeId,omitempty"`
+	// OpenstackVolumeRef contains OpenStack volume reference information
+	VolumeRef map[string]string `json:"volumeRef,omitempty"`
+}
+
+func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string, k8sClient client.Client) (*VMOps, error) {
 	vm, err := vcclient.GetVMByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM: %s", err)
@@ -235,6 +265,12 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 			vminfo.VMDisks[idx].Snapname = snapname[idx]
 			vminfo.VMDisks[idx].ChangeID = snapid[idx]
 		}
+		// Based on VMName and diskname fetch DiskInfo
+		rdmDIskInfo, err := GetVMwareMachine(vmops.ctx, vmops.k8sClient, vminfo.Name)
+		if err != nil {
+			return vminfo, fmt.Errorf("failed to get rdmDisk properties: %s", err)
+		}
+		copyRDMDisks(&vminfo, rdmDIskInfo)
 	}
 
 	return vminfo, nil
@@ -346,18 +382,18 @@ func (vmops *VMOps) VMGuestShutdown() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
-	
+
 	// Attempt guest OS shutdown
 	err = vmops.VMObj.ShutdownGuest(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initiate guest shutdown: %s", err)
 	}
-	
+
 	// Wait for up to 2 minutes for the VM to power off
 	poweredOff := false
 	ctx, cancel := context.WithTimeout(vmops.ctx, 2*time.Minute)
 	defer cancel()
-	
+
 	for !poweredOff {
 		state, err := vmops.VMObj.PowerState(ctx)
 		if err != nil {
@@ -367,7 +403,7 @@ func (vmops *VMOps) VMGuestShutdown() error {
 			poweredOff = true
 			break
 		}
-		
+
 		// Check if timeout occurred
 		select {
 		case <-ctx.Done():
@@ -376,7 +412,7 @@ func (vmops *VMOps) VMGuestShutdown() error {
 			time.Sleep(5 * time.Second)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -388,17 +424,17 @@ func (vmops *VMOps) VMPowerOff() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
-	
+
 	// First try a clean guest shutdown
 	err = vmops.VMGuestShutdown()
 	if err == nil {
 		// Guest shutdown succeeded
 		return nil
 	}
-	
+
 	// If guest shutdown failed, log the error and fall back to power off
 	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
-	
+
 	// Fall back to power off
 	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
@@ -428,4 +464,58 @@ func (vmops *VMOps) VMPowerOn() error {
 		return fmt.Errorf("failed while waiting for power on task: %s", err)
 	}
 	return nil
+}
+
+func GetVMwareMachine(ctx context.Context, client client.Client, vmName string) (*vjailbreakv1alpha1.VMwareMachine, error) {
+	// Convert VM name to k8s compatible name
+	sanitizedVMName := ConvertToK8sName(vmName)
+
+	// Create VMwareMachine object
+	vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
+
+	// Create namespaced name for lookup
+	namespacedName := k8stypes.NamespacedName{
+		Name:      sanitizedVMName,    // Use the sanitized VM name
+		Namespace: "migration-system", // Specify the namespace
+	}
+
+	// Get VMwareMachine object
+	if err := client.Get(ctx, namespacedName, vmwareMachine); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("VMwareMachine '%s' not found in namespace '%s'", sanitizedVMName, namespacedName.Namespace)
+		}
+		return nil, fmt.Errorf("failed to get VMwareMachine: %w", err)
+	}
+
+	return vmwareMachine, nil
+}
+
+func ConvertToK8sName(name string) string {
+	// Replace invalid characters with dashes
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, "_", "-")
+	name = strings.ReplaceAll(name, " ", "-")
+
+	// Remove any other invalid characters
+	validChar := regexp.MustCompile(`[^a-z0-9-]`)
+	name = validChar.ReplaceAllString(name, "")
+
+	return name
+}
+
+func copyRDMDisks(vminfo *VMInfo, rdmDiskInfo *vjailbreakv1alpha1.VMwareMachine) {
+	if rdmDiskInfo != nil && rdmDiskInfo.Spec.VMs.RDMDisks != nil {
+		vminfo.RDMDisks = make([]RDMDisk, len(rdmDiskInfo.Spec.VMs.RDMDisks))
+		for i, disk := range rdmDiskInfo.Spec.VMs.RDMDisks {
+			vminfo.RDMDisks[i] = RDMDisk{
+				DiskName:          disk.DiskName,
+				DiskSize:          disk.DiskSize,
+				UUID:              disk.UUID,
+				DisplayName:       disk.DisplayName,
+				CinderBackendPool: disk.OpenstackVolumeRef.CinderBackendPool,
+				VolumeType:        disk.OpenstackVolumeRef.VolumeType,
+				VolumeRef:         disk.OpenstackVolumeRef.VolumeRef,
+			}
+		}
+	}
 }
