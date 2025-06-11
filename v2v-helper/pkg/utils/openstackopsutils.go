@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,9 +70,13 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 
 	opts := volumes.CreateOpts{
 		VolumeType: volumetype,
-		Size:       int(float64(size) / (1024 * 1024 * 1024)),
+		Size:       int(math.Ceil(float64(size) / (1024 * 1024 * 1024))),
 		Name:       name,
 	}
+
+	// Add 1GB to the size to account for the extra space
+	opts.Size += 1
+
 	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume: %s", err)
