@@ -1124,16 +1124,16 @@ func containsString(slice []string, target string) bool {
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
 func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.VMwareMachine) {
 	// Case 1: VMInfo has no RDM disks but VMwareMachine does
-	if vminfo.RDMDisks == nil && vmwvm.Spec.VMs.RDMDisks != nil {
-		vminfo.RDMDisks = vmwvm.Spec.VMs.RDMDisks
+	if vminfo.RDMDisks == nil && vmwvm.Spec.VMInfo.RDMDisks != nil {
+		vminfo.RDMDisks = vmwvm.Spec.VMInfo.RDMDisks
 		return
 	}
 
 	// Case 2: Both have RDM disks - preserve OpenStack related information
-	if vminfo.RDMDisks != nil && vmwvm.Spec.VMs.RDMDisks != nil {
+	if vminfo.RDMDisks != nil && vmwvm.Spec.VMInfo.RDMDisks != nil {
 		// Create a map of existing VMware Machine RDM disks by disk name
 		existingDisks := make(map[string]vjailbreakv1alpha1.RDMDiskInfo)
-		for _, disk := range vmwvm.Spec.VMs.RDMDisks {
+		for _, disk := range vmwvm.Spec.VMInfo.RDMDisks {
 			existingDisks[disk.DiskName] = disk
 		}
 
@@ -1162,7 +1162,7 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 	}
 }
 
-func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*types.HostStorageDeviceInfo, error) {
+func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
 	hostSystem, err := vm.HostSystem(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system: %v", err)
@@ -1199,39 +1199,37 @@ func PopulateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 
 	// Process attributes for additional RDM information
 	for _, attr := range attributes {
-		splitIndexStartsWith := 0
 		if strings.HasPrefix(attr, "VJB_RDM:") {
-			splitIndexStartsWith++
-		}
-		parts := strings.Split(attr, ":")
-		if len(parts) != splitIndexStartsWith+3 {
-			continue
-		}
-
-		diskName := parts[splitIndexStartsWith]
-		key := parts[splitIndexStartsWith+1]
-		value := parts[splitIndexStartsWith+2]
-
-		// Get or create RDMDiskInfo
-		rdmInfo, exists := rdmMap[diskName]
-		if exists && rdmInfo != nil {
-			// Initialize OpenstackVolumeRef if nil
-			if rdmInfo.OpenstackVolumeRef == nil {
-				rdmInfo.OpenstackVolumeRef = &vjailbreakv1alpha1.OpenStackVolumeRefInfo{}
+			parts := strings.Split(attr, ":")
+			if len(parts) != 4 {
+				continue
 			}
 
-			// Update fields only if new value is provided
-			if key == "volumeRef" && value != "" {
-				splotVolRef := strings.Split(value, "=")
-				if len(splotVolRef) != 2 {
-					return nil, fmt.Errorf("invalid volume reference format: %s", rdmInfo.OpenstackVolumeRef.VolumeRef)
+			diskName := parts[1]
+			key := parts[2]
+			value := parts[3]
+
+			// Get or create RDMDiskInfo
+			rdmInfo, exists := rdmMap[diskName]
+			if exists && rdmInfo != nil {
+				// Initialize OpenstackVolumeRef if nil
+				if rdmInfo.OpenstackVolumeRef == nil {
+					rdmInfo.OpenstackVolumeRef = &vjailbreakv1alpha1.OpenStackVolumeRefInfo{}
 				}
-				mp := make(map[string]string)
-				mp[splotVolRef[0]] = splotVolRef[1]
-				rdmInfo.OpenstackVolumeRef.VolumeRef = mp
+
+				// Update fields only if new value is provided
+				if key == "volumeRef" && value != "" {
+					splotVolRef := strings.Split(value, "=")
+					if len(splotVolRef) != 2 {
+						return nil, fmt.Errorf("invalid volume reference format: %s", rdmInfo.OpenstackVolumeRef.VolumeRef)
+					}
+					mp := make(map[string]string)
+					mp[splotVolRef[0]] = splotVolRef[1]
+					rdmInfo.OpenstackVolumeRef.VolumeRef = mp
+				}
+			} else {
+				log.Info("RDM attributes exist on VM but disk not found in  RDM disks")
 			}
-		} else {
-			log.Info("RDM attributes exist on VM but disk not found in  RDM disks")
 		}
 	}
 	// Convert map back to slice while preserving all data
@@ -1241,16 +1239,4 @@ func PopulateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 	}
 
 	return rdmDisks, nil
-}
-
-func CreateServiceClient(region string, provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	// Create Cinder client
-	client, err := openstack.NewBlockStorageV3(provider, gophercloud.EndpointOpts{
-		Region: region,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
 }
