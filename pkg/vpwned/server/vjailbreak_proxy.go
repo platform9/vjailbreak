@@ -16,6 +16,8 @@ import (
 
 type vjailbreakProxy struct {
 	api.UnimplementedVailbreakProxyServer
+	api.UnimplementedVCenterServer
+	api.UnimplementedBMProviderServer
 }
 
 func (p *vjailbreakProxy) ValidateOpenstackIp(ctx context.Context, in *api.ValidateOpenstackIpRequest) (*api.ValidateOpenstackIpResponse, error) {
