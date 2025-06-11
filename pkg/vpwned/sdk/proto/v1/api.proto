@@ -440,7 +440,8 @@ message ValidateOpenstackIpResponse {
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
-            get: "/vpw/v1/validate_openstack_ip"
+            post: "/vpw/v1/validate_openstack_ip"
+            body: "*"
         };
     }
 }
