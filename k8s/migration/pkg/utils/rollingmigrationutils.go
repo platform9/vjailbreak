@@ -8,6 +8,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -16,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -766,24 +768,53 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 
 func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
 
-	// validate vMotion is enabled
+	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials")
+	}
 
-	// validate there is enough extra capacity on vcenter
+	// TODO(vpwned): validate vmwarecreds have enough permissions
 
-	// verify ESXis are added as Machines in MAAS
-
-	// verify these machines are in Deployed or Allocated state
-
-	// validate vmwarecreds have enough permissions
-
-	// validate there is enough space on underlying storage array
-
-	// Ensure PCD has at-least one Cluster configured
-
-	// Ensure the ESXis have no VMs that are vMotion incompatible
+	// TODO(vpwned): validate there is enough space on underlying storage array
 
 	if !isBMConfigValid(ctx, scope.Client, scope.RollingMigrationPlan.Spec.BMConfigRef.Name) {
 		return errors.New("BMConfig is not valid")
+	}
+
+	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName)
+	if err != nil {
+		return errors.Wrap(err, "failed to filter vmware hosts for cluster")
+	}
+
+	for _, vmwareHost := range vmwareHosts {
+		// This checks if the ESXi host can enter maintenance mode
+		// with all VMs automatically migrating off to other hosts.
+		// It checks host, VM, and cluster settings that could block automatic VM migration.
+		canEnterMaintenanceMode, blockedVMs, err := CanEnterMaintenanceMode(ctx, scope.Client, vmwareCreds, vmwareHost.Spec.Name)
+		if err != nil {
+			return errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
+		}
+		if !canEnterMaintenanceMode {
+			return errors.New(fmt.Sprintf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs))
+		}
+
+		// Ensure the ESXi host is in MAAS
+		inMAAS, message, err := EnsureESXiInMass(ctx, scope, vmwareHost)
+		if err != nil {
+			return errors.Wrap(err, "failed to ensure ESXi is in MAAS")
+		}
+		if !inMAAS {
+			return errors.New(message)
+		}
+	}
+
+	// Ensure PCD has at-least one Cluster configured
+	inPCD, message, err := EnsurePCDHasClusterConfigured(ctx, scope)
+	if err != nil {
+		return errors.Wrap(err, "failed to ensure PCD has at-least one Cluster configured")
+	}
+	if !inPCD {
+		return errors.New(message)
 	}
 
 	return nil
@@ -800,4 +831,51 @@ func isBMConfigValid(ctx context.Context, client client.Client, name string) boo
 	}
 
 	return true
+}
+
+func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwarehost vjailbreakv1alpha1.VMwareHost) (bool, string, error) {
+	// Get maas provider
+	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get BMConfig for rolling migration plan")
+	}
+	provider, err := providers.GetProvider(string(bmConfig.Spec.ProviderType))
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get provider")
+	}
+
+	// list maas machines
+	machines, err := provider.ListResources(ctx)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to list maas machines")
+	}
+
+	for i := range machines {
+		if machines[i].HardwareUuid == vmwarehost.Spec.HardwareUUID {
+			if machines[i].Status == "Deployed" || machines[i].Status == "Allocated" {
+				return true, "", nil
+			}
+			return false, fmt.Sprintf("ESXi %s is not in Deployed or Allocated state", vmwarehost.Spec.Name), nil
+		}
+	}
+
+	return false, fmt.Sprintf("ESXi %s is not in MAAS", vmwarehost.Spec.Name), nil
+}
+
+// Ensure PCD has at-least one Cluster configured
+func EnsurePCDHasClusterConfigured(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, string, error) {
+	// Get openstackcreds
+	openstackCreds, err := GetOpenstackCredsForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get openstack creds for rolling migration plan")
+	}
+	// List PCD clusters
+	clusters, err := filterPCDClustersOnOpenstackCreds(ctx, scope.Client, *openstackCreds)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to list PCD clusters")
+	}
+	if len(clusters) == 0 {
+		return false, fmt.Sprintf("no PCD clusters configured for openstack creds %s", openstackCreds.Name), nil
+	}
+	return true, "", nil
 }
