@@ -25,7 +25,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -550,7 +549,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 
 // GetAllVMs gets all the VMs in a datacenter
 func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
-	hostStorageMap := sync.Map{}
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
@@ -566,12 +564,11 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	ctxlog := log.FromContext(ctx)
+	ctxlog := ctrllog.FromContext(ctx)
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
 		err = vm.Properties(ctx, vm.Reference(), []string{
 			"config",
 			"guest",
@@ -600,7 +597,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		// Fetch details required for RDM disks
 		hostStorageMap := sync.Map{}
 		controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
-		// First pass: collect all SCSI controllers
+		// Collect all SCSI controller to find shared RDM disks
 		for _, device := range vmProps.Config.Hardware.Device {
 			if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
 				controllers[device.GetVirtualDevice().Key] = scsiController
@@ -720,7 +717,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		if skipVm {
 			continue
 		}
-		if len(rdmDiskInfos) > 1 && len(disks) == 0 {
+		if len(rdmDiskInfos) >= 1 && len(disks) == 0 {
 			ctxlog.Info("VM has multiple RDM disks but no regular bootable disks found", "vm", vm.Name(), "hence VM cannot be migrated")
 			continue
 		}
@@ -748,10 +745,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	}
 	return vminfo, nil
 }
-
-const (
-	physicalSharing = govmitypes.VirtualSCSISharingPhysicalSharing
-)
 
 // AppendUnique appends unique values to a slice
 func AppendUnique(slice []string, values ...string) []string {
@@ -1124,13 +1117,7 @@ func containsString(slice []string, target string) bool {
 
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
 func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.VMwareMachine) {
-	// Case 1: VMInfo has no RDM disks but VMwareMachine does
-	if vminfo.RDMDisks == nil && vmwvm.Spec.VMInfo.RDMDisks != nil {
-		vminfo.RDMDisks = vmwvm.Spec.VMInfo.RDMDisks
-		return
-	}
-
-	// Case 2: Both have RDM disks - preserve OpenStack related information
+	//Both have RDM disks - preserve OpenStack related information
 	if vminfo.RDMDisks != nil && vmwvm.Spec.VMInfo.RDMDisks != nil {
 		// Create a map of existing VMware Machine RDM disks by disk name
 		existingDisks := make(map[string]vjailbreakv1alpha1.RDMDiskInfo)
@@ -1191,7 +1178,7 @@ func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 // PopulateRDMDiskInfoFromAttributes processes VM annotations and custom attributes to populate RDM disk information
 func PopulateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
 	rdmMap := make(map[string]*vjailbreakv1alpha1.RDMDiskInfo)
-	log := log.FromContext(ctx)
+	log := ctrllog.FromContext(ctx)
 
 	// Create copies of base RDM disks to preserve existing data
 	for i := range baseRDMDisks {
