@@ -15,9 +15,6 @@ import (
 )
 
 type vjailbreakProxy struct {
-	api.UnimplementedVersionServer
-	api.UnimplementedVCenterServer
-	api.UnimplementedBMProviderServer
 	api.UnimplementedVailbreakProxyServer
 }
 
