@@ -3259,7 +3259,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: omkardeshpande7/vjailbreak-controller:resmgr2
+        image: quay.io/platform9/vjailbreak-controller:v0.1.13
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
