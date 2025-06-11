@@ -258,3 +258,15 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, k3sclient client.Cli
 	}
 	return nil
 }
+
+func FilterVMwareHostsForCluster(ctx context.Context, k3sclient client.Client, clusterName string) ([]vjailbreakv1alpha1.VMwareHost, error) {
+	// List all VMwareHost resources
+	vmwareHosts := &vjailbreakv1alpha1.VMwareHostList{}
+
+	// Filter VMwareHost resources by cluster name
+	if err := k3sclient.List(ctx, vmwareHosts, client.MatchingLabels{constants.VMwareClusterLabel: clusterName}); err != nil {
+		return nil, errors.Wrap(err, "failed to list VMwareHost resources")
+	}
+
+	return vmwareHosts.Items, nil
+}
