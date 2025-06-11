@@ -575,7 +575,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			"runtime",
 			"network",
 			"summary.config.annotation",
-			"summary.customValue",
 		}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
@@ -605,7 +604,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 		// Get basic RDM disk info from VM properties
 		rdmDiskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
-		hostStorageInfo, err := GetHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
+		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
 		if err != nil {
 			ctxlog.Error(err, "failed to get disk info for vm skipping vm", "vm", vm.Name(), err)
 			continue
@@ -620,7 +619,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 			networks = append(networks, netObj.Name)
 		}
-		skipVm := false
+		var skipVm bool
 		for _, device := range vmProps.Config.Hardware.Device {
 			disk, ok := device.(*govmitypes.VirtualDisk)
 			if !ok {
@@ -722,7 +721,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 		var rdmDisks []vjailbreakv1alpha1.RDMDiskInfo
 		if len(rdmDiskInfos) > 0 {
-			rdmDisks, err = PopulateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
+			rdmDisks, err = populateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
 			if err != nil {
 				ctxlog.Error(err, "failed to populate RDM disk info from attributes for vm", "vm", vm.Name)
 				continue
@@ -1151,8 +1150,8 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 	}
 }
 
-// GetHostStorageDeviceInfo retrieves the storage device information for the host of a given VM
-func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
+// getHostStorageDeviceInfo retrieves the storage device information for the host of a given VM
+func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
 	hostSystem, err := vm.HostSystem(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system: %v", err)
@@ -1171,12 +1170,12 @@ func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 	return hs.Config.StorageDevice, nil
 }
 
-// PopulateRDMDiskInfoFromAttributes processes VM annotations and custom attributes to populate RDM disk information
+// populateRDMDiskInfoFromAttributes processes VM annotations and custom attributes to populate RDM disk information
 // RDM disk attributes in Vmware for migration - VJB_RDM:diskName:volumeRef:value
 // eg:
 //
 //	VJB_RDM:Hard Disk:volumeRef:"source-id"="abac111"
-func PopulateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
+func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
 	rdmMap := make(map[string]*vjailbreakv1alpha1.RDMDiskInfo)
 	log := ctrllog.FromContext(ctx)
 
