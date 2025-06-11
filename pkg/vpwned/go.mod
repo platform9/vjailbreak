@@ -7,6 +7,7 @@ toolchain go1.23.8
 require (
 	github.com/bougou/go-ipmi v0.7.4
 	github.com/canonical/gomaasclient v0.9.0
+	github.com/gophercloud/gophercloud v1.14.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
