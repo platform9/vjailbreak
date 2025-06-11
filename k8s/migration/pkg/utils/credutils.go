@@ -620,7 +620,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 			networks = append(networks, netObj.Name)
 		}
-		var rdmDisks []vjailbreakv1alpha1.RDMDiskInfo
 		skipVm := false
 		for _, device := range vmProps.Config.Hardware.Device {
 			disk, ok := device.(*govmitypes.VirtualDisk)
@@ -721,8 +720,9 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			ctxlog.Info("VM has multiple RDM disks but no regular bootable disks found", "vm", vm.Name(), "hence VM cannot be migrated")
 			continue
 		}
+		var rdmDisks []vjailbreakv1alpha1.RDMDiskInfo
 		if len(rdmDiskInfos) > 0 {
-			rdmDiskInfos, err = PopulateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
+			rdmDisks, err = PopulateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
 			if err != nil {
 				ctxlog.Error(err, "failed to populate RDM disk info from attributes for vm", "vm", vm.Name)
 				continue
@@ -1117,7 +1117,7 @@ func containsString(slice []string, target string) bool {
 
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
 func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.VMwareMachine) {
-	//Both have RDM disks - preserve OpenStack related information
+	// Both have RDM disks - preserve OpenStack related information
 	if vminfo.RDMDisks != nil && vmwvm.Spec.VMInfo.RDMDisks != nil {
 		// Create a map of existing VMware Machine RDM disks by disk name
 		existingDisks := make(map[string]vjailbreakv1alpha1.RDMDiskInfo)
@@ -1151,6 +1151,7 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 	}
 }
 
+// GetHostStorageDeviceInfo retrieves the storage device information for the host of a given VM
 func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
 	hostSystem, err := vm.HostSystem(ctx)
 	if err != nil {
@@ -1170,12 +1171,11 @@ func GetHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 	return hs.Config.StorageDevice, nil
 }
 
+// PopulateRDMDiskInfoFromAttributes processes VM annotations and custom attributes to populate RDM disk information
 // RDM disk attributes in Vmware for migration - VJB_RDM:diskName:volumeRef:value
 // eg:
 //
 //	VJB_RDM:Hard Disk:volumeRef:"source-id"="abac111"
-//
-// PopulateRDMDiskInfoFromAttributes processes VM annotations and custom attributes to populate RDM disk information
 func PopulateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
 	rdmMap := make(map[string]*vjailbreakv1alpha1.RDMDiskInfo)
 	log := ctrllog.FromContext(ctx)
