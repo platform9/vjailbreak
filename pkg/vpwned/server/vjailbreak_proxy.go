@@ -12,6 +12,12 @@ import (
 	openstack "github.com/gophercloud/gophercloud/openstack"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
+
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type vjailbreakProxy struct {
@@ -181,4 +187,23 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	defer conn.Close()
 	cert := conn.ConnectionState().PeerCertificates[0]
 	return cert, nil
+}
+
+// Create in cluster k8s client
+func CreateInClusterClient() (client.Client, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must()
+
+	clientset, err := client.New(config, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return clientset, nil
 }
