@@ -259,6 +259,8 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, k3sclient client.Cli
 	return nil
 }
 
+// FilterVMwareHostsForCluster returns a list of VMwareHost resources associated with the specified cluster
+// It filters the hosts by the VMwareClusterLabel matching the provided cluster name
 func FilterVMwareHostsForCluster(ctx context.Context, k3sclient client.Client, clusterName string) ([]vjailbreakv1alpha1.VMwareHost, error) {
 	// List all VMwareHost resources
 	vmwareHosts := &vjailbreakv1alpha1.VMwareHostList{}

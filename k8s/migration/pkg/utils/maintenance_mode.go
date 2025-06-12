@@ -19,7 +19,7 @@ import (
 // settings that could block automatic VM migration.
 func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (bool, string, error) {
 	// List of VMs that cannot migrate
-	var blockedVMs []string
+	blockedVMs := make([]string, 0)
 	k8sClient := scope.Client
 	// Connect to vCenter
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwcreds)
@@ -114,16 +114,16 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		// This is a basic estimation - in reality vSphere DRS has more sophisticated algorithms
 		effectiveHosts := len(clusterHosts.Host) - 1 // Removing the host we're checking
 		if effectiveHosts > 0 {
-			currentCpuUsage := float64(summary.TotalCpu-summary.EffectiveCpu) / float64(summary.TotalCpu)
+			currentCPUUsage := float64(summary.TotalCpu-summary.EffectiveCpu) / float64(summary.TotalCpu)
 			currentMemUsage := float64(summary.TotalMemory-summary.EffectiveMemory) / float64(summary.TotalMemory)
 
 			// A rough estimation assuming equal hosts
-			projectedCpuUsage := currentCpuUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
+			projectedCPUUsage := currentCPUUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
 			projectedMemUsage := currentMemUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
 
-			if projectedCpuUsage > 0.90 || projectedMemUsage > 0.90 {
+			if projectedCPUUsage > 0.90 || projectedMemUsage > 0.90 {
 				return false, fmt.Sprintf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
-					projectedCpuUsage*100, projectedMemUsage*100), nil
+					projectedCPUUsage*100, projectedMemUsage*100), nil
 			}
 		}
 	}
@@ -144,7 +144,7 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	}
 
 	for _, vm := range vms {
-		blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(ctx, k8sClient, vm))
+		blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(vm))
 	}
 
 	if len(blockedVMs) > 0 {
@@ -154,6 +154,8 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	return true, "", nil
 }
 
+// GetMaintenanceModeOptions creates a maintenance mode specification for the specified ESXi host
+// It configures appropriate options based on the host's capabilities, including VSAN settings
 func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (*types.HostMaintenanceSpec, error) {
 	// Connect to vCenter
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwcreds)
@@ -203,7 +205,9 @@ func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmw
 	return spec, nil
 }
 
-func CheckVMForMaintenanceMode(ctx context.Context, k8sClient client.Client, vm mo.VirtualMachine) string {
+// CheckVMForMaintenanceMode evaluates if a VM would block maintenance mode operations
+// Returns an empty string if the VM won't block maintenance mode, otherwise returns VM name with reason
+func CheckVMForMaintenanceMode(vm mo.VirtualMachine) string {
 	// Check VM power state
 	if vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOff {
 		return fmt.Sprintf("%s (powered off)", vm.Name)

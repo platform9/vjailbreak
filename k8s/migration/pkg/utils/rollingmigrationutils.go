@@ -766,6 +766,8 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 	return scope.Client.Update(ctx, rollingMigrationPlan)
 }
 
+// ValidateRollingMigrationPlan validates that a rolling migration plan meets all the prerequisites
+// It checks VMware credentials, MAAS configurations, and ESXi host readiness
 func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, string, error) {
 	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
@@ -794,7 +796,7 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 			return false, "", errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
 		}
 		if !canEnterMaintenanceMode {
-			return false, "", errors.New(fmt.Sprintf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs))
+			return false, "", fmt.Errorf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs)
 		}
 
 		// Ensure the ESXi host is in MAAS
@@ -832,6 +834,8 @@ func isBMConfigValid(ctx context.Context, client client.Client, name string) boo
 	return true
 }
 
+// EnsureESXiInMass verifies that an ESXi host is correctly registered in the Metal-as-a-Service system
+// and is in the appropriate state (Deployed or Allocated) for migration operations
 func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwarehost vjailbreakv1alpha1.VMwareHost) (bool, string, error) {
 	// Get maas provider
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
@@ -861,7 +865,7 @@ func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScop
 	return false, fmt.Sprintf("ESXi %s is not in MAAS", vmwarehost.Spec.Name), nil
 }
 
-// Ensure PCD has at-least one Cluster configured
+// EnsurePCDHasClusterConfigured verifies that at least one cluster is configured in PCD for the OpenStack credentials
 func EnsurePCDHasClusterConfigured(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, string, error) {
 	// Get openstackcreds
 	openstackCreds, err := GetOpenstackCredsForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
