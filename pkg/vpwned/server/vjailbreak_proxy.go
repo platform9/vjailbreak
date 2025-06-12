@@ -25,12 +25,27 @@ func (p *vjailbreakProxy) ValidateOpenstackIp(ctx context.Context, in *api.Valid
 	ips := in.GetIp()
 	openstackAccessInfo := in.AccessInfo
 
+	// Add a check if there are same ips present in the list
+	ipMap := make(map[string]bool)
+	for _, ip := range ips {
+		if _, ok := ipMap[ip]; ok {
+			ipMap[ip] = false
+		} else {
+			ipMap[ip] = true
+		}
+	}
+
 	openstackClients, err := GetOpenStackClients(ctx, openstackAccessInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, ip := range ips {
+		if ipMap[ip] == false {
+			retVal.IsValid = append(retVal.IsValid, false)
+			retVal.Reason = append(retVal.Reason, "Duplicate IP")
+			continue
+		}
 		isInUse, reason, err := isIPInUse(openstackClients.NetworkingClient, ip)
 		if err != nil {
 			return nil, err
