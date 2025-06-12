@@ -83,15 +83,6 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
 
-// func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
-// 	// Find all virtual machines on the host
-// 	vms, err := finder.VirtualMachineList(ctx, "*")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return vms, nil
-// }
-
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vm := vmops.VMObj
 
@@ -118,15 +109,14 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		}
 	}
 
-	vmdisks := []VMDisk{} // Create an empty slice of Disk structs
+	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
 		if disk, ok := device.(*types.VirtualDisk); ok {
 			vmdisks = append(vmdisks, VMDisk{
 				Name: disk.DeviceInfo.GetDescription().Label,
 				Size: disk.CapacityInBytes,
 				Disk: disk,
-			},
-			)
+			})
 		}
 	}
 	uefi := false
