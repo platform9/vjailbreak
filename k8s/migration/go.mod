@@ -15,8 +15,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
-	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250514052518-8765d68965f5
+	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250519110518-98cb73fc034b
 	github.com/vmware/govmomi v0.50.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -105,6 +104,7 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
+
 )
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
