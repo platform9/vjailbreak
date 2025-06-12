@@ -21,8 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-
-
 // MigrationPlanStrategy defines the strategy for executing a migration plan including
 // scheduling options and migration type (hot or cold)
 type MigrationPlanStrategy struct {
@@ -50,10 +48,15 @@ type MigrationPlanStrategy struct {
 type AdvancedOptions struct {
 	// GranularVolumeTypes is a list of volume types to be migrated
 	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
-	// GranularNetworks is a list of networks to be migrated
-	GranularNetworks []string `json:"granularNetworks,omitempty"`
-	// GranularPorts is a list of ports to be migrated
-	GranularPorts []string `json:"granularPorts,omitempty"`
+	GranularNetworks    []string `json:"granularNetworks,omitempty"`
+	GranularPorts       []string `json:"granularPorts,omitempty"`
+}
+
+type PostMigrationAction struct {
+	RenameVM     *bool  `json:"renameVm,omitempty"`
+	Suffix       string `json:"suffix,omitempty"`
+	MoveToFolder *bool  `json:"moveToFolder,omitempty"`
+	FolderName   string `json:"folderName,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan including
@@ -76,7 +79,8 @@ type MigrationPlanSpecPerVM struct {
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
-	FirstBootScript string `json:"firstBootScript,omitempty"`
+	FirstBootScript     string               `json:"firstBootScript,omitempty"`
+	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan including
