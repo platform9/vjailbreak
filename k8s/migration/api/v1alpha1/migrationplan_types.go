@@ -56,8 +56,19 @@ type AdvancedOptions struct {
 	GranularPorts []string `json:"granularPorts,omitempty"`
 }
 
+<<<<<<< HEAD
 // MigrationPlanSpec defines the desired state of MigrationPlan including
 // the migration template, strategy, and the list of virtual machines to migrate
+=======
+type PostMigrationAction struct {
+	RenameVM     *bool  `json:"renameVm,omitempty"`
+	Suffix       string `json:"suffix,omitempty"`
+	MoveToFolder *bool  `json:"moveToFolder,omitempty"`
+	FolderName   string `json:"folderName,omitempty"`
+}
+
+// MigrationPlanSpec defines the desired state of MigrationPlan
+>>>>>>> 03c1fda1 (Added post-migration actions for renaming and moving VMs in vCenter (release) (#463))
 type MigrationPlanSpec struct {
 	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
 	MigrationPlanSpecPerVM `json:",inline"`
@@ -76,7 +87,8 @@ type MigrationPlanSpecPerVM struct {
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
-	FirstBootScript string `json:"firstBootScript,omitempty"`
+	FirstBootScript     string               `json:"firstBootScript,omitempty"`
+	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan including
