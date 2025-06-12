@@ -120,6 +120,21 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, nil
 	}
 
+	valid, message, err := utils.ValidateRollingMigrationPlan(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to validate rolling migration plan")
+	}
+
+	if !valid {
+		log.Info(fmt.Sprintf("RollingMigrationPlan %s is not valid: %s, requeueing after 1 minute", migrationPlan.Name, message))
+		migrationPlan.Status.Message = message
+		migrationPlan.Status.Phase = vjailbreakv1alpha1.RollingMigrationPlanPhaseValidationFailed
+		if err := r.Status().Update(ctx, migrationPlan); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update rolling migration plan")
+		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
 	if err := utils.ResumeRollingMigrationPlan(ctx, scope); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to resume rolling migration plan")
 	}
