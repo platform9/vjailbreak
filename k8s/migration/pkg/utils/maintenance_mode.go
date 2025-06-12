@@ -5,25 +5,26 @@ import (
 	"fmt"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CanEnterMaintenanceMode checks if an ESXi host can successfully enter maintenance mode
 // with all VMs automatically migrating off to other hosts. It checks host, VM, and cluster
 // settings that could block automatic VM migration.
-func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (bool, []string, error) {
+func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (bool, string, error) {
 	// List of VMs that cannot migrate
 	var blockedVMs []string
-
+	k8sClient := scope.Client
 	// Connect to vCenter
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwcreds)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("failed to validate vCenter connection: %w", err)
+		return false, fmt.Sprintf("failed to validate vCenter connection: %v", err), fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 
 	// Create a finder to locate objects
@@ -32,33 +33,32 @@ func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcr
 	// Use default datacenter
 	dc, err := finder.DefaultDatacenter(ctx)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("error getting datacenter: %w", err)
+		return false, fmt.Sprintf("error getting datacenter: %v", err), fmt.Errorf("error getting datacenter: %w", err)
 	}
 	finder.SetDatacenter(dc)
 
 	// Get host system
 	host, err := finder.HostSystem(ctx, hostName)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("host not found: %w", err)
+		return false, fmt.Sprintf("host not found: %v", err), fmt.Errorf("host not found: %w", err)
 	}
 
 	// Get host properties
 	var hostProps mo.HostSystem
 	err = host.Properties(ctx, host.Reference(), []string{"vm", "parent"}, &hostProps)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("error getting host properties: %w", err)
+		return false, fmt.Sprintf("error getting host properties: %v", err), fmt.Errorf("error getting host properties: %w", err)
 	}
 
 	// Check if host already in maintenance mode
 	var hostSummary mo.HostSystem
 	err = host.Properties(ctx, host.Reference(), []string{"runtime"}, &hostSummary)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("error getting host runtime: %w", err)
+		return false, fmt.Sprintf("error getting host runtime: %v", err), fmt.Errorf("error getting host runtime: %w", err)
 	}
 
 	if hostSummary.Runtime.InMaintenanceMode {
-		klog.Infof("Host %s already in maintenance mode", hostName)
-		return true, blockedVMs, nil
+		return true, fmt.Sprintf("Host %s already in maintenance mode", hostName), nil
 	}
 
 	// Check cluster settings
@@ -67,12 +67,12 @@ func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcr
 	pc := property.DefaultCollector(c)
 	err = pc.RetrieveOne(ctx, *clusterMoRef, []string{"configuration", "name"}, &cluster)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("failed to get cluster information: %w", err)
+		return false, fmt.Sprintf("failed to get cluster information: %v", err), fmt.Errorf("failed to get cluster information: %w", err)
 	}
 
 	// Check if DRS is enabled and in fully automated mode
 	if cluster.Configuration.DrsConfig.Enabled == nil {
-		return false, blockedVMs, fmt.Errorf("cluster configuration not available")
+		return false, "cluster configuration not available", nil
 	}
 
 	drsEnabled := cluster.Configuration.DrsConfig.Enabled != nil && *cluster.Configuration.DrsConfig.Enabled
@@ -80,30 +80,30 @@ func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcr
 
 	// Check if DRS automation level supports automatic migration
 	if !drsEnabled {
-		return false, blockedVMs, fmt.Errorf("DRS not enabled on cluster %s, VM migration will not be automatic", cluster.Name)
+		return false, fmt.Sprintf("DRS not enabled on cluster %s, VM migration will not be automatic", cluster.Name), nil
 	}
 
 	fullyAutomated := drsAutomationLevel == types.DrsBehaviorFullyAutomated
 	if !fullyAutomated {
-		klog.Warningf("DRS not in fully automated mode on cluster %s, some VMs may not migrate automatically", cluster.Name)
+		return false, fmt.Sprintf("DRS not in fully automated mode on cluster %s, some VMs may not migrate automatically", cluster.Name), nil
 	}
 
 	// Check if there are any other hosts in the cluster to migrate to
 	var clusterHosts mo.ClusterComputeResource
 	err = pc.RetrieveOne(ctx, *clusterMoRef, []string{"host"}, &clusterHosts)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("failed to get cluster hosts: %w", err)
+		return false, fmt.Sprintf("failed to get cluster hosts: %v", err), fmt.Errorf("failed to get cluster hosts: %w", err)
 	}
 
 	if len(clusterHosts.Host) <= 1 {
-		return false, blockedVMs, fmt.Errorf("cluster %s has only one host, nowhere to migrate VMs", cluster.Name)
+		return false, fmt.Sprintf("cluster %s has only one host, nowhere to migrate VMs", cluster.Name), nil
 	}
 
 	// Check cluster resource capacity
 	var clusterResourceUsageSummary mo.ClusterComputeResource
 	err = pc.RetrieveOne(ctx, *clusterMoRef, []string{"summary"}, &clusterResourceUsageSummary)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("failed to get cluster resource summary: %w", err)
+		return false, fmt.Sprintf("failed to get cluster resource summary: %v", err), fmt.Errorf("failed to get cluster resource summary: %w", err)
 	}
 
 	// Check if remaining hosts have enough capacity
@@ -122,16 +122,15 @@ func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcr
 			projectedMemUsage := currentMemUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
 
 			if projectedCpuUsage > 0.90 || projectedMemUsage > 0.90 {
-				klog.Warningf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
-					projectedCpuUsage*100, projectedMemUsage*100)
+				return false, fmt.Sprintf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
+					projectedCpuUsage*100, projectedMemUsage*100), nil
 			}
 		}
 	}
 
 	// Check VMs on the host
 	if len(hostProps.Vm) == 0 {
-		klog.Infof("No VMs on host %s, maintenance mode can be entered", hostName)
-		return true, blockedVMs, nil
+		return true, fmt.Sprintf("No VMs on host %s, maintenance mode can be entered", hostName), nil
 	}
 
 	// Get properties for all VMs on the host
@@ -141,104 +140,18 @@ func CanEnterMaintenanceMode(ctx context.Context, k8sClient client.Client, vmwcr
 
 	err = pc.Retrieve(ctx, vmRefs, []string{"name", "runtime", "config", "summary"}, &vms)
 	if err != nil {
-		return false, blockedVMs, fmt.Errorf("failed to retrieve VM properties: %w", err)
+		return false, fmt.Sprintf("failed to retrieve VM properties: %v", err), fmt.Errorf("failed to retrieve VM properties: %w", err)
 	}
 
 	for _, vm := range vms {
-		// Check VM power state
-		if vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOff {
-			klog.V(4).Infof("VM %s is powered off, no migration needed", vm.Name)
-			continue
-		}
-
-		// Check for vMotion capability
-		if vm.Runtime.Host == nil {
-			blockedVMs = append(blockedVMs, fmt.Sprintf("%s (no host information)", vm.Name))
-			continue
-		}
-
-		// Check for VM specific issues that would block migration
-		if vm.Config == nil {
-			klog.Warningf("Could not get configuration for VM %s", vm.Name)
-			continue
-		}
-
-		// Check for connected devices that would block migration
-		hasBlockingDevices := false
-		if vm.Config.Hardware.Device != nil {
-			for _, device := range vm.Config.Hardware.Device {
-				// Check for connected local media like ISOs
-				if cdrom, ok := device.(*types.VirtualCdrom); ok {
-					if cdrom.Connectable != nil && cdrom.Connectable.Connected && cdrom.Connectable.StartConnected {
-						// Check if it's a client device or ISO
-						// Remote passthrough devices are client devices that would block migration
-						// File-backed ISOs are typically ok for migration
-						if _, ok := cdrom.Backing.(*types.VirtualCdromRemotePassthroughBackingInfo); ok {
-							hasBlockingDevices = true
-							klog.Warningf("VM %s has connected client device", vm.Name)
-							break
-						}
-
-						// Also check for host device passthrough which blocks migration
-						if _, ok := cdrom.Backing.(*types.VirtualCdromAtapiBackingInfo); ok {
-							hasBlockingDevices = true
-							klog.Warningf("VM %s has host passthrough device", vm.Name)
-							break
-						}
-					}
-				}
-
-				// Check for USB and other passthrough devices
-				if _, ok := device.(*types.VirtualUSB); ok {
-					hasBlockingDevices = true
-					klog.Warningf("VM %s has USB device that may block migration", vm.Name)
-					break
-				}
-			}
-		}
-
-		if hasBlockingDevices {
-			blockedVMs = append(blockedVMs, fmt.Sprintf("%s (connected devices)", vm.Name))
-			continue
-		}
-
-		// Check VM-Host affinity rules
-		// This is a basic implementation - in a production environment you would
-		// check detailed DRS rules including must/should constraints
-		if vm.Config.ExtraConfig != nil {
-			hasAffinityRules := false
-			for _, opt := range vm.Config.ExtraConfig {
-				if opt.GetOptionValue().Key == "hostAffinityRule" {
-					hasAffinityRules = true
-					break
-				}
-			}
-			if hasAffinityRules {
-				blockedVMs = append(blockedVMs, fmt.Sprintf("%s (affinity rules)", vm.Name))
-				continue
-			}
-		}
-
-		// Check additional migration constraints
-
-		// Check VM runtime status that could prevent migration
-		if vm.Runtime.PowerState == types.VirtualMachinePowerStateSuspended {
-			klog.Warningf("VM %s is in suspended state, which prevents migration", vm.Name)
-			blockedVMs = append(blockedVMs, fmt.Sprintf("%s (suspended state)", vm.Name))
-		}
-
-		// Check if there's a pending question on the VM (requires user input)
-		if vm.Runtime.Question != nil {
-			klog.Warningf("VM %s has pending questions requiring user input", vm.Name)
-			blockedVMs = append(blockedVMs, fmt.Sprintf("%s (pending question)", vm.Name))
-		}
+		blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(ctx, k8sClient, vm))
 	}
 
 	if len(blockedVMs) > 0 {
-		return false, blockedVMs, fmt.Errorf("some VMs on host %s are blocked for migration", hostName)
+		return false, fmt.Sprintf("some VMs on host %s are blocked for migration: %v", hostName, blockedVMs), nil
 	}
 
-	return true, blockedVMs, nil
+	return true, "", nil
 }
 
 func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (*types.HostMaintenanceSpec, error) {
@@ -288,4 +201,85 @@ func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmw
 	}
 
 	return spec, nil
+}
+
+func CheckVMForMaintenanceMode(ctx context.Context, k8sClient client.Client, vm mo.VirtualMachine) string {
+	// Check VM power state
+	if vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOff {
+		return fmt.Sprintf("%s (powered off)", vm.Name)
+	}
+
+	// Check for vMotion capability
+	if vm.Runtime.Host == nil {
+		return fmt.Sprintf("%s (no host information)", vm.Name)
+	}
+
+	// Check for VM specific issues that would block migration
+	if vm.Config == nil {
+		return fmt.Sprintf("%s (no configuration)", vm.Name)
+	}
+
+	// Check for connected devices that would block migration
+	hasBlockingDevices := false
+	if vm.Config.Hardware.Device != nil {
+		for _, device := range vm.Config.Hardware.Device {
+			// Check for connected local media like ISOs
+			if cdrom, ok := device.(*types.VirtualCdrom); ok {
+				if cdrom.Connectable != nil && cdrom.Connectable.Connected && cdrom.Connectable.StartConnected {
+					// Check if it's a client device or ISO
+					// Remote passthrough devices are client devices that would block migration
+					// File-backed ISOs are typically ok for migration
+					if _, ok := cdrom.Backing.(*types.VirtualCdromRemotePassthroughBackingInfo); ok {
+						hasBlockingDevices = true
+						break
+					}
+
+					// Also check for host device passthrough which blocks migration
+					if _, ok := cdrom.Backing.(*types.VirtualCdromAtapiBackingInfo); ok {
+						hasBlockingDevices = true
+						break
+					}
+				}
+			}
+
+			// Check for USB and other passthrough devices
+			if _, ok := device.(*types.VirtualUSB); ok {
+				hasBlockingDevices = true
+				break
+			}
+		}
+	}
+
+	if hasBlockingDevices {
+		return fmt.Sprintf("%s (connected devices)", vm.Name)
+	}
+
+	// Check VM-Host affinity rules
+	// This is a basic implementation - in a production environment you would
+	// check detailed DRS rules including must/should constraints
+	if vm.Config.ExtraConfig != nil {
+		hasAffinityRules := false
+		for _, opt := range vm.Config.ExtraConfig {
+			if opt.GetOptionValue().Key == "hostAffinityRule" {
+				hasAffinityRules = true
+				break
+			}
+		}
+		if hasAffinityRules {
+			return fmt.Sprintf("%s (affinity rules)", vm.Name)
+		}
+	}
+
+	// Check additional migration constraints
+
+	// Check VM runtime status that could prevent migration
+	if vm.Runtime.PowerState == types.VirtualMachinePowerStateSuspended {
+		return fmt.Sprintf("%s (suspended state)", vm.Name)
+	}
+
+	// Check if there's a pending question on the VM (requires user input)
+	if vm.Runtime.Question != nil {
+		return fmt.Sprintf("%s (pending question)", vm.Name)
+	}
+	return ""
 }

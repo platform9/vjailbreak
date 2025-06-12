@@ -766,11 +766,10 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 	return scope.Client.Update(ctx, rollingMigrationPlan)
 }
 
-func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
-
+func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, string, error) {
 	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
-		return errors.Wrap(err, "failed to get vmware credentials")
+		return false, "", errors.Wrap(err, "failed to get vmware credentials")
 	}
 
 	// TODO(vpwned): validate vmwarecreds have enough permissions
@@ -778,46 +777,46 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 	// TODO(vpwned): validate there is enough space on underlying storage array
 
 	if !isBMConfigValid(ctx, scope.Client, scope.RollingMigrationPlan.Spec.BMConfigRef.Name) {
-		return errors.New("BMConfig is not valid")
+		return false, "", errors.New("BMConfig is not valid")
 	}
 
 	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName)
 	if err != nil {
-		return errors.Wrap(err, "failed to filter vmware hosts for cluster")
+		return false, "", errors.Wrap(err, "failed to filter vmware hosts for cluster")
 	}
 
 	for _, vmwareHost := range vmwareHosts {
 		// This checks if the ESXi host can enter maintenance mode
 		// with all VMs automatically migrating off to other hosts.
 		// It checks host, VM, and cluster settings that could block automatic VM migration.
-		canEnterMaintenanceMode, blockedVMs, err := CanEnterMaintenanceMode(ctx, scope.Client, vmwareCreds, vmwareHost.Spec.Name)
+		canEnterMaintenanceMode, blockedVMs, err := CanEnterMaintenanceMode(ctx, scope, vmwareCreds, vmwareHost.Spec.Name)
 		if err != nil {
-			return errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
+			return false, "", errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
 		}
 		if !canEnterMaintenanceMode {
-			return errors.New(fmt.Sprintf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs))
+			return false, "", errors.New(fmt.Sprintf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs))
 		}
 
 		// Ensure the ESXi host is in MAAS
 		inMAAS, message, err := EnsureESXiInMass(ctx, scope, vmwareHost)
 		if err != nil {
-			return errors.Wrap(err, "failed to ensure ESXi is in MAAS")
+			return false, "", errors.Wrap(err, "failed to ensure ESXi is in MAAS")
 		}
 		if !inMAAS {
-			return errors.New(message)
+			return false, "", errors.New(message)
 		}
 	}
 
 	// Ensure PCD has at-least one Cluster configured
 	inPCD, message, err := EnsurePCDHasClusterConfigured(ctx, scope)
 	if err != nil {
-		return errors.Wrap(err, "failed to ensure PCD has at-least one Cluster configured")
+		return false, "", errors.Wrap(err, "failed to ensure PCD has at-least one Cluster configured")
 	}
 	if !inPCD {
-		return errors.New(message)
+		return false, "", errors.New(message)
 	}
 
-	return nil
+	return true, "", nil
 }
 
 func isBMConfigValid(ctx context.Context, client client.Client, name string) bool {
