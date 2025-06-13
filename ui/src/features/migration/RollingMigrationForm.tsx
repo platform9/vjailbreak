@@ -13,7 +13,7 @@ import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
 import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
 import { getVMwareHosts, patchVMwareHost } from "src/api/vmware-hosts/vmwareHosts"
-import { getVMwareMachines } from "src/api/vmware-machines/vmwareMachines"
+import { getVMwareMachines, patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines"
 import { VMwareCreds } from "src/api/vmware-creds/model"
 import { VMwareCluster } from "src/api/vmware-clusters/model"
 import { VMwareHost } from "src/api/vmware-hosts/model"
@@ -43,6 +43,11 @@ import { CUTOVER_TYPES } from "./constants"
 import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
 import WarningIcon from '@mui/icons-material/Warning';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import { TextField, CircularProgress } from "@mui/material"
+import { validateOpenstackIPs } from "src/api/openstack-creds/openstackCreds"
 
 // Import CDS icons
 import "@cds/core/icon/register.js"
@@ -106,7 +111,7 @@ const StyledDrawer = styled(Drawer)(() => ({
     "& .MuiDrawer-paper": {
         display: "grid",
         gridTemplateRows: "max-content 1fr max-content",
-        width: "1200px",
+        width: "1400px",
         maxWidth: "90vw",
     },
 }))
@@ -138,6 +143,8 @@ interface VM {
     cpu?: number;
     memory?: number;
     powerState: string;
+    ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating';
+    ipValidationMessage?: string;
 }
 
 const esxColumns: GridColDef[] = [
@@ -206,149 +213,24 @@ const esxColumns: GridColDef[] = [
     // },
 ];
 
-const vmColumns: GridColDef[] = [
-    {
-        field: "name",
-        headerName: "VM Name",
-        flex: 1.5,
-        renderCell: (params) => (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
-                    <CdsIconWrapper>
-                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                        {/* @ts-ignore */}
-                        <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
-                    </CdsIconWrapper>
-                </Tooltip>
-                <Box>{params.value}</Box>
-            </Box>
-        ),
-    },
-    {
-        field: "ip",
-        headerName: "Current IP",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "osType",
-        headerName: "OS",
-        flex: 0.5,
-        renderCell: (params) => {
-            const osType = params.row.osType || "Unknown";
-            let displayValue = osType;
-            let icon: React.ReactNode = null;
-
-            if (osType.includes("windows")) {
-                displayValue = "Windows";
-                icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-            } else if (osType.includes("linux")) {
-                displayValue = "Linux";
-                icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
-            } else {
-                displayValue = "Other";
-            }
-
-            return (
-                <Tooltip title={displayValue}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                        {icon}
-                    </Box>
-                </Tooltip>
-            );
-        },
-    },
-    {
-        field: "networks",
-        headerName: "Network Interface(s)",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "cpu",
-        headerName: "CPU",
-        flex: 0.3,
-        valueGetter: (value) => value || "- ",
-    },
-    {
-        field: "memory",
-        headerName: "Memory (MB)",
-        flex: 0.8,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "esxHost",
-        headerName: "ESX Host",
-        flex: 1,
-        valueGetter: (value) => value || "—",
-    },
-    {
-        field: "auto-assign",
-        headerName: "Flavor",
-        flex: 0.8,
-        renderCell: () => (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography variant="body2">auto-assign</Typography>
-            </Box>
-        ),
-    },
-];
-
-const paginationModel = { page: 0, pageSize: 5 };
-
 const CustomToolbarWithActions = (props) => {
-    const { ...toolbarProps } = props;
+    const { rowSelectionModel, onEditIPs, ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-            {/* {rowSelectionModel.length > 0 && (
+            {rowSelectionModel && rowSelectionModel.length > 0 && (
                 <>
-                    <Tooltip title="Move to Top">
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onMoveToTop}
-                            size="small"
-                            sx={{ ml: 1, minWidth: 'auto' }}
-                        >
-                            <VerticalAlignTopIcon />
-                        </Button>
-                    </Tooltip>
-                    <Tooltip title="Move Up">
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onMoveUp}
-                            size="small"
-                            sx={{ ml: 1, minWidth: 'auto' }}
-                        >
-                            <ArrowUpwardIcon />
-                        </Button>
-                    </Tooltip>
-                    <Tooltip title="Move Down">
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onMoveDown}
-                            size="small"
-                            sx={{ ml: 1, minWidth: 'auto' }}
-                        >
-                            <ArrowDownwardIcon />
-                        </Button>
-                    </Tooltip>
-                    <Tooltip title="Move to Bottom">
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onMoveToBottom}
-                            size="small"
-                            sx={{ ml: 1, minWidth: 'auto' }}
-                        >
-                            <VerticalAlignBottomIcon />
-                        </Button>
-                    </Tooltip>
+                    <Button
+                        variant="text"
+                        color="primary"
+                        onClick={onEditIPs}
+                        size="small"
+                        sx={{ ml: 1 }}
+                    >
+                        Assign/Edit IPs ({rowSelectionModel.length})
+                    </Button>
                 </>
-            )} */}
+            )}
             <CustomSearchToolbar {...toolbarProps} />
         </Box>
     );
@@ -491,6 +373,12 @@ export default function RollingMigrationFormDrawer({
     const [openstackCredData, setOpenstackCredData] = useState<OpenstackCreds | null>(null);
     const [loadingOpenstackDetails, setLoadingOpenstackDetails] = useState(false);
 
+    // IP editing and validation state
+    const [editingIpFor, setEditingIpFor] = useState<string | null>(null);
+    const [tempIpValue, setTempIpValue] = useState<string>("");
+    const [ipValidationStatus, setIpValidationStatus] = useState<Record<string, 'pending' | 'valid' | 'invalid' | 'validating'>>({});
+    const [ipValidationMessages, setIpValidationMessages] = useState<Record<string, string>>({});
+
     // Migration Options state
     const { params, getParamsUpdater } = useParams<FormValues>({});
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -500,11 +388,28 @@ export default function RollingMigrationFormDrawer({
     const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
         useParams<SelectedMigrationOptionsType>(defaultMigrationOptions);
 
+    const [assigningIPs, setAssigningIPs] = useState(false);
+
+    // IP validation error state
+    const [vmIpValidationError, setVmIpValidationError] = useState<string>("");
+
+    // Bulk IP editing state
+    const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
+    const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, string>>({});
+    const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, 'empty' | 'valid' | 'invalid' | 'validating'>>({});
+    const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, string>>({});
+
+    const paginationModel = { page: 0, pageSize: 5 };
+
     useEffect(() => {
         if (open) {
             fetchSourceData();
             fetchMaasConfigs();
             fetchPcdData();
+        } else {
+            // Clear editing state when closing
+            setEditingIpFor(null);
+            setTempIpValue("");
         }
     }, [open]);
 
@@ -544,6 +449,8 @@ export default function RollingMigrationFormDrawer({
                     credName
                 );
 
+                console.log('This is the clusters response', clustersResponse, credName)
+
                 const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
                     id: `${credName}:${cluster.metadata.name}`,
                     name: cluster.spec.name
@@ -565,6 +472,10 @@ export default function RollingMigrationFormDrawer({
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        console.log(sourceData)
+    }, [sourceData])
 
     const fetchPcdData = async () => {
         setLoadingPCD(true);
@@ -704,14 +615,16 @@ export default function RollingMigrationFormDrawer({
                 return {
                     id: vm.metadata.name,
                     name: vm.spec.vms.name || vm.metadata.name,
-                    ip: vm.spec.vms.ipAddress || "—",
+                    ip: vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || "—",
                     esxHost: esxiHost,
                     networks: vm.spec.vms.networks,
                     datastores: vm.spec.vms.datastores,
                     cpu: vm.spec.vms.cpu,
                     memory: vm.spec.vms.memory,
                     osType: vm.spec.vms.osType,
-                    powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off"
+                    powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off",
+                    ipValidationStatus: 'pending',
+                    ipValidationMessage: ''
                 };
             });
 
@@ -741,66 +654,6 @@ export default function RollingMigrationFormDrawer({
         }
     }, [orderedESXHosts]);
 
-    const handleVMMoveUp = () => {
-        if (selectedVMs.length === 0) return;
-
-        const newOrderedVMs = [...vmsWithAssignments];
-        const indices = findItemIndices(newOrderedVMs, selectedVMs);
-
-        for (const index of indices) {
-            if (index > 0) {
-                [newOrderedVMs[index - 1], newOrderedVMs[index]] =
-                    [newOrderedVMs[index], newOrderedVMs[index - 1]];
-            }
-        }
-
-        setVmsWithAssignments(newOrderedVMs);
-    };
-
-    const handleVMMoveDown = () => {
-        if (selectedVMs.length === 0) return;
-
-        const newOrderedVMs = [...vmsWithAssignments];
-        const indices = findItemIndices(newOrderedVMs, selectedVMs);
-
-        for (let i = indices.length - 1; i >= 0; i--) {
-            const index = indices[i];
-            if (index < newOrderedVMs.length - 1) {
-                [newOrderedVMs[index], newOrderedVMs[index + 1]] =
-                    [newOrderedVMs[index + 1], newOrderedVMs[index]];
-            }
-        }
-
-        setVmsWithAssignments(newOrderedVMs);
-    };
-
-    const handleVMMoveToTop = () => {
-        if (selectedVMs.length === 0) return;
-
-        const selectedItems = vmsWithAssignments.filter(item =>
-            selectedVMs.includes(item.id as string | number)
-        );
-
-        const remainingItems = vmsWithAssignments.filter(item =>
-            !selectedVMs.includes(item.id as string | number)
-        );
-
-        setVmsWithAssignments([...selectedItems, ...remainingItems]);
-    };
-
-    const handleVMMoveToBottom = () => {
-        if (selectedVMs.length === 0) return;
-
-        const selectedItems = vmsWithAssignments.filter(item =>
-            selectedVMs.includes(item.id as string | number)
-        );
-
-        const remainingItems = vmsWithAssignments.filter(item =>
-            !selectedVMs.includes(item.id as string | number)
-        );
-
-        setVmsWithAssignments([...remainingItems, ...selectedItems]);
-    };
 
     const handleCloseMaasConfig = () => {
         setMaasConfigDialogOpen(false);
@@ -849,16 +702,124 @@ export default function RollingMigrationFormDrawer({
         }
     };
 
-    const findItemIndices = <T extends { id: string | number }>(items: T[], selectedIds: readonly (string | number)[]) => {
-        const indices: number[] = [];
-        for (const id of selectedIds) {
-            const index = items.findIndex(item => item.id === id);
-            if (index !== -1) {
-                indices.push(index);
+    // IP validation and editing functions
+    const isValidIPAddress = (ip: string): boolean => {
+        const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        return ipRegex.test(ip);
+    };
+
+    const getOpenstackAccessInfo = async (openstackCredData: OpenstackCreds) => {
+        const spec = openstackCredData.spec;
+
+        // If there's a secretRef, fetch the credentials from the secret
+        if (spec.secretRef?.name) {
+            try {
+                const secret = await getSecret(spec.secretRef.name, VJAILBREAK_DEFAULT_NAMESPACE);
+                if (secret && secret.data) {
+                    return {
+                        authUrl: secret.data.OS_AUTH_URL || '',
+                        domainName: secret.data.OS_DOMAIN_NAME || 'default',
+                        insecure: secret.data.OS_INSECURE === 'true' || true,
+                        password: secret.data.OS_PASSWORD || '',
+                        regionName: secret.data.OS_REGION_NAME || '',
+                        tenantName: secret.data.OS_TENANT_NAME || '',
+                        username: secret.data.OS_USERNAME || '',
+                    };
+                }
+            } catch (error) {
+                console.error('Failed to fetch OpenStack credentials from secret:', error);
+                throw new Error('Failed to fetch OpenStack credentials from secret');
             }
         }
-        return indices.sort((a, b) => a - b);
+
+        return {
+            authUrl: '',
+            domainName: 'default',
+            insecure: true,
+            password: '',
+            regionName: '',
+            tenantName: '',
+            username: '',
+        };
     };
+
+    const handleStartEditingIP = (vmId: string, currentIp: string) => {
+        setEditingIpFor(vmId);
+        setTempIpValue(currentIp === "—" ? "" : currentIp);
+    };
+
+    const handleCancelEditingIP = () => {
+        setEditingIpFor(null);
+        setTempIpValue("");
+    };
+
+    const handleSaveIP = async (vmId: string) => {
+        const vm = vmsWithAssignments.find(v => v.id === vmId);
+        if (!vm || !tempIpValue.trim()) {
+            handleCancelEditingIP();
+            return;
+        }
+
+        if (!isValidIPAddress(tempIpValue.trim())) {
+            setIpValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+            setIpValidationMessages(prev => ({ ...prev, [vmId]: 'Invalid IP address format' }));
+            return;
+        }
+
+        // Set validating status
+        setIpValidationStatus(prev => ({ ...prev, [vmId]: 'validating' }));
+        setIpValidationMessages(prev => ({ ...prev, [vmId]: 'Validating IP address...' }));
+
+        try {
+            if (openstackCredData && vm.ip !== tempIpValue.trim()) {
+                const accessInfo = await getOpenstackAccessInfo(openstackCredData);
+                const validationResult = await validateOpenstackIPs({
+                    ip: [tempIpValue.trim()],
+                    accessInfo
+                });
+
+                const isValid = validationResult.isValid[0];
+                const reason = validationResult.reason[0];
+
+                if (!isValid) {
+                    setIpValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+                    setIpValidationMessages(prev => ({ ...prev, [vmId]: reason }));
+                    return;
+                }
+            }
+
+            // Update the VM with new IP (only if validation passed)
+            await patchVMwareMachine(vm.id, {
+                spec: {
+                    vms: {
+                        assignedIp: tempIpValue.trim()
+                    }
+                }
+            }, VJAILBREAK_DEFAULT_NAMESPACE);
+
+            // Update local state with new IP
+            const updatedVMs = vmsWithAssignments.map(v =>
+                v.id === vmId ? { ...v, ip: tempIpValue.trim() } : v
+            );
+            setVmsWithAssignments(updatedVMs);
+
+            // Set as valid immediately (no more polling needed)
+            setIpValidationStatus(prev => ({ ...prev, [vmId]: 'valid' }));
+            setIpValidationMessages(prev => ({ ...prev, [vmId]: 'IP validated successfully' }));
+
+            setEditingIpFor(null);
+            setTempIpValue("");
+
+        } catch (error) {
+            console.error("Failed to validate or update IP address:", error);
+            setIpValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+            setIpValidationMessages(prev => ({
+                ...prev,
+                [vmId]: error instanceof Error ? error.message : 'Failed to validate IP address'
+            }));
+        }
+    };
+
 
     const availableVmwareNetworks = useMemo(() => {
         if (!vmsWithAssignments.length || !selectedVMs.length) return [];
@@ -927,6 +888,26 @@ export default function RollingMigrationFormDrawer({
             setStorageMappingError("");
         }
     };
+
+    // Validate IP addresses for selected VMs
+    const vmIpValidation = useMemo(() => {
+        if (selectedVMs.length === 0) {
+            setVmIpValidationError("");
+            return { hasError: false, vmsWithoutIPs: [] };
+        }
+
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const vmsWithoutIPs = selectedVMsData.filter(vm => vm.ip === "—" || !vm.ip);
+
+        if (vmsWithoutIPs.length > 0) {
+            const errorMessage = `Cannot proceed with Migration: ${vmsWithoutIPs.length} selected VM${vmsWithoutIPs.length === 1 ? '' : 's'} do not have IP addresses assigned. Please assign IP addresses to all selected VMs before continuing.`;
+            setVmIpValidationError(errorMessage);
+            return { hasError: true, vmsWithoutIPs };
+        } else {
+            setVmIpValidationError("");
+            return { hasError: false, vmsWithoutIPs: [] };
+        }
+    }, [selectedVMs, vmsWithAssignments]);
 
     const handleSubmit = async () => {
         setSubmitting(true);
@@ -1116,7 +1097,10 @@ export default function RollingMigrationFormDrawer({
                 return host?.pcdHostConfigName;
             });
 
-        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid;
+        // IP validation - ensure all selected VMs have IP addresses assigned
+        const ipValidationPassed = !vmIpValidation.hasError;
+
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !ipValidationPassed;
     }, [
         sourceCluster,
         destinationPCD,
@@ -1131,7 +1115,8 @@ export default function RollingMigrationFormDrawer({
         params,
         fieldErrors,
         selectedESXHosts,
-        orderedESXHosts
+        orderedESXHosts,
+        vmIpValidation.hasError
     ]);
 
     useKeyboardSubmit({
@@ -1202,6 +1187,349 @@ export default function RollingMigrationFormDrawer({
         } finally {
             setUpdatingPcdMapping(false);
         }
+    };
+
+    // Define VM columns inside component to access state
+    const vmColumns: GridColDef[] = [
+        {
+            field: "name",
+            headerName: "VM Name",
+            flex: 1.5,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
+                        <CdsIconWrapper>
+                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                            {/* @ts-ignore */}
+                            <cds-icon shape="vm" size="md" badge={params.row.powerState === "powered-on" ? "success" : "danger"}></cds-icon>
+                        </CdsIconWrapper>
+                    </Tooltip>
+                    <Box>{params.value}</Box>
+                </Box>
+            ),
+        },
+        {
+            field: "ip",
+            headerName: "Current IP",
+            flex: 1,
+            renderCell: (params) => {
+                const vmId = params.row.id;
+                const isEditing = editingIpFor === vmId;
+                const validationStatus = ipValidationStatus[vmId];
+                const validationMessage = ipValidationMessages[vmId];
+                const currentIp = params.value || "—";
+
+                const getValidationIcon = () => {
+                    switch (validationStatus) {
+                        case 'valid':
+                            return <Tooltip title={validationMessage}><CheckCircleIcon color="success" sx={{ ml: 1, fontSize: 16 }} /></Tooltip>;
+                        case 'invalid':
+                            return <Tooltip title={validationMessage}><ErrorIcon color="error" sx={{ ml: 1, fontSize: 16 }} /></Tooltip>;
+                        case 'pending':
+                            return <Tooltip title={validationMessage}><WarningIcon color="warning" sx={{ ml: 1, fontSize: 16 }} /></Tooltip>;
+                        case 'validating':
+                            return <Tooltip title={validationMessage}><CircularProgress size={20} sx={{ ml: 1, display: 'flex', alignItems: 'center' }} /></Tooltip>;
+                        default:
+                            return null;
+                    }
+                };
+
+                if (isEditing) {
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', }}>
+                            <TextField
+                                value={tempIpValue}
+                                onChange={(e) => setTempIpValue(e.target.value)}
+                                onBlur={() => handleSaveIP(vmId)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleSaveIP(vmId);
+                                    } else if (e.key === 'Escape') {
+                                        handleCancelEditingIP();
+                                    }
+                                }}
+                                size="small"
+                                autoFocus
+                                placeholder="Enter IP address"
+                                sx={{
+                                    '& .MuiInputBase-input': {
+                                        fontSize: '0.875rem',
+                                        padding: '4px 8px'
+                                    }
+                                }}
+                                slotProps={{
+                                    input: {
+                                        endAdornment: getValidationIcon()
+                                    }
+                                }}
+                            />
+                        </Box>
+                    );
+                }
+
+                return (
+                    <Tooltip
+                        title={"Double-click to edit IP address"}
+                        placement="top"
+                    >
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                padding: '4px 0',
+                                height: '100%',
+                                '&:hover': {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                                    borderRadius: '4px'
+                                }
+                            }}
+                            onDoubleClick={() => handleStartEditingIP(vmId, currentIp)}
+                        >
+                            <Typography variant="body2">
+                                {currentIp}
+                            </Typography>
+                            {!isEditing && currentIp === "—" && (
+                                <EditIcon sx={{ ml: 1, fontSize: 14, color: 'text.secondary' }} />
+                            )}
+                            {getValidationIcon()}
+                        </Box>
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: "osType",
+            headerName: "OS",
+            flex: 0.5,
+            renderCell: (params) => {
+                const osType = params.row.osType || "Unknown";
+                let displayValue = osType;
+                let icon: React.ReactNode = null;
+
+                if (osType.includes("windows")) {
+                    displayValue = "Windows";
+                    icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
+                } else if (osType.includes("linux")) {
+                    displayValue = "Linux";
+                    icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
+                } else {
+                    displayValue = "Other";
+                }
+
+                return (
+                    <Tooltip title={displayValue}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                            {icon}
+                        </Box>
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: "networks",
+            headerName: "Network Interface(s)",
+            flex: 1,
+            valueGetter: (value) => value || "—",
+        },
+        {
+            field: "cpu",
+            headerName: "CPU",
+            flex: 0.3,
+            valueGetter: (value) => value || "- ",
+        },
+        {
+            field: "memory",
+            headerName: "Memory (MB)",
+            flex: 0.8,
+            valueGetter: (value) => value || "—",
+        },
+        {
+            field: "esxHost",
+            headerName: "ESX Host",
+            flex: 1,
+            valueGetter: (value) => value || "—",
+        },
+        {
+            field: "auto-assign",
+            headerName: "Flavor",
+            flex: 0.8,
+            renderCell: () => (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="body2">auto-assign</Typography>
+                </Box>
+            ),
+        },
+    ];
+
+    const handleOpenBulkEditDialog = () => {
+        if (selectedVMs.length === 0) return;
+
+        // Initialize bulk edit state
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const initialIPs: Record<string, string> = {};
+        const initialStatus: Record<string, 'empty' | 'valid' | 'invalid' | 'validating'> = {};
+
+        selectedVMsData.forEach(vm => {
+            initialIPs[vm.id] = vm.ip === "—" ? "" : vm.ip;
+            initialStatus[vm.id] = vm.ip === "—" ? 'empty' : 'valid';
+        });
+
+        setBulkEditIPs(initialIPs);
+        setBulkValidationStatus(initialStatus);
+        setBulkValidationMessages({});
+        setBulkEditDialogOpen(true);
+    };
+
+    const handleCloseBulkEditDialog = () => {
+        setBulkEditDialogOpen(false);
+        setBulkEditIPs({});
+        setBulkValidationStatus({});
+        setBulkValidationMessages({});
+    };
+
+    const handleBulkIpChange = (vmId: string, value: string) => {
+        setBulkEditIPs(prev => ({ ...prev, [vmId]: value }));
+
+        if (!value.trim()) {
+            setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'empty' }));
+            setBulkValidationMessages(prev => ({ ...prev, [vmId]: '' }));
+        } else if (!isValidIPAddress(value.trim())) {
+            setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+            setBulkValidationMessages(prev => ({ ...prev, [vmId]: 'Invalid IP format' }));
+        } else {
+            setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'empty' }));
+            setBulkValidationMessages(prev => ({ ...prev, [vmId]: '' }));
+        }
+    };
+
+    const handleClearAllIPs = () => {
+        const clearedIPs: Record<string, string> = {};
+        const clearedStatus: Record<string, 'empty' | 'valid' | 'invalid' | 'validating'> = {};
+
+        Object.keys(bulkEditIPs).forEach(vmId => {
+            clearedIPs[vmId] = "";
+            clearedStatus[vmId] = 'empty';
+        });
+
+        setBulkEditIPs(clearedIPs);
+        setBulkValidationStatus(clearedStatus);
+        setBulkValidationMessages({});
+    };
+
+    const handleApplyBulkIPs = async () => {
+        const ipsToApply = Object.entries(bulkEditIPs).filter(([, ip]) => ip.trim() !== "");
+        if (ipsToApply.length === 0) return;
+
+        setAssigningIPs(true);
+
+        try {
+            // NEW: Batch validation before applying any changes
+            if (openstackCredData) {
+                const accessInfo = await getOpenstackAccessInfo(openstackCredData);
+                const ipList = ipsToApply.map(([, ip]) => ip.trim());
+
+                setBulkValidationStatus(prev => {
+                    const newStatus = { ...prev };
+                    ipsToApply.forEach(([vmId]) => {
+                        newStatus[vmId] = 'validating';
+                    });
+                    return newStatus;
+                });
+
+                const validationResult = await validateOpenstackIPs({
+                    ip: ipList,
+                    accessInfo
+                });
+
+                // Process validation results
+                const validIPs: Array<[string, string]> = [];
+                let hasInvalidIPs = false;
+
+                ipsToApply.forEach(([vmId, ip], index) => {
+                    const isValid = validationResult.isValid[index];
+                    const reason = validationResult.reason[index];
+
+                    if (isValid) {
+                        validIPs.push([vmId, ip.trim()]);
+                        setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'valid' }));
+                        setBulkValidationMessages(prev => ({ ...prev, [vmId]: 'Valid' }));
+                    } else {
+                        hasInvalidIPs = true;
+                        setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+                        setBulkValidationMessages(prev => ({ ...prev, [vmId]: reason }));
+                    }
+                });
+
+                // Only proceed if ALL IPs are valid
+                if (hasInvalidIPs) {
+                    setAssigningIPs(false);
+                    return;
+                }
+
+                // Apply only the valid IPs to VMs (all IPs are valid at this point)
+                const updatePromises = validIPs.map(async ([vmId, ip]) => {
+                    try {
+                        await patchVMwareMachine(vmId, {
+                            spec: {
+                                vms: {
+                                    assignedIp: ip
+                                }
+                            }
+                        }, VJAILBREAK_DEFAULT_NAMESPACE);
+                        return { success: true, vmId, ip };
+                    } catch (error) {
+                        setBulkValidationStatus(prev => ({ ...prev, [vmId]: 'invalid' }));
+                        setBulkValidationMessages(prev => ({
+                            ...prev,
+                            [vmId]: error instanceof Error ? error.message : 'Failed to apply IP'
+                        }));
+                        return { success: false, vmId, error };
+                    }
+                });
+
+                const results = await Promise.all(updatePromises);
+
+                // Check if any updates failed
+                const failedUpdates = results.filter(result => !result.success);
+                if (failedUpdates.length > 0) {
+                    setAssigningIPs(false);
+                    return; // Don't close modal if any updates failed
+                }
+
+                // Update local VM state only if all validations and updates succeeded
+                const updatedVMs = vmsWithAssignments.map(vm => {
+                    const newIp = bulkEditIPs[vm.id];
+                    return newIp && newIp.trim() ? { ...vm, ip: newIp.trim() } : vm;
+                });
+                setVmsWithAssignments(updatedVMs);
+
+                // Transfer validation status from bulk edit to individual IP validation state
+                const newIpValidationStatus = { ...ipValidationStatus };
+                const newIpValidationMessages = { ...ipValidationMessages };
+
+                validIPs.forEach(([vmId]) => {
+                    newIpValidationStatus[vmId] = 'valid';
+                    newIpValidationMessages[vmId] = 'IP validated and applied successfully';
+                });
+
+                setIpValidationStatus(newIpValidationStatus);
+                setIpValidationMessages(newIpValidationMessages);
+
+                handleCloseBulkEditDialog();
+            }
+
+        } catch (error) {
+            console.error("Error in bulk IP validation/assignment:", error);
+        } finally {
+            setAssigningIPs(false);
+        }
+    };
+
+    // Update the toolbar handler
+    const handleEditIPs = () => {
+        handleOpenBulkEditDialog();
     };
 
     return (
@@ -1492,10 +1820,7 @@ export default function RollingMigrationFormDrawer({
                                             <CustomToolbarWithActions
                                                 {...props}
                                                 rowSelectionModel={selectedVMs}
-                                                onMoveUp={handleVMMoveUp}
-                                                onMoveDown={handleVMMoveDown}
-                                                onMoveToTop={handleVMMoveToTop}
-                                                onMoveToBottom={handleVMMoveToBottom}
+                                                onEditIPs={handleEditIPs}
                                             />
                                         ),
                                         noRowsOverlay: () => (
@@ -1515,9 +1840,15 @@ export default function RollingMigrationFormDrawer({
                                     }}
                                     disableColumnMenu
                                     disableColumnFilter
+                                    disableRowSelectionOnClick
                                     loading={loadingVMs}
                                 />
                             </Paper>
+                            {vmIpValidationError && (
+                                <Alert severity="error" sx={{ mt: 2 }}>
+                                    {vmIpValidationError}
+                                </Alert>
+                            )}
                         </Box>
                     </Box>
 
@@ -1743,6 +2074,78 @@ export default function RollingMigrationFormDrawer({
                     </Button>
                 </DialogActions>
             </Dialog>
-        </StyledDrawer >
+
+            {/* Bulk IP Editor Dialog */}
+            <Dialog
+                open={bulkEditDialogOpen}
+                onClose={handleCloseBulkEditDialog}
+                maxWidth="md"
+            >
+                <DialogTitle>
+                    Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+                </DialogTitle>
+                <DialogContent>
+                    <Box sx={{ my: 2 }}>
+                        {/* Quick Actions */}
+                        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                            <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
+                                Clear All
+                            </Button>
+                        </Box>
+
+                        {/* IP Editor Fields */}
+                        <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {Object.entries(bulkEditIPs).map(([vmId, ip]) => {
+                                const vm = vmsWithAssignments.find(v => v.id === vmId);
+                                if (!vm) return null;
+
+                                const status = bulkValidationStatus[vmId];
+                                const message = bulkValidationMessages[vmId];
+
+                                return (
+                                    <Box key={vmId} sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                                        <Box sx={{ width: 400, flexShrink: 0, pr: 3 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                                                {vm.name}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Current: {vm.ip}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ width: 400, height: 60, display: 'flex', alignItems: 'center', gap: 2 }}>
+                                            <TextField
+                                                value={ip}
+                                                onChange={(e) => handleBulkIpChange(vmId, e.target.value)}
+                                                placeholder="Enter IP address"
+                                                size="small"
+                                                sx={{ width: 260 }}
+                                                error={status === 'invalid'}
+                                                helperText={message}
+                                            />
+                                            <Box sx={{ width: 24, display: 'flex' }}>
+                                                {status === 'validating' && <CircularProgress size={20} />}
+                                                {status === 'valid' && <CheckCircleIcon color="success" fontSize="small" />}
+                                                {status === 'invalid' && <ErrorIcon color="error" fontSize="small" sx={{ mb: 3 }} />}
+                                            </Box>
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
+                        </Box>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
+                    <Button
+                        onClick={handleApplyBulkIPs}
+                        variant="contained"
+                        color="primary"
+                        disabled={Object.values(bulkEditIPs).every(ip => !ip.trim()) || assigningIPs}
+                    >
+                        {assigningIPs ? "Applying..." : "Apply Changes"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </StyledDrawer>
     );
 } 
