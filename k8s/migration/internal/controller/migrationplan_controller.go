@@ -769,7 +769,6 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
 				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
 				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
-				"OS_TYPE":               migrationtemplate.Spec.OSType,
 				"VIRTIO_WIN_DRIVER":     virtiodrivers,
 				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
@@ -799,6 +798,16 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
+
+		if vmMachine.Spec.VMs.OSFamily == "" {
+			return nil, fmt.Errorf(
+				"OSFamily is not available for the VM '%s', "+
+					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
+				vmMachine.Name)
+		}
+
+		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMs.OSFamily
+
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
