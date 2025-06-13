@@ -87,8 +87,10 @@ spec:
                     items:
                       type: string
                     type: array
-                  osType:
-                    description: OSType is the OS type of the virtual machine
+                  osFamily:
+                    enum:
+                    - windows
+                    - linux
                     type: string
                   vmState:
                     description: VMState is the state of the virtual machine
