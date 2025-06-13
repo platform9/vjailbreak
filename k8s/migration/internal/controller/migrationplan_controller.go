@@ -779,7 +779,10 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		}
 
 		if vmMachine.Spec.VMs.OSFamily == "" {
-			return nil, fmt.Errorf("OSFamily is not available for the VM '%s', cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR", vmMachine.Name)
+			return nil, fmt.Errorf(
+				"OSFamily is not available for the VM '%s', "+
+					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
+				vmMachine.Name)
 		}
 
 		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMs.OSFamily
