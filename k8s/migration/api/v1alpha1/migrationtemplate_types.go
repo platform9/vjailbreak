@@ -32,8 +32,6 @@ type MigrationTemplateDestination struct {
 
 // MigrationTemplateSpec defines the desired state of MigrationTemplate
 type MigrationTemplateSpec struct {
-	// +kubebuilder:validation:Enum=windows;linux
-	OSType          string                       `json:"osType,omitempty"`
 	VirtioWinDriver string                       `json:"virtioWinDriver,omitempty"`
 	NetworkMapping  string                       `json:"networkMapping"`
 	StorageMapping  string                       `json:"storageMapping"`
