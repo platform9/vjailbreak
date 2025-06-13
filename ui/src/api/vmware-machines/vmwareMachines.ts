@@ -3,7 +3,6 @@ import { VmData } from "../migration-templates/model"
 import { VJAILBREAK_API_BASE_PATH } from "../constants"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "../constants"
 import axios from "../axios"
-import { error } from "console"
 
 
 export const getVMwareMachines = async (
