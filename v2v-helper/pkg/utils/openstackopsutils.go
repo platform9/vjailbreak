@@ -99,7 +99,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		}
 	}
 
-	if ostype == "windows" {
+	if ostype == constants.OSFamilyWindows {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
@@ -274,7 +274,7 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume)
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
-			"os_type":     "windows",
+			"os_type":     constants.OSFamilyWindows,
 		},
 	}
 	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()

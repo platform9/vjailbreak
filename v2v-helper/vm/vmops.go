@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -125,9 +126,9 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	}
 	if ostype == "" {
 		if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyWindowsGuest) {
-			ostype = "windows"
+			ostype = constants.OSFamilyWindows
 		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
-			ostype = "linux"
+			ostype = constants.OSFamilyLinux
 		} else {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
 		}
