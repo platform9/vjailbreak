@@ -14,13 +14,10 @@ import (
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 type vjailbreakProxy struct {
@@ -190,18 +187,6 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	defer conn.Close()
 	cert := conn.ConnectionState().PeerCertificates[0]
 	return cert, nil
-}
-
-// Get VMwareMachine object
-func GetVMwareMachineObject(ctx context.Context, client client.Client, name string) (*vjailbreakv1alpha1.VMwareMachine, error) {
-	vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
-	vmwvmKey := k8stypes.NamespacedName{Name: name}
-	err := client.Get(ctx, vmwvmKey, vmwareMachine)
-
-	if err != nil {
-		return nil, err
-	}
-	return vmwareMachine, nil
 }
 
 // Create in cluster k8s client
