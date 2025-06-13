@@ -37,6 +37,7 @@ export interface MigrationTemplateSpec {
   networkMapping: string
   source: Source
   storageMapping: string
+  targetPCDClusterName?: string
 }
 
 export interface Destination {

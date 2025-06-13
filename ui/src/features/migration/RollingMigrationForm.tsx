@@ -1,4 +1,4 @@
-import { Box, Typography, FormControl, Select, MenuItem, ListSubheader, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link } from "@mui/material"
+import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link, Select, MenuItem } from "@mui/material"
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
@@ -10,12 +10,8 @@ import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
-import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
 import { getVMwareHosts, patchVMwareHost } from "src/api/vmware-hosts/vmwareHosts"
 import { getVMwareMachines } from "src/api/vmware-machines/vmwareMachines"
-import { VMwareCreds } from "src/api/vmware-creds/model"
-import { VMwareCluster } from "src/api/vmware-clusters/model"
 import { VMwareHost } from "src/api/vmware-hosts/model"
 import { VMwareMachine } from "src/api/vmware-machines/model"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
@@ -24,12 +20,9 @@ import { BMConfig } from "src/api/bmconfig/model"
 import MaasConfigDetailsModal from "src/pages/dashboard/BMConfigDetailsModal"
 import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds"
 import { OpenstackCreds } from "src/api/openstack-creds/model"
-import { getPCDClusters } from "src/api/pcd-clusters"
-import { PCDCluster } from "src/api/pcd-clusters/model"
 import NetworkAndStorageMappingStep, { ResourceMap } from "./NetworkAndStorageMappingStep"
 import { createRollingMigrationPlanJson, postRollingMigrationPlan, VMSequence, ClusterMapping } from "src/api/rolling-migration-plans"
-import { getSecret } from "src/api/secrets/secrets"
-import vmwareLogo from "src/assets/vmware.jpeg"
+import SourceDestinationClusterSelection from "./SourceDestinationClusterSelection"
 // Import required APIs for creating migration resources
 import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
 import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
@@ -43,6 +36,7 @@ import { CUTOVER_TYPES } from "./constants"
 import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
 import WarningIcon from '@mui/icons-material/Warning';
+import { useClusterData } from "./useClusterData"
 
 // Import CDS icons
 import "@cds/core/icon/register.js"
@@ -86,14 +80,6 @@ type FieldErrors = { [formId: string]: string };
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
 
-// Create styled components for the image
-const VMwareLogoImg = styled('img')({
-    width: 24,
-    height: 24,
-    marginRight: 8,
-    objectFit: 'contain'
-});
-
 // Style for Clarity icons
 const CdsIconWrapper = styled('div')({
     marginRight: 8,
@@ -110,12 +96,6 @@ const StyledDrawer = styled(Drawer)(() => ({
         maxWidth: "90vw",
     },
 }))
-
-interface PcdDataItem {
-    id: string;
-    name: string;
-    openstackCredName: string;
-}
 
 interface ESXHost {
     id: string;
@@ -432,15 +412,6 @@ const CodeEditorContainer = styled(Box)(({ theme }) => ({
     }
 }));
 
-interface SourceDataItem {
-    credName: string;
-    datacenter: string;
-    vcenterName: string;
-    clusters: {
-        id: string;
-        name: string;
-    }[];
-}
 
 interface RollingMigrationFormDrawerProps {
     open: boolean;
@@ -456,12 +427,8 @@ export default function RollingMigrationFormDrawer({
     const [destinationPCD, setDestinationPCD] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
-    const [sourceData, setSourceData] = useState<SourceDataItem[]>([]);
-    const [loading, setLoading] = useState(false);
     const [selectedVMwareCredName, setSelectedVMwareCredName] = useState("");
 
-    const [pcdData, setPcdData] = useState<PcdDataItem[]>([]);
-    const [loadingPCD, setLoadingPCD] = useState(false);
     const [selectedPcdCredName, setSelectedPcdCredName] = useState("");
 
     const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([]);
@@ -500,101 +467,13 @@ export default function RollingMigrationFormDrawer({
     const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
         useParams<SelectedMigrationOptionsType>(defaultMigrationOptions);
 
+    const { sourceData, pcdData, loadingVMware: loading, loadingPCD } = useClusterData();
+
     useEffect(() => {
         if (open) {
-            fetchSourceData();
             fetchMaasConfigs();
-            fetchPcdData();
         }
     }, [open]);
-
-    const fetchSourceData = async () => {
-        setLoading(true);
-        try {
-            const vmwareCreds = await getVmwareCredentialsList(VJAILBREAK_DEFAULT_NAMESPACE);
-
-            if (!vmwareCreds || vmwareCreds.length === 0) {
-                setSourceData([]);
-                setLoading(false);
-                return;
-            }
-            const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
-                const credName = cred.metadata.name;
-                const datacenter = cred.spec.datacenter || credName;
-
-                // Default vcenterName to credential name
-                let vcenterName = credName;
-
-                // If credential has a secretRef, fetch the secret to get VCENTER_HOST
-                if (cred.spec.secretRef?.name) {
-                    try {
-                        const secret = await getSecret(cred.spec.secretRef.name, VJAILBREAK_DEFAULT_NAMESPACE);
-                        if (secret && secret.data && secret.data.VCENTER_HOST) {
-                            // Use VCENTER_HOST as the vCenter name
-                            vcenterName = secret.data.VCENTER_HOST;
-                        }
-                    } catch (error) {
-                        console.error(`Failed to fetch secret for credential ${credName}:`, error);
-                        // Fall back to using credential name if secret fetch fails
-                    }
-                }
-
-                const clustersResponse = await getVMwareClusters(
-                    VJAILBREAK_DEFAULT_NAMESPACE,
-                    credName
-                );
-
-                const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
-                    id: `${credName}:${cluster.metadata.name}`,
-                    name: cluster.spec.name
-                }));
-
-                return {
-                    credName,
-                    datacenter,
-                    vcenterName,
-                    clusters
-                };
-            });
-
-            const newSourceData = await Promise.all(sourceDataPromises);
-            setSourceData(newSourceData.filter(item => item.clusters.length > 0));
-        } catch (error) {
-            console.error("Failed to fetch source data:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchPcdData = async () => {
-        setLoadingPCD(true);
-        try {
-            const pcdClusters = await getPCDClusters(VJAILBREAK_DEFAULT_NAMESPACE);
-
-            if (!pcdClusters || pcdClusters.items.length === 0) {
-                setPcdData([]);
-                setLoadingPCD(false);
-                return;
-            }
-
-            const clusterData = pcdClusters.items.map((cluster: PCDCluster) => {
-                const clusterName = cluster.spec.clusterName;
-                const openstackCredName = cluster.metadata.labels?.["vjailbreak.k8s.pf9.io/openstackcreds"] || "";
-
-                return {
-                    id: cluster.metadata.name,
-                    name: clusterName,
-                    openstackCredName: openstackCredName
-                };
-            });
-
-            setPcdData(clusterData);
-        } catch (error) {
-            console.error("Failed to fetch PCD clusters:", error);
-        } finally {
-            setLoadingPCD(false);
-        }
-    };
 
     const fetchMaasConfigs = async () => {
         try {
@@ -806,8 +685,7 @@ export default function RollingMigrationFormDrawer({
         setMaasConfigDialogOpen(false);
     };
 
-    const handleSourceClusterChange = (event) => {
-        const value = event.target.value;
+    const handleSourceClusterChange = (value) => {
         setSourceCluster(value);
 
         if (value) {
@@ -819,8 +697,7 @@ export default function RollingMigrationFormDrawer({
         }
     };
 
-    const handleDestinationPCDChange = (event) => {
-        const value = event.target.value;
+    const handleDestinationPCDChange = (value) => {
         setDestinationPCD(value);
 
         if (value) {
@@ -1254,147 +1131,18 @@ export default function RollingMigrationFormDrawer({
 
             <DrawerContent>
                 <Box sx={{ display: "grid", gap: 4 }}>
-                    <Box>
-                        <Step stepNumber="1" label="Source & Destination" />
-                        <Box sx={{ ml: 5, mt: 2 }}>
-                            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: "500" }}>Source</Typography>
-                                    <FormControl fullWidth variant="outlined" size="small">
-                                        <Select
-                                            value={sourceCluster}
-                                            onChange={handleSourceClusterChange}
-                                            displayEmpty
-                                            disabled={loading}
-                                            renderValue={(selected) => {
-                                                if (!selected) return <em>Select VMware Cluster</em>;
-                                                const parts = selected.split(":");
-                                                const credName = parts[0];
-
-                                                // Find the vcenterName for this credential
-                                                const sourceItem = sourceData.find(item => item.credName === credName);
-                                                const vcenterName = sourceItem?.vcenterName || credName;
-
-                                                const cluster = sourceItem?.clusters.find(c => c.id === selected);
-                                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.name || ""}`;
-                                            }}
-                                            MenuProps={{
-                                                PaperProps: {
-                                                    style: {
-                                                        maxHeight: 300
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <MenuItem value="" disabled><em>Select VMware Cluster</em></MenuItem>
-
-                                            {loading ? (
-                                                <MenuItem disabled>Loading...</MenuItem>
-                                            ) : sourceData.length === 0 ? (
-                                                <MenuItem disabled>No clusters found</MenuItem>
-                                            ) : (
-                                                Object.entries(
-                                                    sourceData.reduce((acc, item) => {
-                                                        if (!acc[item.vcenterName]) {
-                                                            acc[item.vcenterName] = {
-                                                                credName: item.credName,
-                                                                datacenters: {}
-                                                            };
-                                                        }
-                                                        acc[item.vcenterName].datacenters[item.datacenter] = item.clusters;
-                                                        return acc;
-                                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string }[]> }>)
-                                                ).map(([vcenterName, { credName, datacenters }]) => [
-                                                    <ListSubheader key={vcenterName} sx={{ fontWeight: 700 }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                            <VMwareLogoImg src={vmwareLogo} alt="VMware" />
-                                                            {vcenterName}
-                                                        </Box>
-                                                    </ListSubheader>,
-                                                    ...Object.entries(datacenters).map(([datacenterName, clusters]) => [
-                                                        <ListSubheader key={`${credName}-${datacenterName}`} sx={{ fontWeight: 600, pl: 4 }}>
-                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                <CdsIconWrapper>
-                                                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                                                    {/* @ts-ignore */}
-                                                                    <cds-icon shape="building" size="md" solid ></cds-icon>
-                                                                </CdsIconWrapper>
-                                                                {datacenterName}
-                                                            </Box>
-                                                        </ListSubheader>,
-                                                        ...clusters.map((cluster) => (
-                                                            <MenuItem
-                                                                key={cluster.id}
-                                                                value={cluster.id}
-                                                                sx={{ pl: 7 }}
-                                                            >
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <CdsIconWrapper>
-                                                                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                                                        {/* @ts-ignore */}
-                                                                        <cds-icon shape="cluster" size="md" ></cds-icon>
-                                                                    </CdsIconWrapper>
-                                                                    {cluster.name}
-                                                                </Box>
-                                                            </MenuItem>
-                                                        ))
-                                                    ])
-                                                ]).flat()
-                                            )}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: "500" }}>Destination</Typography>
-                                    <FormControl fullWidth variant="outlined" size="small">
-                                        <Select
-                                            value={destinationPCD}
-                                            onChange={handleDestinationPCDChange}
-                                            displayEmpty
-                                            disabled={!sourceCluster || loadingPCD}
-                                            renderValue={(selected) => {
-                                                if (!selected) return <em>Select PCD Cluster</em>;
-                                                const pcd = pcdData.find(p => p.id === selected);
-                                                return pcd?.name || selected;
-                                            }}
-                                            MenuProps={{
-                                                PaperProps: {
-                                                    style: {
-                                                        maxHeight: 300
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <MenuItem value="" disabled><em>Select PCD Cluster</em></MenuItem>
-
-                                            {loadingPCD ? (
-                                                <MenuItem disabled>Loading...</MenuItem>
-                                            ) : pcdData.length === 0 ? (
-                                                <MenuItem disabled>No PCD clusters found</MenuItem>
-                                            ) : (
-                                                pcdData.map((pcd) => (
-                                                    <MenuItem
-                                                        key={pcd.id}
-                                                        value={pcd.id}
-                                                    >
-                                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                            <CdsIconWrapper>
-                                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                                                {/* @ts-ignore */}
-                                                                <cds-icon shape="cluster" size="md"></cds-icon>
-                                                            </CdsIconWrapper>
-                                                            {pcd.name}
-                                                        </Box>
-                                                    </MenuItem>
-                                                ))
-                                            )}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                            </Box>
-                        </Box>
-                    </Box>
-
+                    <SourceDestinationClusterSelection
+                        onChange={() => () => { }}
+                        errors={{}}
+                        stepNumber="1"
+                        stepLabel="Source & Destination"
+                        onVmwareClusterChange={handleSourceClusterChange}
+                        onPcdClusterChange={handleDestinationPCDChange}
+                        vmwareCluster={sourceCluster}
+                        pcdCluster={destinationPCD}
+                        loadingVMware={loading}
+                        loadingPCD={loadingPCD}
+                    />
                     <Box>
                         <Step stepNumber="2" label="MAAS Config (Verify the configuration)" />
                         <Box sx={{ ml: 5, mt: 1 }}>

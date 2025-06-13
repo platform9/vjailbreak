@@ -40,7 +40,7 @@ import Footer from "../../components/forms/Footer"
 import Header from "../../components/forms/Header"
 import MigrationOptions from "./MigrationOptionsAlt"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
-import SourceAndDestinationEnvStep from "./SourceAndDestinationEnvStep"
+import SourceDestinationClusterSelection from "./SourceDestinationClusterSelection"
 import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 import { uniq } from "ramda"
@@ -87,6 +87,9 @@ export interface FormValues extends Record<string, unknown> {
   vms?: VmData[]
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
+  // Cluster selection fields
+  vmwareCluster?: string  // Format: "credName:datacenter:clusterName"
+  pcdCluster?: string     // PCD cluster ID
   // Optional Params
   dataCopyMethod?: string
   dataCopyStartTime?: string
@@ -233,10 +236,16 @@ export default function MigrationFormDrawer({
 
   useEffect(() => {
     const createMigrationTemplate = async () => {
+      let targetPCDClusterName: string | undefined = undefined;
+      if (params.pcdCluster) {
+        targetPCDClusterName = params.pcdCluster;
+      }
+
       const body = createMigrationTemplateJson({
         datacenter: params.vmwareCreds?.datacenter,
         vmwareRef: vmwareCredentials?.metadata.name,
         openstackRef: openstackCredentials?.metadata.name,
+        targetPCDClusterName: targetPCDClusterName,
       })
       const response = await postMigrationTemplate(body)
       setMigrationTemplate(response)
@@ -250,6 +259,7 @@ export default function MigrationFormDrawer({
     params.vmwareCreds?.datacenter,
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
+    params.pcdCluster,
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
@@ -506,6 +516,8 @@ export default function MigrationFormDrawer({
     isNilOrEmpty(params.vms) ||
     isNilOrEmpty(params.networkMappings) ||
     isNilOrEmpty(params.storageMappings) ||
+    isNilOrEmpty(params.vmwareCluster) ||
+    isNilOrEmpty(params.pcdCluster) ||
     // Check if all networks are mapped
     availableVmwareNetworks.some(network =>
       !params.networkMappings?.some(mapping => mapping.source === network)) ||
@@ -579,9 +591,11 @@ export default function MigrationFormDrawer({
       <DrawerContent>
         <Box sx={{ display: "grid", gap: 4 }}>
           {/* Step 1 */}
-          <SourceAndDestinationEnvStep
+          <SourceDestinationClusterSelection
             onChange={getParamsUpdater}
             errors={fieldErrors}
+            vmwareCluster={params.vmwareCluster}
+            pcdCluster={params.pcdCluster}
           />
           {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
           <VmsSelectionStep
