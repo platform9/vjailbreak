@@ -67,7 +67,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		OpenstackNetworkPorts:  string(configMap.Data["NEUTRON_PORT_IDS"]),
 		OpenstackVolumeTypes:   string(configMap.Data["CINDER_VOLUME_TYPES"]),
 		OpenstackVirtioWin:     string(configMap.Data["VIRTIO_WIN_DRIVER"]),
-		OpenstackOSType:        string(configMap.Data["OS_TYPE"]),
+		OpenstackOSType:        string(configMap.Data["OS_FAMILY"]),
 		OpenstackConvert:       string(configMap.Data["CONVERT"]) == constants.TrueString,
 		DataCopyStart:          string(configMap.Data["DATACOPYSTART"]),
 		VMcutoverStart:         string(configMap.Data["CUTOVERSTART"]),

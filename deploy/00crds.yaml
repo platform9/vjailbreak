@@ -497,6 +497,17 @@ spec:
                 description: MigrationTemplate is the template to be used for the
                   migration
                 type: string
+              postMigrationAction:
+                properties:
+                  folderName:
+                    type: string
+                  moveToFolder:
+                    type: boolean
+                  renameVm:
+                    type: boolean
+                  suffix:
+                    type: string
+                type: object
               retry:
                 description: Retry the migration if it fails
                 type: boolean
@@ -747,12 +758,6 @@ spec:
               networkMapping:
                 description: NetworkMapping is the reference to the NetworkMapping
                   resource that defines source to destination network mappings
-                type: string
-              osType:
-                description: OSType is the OS type of the virtual machine
-                enum:
-                - windows
-                - linux
                 type: string
               source:
                 description: Source is the source details for the virtual machine
@@ -2124,8 +2129,10 @@ spec:
                     items:
                       type: string
                     type: array
-                  osType:
-                    description: OSType is the OS type of the virtual machine
+                  osFamily:
+                    enum:
+                    - windows
+                    - linux
                     type: string
                   vmState:
                     description: VMState is the state of the virtual machine

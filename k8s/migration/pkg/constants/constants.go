@@ -142,6 +142,9 @@ const (
 	StartCutOverYes = "yes"
 
 	// MaxVCPUs is the maximum number of vCPUs
+	OSFamilyWindows = "windows"
+	OSFamilyLinux   = "linux"
+
 	MaxVCPUs = 99999
 
 	// MaxRAM is the maximum amount of RAM

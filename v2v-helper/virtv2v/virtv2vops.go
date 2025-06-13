@@ -18,6 +18,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -122,7 +123,7 @@ func downloadFile(url, filePath string) error {
 
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
 	// Step 1: Handle Windows driver injection
-	if ostype == "windows" {
+	if ostype == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win.iso"
 		log.Println("Downloading virtio windrivers")
 		err := downloadFile(virtiowindriver, filePath)
