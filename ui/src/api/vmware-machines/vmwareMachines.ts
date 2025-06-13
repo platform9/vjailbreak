@@ -36,13 +36,8 @@ export const patchVMwareMachine = async (
   flavorId: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<VMwareMachine> => {
-  let vmNameK8s = convertToK8sName(vmName).name
-
-  if (convertToK8sName(vmName).error) {
-    throw new Error(convertToK8sName(vmName).error)
-  }
-
-  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines/${vmNameK8s}`
+  
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines/${vmName}`
   const payload = {
     spec: {
       targetFlavorId: flavorId,
@@ -73,6 +68,7 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     targetFlavorId: machine.spec.targetFlavorId,
     labels: machine.metadata.labels,
     osType: machine.spec.vms.osType,
+    vmWareMachineName: machine.metadata.name,
 
   }))
 }
@@ -91,10 +87,6 @@ function convertToK8sName(name: string, maxLength = 242) {
   // Remove leading and trailing hyphens
   name = name.replace(/^-+|-+$/g, '');
 
-  // Truncate to the max allowed length
-  if (name.length > maxLength) {
-    name = name.substring(0, maxLength);
-  }
 
   // Validate the name against Kubernetes DNS-1123 subdomain rules
   const k8sNameRegex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
