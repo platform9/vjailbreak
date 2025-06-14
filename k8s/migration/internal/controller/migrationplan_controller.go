@@ -534,7 +534,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 							{
 								Name:            "fedora",
 								Image:           v2vimage,
-								ImagePullPolicy: corev1.PullAlways,
+								ImagePullPolicy: corev1.PullIfNotPresent,
 								Command:         []string{"/home/fedora/manager"},
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
@@ -598,12 +598,12 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse("1000m"),
 										corev1.ResourceMemory:           resource.MustParse("1Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("200Mi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
 									},
 									Limits: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse("2000m"),
 										corev1.ResourceMemory:           resource.MustParse("3Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("2Gi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
 									},
 								},
 							},
