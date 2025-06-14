@@ -67,9 +67,6 @@ spec:
                       type: string
                     type: array
                   osFamily:
-                    enum:
-                    - windows
-                    - linux
                     type: string
                   vmState:
                     type: string

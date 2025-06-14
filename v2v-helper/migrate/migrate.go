@@ -482,7 +482,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 		utils.PrintLog("OS compatibility check passed")
 
-	} else if vminfo.OSType == constants.OSFamilyWindows {
+	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		utils.PrintLog("OS compatibility check passed")
 	} else {
 		return fmt.Errorf("unsupported OS type: %s", vminfo.OSType)
@@ -494,14 +494,14 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if migobj.Convert {
 		firstbootscripts := []string{}
 		// Fix NTFS
-		if vminfo.OSType == constants.OSFamilyWindows {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 			err = virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
 		// Turn on DHCP for interfaces in rhel VMs
-		if vminfo.OSType == constants.OSFamilyLinux {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 			if strings.Contains(osRelease, "rhel") {
 				firstbootscriptname := "rhel_enable_dhcp"
 				firstbootscript := constants.RhelFirstBootScript

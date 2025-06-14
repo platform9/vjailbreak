@@ -969,9 +969,6 @@ spec:
                       type: string
                     type: array
                   osFamily:
-                    enum:
-                    - windows
-                    - linux
                     type: string
                   vmState:
                     type: string
@@ -1670,7 +1667,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.13
+        image: quay.io/platform9/vjailbreak-controller:latest
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:

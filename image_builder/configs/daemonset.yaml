@@ -27,9 +27,14 @@ spec:
               echo "Fixing permissions on /home/ubuntu/vmware-vix-disklib-distrib..."
               chown -R 1000:1000 /home/ubuntu/vmware-vix-disklib-distrib
               chmod 755 /home/ubuntu/vmware-vix-disklib-distrib
+              echo "Fixing permissions on /home/ubuntu/virtio-win..."
+              chown -R 1000:1000 /home/ubuntu/virtio-win
+              chmod 755 /home/ubuntu/virtio-win
           volumeMounts:
             - name: vmwarelib
               mountPath: /home/ubuntu/vmware-vix-disklib-distrib
+            - name: virtio-win
+              mountPath: /home/ubuntu/virtio-win
       containers:
         - name: sync-container
           image: alpine:latest
@@ -47,6 +52,8 @@ spec:
               mountPath: /home/ubuntu/vmware-vix-disklib-distrib
             - name: logs
               mountPath: /var/log/pf9
+            - name: virtio-win
+              mountPath: /home/ubuntu/virtio-win
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -100,3 +107,7 @@ spec:
           hostPath:
             type: DirectoryOrCreate
             path: /var/log/pf9
+        - name: virtio-win
+          hostPath:
+            type: DirectoryOrCreate
+            path: /home/ubuntu/virtio-win
