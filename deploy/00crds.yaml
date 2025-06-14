@@ -2130,9 +2130,6 @@ spec:
                       type: string
                     type: array
                   osFamily:
-                    enum:
-                    - windows
-                    - linux
                     type: string
                   vmState:
                     description: VMState is the state of the virtual machine
