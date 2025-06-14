@@ -95,8 +95,11 @@ func CreatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, h
 
 // CreatePCDClusterFromResmgrCluster creates a PCDCluster from resmgr Cluster
 func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
-	pcdCluster := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
-	if err := k8sClient.Create(ctx, &pcdCluster); err != nil {
+	pcdCluster, err := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate PCD cluster")
+	}
+	if err := k8sClient.Create(ctx, pcdCluster); err != nil {
 		return errors.Wrap(err, "failed to create PCD cluster")
 	}
 	return nil
@@ -127,7 +130,10 @@ func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 		return errors.Wrap(err, "failed to get PCD cluster")
 	}
 
-	pcdCluster := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
+	pcdCluster, err := generatePCDClusterFromResmgrCluster(openstackCreds, cluster)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate PCD cluster")
+	}
 	oldPCDCluster.Spec = pcdCluster.Spec
 	oldPCDCluster.Status = pcdCluster.Status
 	if err := k8sClient.Update(ctx, &oldPCDCluster); err != nil {
@@ -184,10 +190,14 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 	return pcdHost
 }
 
-func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, cluster resmgr.Cluster) vjailbreakv1alpha1.PCDCluster {
-	return vjailbreakv1alpha1.PCDCluster{
+func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, cluster resmgr.Cluster) (*vjailbreakv1alpha1.PCDCluster, error) {
+	k8sClusterName, err := ConvertToK8sName(cluster.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &vjailbreakv1alpha1.PCDCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name,
+			Name:      k8sClusterName,
 			Namespace: constants.NamespaceMigrationSystem,
 			Labels: map[string]string{
 				constants.OpenstackCredsLabel: openstackCreds.Name,
@@ -206,7 +216,7 @@ func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.Open
 			CreatedAt:   cluster.CreatedAt,
 			UpdatedAt:   cluster.UpdatedAt,
 		},
-	}
+	}, nil
 }
 
 // DeleteStalePCDHosts removes PCDHost resources that no longer exist in the upstream resmgr
