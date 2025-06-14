@@ -121,17 +121,50 @@ func downloadFile(url, filePath string) error {
 	return nil
 }
 
+func CheckForVirtioDrivers() (bool, error) {
+
+	// Before downloading virtio windrivers Check if iso is present in the path
+	preDownloadPath := "/home/fedora/virtio-win"
+
+	// Check if path exists
+	_, err := os.Stat(preDownloadPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if path exists: %s", err)
+	}
+	// Check if iso is present in the path
+	files, err := os.ReadDir(preDownloadPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read directory: %s", err)
+	}
+	for _, file := range files {
+		if file.Name() == "virtio-win.iso" {
+			log.Println("Found virtio windrivers")
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
 	// Step 1: Handle Windows driver injection
-	if ostype == constants.OSFamilyWindows {
-		filePath := "/home/fedora/virtio-win.iso"
-		log.Println("Downloading virtio windrivers")
-		err := downloadFile(virtiowindriver, filePath)
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
+		filePath := "/home/fedora/virtio-win/virtio-win.iso"
+
+		found, err := CheckForVirtioDrivers()
 		if err != nil {
-			return fmt.Errorf("failed to download virtio-win: %s", err)
+			log.Printf("failed to check for virtio drivers: %s", err)
+			log.Println("Downloading virtio windrivers instead of using the existing one")
 		}
-		log.Println("Downloaded virtio windrivers")
-		defer os.Remove(filePath)
+		if found {
+			log.Println("Found virtio windrivers")
+		} else {
+			log.Println("Downloading virtio windrivers")
+			err := downloadFile(virtiowindriver, filePath)
+			if err != nil {
+				return fmt.Errorf("failed to download virtio-win: %s", err)
+			}
+			log.Println("Downloaded virtio windrivers")
+		}
 		os.Setenv("VIRTIO_WIN", filePath)
 	}
 

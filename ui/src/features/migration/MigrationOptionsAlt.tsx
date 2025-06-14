@@ -87,7 +87,7 @@ export default function MigrationOptionsAlt({
   useEffect(() => {
     onChange("dataCopyMethod")("hot")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
-    onChange("osType")(OS_TYPES.AUTO_DETECT)
+    onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -285,23 +285,23 @@ export default function MigrationOptionsAlt({
 
             <Fields>
               <FormControlLabel
-                id="os-type"
-                label="OS Type"
+                id="os-family"
+                label="OS Family"
                 control={
                   <Checkbox
-                    checked={selectedMigrationOptions.osType}
+                    checked={selectedMigrationOptions.osFamily}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("osType")(e.target.checked)
+                      updateSelectedMigrationOptions("osFamily")(e.target.checked)
                     }}
                   />
                 }
               />
               <Select
                 size="small"
-                disabled={!selectedMigrationOptions?.osType}
-                value={params?.osType || OS_TYPES.AUTO_DETECT}
+                disabled={!selectedMigrationOptions?.osFamily}
+                value={params?.osFamily || OS_TYPES.AUTO_DETECT}
                 onChange={(e) => {
-                  onChange("osType")(e.target.value)
+                  onChange("osFamily")(e.target.value)
                 }}
               >
                 {OS_TYPES_OPTIONS.map((item) => (

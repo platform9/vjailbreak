@@ -20,13 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// VMInfo contains detailed information about a VMware virtual machine to be migrated,
-// including resource allocation, network configuration, storage details, and host placement.
-// This comprehensive data is necessary for accurately recreating the VM in the target environment.
 type VMInfo struct {
-	// Name is the name of the virtual machine
-	Name string `json:"name"`
-	// Datastores is the list of datastores for the virtual machine
+	Name       string   `json:"name"`
 	Datastores []string `json:"datastores,omitempty"`
 	// Disks is the list of disks for the virtual machine
 	Disks []string `json:"disks,omitempty"`
@@ -36,8 +31,8 @@ type VMInfo struct {
 	IPAddress string `json:"ipAddress,omitempty"`
 	// VMState is the state of the virtual machine
 	VMState string `json:"vmState,omitempty"`
-	// OSType is the OS type of the virtual machine
-	OSType string `json:"osType,omitempty"`
+	// OSFamily is the OS type of the virtual machine
+	OSFamily string `json:"osFamily,omitempty"`
 	// CPU is the number of CPUs in the virtual machine
 	CPU int `json:"cpu,omitempty"`
 	// Memory is the amount of memory in the virtual machine
@@ -51,7 +46,7 @@ type VMInfo struct {
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMInfo is the info of the VMs in the VMwareMachine
-	VMInfo VMInfo `json:"vms,omitempty"`
+	VMs VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
@@ -71,12 +66,7 @@ type VMwareMachineStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
-// in the VMware source environment targeted for migration. It tracks VM configuration,
-// resource allocation, migration status, and target environment specifications.
-// VMwareMachine resources are the primary workloads migrated from VMware to OpenStack
-// as part of the migration process and contain all necessary information to recreate
-// equivalent virtual machines in the target environment.
+// VMwareMachine is the Schema for the vmwaremachines API
 type VMwareMachine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

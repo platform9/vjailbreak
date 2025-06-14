@@ -975,10 +975,6 @@ spec:
                       type: string
                     type: array
                   osFamily:
-                    enum:
-                    - windows
-                    - linux
-                    description: OSType is the OS type of the virtual machine
                     type: string
                   vmState:
                     type: string

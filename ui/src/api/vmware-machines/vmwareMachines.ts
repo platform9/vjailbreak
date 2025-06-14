@@ -70,7 +70,7 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     disks: machine.spec.vms.disks || [],
     targetFlavorId: machine.spec.targetFlavorId,
     labels: machine.metadata.labels,
-    osType: machine.spec.vms.osType,
+    osFamily: machine.spec.vms.osFamily,
     vmWareMachineName: machine.metadata.name,
     esxHost:
       machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",

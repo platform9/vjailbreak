@@ -42,6 +42,6 @@ systemctl enable --now serial-getty@ttyS0.service`
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
 
-	OSFamilyWindows = "windows"
-	OSFamilyLinux   = "linux"
+	OSFamilyWindows = "windowsguest"
+	OSFamilyLinux   = "linuxguest"
 )
