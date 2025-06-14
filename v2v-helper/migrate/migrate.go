@@ -385,9 +385,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		useSingleDisk               bool
 	)
 
-	if vminfo.OSType == constants.OSFamilyWindows {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		getBootCommand = "ls /Windows"
-	} else if vminfo.OSType == constants.OSFamilyLinux {
+	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		getBootCommand = "ls /boot"
 	} else {
 		getBootCommand = "inspect-os"
@@ -427,7 +427,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		break
 	}
 
-	if vminfo.OSType == constants.OSFamilyLinux {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if useSingleDisk {
 			// skip checking LVM, because its a single disk
 			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
@@ -526,7 +526,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	//TODO(omkar): can disable DHCP here
-	if vminfo.OSType == constants.OSFamilyLinux {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			utils.PrintLog("Adding wildcard netplan")

@@ -142,7 +142,7 @@ func CheckForVirtioDrivers() (bool, error) {
 
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
 	// Step 1: Handle Windows driver injection
-	if ostype == constants.OSFamilyWindows {
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
 
 		found, err := CheckForVirtioDrivers()

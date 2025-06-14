@@ -125,9 +125,9 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		uefi = true
 	}
 	if ostype == "" {
-		if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyWindowsGuest) {
+		if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyWindowsGuest)) {
 			ostype = constants.OSFamilyWindows
-		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
+		} else if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyLinuxGuest)) {
 			ostype = constants.OSFamilyLinux
 		} else {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
