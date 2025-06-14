@@ -1672,6 +1672,13 @@ spec:
         - /manager
         image: quay.io/platform9/vjailbreak-controller:v0.1.13
         imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 5
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1699,7 +1706,7 @@ spec:
         runAsGroup: 0
         runAsUser: 0
       serviceAccountName: migration-controller-manager
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 30
       volumes:
       - hostPath:
           path: /var/lib/rancher/k3s/server
