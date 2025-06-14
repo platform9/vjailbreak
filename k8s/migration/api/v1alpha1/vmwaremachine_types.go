@@ -46,6 +46,8 @@ type VMInfo struct {
 	ESXiName string `json:"esxiName,omitempty"`
 	// ClusterName is the name of the cluster
 	ClusterName string `json:"clusterName,omitempty"`
+	// AssignedIp is the IP address assigned to the VM
+	AssignedIp string `json:"assignedIp,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
