@@ -95,7 +95,7 @@ const columns: GridColDef[] = [
   {
     field: "name",
     headerName: "VM Name",
-    flex: 2,
+    flex: 2.5,
     renderCell: (params) => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -119,9 +119,6 @@ const columns: GridColDef[] = [
         {params.row.flavorNotFound && (
           <Box display="flex" alignItems="center" gap={0.5}>
             <WarningIcon color="warning" fontSize="small" />
-            <Typography variant="body2" color="warning.main">
-              Flavor not found
-            </Typography>
           </Box>
         )}
       </Box>
@@ -484,8 +481,6 @@ export default function VmsSelectionStep({
               getRowClassName={(params) => {
                 if (params.row.vmState !== "running" || params.row.isMigrated) {
                   return "disabled-row";
-                } else if (params.row.flavorNotFound) {
-                  return "warning-row";
                 } else {
                   return "";
                 }
