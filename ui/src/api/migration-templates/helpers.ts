@@ -6,7 +6,7 @@ export const createMigrationTemplateJson = (params) => {
     networkMapping = "",
     storageMapping = "",
     virtioWinDriver,
-    osType,
+    osFamily,
     datacenter,
     vmwareRef,
     openstackRef,
@@ -21,7 +21,7 @@ export const createMigrationTemplateJson = (params) => {
       networkMapping: networkMapping,
       storageMapping: storageMapping,
       virtioWinDriver: virtioWinDriver,
-      osType: osType,
+      osFamily: osFamily,
       source: {
         datacenter: datacenter,
         vmwareRef: vmwareRef,
