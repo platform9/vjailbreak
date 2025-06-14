@@ -362,7 +362,11 @@ export default function VmsSelectionStep({
       const selectedVmNames = rowSelectionModel as string[];
 
       const updatePromises = selectedVmNames.map(vmName =>
-        patchVMwareMachine(vmName, isAutoAssign ? "" : selectedFlavor)
+        patchVMwareMachine(vmName, {
+          spec: {
+            targetFlavorId: isAutoAssign ? "" : selectedFlavor
+          }
+        })
       );
 
       await Promise.all(updatePromises);
