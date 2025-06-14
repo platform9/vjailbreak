@@ -43,6 +43,7 @@ export const patchVMwareMachine = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<VMwareMachine> => {
+  
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines/${vmName}`
 
   return axios.patch<VMwareMachine>({
@@ -70,8 +71,9 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     targetFlavorId: machine.spec.targetFlavorId,
     labels: machine.metadata.labels,
     osType: machine.spec.vms.osType,
-    esxHost:
-      machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
+    esxHost: machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
+    vmWareMachineName: machine.metadata.name,
+
   }))
 }
 
