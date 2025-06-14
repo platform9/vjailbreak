@@ -146,7 +146,7 @@ const esxColumns: GridColDef[] = [
     },
     {
         field: "pcdHostConfigName",
-        headerName: "PCD Host Config",
+        headerName: "Host Config",
         flex: 1,
         align: "center",
         valueGetter: (value) => value || "—",
@@ -361,6 +361,9 @@ export default function RollingMigrationFormDrawer({
 
     // IP validation error state
     const [vmIpValidationError, setVmIpValidationError] = useState<string>("");
+
+    // ESX host config validation error state
+    const [esxHostConfigValidationError, setEsxHostConfigValidationError] = useState<string>("");
 
     // Bulk IP editing state
     const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
@@ -776,6 +779,25 @@ export default function RollingMigrationFormDrawer({
         }
     }, [selectedVMs, vmsWithAssignments]);
 
+    // Validate ESX host configs for all hosts
+    const esxHostConfigValidation = useMemo(() => {
+        if (orderedESXHosts.length === 0) {
+            setEsxHostConfigValidationError("");
+            return { hasError: false, hostsWithoutConfigs: [] };
+        }
+
+        const hostsWithoutConfigs = orderedESXHosts.filter(host => !host.pcdHostConfigName);
+
+        if (hostsWithoutConfigs.length > 0) {
+            const errorMessage = `Cannot proceed with Migration: ${hostsWithoutConfigs.length} ESXi host${hostsWithoutConfigs.length === 1 ? '' : 's'} do not have Host Config assigned. Please assign Host Config to all ESXi hosts before continuing.`;
+            setEsxHostConfigValidationError(errorMessage);
+            return { hasError: true, hostsWithoutConfigs };
+        } else {
+            setEsxHostConfigValidationError("");
+            return { hasError: false, hostsWithoutConfigs: [] };
+        }
+    }, [orderedESXHosts]);
+
     const handleSubmit = async () => {
         setSubmitting(true);
 
@@ -964,10 +986,13 @@ export default function RollingMigrationFormDrawer({
                 return host?.pcdHostConfigName;
             });
 
+        // ESX host config validation - ensure all ESX hosts have host configs assigned
+        const esxHostConfigValid = !esxHostConfigValidation.hasError;
+
         // IP validation - ensure all selected VMs have IP addresses assigned
         const ipValidationPassed = !vmIpValidation.hasError;
 
-        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !ipValidationPassed;
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !esxHostConfigValid || !ipValidationPassed;
     }, [
         sourceCluster,
         destinationPCD,
@@ -983,7 +1008,8 @@ export default function RollingMigrationFormDrawer({
         fieldErrors,
         selectedESXHosts,
         orderedESXHosts,
-        vmIpValidation.hasError
+        vmIpValidation.hasError,
+        esxHostConfigValidation.hasError
     ]);
 
     useKeyboardSubmit({
@@ -1028,7 +1054,7 @@ export default function RollingMigrationFormDrawer({
             const selectedPcdConfig = availablePcdHostConfigs.find(config => config.id === selectedPcdHostConfig);
             const pcdConfigName = selectedPcdConfig ? selectedPcdConfig.name : selectedPcdHostConfig;
 
-            // Update the ESX hosts with the selected PCD host config
+            // Update the ESX hosts with the selected host config
             const updatedESXHosts = orderedESXHosts.map(host => {
                 if (selectedESXHosts.includes(host.id)) {
                     return {
@@ -1532,6 +1558,11 @@ export default function RollingMigrationFormDrawer({
                                     loading={loadingHosts}
                                 />
                             </Paper>
+                            {esxHostConfigValidationError && (
+                                <Alert severity="error" sx={{ mt: 2 }}>
+                                    {esxHostConfigValidationError}
+                                </Alert>
+                            )}
                         </Box>
                     </Box>
 
