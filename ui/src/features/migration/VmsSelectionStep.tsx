@@ -127,18 +127,18 @@ const columns: GridColDef[] = [
     valueGetter: (value) => value || "- ",
   },
   {
-    field: "osType",
+    field: "osFamily",
     headerName: "OS",
     flex: 1,
     renderCell: (params) => {
-      const osType = params.row.osType || "Unknown";
-      let displayValue = osType;
+      const osFamily = params.row.osFamily || "Unknown";
+      let displayValue = osFamily;
       let icon: React.ReactNode = null;
 
-      if (osType.includes("windows")) {
+      if (osFamily.includes("windows")) {
         displayValue = "Windows";
         icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-      } else if (osType.includes("linux")) {
+      } else if (osFamily.includes("linux")) {
         displayValue = "Linux";
         icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
       } else {

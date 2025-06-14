@@ -385,9 +385,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		useSingleDisk               bool
 	)
 
-	if vminfo.OSType == constants.OSFamilyWindows {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		getBootCommand = "ls /Windows"
-	} else if vminfo.OSType == constants.OSFamilyLinux {
+	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		getBootCommand = "ls /boot"
 	} else {
 		getBootCommand = "inspect-os"
@@ -427,7 +427,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		break
 	}
 
-	if vminfo.OSType == constants.OSFamilyLinux {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if useSingleDisk {
 			// skip checking LVM, because its a single disk
 			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
@@ -482,7 +482,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 		utils.PrintLog("OS compatibility check passed")
 
-	} else if vminfo.OSType == constants.OSFamilyWindows {
+	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		utils.PrintLog("OS compatibility check passed")
 	} else {
 		return fmt.Errorf("unsupported OS type: %s", vminfo.OSType)
@@ -494,14 +494,14 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if migobj.Convert {
 		firstbootscripts := []string{}
 		// Fix NTFS
-		if vminfo.OSType == constants.OSFamilyWindows {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 			err = virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
 		// Turn on DHCP for interfaces in rhel VMs
-		if vminfo.OSType == constants.OSFamilyLinux {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 			if strings.Contains(osRelease, "rhel") {
 				firstbootscriptname := "rhel_enable_dhcp"
 				firstbootscript := constants.RhelFirstBootScript
@@ -526,7 +526,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	//TODO(omkar): can disable DHCP here
-	if vminfo.OSType == constants.OSFamilyLinux {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			utils.PrintLog("Adding wildcard netplan")

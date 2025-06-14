@@ -7,7 +7,7 @@ export interface VMwareVM {
   networks?: string[]
   vmState: string
   ipAddress?: string
-  osType?: string
+  osFamily?: string
 }
 
 export interface VMwareMachine {

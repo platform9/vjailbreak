@@ -27,10 +27,9 @@ type VMInfo struct {
 	Networks   []string `json:"networks,omitempty"`
 	IPAddress  string   `json:"ipAddress,omitempty"`
 	VMState    string   `json:"vmState,omitempty"`
-	// +kubebuilder:validation:Enum=windows;linux
-	OSFamily string `json:"osFamily,omitempty"`
-	CPU      int    `json:"cpu,omitempty"`
-	Memory   int    `json:"memory,omitempty"`
+	OSFamily   string   `json:"osFamily,omitempty"`
+	CPU        int      `json:"cpu,omitempty"`
+	Memory     int      `json:"memory,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

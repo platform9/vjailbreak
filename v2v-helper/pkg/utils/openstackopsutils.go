@@ -99,7 +99,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		}
 	}
 
-	if ostype == constants.OSFamilyWindows {
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
