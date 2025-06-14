@@ -607,6 +607,10 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "logs",
 										MountPath: "/var/log/pf9",
 									},
+									{
+										Name:      "virtio-driver",
+										MountPath: "/home/fedora/virtio-win",
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -656,6 +660,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/var/log/pf9",
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
+									},
+								},
+							},
+							{
+								Name: "virtio-driver",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/home/ubuntu/virtio-win",
 										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},

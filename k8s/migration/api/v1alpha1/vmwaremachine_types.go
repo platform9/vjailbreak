@@ -36,8 +36,8 @@ type VMInfo struct {
 	IPAddress string `json:"ipAddress,omitempty"`
 	// VMState is the state of the virtual machine
 	VMState string `json:"vmState,omitempty"`
-	// OSType is the OS type of the virtual machine
-	OSType string `json:"osType,omitempty"`
+	// OSFamily is the OS family of the virtual machine
+	OSFamily string `json:"osFamily,omitempty"`
 	// CPU is the number of CPUs in the virtual machine
 	CPU int `json:"cpu,omitempty"`
 	// Memory is the amount of memory in the virtual machine

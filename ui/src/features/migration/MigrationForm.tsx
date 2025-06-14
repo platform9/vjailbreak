@@ -98,7 +98,7 @@ export interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   retryOnFailure?: boolean
-  osType?: string
+  osFamily?: string
   // Add postMigrationAction with optional properties
   postMigrationAction?: {
     suffix?: string
@@ -116,7 +116,7 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
-  osType: boolean
+  osFamily: boolean
   postMigrationAction?: {
     suffix?: boolean       
     folderName?: boolean  
@@ -134,7 +134,7 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  osType: false,
+  osFamily: false,
   postMigrationAction: {        
     suffix: false,    
     folderName: false,
@@ -386,9 +386,9 @@ export default function MigrationFormDrawer({
       spec: {
         networkMapping: networkMappings.metadata.name,
         storageMapping: storageMappings.metadata.name,
-        ...(selectedMigrationOptions.osType &&
-          params.osType !== OS_TYPES.AUTO_DETECT && {
-          osType: params.osType,
+        ...(selectedMigrationOptions.osFamily &&
+          params.osFamily !== OS_TYPES.AUTO_DETECT && {
+          osFamily: params.osFamily,
         }),
       },
     }
