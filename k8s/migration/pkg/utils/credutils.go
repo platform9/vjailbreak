@@ -621,7 +621,7 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			Networks:   networks,
 			IPAddress:  vmProps.Guest.IpAddress,
 			VMState:    vmProps.Guest.GuestState,
-			OSType:     vmProps.Guest.GuestFamily,
+			OSFamily:   vmProps.Guest.GuestFamily,
 			CPU:        int(vmProps.Config.Hardware.NumCPU),
 			Memory:     int(vmProps.Config.Hardware.MemoryMB),
 		})
@@ -707,7 +707,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	} else {
 		// Initialize labels map if needed
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-
+		currentOSFamily := vmwvm.Spec.VMs.OSFamily
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
 			// Initialize labels map if needed
@@ -724,7 +724,9 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		if !reflect.DeepEqual(vmwvm.Spec.VMs, *vminfo) {
 			// update vminfo in case the VM has been moved by vMotion
 			vmwvm.Spec.VMs = *vminfo
-
+			if vmwvm.Spec.VMs.OSFamily == "" {
+				vmwvm.Spec.VMs.OSFamily = currentOSFamily
+			}
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine: %w", err)

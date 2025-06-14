@@ -46,6 +46,9 @@ const (
 	StartCutOverYes = "yes"
 	StartCutOverNo  = "no"
 
+	OSFamilyWindows = "windows"
+	OSFamilyLinux   = "linux"
+
 	MaxVCPUs = 99999
 	MaxRAM   = 99999
 )

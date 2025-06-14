@@ -99,6 +99,17 @@ spec:
                 type: object
               migrationTemplate:
                 type: string
+              postMigrationAction:
+                properties:
+                  folderName:
+                    type: string
+                  moveToFolder:
+                    type: boolean
+                  renameVm:
+                    type: boolean
+                  suffix:
+                    type: string
+                type: object
               retry:
                 type: boolean
               virtualMachines:
@@ -310,11 +321,6 @@ spec:
                 - openstackRef
                 type: object
               networkMapping:
-                type: string
-              osType:
-                enum:
-                - windows
-                - linux
                 type: string
               source:
                 description: MigrationTemplateSource defines the source details for
@@ -962,7 +968,10 @@ spec:
                     items:
                       type: string
                     type: array
-                  osType:
+                  osFamily:
+                    enum:
+                    - windows
+                    - linux
                     type: string
                   vmState:
                     type: string
