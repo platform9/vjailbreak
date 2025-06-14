@@ -54,7 +54,7 @@ const StyledDrawer = styled(Drawer)(() => ({
   "& .MuiDrawer-paper": {
     display: "grid",
     gridTemplateRows: "max-content 1fr max-content",
-    width: "1200px",
+    width: "1400px",
     maxWidth: "90vw", // For responsiveness on smaller screens
   },
 }))
