@@ -364,13 +364,13 @@ export default function VmsSelectionStep({
 
       const selectedVmNames = rowSelectionModel as string[];
 
-      const updatePromises = selectedVmNames.map(vmName =>
-        patchVMwareMachine(vmName, {
-          spec: {
-            targetFlavorId: isAutoAssign ? "" : selectedFlavor
-          }
-        })
-      );
+      const updatePromises = selectedVmNames.map(vmName => {
+        let vmwareMachineName = vmList.find(vm => vm.name === vmName)?.vmWareMachineName
+        if (!vmwareMachineName) {
+          return
+        }
+        return patchVMwareMachine(vmwareMachineName, isAutoAssign ? "" : selectedFlavor)
+      });
 
       await Promise.all(updatePromises);
 

@@ -62,24 +62,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		return nil, errors.Wrap(err, "Failed to get configmap")
 	}
 	return &MigrationParams{
-<<<<<<< HEAD
-		SourceVMName:           os.Getenv("SOURCE_VM_NAME"),
-		OpenstackNetworkNames:  string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
-		OpenstackNetworkPorts:  string(configMap.Data["NEUTRON_PORT_IDS"]),
-		OpenstackVolumeTypes:   string(configMap.Data["CINDER_VOLUME_TYPES"]),
-		OpenstackVirtioWin:     string(configMap.Data["VIRTIO_WIN_DRIVER"]),
-		OpenstackOSType:        string(configMap.Data["OS_TYPE"]),
-		OpenstackConvert:       string(configMap.Data["CONVERT"]) == constants.TrueString,
-		DataCopyStart:          string(configMap.Data["DATACOPYSTART"]),
-		VMcutoverStart:         string(configMap.Data["CUTOVERSTART"]),
-		VMcutoverEnd:           string(configMap.Data["CUTOVEREND"]),
-		MigrationType:          string(configMap.Data["TYPE"]),
-		PerformHealthChecks:    string(configMap.Data["PERFORM_HEALTH_CHECKS"]) == constants.TrueString,
-		HealthCheckPort:        string(configMap.Data["HEALTH_CHECK_PORT"]),
-		Debug:                  string(configMap.Data["DEBUG"]) == constants.TrueString,
-		TARGET_FLAVOR_ID:       string(configMap.Data["TARGET_FLAVOR_ID"]),
-		TargetAvailabilityZone: string(configMap.Data["TARGET_AVAILABILITY_ZONE"]),
-=======
 		SourceVMName:          os.Getenv("SOURCE_VM_NAME"),
 		OpenstackNetworkNames: string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
 		OpenstackNetworkPorts: string(configMap.Data["NEUTRON_PORT_IDS"]),
@@ -95,6 +77,5 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		HealthCheckPort:       string(configMap.Data["HEALTH_CHECK_PORT"]),
 		Debug:                 string(configMap.Data["DEBUG"]) == constants.TrueString,
 		TARGET_FLAVOR_ID:      string(configMap.Data["TARGET_FLAVOR_ID"]),
->>>>>>> 2390401 (move os family selection to per VM basis (#568))
 	}, nil
 }
