@@ -667,17 +667,15 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:        vmProps.Config.Name,
-			Datastores:  datastores,
-			Disks:       disks,
-			Networks:    networks,
-			IPAddress:   vmProps.Guest.IpAddress,
-			VMState:     vmProps.Guest.GuestState,
-			OSType:      vmProps.Guest.GuestFamily,
-			CPU:         int(vmProps.Config.Hardware.NumCPU),
-			Memory:      int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:    host.Name,
-			ClusterName: clusterName,
+			Name:       vmProps.Config.Name,
+			Datastores: datastores,
+			Disks:      disks,
+			Networks:   networks,
+			IPAddress:  vmProps.Guest.IpAddress,
+			VMState:    vmProps.Guest.GuestState,
+			OSFamily:   vmProps.Guest.GuestFamily,
+			CPU:        int(vmProps.Config.Hardware.NumCPU),
+			Memory:     int(vmProps.Config.Hardware.MemoryMB),
 		})
 	}
 	return vminfo, nil
@@ -762,18 +760,27 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		init = true
 	} else {
 		// Initialize labels map if needed
-		if vmwvm.Labels == nil {
-			vmwvm.Labels = make(map[string]string)
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
+		currentOSFamily := vmwvm.Spec.VMs.OSFamily
+		// Check if label already exists with same value
+		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
+			// Initialize labels map if needed
+			if vmwvm.Labels == nil {
+				vmwvm.Labels = make(map[string]string)
+			}
+			vmwvm.Labels[label] = "true"
+			// Update only if we made changes
+			if err = client.Update(ctx, vmwvm); err != nil {
+				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
+			}
 		}
-		// Set the new label
-		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
-		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], vminfo.ESXiName) || !reflect.DeepEqual(vmwvm.Labels[constants.ClusterNameLabel], vminfo.ClusterName) {
+		if !reflect.DeepEqual(vmwvm.Spec.VMs, *vminfo) {
 			// update vminfo in case the VM has been moved by vMotion
-			vmwvm.Spec.VMInfo = *vminfo
-			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
-			vmwvm.Labels[constants.ClusterNameLabel] = vminfo.ClusterName
-
+			vmwvm.Spec.VMs = *vminfo
+			if vmwvm.Spec.VMs.OSFamily == "" {
+				vmwvm.Spec.VMs.OSFamily = currentOSFamily
+			}
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine: %w", err)

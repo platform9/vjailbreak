@@ -34,21 +34,11 @@ type MigrationTemplateDestination struct {
 
 // MigrationTemplateSpec defines the desired state of MigrationTemplate including source/destination environments and mappings
 type MigrationTemplateSpec struct {
-	// OSType is the OS type of the virtual machine
-	// +kubebuilder:validation:Enum=windows;linux
-	OSType string `json:"osType,omitempty"`
-	// VirtioWinDriver is the driver to be used for the virtual machine
-	VirtioWinDriver string `json:"virtioWinDriver,omitempty"`
-	// NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings
-	NetworkMapping string `json:"networkMapping"`
-	// StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
-	StorageMapping string `json:"storageMapping"`
-	// Source is the source details for the virtual machine
-	Source MigrationTemplateSource `json:"source"`
-	// Destination is the destination details for the virtual machine
-	Destination MigrationTemplateDestination `json:"destination"`
-	// TargetPCDClusterName is the name of the PCD cluster where the virtual machine will be migrated
-	TargetPCDClusterName string `json:"targetPCDClusterName,omitempty"`
+	VirtioWinDriver string                       `json:"virtioWinDriver,omitempty"`
+	NetworkMapping  string                       `json:"networkMapping"`
+	StorageMapping  string                       `json:"storageMapping"`
+	Source          MigrationTemplateSource      `json:"source"`
+	Destination     MigrationTemplateDestination `json:"destination"`
 }
 
 // +kubebuilder:object:root=true

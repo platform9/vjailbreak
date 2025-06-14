@@ -140,6 +140,10 @@ const (
 
 	// StartCutOverYes is the value for start cut over yes
 	StartCutOverYes = "yes"
+	StartCutOverNo  = "no"
+
+	OSFamilyWindows = "windows"
+	OSFamilyLinux   = "linux"
 
 	// MaxVCPUs is the maximum number of vCPUs
 	MaxVCPUs = 99999

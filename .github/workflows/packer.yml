@@ -279,7 +279,15 @@ jobs:
 
       - name: Download ubuntu base image
         if: env.release_found == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base
+        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
+      
+      - name: Download images and export as tar
+        if: env.release_found == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y containerd.
+          sudo mkdir -p image_builder/images
+          sudo chmod +x image_builder/scripts/download_images.sh
+          sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
 
       - name: Enable KVM group perms
         if: env.release_found == 'true'
@@ -290,7 +298,7 @@ jobs:
 
       - name: Set up QEMU
         if: env.release_found == 'true'
-        run: sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+        run: sudo apt-get install qemu-system qemu-utils -y
 
       - name: Setup packer
         if: env.release_found == 'true'
@@ -313,10 +321,11 @@ jobs:
         if: env.release_found == 'true'
         uses: oras-project/setup-oras@v1.2.1
 
-      - name: Run packer build
+      - name: Run packer build for normal image
         if: env.release_found == 'true'
-        id: build
+        id: build-1
         run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+
 
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'
