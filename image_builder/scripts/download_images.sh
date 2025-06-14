@@ -25,6 +25,7 @@ grafana="docker.io/grafana/grafana:11.2.0"
 v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
 controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
+vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
 alpine="docker.io/library/alpine:3.22.0"
 
 # Download and export images
@@ -44,6 +45,7 @@ images=(
   "$configmap_reload"
   "$grafana"
   "$alpine"
+  "$vpwned"
 )
 
 for img in "${images[@]}"; do
