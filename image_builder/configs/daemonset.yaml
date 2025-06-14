@@ -76,6 +76,9 @@ spec:
                   # Also Sync logs from master to worker
                   rsync -avz rsync://${MASTER_IP}/master-logs /var/log/pf9
 
+                  # Sync virtio-win drivers from master to worker
+                  rsync -avz rsync://${MASTER_IP}/virtio-win /home/ubuntu/virtio-win
+
                   if [ $? -eq 0 ]; then
                     echo "Sync completed successfully."
                   else
