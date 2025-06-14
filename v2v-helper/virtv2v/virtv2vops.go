@@ -126,6 +126,11 @@ func CheckForVirtioDrivers() (bool, error) {
 	// Before downloading virtio windrivers Check if iso is present in the path
 	preDownloadPath := "/home/fedora/virtio-win"
 
+	// Check if path exists
+	_, err := os.Stat(preDownloadPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if path exists: %s", err)
+	}
 	// Check if iso is present in the path
 	files, err := os.ReadDir(preDownloadPath)
 	if err != nil {

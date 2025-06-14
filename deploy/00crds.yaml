@@ -1667,7 +1667,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:latest
+        image: quay.io/platform9/vjailbreak-controller:v0.1.13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
