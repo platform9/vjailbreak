@@ -50,11 +50,6 @@ spec:
                 type: object
               networkMapping:
                 type: string
-              osType:
-                enum:
-                - windows
-                - linux
-                type: string
               source:
                 description: MigrationTemplateSource defines the source details for
                   the migrationtemplate

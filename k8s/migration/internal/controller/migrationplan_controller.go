@@ -31,6 +31,11 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+
+	"github.com/go-logr/logr"
+	// "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,8 +51,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/session"
 )
 
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
@@ -126,7 +132,7 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
 
-	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan); err != nil {
+	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope); err != nil {
 		return res, err
 	}
 	return ctrl.Result{}, nil
@@ -137,10 +143,10 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
-	log := scope.Logger
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
 	// The object is being deleted
-	log.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
+	ctxlog.Info(fmt.Sprintf("MigrationPlan '%s' CR is being deleted", migrationplan.Name))
 
 	// Now that the finalizer has completed deletion tasks, we can remove it
 	// to allow deletion of the Migration object
@@ -152,9 +158,187 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-// Similar to the Reconcile function above, but specifically for reconciling the Jobs
+func (r *MigrationPlanReconciler) getMigrationTemplateAndCreds(
+	ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+) (*vjailbreakv1alpha1.MigrationTemplate, *vjailbreakv1alpha1.VMwareCreds, *corev1.Secret, error) {
+	ctxlog := log.FromContext(ctx)
+
+	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      migrationplan.Spec.MigrationTemplate,
+		Namespace: migrationplan.Namespace,
+	}, migrationtemplate); err != nil {
+		ctxlog.Error(err, "Failed to get MigrationTemplate")
+		return nil, nil, nil, fmt.Errorf("failed to get MigrationTemplate: %w", err)
+	}
+
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
+		return nil, nil, nil, fmt.Errorf("VMwareCreds not validated: %w", err)
+	}
+
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      vmwcreds.Spec.SecretRef.Name,
+		Namespace: migrationplan.Namespace,
+	}, secret); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get vCenter Secret: %w", err)
+	}
+
+	return migrationtemplate, vmwcreds, secret, nil
+}
+
+func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, scope *scope.MigrationPlanScope, vm string) error {
+	migrationplan := scope.MigrationPlan
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
+
+	if migrationplan.Spec.PostMigrationAction == nil {
+		ctxlog.Info("No post-migration actions configured")
+		return nil
+	}
+
+	if migrationplan.Spec.PostMigrationAction.RenameVM == nil &&
+		migrationplan.Spec.PostMigrationAction.MoveToFolder == nil {
+		ctxlog.Info("No post-migration actions enabled")
+		return nil
+	}
+
+	// Get required resources
+	_, vmwcreds, secret, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
+	if err != nil {
+		return fmt.Errorf("failed to get migration resources: %w", err)
+	}
+
+	// Extract and validate credentials
+	username, password, host, err := extractVCenterCredentials(secret)
+	if err != nil {
+		return fmt.Errorf("invalid vCenter credentials: %w", err)
+	}
+
+	// Create vCenter client and get datacenter
+	vcClient, dc, err := createVCenterClientAndDC(ctx, host, username, password, vmwcreds.Spec.DataCenter)
+	if err != nil {
+		return fmt.Errorf("failed to create vCenter client: %w", err)
+	}
+	defer func() {
+		if vcClient.VCClient != nil {
+			sessionManager := session.NewManager(vcClient.VCClient)
+			_ = sessionManager.Logout(ctx) // Best effort logout
+		}
+	}()
+
+	if migrationplan.Spec.PostMigrationAction.RenameVM != nil && *migrationplan.Spec.PostMigrationAction.RenameVM {
+		if err := r.renameVM(ctx, vcClient, migrationplan, vm); err != nil {
+			return fmt.Errorf("failed to rename VM: %w", err)
+		}
+		vm += migrationplan.Spec.PostMigrationAction.Suffix
+	}
+
+	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
+		if err := r.moveVMToFolder(ctx, vcClient, dc, migrationplan, vm); err != nil {
+			return fmt.Errorf("failed to move VM to folder: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (*MigrationPlanReconciler) renameVM(
+	ctx context.Context,
+	vcClient *vcenter.VCenterClient,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	vm string,
+) error {
+	ctxlog := log.FromContext(ctx)
+	suffix := migrationplan.Spec.PostMigrationAction.Suffix
+	if suffix == "" {
+		suffix = "_migrated_to_pcd"
+		ctxlog.Info("Using default suffix", "suffix", suffix)
+	}
+	newVMName := vm + suffix
+	ctxlog.Info("Renaming VM", "oldName", vm, "newName", newVMName)
+	return vcClient.RenameVM(ctx, vm, newVMName)
+}
+
+func (*MigrationPlanReconciler) moveVMToFolder(
+	ctx context.Context,
+	vcClient *vcenter.VCenterClient,
+	dc *object.Datacenter,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	vm string,
+) error {
+	ctxlog := log.FromContext(ctx)
+	folderName := migrationplan.Spec.PostMigrationAction.FolderName
+	if folderName == "" {
+		folderName = "vjailbreakedVMs"
+		ctxlog.Info("Using default folder name", "folderName", folderName)
+	}
+
+	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
+	if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
+		ctxlog.Error(err, "Folder creation/verification failed")
+		return fmt.Errorf("failed to ensure folder '%s' exists: %w", folderName, err)
+	}
+
+	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName)
+	if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
+		ctxlog.Error(err, "VM move failed")
+		return fmt.Errorf("failed to move VM '%s' to folder '%s': %w", vm, folderName, err)
+	}
+	return nil
+}
+
+func createVCenterClientAndDC(
+	ctx context.Context,
+	host, username, password, datacenterName string,
+) (*vcenter.VCenterClient, *object.Datacenter, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Creating vCenter client...", "host", host, "insecure", true)
+
+	vcClient, err := vcenter.VCenterClientBuilder(ctx, username, password, host, true)
+	if err != nil {
+		ctxlog.Error(err, "Failed to create vCenter client")
+		return nil, nil, fmt.Errorf("failed to create vCenter client: %w", err)
+	}
+	ctxlog.Info("vCenter client created successfully")
+
+	ctxlog.Info("Using datacenter", "datacenter", datacenterName)
+	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
+	if err != nil {
+		ctxlog.Error(err, "Failed to find datacenter")
+		return nil, nil, fmt.Errorf("failed to find datacenter '%s': %w", datacenterName, err)
+	}
+	ctxlog.Info("Datacenter located", "datacenter", dc)
+
+	return vcClient, dc, nil
+}
+
+func extractVCenterCredentials(secret *corev1.Secret) (username, password, host string, err error) {
+	u, ok := secret.Data["VCENTER_USERNAME"]
+	if !ok {
+		err = fmt.Errorf("username not found in secret")
+		return
+	}
+	p, ok := secret.Data["VCENTER_PASSWORD"]
+	if !ok {
+		err = fmt.Errorf("password not found in secret")
+		return
+	}
+	h, ok := secret.Data["VCENTER_HOST"]
+	if !ok {
+		err = fmt.Errorf("host not found in secret")
+		return
+	}
+	username = string(u)
+	password = string(p)
+	host = string(h)
+	return
+}
+
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan) (ctrl.Result, error) {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	// Fetch MigrationTemplate CR
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
@@ -221,6 +405,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				}
 				return ctrl.Result{}, nil
 			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
+				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
+				if err != nil {
+					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
+					return ctrl.Result{}, fmt.Errorf("post-migration actions failed for VM %s: %w", migrationobjs.Items[i].Spec.VMName, err)
+				}
 				continue
 			default:
 				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
@@ -345,7 +534,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 							{
 								Name:            "fedora",
 								Image:           v2vimage,
-								ImagePullPolicy: corev1.PullAlways,
+								ImagePullPolicy: corev1.PullIfNotPresent,
 								Command:         []string{"/home/fedora/manager"},
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
@@ -404,17 +593,21 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "logs",
 										MountPath: "/var/log/pf9",
 									},
+									{
+										Name:      "virtio-driver",
+										MountPath: "/home/fedora/virtio-win",
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse("1000m"),
 										corev1.ResourceMemory:           resource.MustParse("1Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("200Mi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
 									},
 									Limits: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse("2000m"),
 										corev1.ResourceMemory:           resource.MustParse("3Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("2Gi"),
+										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
 									},
 								},
 							},
@@ -453,6 +646,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/var/log/pf9",
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
+									},
+								},
+							},
+							{
+								Name: "virtio-driver",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/home/ubuntu/virtio-win",
 										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},
@@ -563,7 +765,6 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
 				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
 				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
-				"OS_TYPE":               migrationtemplate.Spec.OSType,
 				"VIRTIO_WIN_DRIVER":     virtiodrivers,
 				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
@@ -589,6 +790,16 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
+
+		if vmMachine.Spec.VMs.OSFamily == "" {
+			return nil, fmt.Errorf(
+				"OSFamily is not available for the VM '%s', "+
+					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
+				vmMachine.Name)
+		}
+
+		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMs.OSFamily
+
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
@@ -896,4 +1107,25 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 	}
 	return nil
+}
+
+func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.Datacenter, folderName string) (*object.Folder, error) {
+	finder.SetDatacenter(dc)
+
+	// Check if folder exists
+	folder, err := finder.Folder(ctx, folderName)
+	if err == nil {
+		return folder, nil
+	}
+
+	// Create folder if missing
+	folders, err := dc.Folders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get datacenter folders: %w", err)
+	}
+	folder, err = folders.VmFolder.CreateFolder(ctx, folderName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create folder '%s': %w", folderName, err)
+	}
+	return folder, nil
 }

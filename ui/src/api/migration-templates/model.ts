@@ -69,6 +69,7 @@ export interface VmData {
   targetFlavorId?: string
   disks?: string[]
   labels?: { [key: string]: string }
+  vmWareMachineName?: string
 }
 export interface GetMigrationTemplatesMetadata {
   continue: string

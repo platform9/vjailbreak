@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,9 +70,13 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 
 	opts := volumes.CreateOpts{
 		VolumeType: volumetype,
-		Size:       int(float64(size) / (1024 * 1024 * 1024)),
+		Size:       int(math.Ceil(float64(size) / (1024 * 1024 * 1024))),
 		Name:       name,
 	}
+
+	// Add 1GB to the size to account for the extra space
+	opts.Size += 1
+
 	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume: %s", err)
@@ -94,7 +99,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		}
 	}
 
-	if ostype == "windows" {
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
@@ -269,7 +274,7 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume)
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
-			"os_type":     "windows",
+			"os_type":     constants.OSFamilyWindows,
 		},
 	}
 	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()

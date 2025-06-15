@@ -36,6 +36,7 @@ export const patchVMwareMachine = async (
   flavorId: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<VMwareMachine> => {
+  
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines/${vmName}`
   const payload = {
     spec: {
@@ -66,7 +67,9 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     disks: machine.spec.vms.disks || [],
     targetFlavorId: machine.spec.targetFlavorId,
     labels: machine.metadata.labels,
-    osType: machine.spec.vms.osType,
+    osFamily: machine.spec.vms.osFamily,
+    vmWareMachineName: machine.metadata.name,
 
   }))
 }
+

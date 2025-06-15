@@ -8,6 +8,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -85,15 +86,6 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
 
-// func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
-// 	// Find all virtual machines on the host
-// 	vms, err := finder.VirtualMachineList(ctx, "*")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return vms, nil
-// }
-
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vm := vmops.VMObj
 
@@ -120,15 +112,14 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		}
 	}
 
-	vmdisks := []VMDisk{} // Create an empty slice of Disk structs
+	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
 		if disk, ok := device.(*types.VirtualDisk); ok {
 			vmdisks = append(vmdisks, VMDisk{
 				Name: disk.DeviceInfo.GetDescription().Label,
 				Size: disk.CapacityInBytes,
 				Disk: disk,
-			},
-			)
+			})
 		}
 	}
 	uefi := false
@@ -136,10 +127,10 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		uefi = true
 	}
 	if ostype == "" {
-		if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyWindowsGuest) {
-			ostype = "windows"
-		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
-			ostype = "linux"
+		if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyWindowsGuest)) {
+			ostype = constants.OSFamilyWindows
+		} else if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyLinuxGuest)) {
+			ostype = constants.OSFamilyLinux
 		} else {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
 		}

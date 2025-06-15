@@ -1,4 +1,4 @@
-import { Box, Drawer, styled } from "@mui/material"
+import { Box, Drawer, styled} from "@mui/material"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
 import { useEffect, useMemo, useState, useCallback } from "react"
@@ -94,8 +94,16 @@ export interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   retryOnFailure?: boolean
-  osType?: string
+  osFamily?: string
+  // Add postMigrationAction with optional properties
+  postMigrationAction?: {
+    suffix?: string
+    folderName?: string
+    renameVm?: boolean
+    moveToFolder?: boolean
+  }
 }
+
 
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
@@ -104,8 +112,15 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
-  osType: boolean
+  osFamily: boolean
+  postMigrationAction?: {
+    suffix?: boolean       
+    folderName?: boolean  
+    renameVm?: boolean
+    moveToFolder?: boolean 
+  }
 }
+
 
 // Default state for checkboxes
 const defaultMigrationOptions = {
@@ -115,8 +130,16 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  osType: false,
-}
+  osFamily: false,
+  postMigrationAction: {        
+    suffix: false,    
+    folderName: false,
+    renameVm: false,
+    moveToFolder: false
+  }
+};
+
+
 
 const defaultValues: Partial<FormValues> = {}
 
@@ -226,7 +249,7 @@ export default function MigrationFormDrawer({
     if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
-    getFieldErrorsUpdater("openstackCreds")("")
+    getFieldErrorsUpdater("opeanstackCreds")("")
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
@@ -352,9 +375,9 @@ export default function MigrationFormDrawer({
       spec: {
         networkMapping: networkMappings.metadata.name,
         storageMapping: storageMappings.metadata.name,
-        ...(selectedMigrationOptions.osType &&
-          params.osType !== OS_TYPES.AUTO_DETECT && {
-          osType: params.osType,
+        ...(selectedMigrationOptions.osFamily &&
+          params.osFamily !== OS_TYPES.AUTO_DETECT && {
+          osFamily: params.osFamily,
         }),
       },
     }
@@ -373,46 +396,110 @@ export default function MigrationFormDrawer({
   }
 
   const createMigrationPlan = async (updatedMigrationTemplate) => {
-    const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
+    console.log('=== Migration Plan Creation Debug ===');
+    console.log('Selected Migration Options:', JSON.stringify(selectedMigrationOptions, null, 2));
+    console.log('Current params:', JSON.stringify(params, (key, value) => 
+        key === 'password' || key === 'OS_PASSWORD' ? '***' : value, 2));
+
+    const vmsToMigrate = (params.vms || []).map((vm) => vm.name);
+    
+    // Prepare postMigrationAction only if at least one action is enabled
+    const postMigrationAction = (selectedMigrationOptions.postMigrationAction?.renameVm || 
+        selectedMigrationOptions.postMigrationAction?.moveToFolder) ? {
+        renameVm: Boolean(selectedMigrationOptions.postMigrationAction?.renameVm),
+        moveToFolder: Boolean(selectedMigrationOptions.postMigrationAction?.moveToFolder),
+        ...(selectedMigrationOptions.postMigrationAction?.suffix && {
+            suffix: params.postMigrationAction?.suffix || ''
+        }),
+        ...(selectedMigrationOptions.postMigrationAction?.folderName && {
+            folderName: params.postMigrationAction?.folderName || ''
+        })
+    } : undefined;
+
     const migrationFields = {
-      migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-      virtualMachines: vmsToMigrate,
-      type:
-        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-          ? params.dataCopyMethod
-          : "hot",
-      ...(selectedMigrationOptions.dataCopyStartTime &&
-        params?.dataCopyStartTime && {
-        dataCopyStart: params.dataCopyStartTime,
-      }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { adminInitiatedCutOver: true }),
+        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+        virtualMachines: vmsToMigrate,
+        type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+            ? params.dataCopyMethod
+            : "hot",
+        ...(selectedMigrationOptions.dataCopyStartTime &&
+            params?.dataCopyStartTime && {
+                dataCopyStart: params.dataCopyStartTime,
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && { 
+                adminInitiatedCutOver: true 
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            params.cutoverStartTime && { 
+                vmCutoverStart: params.cutoverStartTime 
+            }),
+        ...(selectedMigrationOptions.cutoverOption &&
+            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            params.cutoverEndTime && { 
+                vmCutoverEnd: params.cutoverEndTime 
+            }),
+        retry: params.retryOnFailure,
+        ...(postMigrationAction && { postMigrationAction })
+    };
 
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverStartTime && { vmCutoverStart: params.cutoverStartTime }),
-      ...(selectedMigrationOptions.cutoverOption &&
-        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-        params.cutoverEndTime && { vmCutoverEnd: params.cutoverEndTime }),
-      retry: params.retryOnFailure,
-    }
-    const body = createMigrationPlanJson(migrationFields)
+    console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
+    
+    const body = createMigrationPlanJson(migrationFields);
+    console.log('Final Request Body:', JSON.stringify(body, null, 2));
+    
     try {
-      const data = await postMigrationPlan(body)
-      return data
-    } catch (err) {
-      // Handle error
-      console.error("Error creating migration plan", err)
-      setError({
-        title: "Error creating migration plan",
-        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
-      })
-      getFieldErrorsUpdater("migrationPlan")(
-        "Error creating migration plan : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
-      )
-
+        console.log('Sending migration plan creation request...');
+        const data = await postMigrationPlan(body);
+        console.log('Migration plan created successfully:', data);
+        return data;
+    } catch (error: unknown) {
+        console.error("Error creating migration plan", error);
+        
+        let errorMessage = "An unknown error occurred";
+        let errorResponse: {
+            status?: number;
+            statusText?: string;
+            data?: any;
+            config?: {
+                url?: string;
+                method?: string;
+                data?: any;
+            };
+        } = {};
+    
+        if (axios.isAxiosError(error)) {
+            errorMessage = error.response?.data?.message || error.message || String(error);
+            errorResponse = {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                config: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    data: error.config?.data
+                }
+            };
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
+        } else {
+            errorMessage = String(error);
+        }
+    
+        console.error('Error details:', errorResponse);
+    
+        setError({
+            title: "Error creating migration plan",
+            message: errorMessage,
+        });
+        
+        getFieldErrorsUpdater("migrationPlan")(
+            `Error creating migration plan: ${errorMessage}`
+        );
+        throw error;
     }
-  }
+};
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
@@ -476,28 +563,19 @@ export default function MigrationFormDrawer({
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
-  // Validate Selected Migration Options
-  const migrationOptionValidated = useMemo(
-    () =>
-      Object.keys(selectedMigrationOptions).every((key) => {
-        if (selectedMigrationOptions[key]) {
-          if (
-            key === "cutoverOption" &&
-            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-          ) {
-            return (
-              params.cutoverStartTime &&
-              params.cutoverEndTime &&
-              !fieldErrors["cutoverStartTime"] &&
-              !fieldErrors["cutoverEndTime"]
-            )
-          }
-          return params?.[key] && !fieldErrors[key]
-        }
-        return true
-      }),
-    [selectedMigrationOptions, params, fieldErrors]
-  )
+  const migrationOptionValidated = useMemo(() => {
+    return Object.keys(selectedMigrationOptions).every((key) => {
+      if (key === "postMigrationAction") {
+        // Post-migration actions are optional, so we don't validate them here
+        return true;
+      }
+      if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
+        return params?.[key as keyof typeof params] !== undefined && 
+               !fieldErrors[key];
+      }
+      return true;
+    });
+  }, [selectedMigrationOptions, params, fieldErrors]);
 
   const disableSubmit =
     !vmwareCredsValidated ||
@@ -614,6 +692,8 @@ export default function MigrationFormDrawer({
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
           />
+
+
         </Box>
       </DrawerContent>
       <Footer
