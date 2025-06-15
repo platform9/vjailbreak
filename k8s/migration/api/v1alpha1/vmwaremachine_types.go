@@ -41,6 +41,7 @@ type VMInfo struct {
 	ESXiName string `json:"esxiName,omitempty"`
 	// ClusterName is the name of the cluster
 	ClusterName string `json:"clusterName,omitempty"`
+
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

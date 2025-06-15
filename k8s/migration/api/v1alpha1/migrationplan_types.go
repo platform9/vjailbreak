@@ -58,7 +58,6 @@ type PostMigrationAction struct {
 	MoveToFolder *bool  `json:"moveToFolder,omitempty"`
 	FolderName   string `json:"folderName,omitempty"`
 }
-
 // MigrationPlanSpec defines the desired state of MigrationPlan including
 // the migration template, strategy, and the list of virtual machines to migrate
 type MigrationPlanSpec struct {
