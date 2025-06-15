@@ -302,18 +302,21 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					// 11. Copy Changed Blocks over
 					done = false
+					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
-						continue
+						changedBlockCopySuccess = false
 					}
 
-					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx])
+					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 					if err != nil {
 						return vminfo, fmt.Errorf("failed to update disk info: %s", err)
+					}
+					if !changedBlockCopySuccess {
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
+						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
 					}
 					migobj.logMessage("Finished copying changed blocks")
 					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))

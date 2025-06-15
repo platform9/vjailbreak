@@ -22,7 +22,7 @@ import (
 type VMOperations interface {
 	GetVMInfo(ostype string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
-	UpdateDiskInfo(*VMInfo, VMDisk) error
+	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
 	UpdateDisksInfo(*VMInfo) error
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
@@ -240,7 +240,7 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 	return nil
 }
 
-func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk) error {
+func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	vm := vmops.VMObj
 	var snapbackingdisk []string
@@ -277,9 +277,11 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk) error {
 		}
 		for idx, _ := range vminfo.VMDisks {
 			if vminfo.VMDisks[idx].Name == disk.Name {
+				if blockCopySuccess {
+					vminfo.VMDisks[idx].ChangeID = snapid[idx]
+				}
 				vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 				vminfo.VMDisks[idx].Snapname = snapname[idx]
-				vminfo.VMDisks[idx].ChangeID = snapid[idx]
 				log.Println(fmt.Sprintf("Updated disk info for %s", disk.Name))
 				log.Println(fmt.Sprintf("Snapshot backing disk: %s", snapbackingdisk[idx]))
 				log.Println(fmt.Sprintf("Snapshot name: %s", snapname[idx]))
