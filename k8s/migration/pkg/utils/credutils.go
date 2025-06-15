@@ -770,7 +770,22 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], vminfo.ESXiName) || !reflect.DeepEqual(vmwvm.Labels[constants.ClusterNameLabel], vminfo.ClusterName) {
 			// update vminfo in case the VM has been moved by vMotion
+			assignedIP := ""
+			osType := ""
+
+			if vmwvm.Spec.VMInfo.AssignedIP != "" {
+				assignedIP = vmwvm.Spec.VMInfo.AssignedIP
+			}
+			if vmwvm.Spec.VMInfo.OSType != "" {
+				osType = vmwvm.Spec.VMInfo.OSType
+			}
 			vmwvm.Spec.VMInfo = *vminfo
+			if assignedIP != "" {
+				vmwvm.Spec.VMInfo.AssignedIP = assignedIP
+			}
+			if osType != "" {
+				vmwvm.Spec.VMInfo.OSType = osType
+			}
 			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
 			vmwvm.Labels[constants.ClusterNameLabel] = vminfo.ClusterName
 

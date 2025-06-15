@@ -55,6 +55,7 @@ type Migrate struct {
 	K8sClient              client.Client
 	TargetFlavorId         string
 	TargetAvailabilityZone string
+	AssignedIP             string
 }
 
 type MigrationTimes struct {
@@ -601,6 +602,10 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 				ip = ""
 			} else {
 				ip = vminfo.IPs[idx]
+			}
+
+			if migobj.AssignedIP != "" {
+				ip = migobj.AssignedIP
 			}
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
 			if err != nil {
