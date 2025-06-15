@@ -13,8 +13,24 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- pcdhost_editor_role.yaml
+- pcdhost_viewer_role.yaml
+- pcdcluster_editor_role.yaml
+- pcdcluster_viewer_role.yaml
+- bmconfig_editor_role.yaml
+- bmconfig_viewer_role.yaml
 - vmwaremachine_editor_role.yaml
 - vmwaremachine_viewer_role.yaml
+- vmwarehost_editor_role.yaml
+- vmwarehost_viewer_role.yaml
+- vmwarecluster_editor_role.yaml
+- vmwarecluster_viewer_role.yaml
+- clustermigration_editor_role.yaml
+- clustermigration_viewer_role.yaml
+- esximigration_editor_role.yaml
+- esximigration_viewer_role.yaml
+- rollingmigrationplan_editor_role.yaml
+- rollingmigrationplan_viewer_role.yaml
 - vjailbreaknode_editor_role.yaml
 - vjailbreaknode_viewer_role.yaml
 - migrationtemplate_editor_role.yaml
@@ -31,4 +47,3 @@ resources:
 - openstackcreds_viewer_role.yaml
 - migration_editor_role.yaml
 - migration_viewer_role.yaml
-

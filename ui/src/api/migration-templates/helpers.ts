@@ -10,6 +10,7 @@ export const createMigrationTemplateJson = (params) => {
     datacenter,
     vmwareRef,
     openstackRef,
+    targetPCDClusterName,
   } = params || {}
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
@@ -29,6 +30,9 @@ export const createMigrationTemplateJson = (params) => {
       destination: {
         openstackRef: openstackRef,
       },
+      ...(targetPCDClusterName && {
+        targetPCDClusterName: targetPCDClusterName,
+      }),
     },
   }
 }

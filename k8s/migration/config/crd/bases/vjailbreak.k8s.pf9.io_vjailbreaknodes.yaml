@@ -24,7 +24,10 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: VjailbreakNode is the Schema for the vjailbreaknodes API
+        description: |-
+          VjailbreakNode is the Schema for the vjailbreaknodes API that represents
+          a node in the migration infrastructure with configuration, resource limits,
+          and statistics for monitoring migration progress
         properties:
           apiVersion:
             description: |-
@@ -47,10 +50,13 @@ spec:
             description: Spec defines the desired state of VjailbreakNode
             properties:
               nodeRole:
-                description: NodeRole is the role assigned to the node
+                description: NodeRole is the role assigned to the node (e.g., "migration-worker",
+                  "controller")
                 type: string
               openstackCreds:
-                description: OpenstackCreds is the credentials for Openstack Environment
+                description: |-
+                  OpenstackCreds is the reference to the credentials for the OpenStack environment
+                  where the node will be provisioned
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -108,8 +114,9 @@ spec:
             description: Status defines the observed state of VjailbreakNode
             properties:
               activeMigrations:
-                description: ActiveMigrations is the list of active migrations happening
-                  on the node
+                description: |-
+                  ActiveMigrations is the list of active migrations currently being processed on this node,
+                  containing references to MigrationPlan resources
                 items:
                   type: string
                 type: array
@@ -117,7 +124,9 @@ spec:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
               phase:
-                description: Phase is the current phase of the node
+                description: |-
+                  Phase is the current lifecycle phase of the node
+                  (e.g., Provisioning, Ready, Error, Decommissioning)
                 type: string
               vmIP:
                 description: VMIP is the IP address of the VM

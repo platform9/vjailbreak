@@ -19,11 +19,13 @@ VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
 export REPO ?= platform9
 export TAG ?= $(VERSION)
-
 export UI_IMG ?= ${REPO}/vjailbreak-ui:${TAG}
 export V2V_IMG ?= ${REPO}/v2v-helper:${TAG}
 export CONTROLLER_IMG ?= ${REPO}/vjailbreak-controller:${TAG}
+export VPWNED_IMG ?= ${REPO}/vjailbreak-vpwned:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
+export KUBECONFIG ?= ~/.kube/config
+export CONTAINER_TOOL ?= docker
 
 .PHONY: ui
 ui:
@@ -54,17 +56,27 @@ generate-manifests: vjail-controller ui
 	envsubst < ui/deploy/ui.yaml > image_builder/deploy/01ui.yaml
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 
+.PHONY: build-vpwned
+build-vpwned:
+	make -C pkg/vpwned docker-build docker-push
+
+build-installer:
+	make -C k8s/migration/ build-installer 
+
 .PHONY: docker-build-image
 docker-build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	cp -r k8s/kube-prometheus image_builder/deploy/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
-.PHONY: lint-check
-lint-check:
-	golangci-lint run --path-prefix=k8s/migration
+.PHONY: lint
+lint:
+	make -C k8s/migration/ lint
 
 .PHONY: build-image
 build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
+
+run-local:
+	cd k8s/migration/cmd/ && go run main.go --kubeconfig ${KUBECONFIG} --local true

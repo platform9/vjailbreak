@@ -79,23 +79,23 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
-
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		}
 		return ctrl.Result{}, err
 	}
-
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
 		return ctrl.Result{}, err
 	}
 
-	if constants.StatesEnum[migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseValidating] {
-		migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseValidating
+	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
+		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidating
 	}
-
 	// Check if the pod is in a valid state only then continue
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
 		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
@@ -105,7 +105,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed getting pod events")
 	}
-
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
@@ -113,17 +112,14 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
-
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-
 	if err := r.Status().Update(ctx, migration); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
-
 	// Always close the scope when exiting this function such that we can persist any Migration changes.
 	defer func() {
 		if err := migrationScope.Close(); err != nil && reterr == nil {
@@ -131,11 +127,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}()
 
-	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseFailed) &&
-		string(migration.Status.Phase) != string(vjailbreakv1alpha1.MigrationPhaseSucceeded) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -146,8 +141,14 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Pod{}, builder.WithPredicates(
 			predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
-					oldpod := e.ObjectOld.(*corev1.Pod)
-					newpod := e.ObjectNew.(*corev1.Pod)
+					oldpod, ok := e.ObjectOld.(*corev1.Pod)
+					if !ok {
+						return false
+					}
+					newpod, ok := e.ObjectNew.(*corev1.Pod)
+					if !ok {
+						return false
+					}
 					for _, condition := range newpod.Status.Conditions {
 						// Ignores the disk percentage updates in the pod custom conditions
 						if condition.Type == "Progressing" && !strings.Contains(condition.Message, "Progress:") {
@@ -161,54 +162,56 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// SetupMigrationPhase sets up the migration phase based on current state
+//
 //nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
 	events, err := r.GetEventsSorted(ctx, scope)
 	if err != nil {
 		return err
 	}
-	IgnoredPhases := []vjailbreakv1alpha1.MigrationPhase{
-		vjailbreakv1alpha1.MigrationPhaseValidating,
-		vjailbreakv1alpha1.MigrationPhasePending}
+	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
+		vjailbreakv1alpha1.VMMigrationPhaseValidating,
+		vjailbreakv1alpha1.VMMigrationPhasePending}
 
 loop:
 	for i := range events.Items {
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseSucceeded]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseSucceeded]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
 			if err := r.markMigrationSuccessful(ctx, scope); err != nil {
 				return err
 			}
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingAdminCutOver
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingCutOverStartTime
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageConvertingDisk) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseConvertingDisk]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseConvertingDisk
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingChangedBlocksWithIteration) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseCopyingChangedBlocks
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseCopying]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseCopying
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopying]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
-			constants.StatesEnum[scope.Migration.Status.Phase] <= constants.StatesEnum[vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseAwaitingDataCopyStart
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart
 			break loop
 		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseFailed
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
 			// If none of the above phases matched
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):
@@ -222,14 +225,14 @@ loop:
 
 // Extracted function to handle successful migration updates
 func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope *scope.MigrationScope) error {
-	scope.Migration.Status.Phase = vjailbreakv1alpha1.MigrationPhaseSucceeded
+	scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
 	name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
 	if err != nil {
 		return err
 	}
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
 		return err
 	}
 
@@ -237,6 +240,7 @@ func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope
 	return r.Status().Update(ctx, vmwvm)
 }
 
+// GetEventsSorted retrieves sorted events for a migration
 func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.MigrationScope) (*corev1.EventList, error) {
 	migration := scope.Migration
 	ctxlog := scope.Logger
@@ -262,12 +266,13 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 
 	// Sort filteredEvents by creation timestamp
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
-		return filteredEvents.Items[i].CreationTimestamp.Time.After(filteredEvents.Items[j].CreationTimestamp.Time)
+		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
 
 	return filteredEvents, nil
 }
 
+// GetPod retrieves the pod associated with a migration
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
 	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)
@@ -280,7 +285,7 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
 	}
 	if len(podList.Items) == 0 {
-		return nil, errors.New("migration pod not found")
+		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil

@@ -11,7 +11,6 @@ export interface VmwareCredential {
     namespace?: string;
   };
   spec: {
-    // Support for both direct credentials and secretRef
     VCENTER_HOST?: string;
     VCENTER_USERNAME?: string;
     VCENTER_PASSWORD?: string;

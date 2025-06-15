@@ -54,14 +54,14 @@ const columns: GridColDef[] = [
     {
         field: "name",
         headerName: "Name",
-        valueGetter: (_, row) => row.metadata?.name,
-        flex: 1.5,
+        valueGetter: (_, row) => row.spec?.vmName,
+        flex: 0.7,
     },
     {
         field: "status",
         headerName: "Status",
         valueGetter: (_, row) => row?.status?.phase || "Pending",
-        flex: 1,
+        flex: 0.5,
         sortComparator: (v1, v2) => {
             const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
             const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
@@ -69,10 +69,17 @@ const columns: GridColDef[] = [
         }
     },
     {
+        field: "agent",
+        headerName: "Agent",
+        valueGetter: (_, row) => row.status?.agentName,
+        flex: 1,
+    },
+
+    {
         field: "status.conditions",
         headerName: "Progress",
         valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
-        flex: 3,
+        flex: 2,
         renderCell: (params) => {
             const phase = params.row?.status?.phase
             const conditions = params.row?.status?.conditions
@@ -156,8 +163,8 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: Cus
 
 interface MigrationsTableProps {
     migrations: Migration[];
-    onDeleteMigration: (name: string) => void;
-    onDeleteSelected: (migrations: Migration[]) => void;
+    onDeleteMigration?: (name: string) => void;
+    onDeleteSelected?: (migrations: Migration[]) => void;
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
@@ -181,7 +188,7 @@ export default function MigrationsTable({
     return (
         <DataGrid
             rows={migrationsWithActions}
-            columns={columns}
+            columns={onDeleteSelected === undefined && onDeleteMigration === undefined ? columns.filter(column => column.field !== "actions") : columns}
             initialState={{
                 pagination: { paginationModel: { page: 0, pageSize: 25 } },
                 sorting: {
@@ -191,22 +198,25 @@ export default function MigrationsTable({
             pageSizeOptions={[25, 50, 100]}
             localeText={{ noRowsLabel: "No Migrations Available" }}
             getRowId={(row) => row.metadata?.name}
-            checkboxSelection
+            checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
             onRowSelectionModelChange={handleSelectionChange}
             rowSelectionModel={selectedRows}
+            disableRowSelectionOnClick
             slots={{
-                toolbar: () => (
+                toolbar: onDeleteSelected !== undefined && onDeleteMigration !== undefined ? () => (
                     <CustomToolbar
                         numSelected={selectedRows.length}
                         onDeleteSelected={() => {
                             const selectedMigrations = migrations?.filter(
                                 m => selectedRows.includes(m.metadata?.name)
                             );
-                            onDeleteSelected(selectedMigrations || []);
+                            if (onDeleteSelected) {
+                                onDeleteSelected(selectedMigrations || []);
+                            }
                         }}
                         refetchMigrations={refetchMigrations}
                     />
-                ),
+                ) : undefined,
             }}
         />
     );

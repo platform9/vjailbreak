@@ -21,14 +21,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VjailbreakNodePhase represents the lifecycle phase of a vjailbreak node
+// including provisioning, ready, and error states
 type VjailbreakNodePhase string
 
-// VjailbreakNodeSpec defines the desired state of VjailbreakNode
+// VjailbreakNodeSpec defines the desired state of VjailbreakNode including
+// node configuration, resource limits, and credentials for provisioning
 type VjailbreakNodeSpec struct {
-	// NodeRole is the role assigned to the node
+	// NodeRole is the role assigned to the node (e.g., "migration-worker", "controller")
 	NodeRole string `json:"nodeRole"`
 
-	// OpenstackCreds is the credentials for Openstack Environment
+	// OpenstackCreds is the reference to the credentials for the OpenStack environment
+	// where the node will be provisioned
 	OpenstackCreds corev1.ObjectReference `json:"openstackCreds"`
 
 	// OpenstackFlavorID is the flavor of the VM
@@ -38,7 +42,8 @@ type VjailbreakNodeSpec struct {
 	OpenstackImageID string `json:"openstackImageID"`
 }
 
-// VjailbreakNodeStatus defines the observed state of VjailbreakNode
+// VjailbreakNodeStatus defines the observed state of VjailbreakNode including
+// migration statistics, health status, and current workload
 type VjailbreakNodeStatus struct {
 	// OpenstackUUID is the UUID of the VM in OpenStack
 	OpenstackUUID string `json:"openstackUUID,omitempty"`
@@ -46,10 +51,12 @@ type VjailbreakNodeStatus struct {
 	// VMIP is the IP address of the VM
 	VMIP string `json:"vmIP"`
 
-	// Phase is the current phase of the node
+	// Phase is the current lifecycle phase of the node
+	// (e.g., Provisioning, Ready, Error, Decommissioning)
 	Phase VjailbreakNodePhase `json:"phase,omitempty"`
 
-	// ActiveMigrations is the list of active migrations happening on the node
+	// ActiveMigrations is the list of active migrations currently being processed on this node,
+	// containing references to MigrationPlan resources
 	ActiveMigrations []string `json:"activeMigrations,omitempty"`
 }
 
@@ -58,7 +65,9 @@ type VjailbreakNodeStatus struct {
 // +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
 // +kubebuilder:printcolumn:JSONPath=`.status.vmIP`,name=VMIP,type=string
 
-// VjailbreakNode is the Schema for the vjailbreaknodes API
+// VjailbreakNode is the Schema for the vjailbreaknodes API that represents
+// a node in the migration infrastructure with configuration, resource limits,
+// and statistics for monitoring migration progress
 type VjailbreakNode struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

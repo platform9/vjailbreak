@@ -14,6 +14,8 @@ dist-ssr
 *.local
 config.js
 
+# TypeScript build cache
+tsconfig.tsbuildinfo
 
 # Editor directories and files
 mock-json-server/*

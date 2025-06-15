@@ -63,6 +63,7 @@ interface MigrationOptionsPropsInterface {
 
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
+  stepNumber: string
 }
 
 // TODO - Commented out the non-required field from the options for now
@@ -80,6 +81,7 @@ export default function MigrationOptionsAlt({
   updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
+  stepNumber,
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
@@ -122,7 +124,7 @@ export default function MigrationOptionsAlt({
           id="panel2-header"
         >
           <Step
-            stepNumber="4"
+            stepNumber={stepNumber}
             label="Migration Options (Optional)"
             sx={{ mb: "0" }}
           />

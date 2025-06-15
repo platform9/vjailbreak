@@ -18,10 +18,15 @@ spec:
     - jsonPath: .status.storageMappingValidationStatus
       name: Status
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: StorageMapping is the Schema for the storagemappings API
+        description: |-
+          StorageMapping is the Schema for the storagemappings API that defines
+          mappings between VMware and OpenStack storage types to be used during migration
         properties:
           apiVersion:
             description: |-
@@ -41,15 +46,24 @@ spec:
           metadata:
             type: object
           spec:
-            description: StorageMappingSpec defines the desired state of StorageMapping
+            description: |-
+              StorageMappingSpec defines the desired state of StorageMapping including
+              mappings between VMware and OpenStack storage types
             properties:
               storages:
-                description: Storages is a list of storage mappings
+                description: Storages is a list of storage mappings between source
+                  (VMware) and target (OpenStack) environments
                 items:
+                  description: Storage represents a mapping between source and target
+                    storage types
                   properties:
                     source:
+                      description: Source is the name of the source storage type in
+                        VMware
                       type: string
                     target:
+                      description: Target is the name of the target storage type in
+                        OpenStack
                       type: string
                   required:
                   - source
@@ -63,8 +77,14 @@ spec:
             description: StorageMappingStatus defines the observed state of StorageMapping
             properties:
               storageMappingValidationMessage:
+                description: |-
+                  StoragemappingValidationMessage provides detailed validation information including
+                  information about available storage types and any validation errors
                 type: string
               storageMappingValidationStatus:
+                description: |-
+                  StoragemappingValidationStatus indicates the validation status of the storage mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
                 type: string
             type: object
         type: object

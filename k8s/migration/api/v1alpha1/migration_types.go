@@ -21,18 +21,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VMMigrationPhase represents the current phase of the VM migration process from VMware to OpenStack,
+// tracking the detailed progression through various stages including validation, data copying,
+// disk conversion, and cutover. Each phase provides visibility into the migration's progress,
+// enabling precise monitoring and troubleshooting of the migration workflow.
+// +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
+type VMMigrationPhase string
+
+// MigrationConditionType represents the type of condition for a migration, used to track
+// specific state conditions that may affect the migration process, such as resource availability,
+// network connectivity, or authentication status.
+type MigrationConditionType string
+
 const (
-	MigrationPhasePending                  MigrationPhase = "Pending"
-	MigrationPhaseValidating               MigrationPhase = "Validating"
-	MigrationPhaseAwaitingDataCopyStart    MigrationPhase = "AwaitingDataCopyStart"
-	MigrationPhaseCopying                  MigrationPhase = "CopyingBlocks"
-	MigrationPhaseCopyingChangedBlocks     MigrationPhase = "CopyingChangedBlocks"
-	MigrationPhaseConvertingDisk           MigrationPhase = "ConvertingDisk"
-	MigrationPhaseAwaitingCutOverStartTime MigrationPhase = "AwaitingCutOverStartTime"
-	MigrationPhaseAwaitingAdminCutOver     MigrationPhase = "AwaitingAdminCutOver"
-	MigrationPhaseSucceeded                MigrationPhase = "Succeeded"
-	MigrationPhaseFailed                   MigrationPhase = "Failed"
-	MigrationPhaseUnknown                  MigrationPhase = "Unknown"
+	// VMMigrationPhasePending indicates the migration is waiting to start
+	VMMigrationPhasePending VMMigrationPhase = "Pending"
+	// VMMigrationPhaseValidating indicates the migration prerequisites are being validated
+	VMMigrationPhaseValidating VMMigrationPhase = "Validating"
+	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
+	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
+	// VMMigrationPhaseCopying indicates initial block copying is in progress
+	VMMigrationPhaseCopying VMMigrationPhase = "CopyingBlocks"
+	// VMMigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress
+	VMMigrationPhaseCopyingChangedBlocks VMMigrationPhase = "CopyingChangedBlocks"
+	// VMMigrationPhaseConvertingDisk indicates disk format conversion is in progress
+	VMMigrationPhaseConvertingDisk VMMigrationPhase = "ConvertingDisk"
+	// VMMigrationPhaseAwaitingCutOverStartTime indicates waiting for scheduled cutover time
+	VMMigrationPhaseAwaitingCutOverStartTime VMMigrationPhase = "AwaitingCutOverStartTime"
+	// VMMigrationPhaseAwaitingAdminCutOver indicates waiting for admin to initiate cutover
+	VMMigrationPhaseAwaitingAdminCutOver VMMigrationPhase = "AwaitingAdminCutOver"
+	// VMMigrationPhaseSucceeded indicates the migration completed successfully
+	VMMigrationPhaseSucceeded VMMigrationPhase = "Succeeded"
+	// VMMigrationPhaseFailed indicates the migration has failed
+	VMMigrationPhaseFailed VMMigrationPhase = "Failed"
+	// VMMigrationPhaseUnknown indicates the migration state is unknown
+	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -50,13 +73,10 @@ type MigrationSpec struct {
 	InitiateCutover bool `json:"initiateCutover"`
 }
 
-type MigrationPhase string
-type MigrationConditionType string
-
 // MigrationStatus defines the observed state of Migration
 type MigrationStatus struct {
 	// Phase is the current phase of the migration
-	Phase MigrationPhase `json:"phase"`
+	Phase VMMigrationPhase `json:"phase"`
 
 	// Conditions is the list of conditions of the migration object pod
 	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
@@ -67,10 +87,16 @@ type MigrationStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
-// +kubebuilder:printcolumn:JSONPath=`.status.agentName`,name=AgentName,type=string
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Agent Name",type="string",JSONPath=".status.agentName"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// Migration is the Schema for the migrations API
+// Migration is the Schema for the migrations API that represents a single virtual machine
+// migration job from VMware to OpenStack. It tracks the complete migration lifecycle
+// including validation, data transfer, disk conversion, and cutover phases. Migration resources
+// provide detailed status monitoring, error handling, and manual intervention points like
+// cutover initiation. Each Migration is associated with a MigrationPlan and executes on a specific
+// VjailbreakNode agent, tracking progress via status updates and condition changes.
 type Migration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
