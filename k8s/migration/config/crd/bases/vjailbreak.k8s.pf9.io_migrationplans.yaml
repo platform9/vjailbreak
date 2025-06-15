@@ -54,12 +54,10 @@ spec:
                   migration
                 properties:
                   granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
                     items:
                       type: string
                     type: array
                   granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
                     items:
                       type: string
                     type: array
@@ -108,7 +106,6 @@ spec:
                   migration
                 type: string
               postMigrationAction:
-                description: 'NEW: Add post-migration action field'
                 properties:
                   folderName:
                     type: string

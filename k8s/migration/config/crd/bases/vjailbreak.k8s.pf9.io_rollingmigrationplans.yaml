@@ -48,12 +48,10 @@ spec:
                   migration
                 properties:
                   granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
                     items:
                       type: string
                     type: array
                   granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
                     items:
                       type: string
                     type: array
@@ -196,6 +194,17 @@ spec:
                 description: MigrationTemplate is the template to be used for the
                   migration
                 type: string
+              postMigrationAction:
+                properties:
+                  folderName:
+                    type: string
+                  moveToFolder:
+                    type: boolean
+                  renameVm:
+                    type: boolean
+                  suffix:
+                    type: string
+                type: object
               retry:
                 description: Retry the migration if it fails
                 type: boolean
