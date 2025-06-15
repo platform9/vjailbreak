@@ -106,7 +106,6 @@ spec:
                   migration
                 type: string
               postMigrationAction:
-                description: 'NEW: Add post-migration action field'
                 properties:
                   folderName:
                     type: string
