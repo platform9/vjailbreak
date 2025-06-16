@@ -26,7 +26,8 @@ v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
 controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
-alpine="docker.io/library/alpine:3.22.0"
+# TODO(suhas): Create a seperate repository for alpine image in quay
+alpine="quay.io/platform9/vjailbreak:alpine"
 
 # Download and export images
 images=(

@@ -17,7 +17,7 @@ spec:
       hostNetwork: true
       initContainers:
         - name: fix-perms
-          image: alpine:3.22.0
+          image: quay.io/platform9/vjailbreak:alpine
           securityContext:
             privileged: true
             runAsUser: 0
@@ -37,7 +37,7 @@ spec:
               mountPath: /home/ubuntu/virtio-win
       containers:
         - name: sync-container
-          image: alpine:3.22.0
+          image: quay.io/platform9/vjailbreak:alpine
           securityContext:
             privileged: true
             runAsUser: 0
@@ -57,7 +57,6 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk add --no-cache rsync coreutils grep
               IS_MASTER=$(grep -E '^export IS_MASTER=' /etc/pf9/k3s.env | cut -d'=' -f2)
               MASTER_IP=$(grep -E '^export MASTER_IP=' /etc/pf9/k3s.env | cut -d'=' -f2)
               if [ "$IS_MASTER" = "true" ]; then
