@@ -1,3 +1,4 @@
+// Package utils provides utility functions for handling credentials and other operations
 package utils
 
 import (
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,70 +22,77 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud"
+
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/vim25/types"
+	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// OpenStackClients holds clients for interacting with OpenStack services
 type OpenStackClients struct {
+	// BlockStorageClient is the client for interacting with OpenStack Block Storage
 	BlockStorageClient *gophercloud.ServiceClient
-	ComputeClient      *gophercloud.ServiceClient
-	NetworkingClient   *gophercloud.ServiceClient
-}
-
-// VMwareCredentials holds the actual credentials after decoding
-type VMwareCredentials struct {
-	Host       string
-	Username   string
-	Password   string
-	Insecure   bool
-	Datacenter string
-}
-
-// OpenStackCredentials holds the actual credentials after decoding
-type OpenStackCredentials struct {
-	AuthURL    string
-	Username   string
-	Password   string
-	RegionName string
-	TenantName string
-	Insecure   bool
-	DomainName string
+	// ComputeClient is the client for interacting with OpenStack Compute
+	ComputeClient *gophercloud.ServiceClient
+	// NetworkingClient is the client for interacting with OpenStack Networking
+	NetworkingClient *gophercloud.ServiceClient
 }
 
 const (
 	trueString = "true" // Define at package level
 )
 
-// GetVMwareCredentials retrieves vCenter credentials from a secret
-func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredentials, error) {
+// GetVMwareCredsInfo retrieves vCenter credentials from a secret
+func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
+	creds := vjailbreakv1alpha1.VMwareCreds{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
+	}
+	return GetVMwareCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+}
+
+// GetOpenstackCredsInfo retrieves OpenStack credentials from a secret
+func GetOpenstackCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
+	creds := vjailbreakv1alpha1.OpenstackCreds{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
+	}
+	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+}
+
+// GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
+func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	secret := &corev1.Secret{}
 
 	// Get In cluster client
-	c, err := GetInclusterClient()
-	if err != nil {
-		return VMwareCredentials{}, errors.Wrap(err, "failed to get in cluster client")
-	}
-
-	if err := c.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return VMwareCredentials{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
 	}
 
 	if secret.Data == nil {
-		return VMwareCredentials{}, fmt.Errorf("no data in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
 	host := string(secret.Data["VCENTER_HOST"])
@@ -93,39 +102,34 @@ func GetVMwareCredentials(ctx context.Context, secretName string) (VMwareCredent
 	datacenter := string(secret.Data["VCENTER_DATACENTER"])
 
 	if host == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
 	if username == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
 	}
 	if password == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
 	if datacenter == "" {
-		return VMwareCredentials{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
+		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return VMwareCredentials{
+	return vjailbreakv1alpha1.VMwareCredsInfo{
 		Host:       host,
 		Username:   username,
 		Password:   password,
-		Insecure:   insecure,
 		Datacenter: datacenter,
+		Insecure:   insecure,
 	}, nil
 }
 
-// GetOpenstackCredentials retrieves and checks the secret
-func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackCredentials, error) {
+// GetOpenstackCredentialsFromSecret retrieves and checks the secret
+func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	secret := &corev1.Secret{}
-	// Get In cluster client
-	c, err := GetInclusterClient()
-	if err != nil {
-		return OpenStackCredentials{}, errors.Wrap(err, "failed to get in cluster client")
-	}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return OpenStackCredentials{}, errors.Wrap(err, "failed to get secret")
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
 	}
 
 	// Extract and validate each field
@@ -140,14 +144,14 @@ func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackC
 
 	for key, value := range fields {
 		if value == "" {
-			return OpenStackCredentials{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
+			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
 		}
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
-	return OpenStackCredentials{
+	return vjailbreakv1alpha1.OpenStackCredsInfo{
 		AuthURL:    fields["AuthURL"],
 		DomainName: fields["DomainName"],
 		Username:   fields["Username"],
@@ -158,6 +162,7 @@ func GetOpenstackCredentials(ctx context.Context, secretName string) (OpenStackC
 	}, nil
 }
 
+// GetCert retrieves an X.509 certificate from an endpoint
 func GetCert(endpoint string) (*x509.Certificate, error) {
 	conf := &tls.Config{
 		//nolint:gosec // This is required to skip certificate verification
@@ -172,14 +177,18 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "error connecting to %s", hostname)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			ctrllog.Log.Info("Error closing connection", "error", err)
+		}
+	}()
 	cert := conn.ConnectionState().PeerCertificates[0]
 	return cert, nil
 }
 
-//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
-func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetnetworks []string) error {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+// VerifyNetworks verifies the existence of specified networks in OpenStack
+func VerifyNetworks(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetnetworks []string) error {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -208,9 +217,9 @@ func VerifyNetworks(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Open
 	return nil
 }
 
-//nolint:dupl // This function is similar to VerifyNetworks, excluding from linting to keep it readable
-func VerifyPorts(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetports []string) error {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+// VerifyPorts verifies the existence of specified ports in OpenStack
+func VerifyPorts(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetports []string) error {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
@@ -240,19 +249,20 @@ func VerifyPorts(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opensta
 	return nil
 }
 
-func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
+// VerifyStorage verifies the existence of specified storage in OpenStack
+func VerifyStorage(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, targetstorages []string) error {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get openstack clients")
 	}
 	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return fmt.Errorf("failed to list volume types: %w", err)
+		return errors.Wrap(err, "failed to list volume types")
 	}
 
 	allvoltypes, err := volumetypes.ExtractVolumeTypes(allPages)
 	if err != nil {
-		return fmt.Errorf("failed to extract all volume types: %w", err)
+		return errors.Wrap(err, "failed to extract all volume types")
 	}
 
 	// Verify that all volume types in targetstorage exist in the openstack volume types
@@ -265,27 +275,28 @@ func VerifyStorage(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Opens
 			}
 		}
 		if !found {
-			return fmt.Errorf("volume type '%s' not found in OpenStack", targetstorage)
+			return errors.Wrap(fmt.Errorf("volume type '%s' not found in OpenStack", targetstorage), "failed to verify volume types")
 		}
 	}
 	return nil
 }
 
-func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*vjailbreakv1alpha1.OpenstackInfo, error) {
+// GetOpenstackInfo retrieves OpenStack information using provided credentials
+func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*vjailbreakv1alpha1.OpenstackInfo, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get openstack clients")
+	}
 	var openstackvoltypes []string
 	var openstacknetworks []string
-	openstackClients, err := GetOpenStackClients(ctx, openstackcreds)
-	if err != nil {
-		return nil, err
-	}
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list volume types: %w", err)
+		return nil, errors.Wrap(err, "failed to list volume types")
 	}
 
 	allvoltypes, err := volumetypes.ExtractVolumeTypes(allVolumeTypePages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract all volume types: %w", err)
+		return nil, errors.Wrap(err, "failed to extract all volume types")
 	}
 
 	for i := 0; i < len(allvoltypes); i++ {
@@ -294,12 +305,12 @@ func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Op
 
 	allNetworkPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list networks: %w", err)
+		return nil, errors.Wrap(err, "failed to list networks")
 	}
 
 	allNetworks, err := networks.ExtractNetworks(allNetworkPages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract all networks: %w", err)
+		return nil, errors.Wrap(err, "failed to extract all networks")
 	}
 
 	for i := 0; i < len(allNetworks); i++ {
@@ -313,12 +324,12 @@ func GetOpenstackInfo(ctx context.Context, openstackcreds *vjailbreakv1alpha1.Op
 }
 
 // GetOpenStackClients is a function to create openstack clients
-func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
+func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*OpenStackClients, error) {
 	if openstackcreds == nil {
-		return nil, fmt.Errorf("openstackcreds cannot be nil")
+		return nil, errors.New("openstackcreds cannot be nil")
 	}
 
-	openstackCredential, err := GetOpenstackCredentials(ctx, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -326,7 +337,7 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 	endpoint := gophercloud.EndpointOpts{
 		Region: openstackCredential.RegionName,
 	}
-	providerClient, err := ValidateAndGetProviderClient(ctx, openstackcreds)
+	providerClient, err := ValidateAndGetProviderClient(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to get provider client for region '%s'", openstackCredential.RegionName))
 	}
@@ -347,6 +358,7 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to create openstack networking client for region '%s'",
 			openstackCredential.RegionName))
 	}
+
 	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
@@ -355,10 +367,9 @@ func GetOpenStackClients(ctx context.Context, openstackcreds *vjailbreakv1alpha1
 }
 
 // ValidateAndGetProviderClient is a function to get provider client
-func ValidateAndGetProviderClient(ctx context.Context,
+func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
-	ctxlog := log.FromContext(ctx)
-	openstackCredential, err := GetOpenstackCredentials(ctx, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -378,9 +389,11 @@ func ValidateAndGetProviderClient(ctx context.Context,
 		if certerr != nil {
 			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
 		}
-		ctxlog.Info("Trusting certificate for OpenStack endpoint", "authURL", openstackCredential.AuthURL)
 		// Trying to fetch the system cert pool and add the Openstack certificate to it
-		caCertPool, _ := x509.SystemCertPool()
+		caCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get system cert pool: %w", err)
+		}
 		if caCertPool == nil {
 			caCertPool = x509.NewCertPool()
 		}
@@ -408,16 +421,16 @@ func ValidateAndGetProviderClient(ctx context.Context,
 }
 
 // ValidateVMwareCreds validates the VMware credentials
-func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
-	VMwareCredentials, err := GetVMwareCredentials(context.TODO(), vmwcreds.Spec.SecretRef.Name)
+func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
 
-	host := VMwareCredentials.Host
-	username := VMwareCredentials.Username
-	password := VMwareCredentials.Password
-	disableSSLVerification := VMwareCredentials.Insecure
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
@@ -429,9 +442,7 @@ func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
-	// fmt.Println(u)
 	// Connect and log in to ESX or vCenter
-	// Share govc's session cache
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
@@ -441,12 +452,12 @@ func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 	c := new(vim25.Client)
 	err = s.Login(context.Background(), c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to login: %w", err)
+		return nil, fmt.Errorf("failed to login to vSphere: %w", err)
 	}
 
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), VMwareCredentials.Datacenter)
+	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
@@ -455,9 +466,10 @@ func ValidateVMwareCreds(vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Clien
 }
 
 // GetVMwNetworks gets the networks of a VM
-func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	var networks []string
-	c, err := ValidateVMwareCreds(vmwcreds)
+func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	// Pre-allocate networks slice to avoid append allocations
+	networks := make([]string, 0)
+	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
@@ -495,8 +507,8 @@ func GetVMwNetworks(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCred
 }
 
 // GetVMwDatastore gets the datastores of a VM
-func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	c, err := ValidateVMwareCreds(vmwcreds)
+func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
+	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
@@ -521,15 +533,15 @@ func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCre
 
 	var datastores []string
 	var ds mo.Datastore
-	var dsref types.ManagedObjectReference
+	var dsref govmitypes.ManagedObjectReference
 	for _, device := range vmProps.Config.Hardware.Device {
-		if _, ok := device.(*types.VirtualDisk); ok {
+		if _, ok := device.(*govmitypes.VirtualDisk); ok {
 			switch backing := device.GetVirtualDevice().Backing.(type) {
-			case *types.VirtualDiskFlatVer2BackingInfo:
+			case *govmitypes.VirtualDiskFlatVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskSparseVer2BackingInfo:
+			case *govmitypes.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+			case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
 				dsref = backing.Datastore.Reference()
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
@@ -538,15 +550,16 @@ func GetVMwDatastore(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCre
 			if err != nil {
 				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
-			datastores = append(datastores, ds.Name)
+
+			datastores = AppendUnique(datastores, ds.Name)
 		}
 	}
 	return datastores, nil
 }
 
 // GetAllVMs gets all the VMs in a datacenter
-func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
-	c, err := ValidateVMwareCreds(vmwcreds)
+func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
+	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
@@ -561,11 +574,11 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	var vminfo []vjailbreakv1alpha1.VMInfo
-	pc := property.DefaultCollector(c)
+	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "network"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -577,6 +590,13 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		var datastores []string
 		var networks []string
 		var disks []string
+		var clusterName string
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
+			continue
+		}
+		pc := property.DefaultCollector(c)
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
 			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
@@ -587,18 +607,18 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 		}
 
 		for _, device := range vmProps.Config.Hardware.Device {
-			disk, ok := device.(*types.VirtualDisk)
+			disk, ok := device.(*govmitypes.VirtualDisk)
 			if !ok {
 				continue
 			}
 
-			var dsref types.ManagedObjectReference
+			var dsref govmitypes.ManagedObjectReference
 			switch backing := disk.Backing.(type) {
-			case *types.VirtualDiskFlatVer2BackingInfo:
+			case *govmitypes.VirtualDiskFlatVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskSparseVer2BackingInfo:
+			case *govmitypes.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+			case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
 				dsref = backing.Datastore.Reference()
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
@@ -614,16 +634,61 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
 
+		// Get the host name and parent (cluster) information
+		host := mo.HostSystem{}
+		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host name: %w", err)
+		}
+
+		// Get the cluster name from the host's parent
+		if host.Parent != nil {
+			// Determine parent type based on the object reference type
+			parentType := host.Parent.Type
+			// Get the parent name
+			var parentEntity mo.ManagedEntity
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
+			if err != nil {
+				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
+			} else {
+				// Handle based on the parent's type
+				switch parentType {
+				case "ClusterComputeResource":
+					var cluster mo.ClusterComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+					if err != nil {
+						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = cluster.Name
+					}
+				case "ComputeResource":
+					var compute mo.ComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
+					if err != nil {
+						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = compute.Name
+					}
+				default:
+					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+				}
+			}
+		} else {
+			clusterName = ""
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:       vmProps.Config.Name,
-			Datastores: datastores,
-			Disks:      disks,
-			Networks:   networks,
-			IPAddress:  vmProps.Guest.IpAddress,
-			VMState:    vmProps.Guest.GuestState,
-			OSType:     vmProps.Guest.GuestFamily,
-			CPU:        int(vmProps.Config.Hardware.NumCPU),
-			Memory:     int(vmProps.Config.Hardware.MemoryMB),
+			Name:        vmProps.Config.Name,
+			Datastores:  datastores,
+			Disks:       disks,
+			Networks:    networks,
+			IPAddress:   vmProps.Guest.IpAddress,
+			VMState:     vmProps.Guest.GuestState,
+			OSFamily:    vmProps.Guest.GuestFamily,
+			CPU:         int(vmProps.Config.Hardware.NumCPU),
+			Memory:      int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:    host.Name,
+			ClusterName: clusterName,
 		})
 	}
 	return vminfo, nil
@@ -631,14 +696,15 @@ func GetAllVMs(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds, da
 
 // AppendUnique appends unique values to a slice
 func AppendUnique(slice []string, values ...string) []string {
-	for _, v := range values {
-		if !slices.Contains(slice, v) {
-			slice = append(slice, v)
+	for _, value := range values {
+		if !slices.Contains(slice, value) {
+			slice = append(slice, value)
 		}
 	}
 	return slice
 }
 
+// CreateOrUpdateVMwareMachines creates or updates VMwareMachine objects for the given VMs
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
 	var wg sync.WaitGroup
@@ -690,24 +756,25 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
-		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
 				Labels: map[string]string{
+
 					label: "true",
+
 				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-				VMs: *vminfo,
+				VMInfo: *vminfo,
 			},
 		}
 		init = true
 	} else {
 		// Initialize labels map if needed
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-
+		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
 			// Initialize labels map if needed
@@ -721,10 +788,21 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			}
 		}
 
+
 		if !reflect.DeepEqual(vmwvm.Spec.VMs, *vminfo) {
 			// update vminfo in case the VM has been moved by vMotion
 			vmwvm.Spec.VMs = *vminfo
 
+
+		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], vminfo.ESXiName) || !reflect.DeepEqual(vmwvm.Labels[constants.ClusterNameLabel], vminfo.ClusterName) {
+			// update vminfo in case the VM has been moved by vMotion
+			vmwvm.Spec.VMInfo = *vminfo
+			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
+			vmwvm.Labels[constants.ClusterNameLabel] = vminfo.ClusterName
+
+			if vmwvm.Spec.VMInfo.OSFamily == "" {
+				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
+			}
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine: %w", err)
@@ -761,6 +839,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 func GetClosestFlavour(cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -789,6 +868,7 @@ func GetClosestFlavour(cpu, memory int, computeClient *gophercloud.ServiceClient
 		return bestFlavor, nil
 	}
 
+
 	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
@@ -810,6 +890,7 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client,
 	return nil
 }
 
+
 // FilterVMwareMachinesForCreds filters VMwareMachine objects for the given credentials
 func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
@@ -818,6 +899,7 @@ func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
 	if err := k8sClient.List(ctx, &vmList,
 		client.InNamespace(constants.NamespaceMigrationSystem),
 		client.MatchingLabels{label: "true"}); err != nil {
+
 		return nil, errors.Wrap(err, "Error listing VMs")
 	}
 	return &vmList, nil
@@ -828,30 +910,37 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context,
 	client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vcenterVMs []vjailbreakv1alpha1.VMInfo) ([]vjailbreakv1alpha1.VMwareMachine, error) {
+
 	vmList, err := FilterVMwareMachinesForCreds(ctx, client, vmwcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error filtering VMs")
 	}
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
+
 	for i := range vmList.Items {
 		vm := &vmList.Items[i]
 		if !VMExistsInVcenter(vm.Spec.VMs.Name, vcenterVMs) {
 			staleVMs = append(staleVMs, *vm)
+
 		}
 	}
 	return staleVMs, nil
 }
 
+
 // DeleteStaleVMwareMachines deletes VMwareMachine objects that are not present in the vCenter
 func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcenterVMs []vjailbreakv1alpha1.VMInfo) error {
+
 	staleVMs, err := FindVMwareMachinesNotInVcenter(ctx, client, vmwcreds, vcenterVMs)
 	if err != nil {
 		return errors.Wrap(err, "Error finding stale VMs")
 	}
+
 	for i := range staleVMs {
 		vm := &staleVMs[i]
 		if err := client.Delete(ctx, vm); err != nil {
+
 			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting stale VM '%s'", vm.Name))
 			}
@@ -862,8 +951,10 @@ func DeleteStaleVMwareMachines(ctx context.Context, client client.Client,
 
 // VMExistsInVcenter checks if a VM exists in the vCenter
 func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bool {
+
 	for i := range vcenterVMs {
 		vm := &vcenterVMs[i]
+
 		if vm.Name == vmName {
 			return true
 		}
@@ -871,10 +962,12 @@ func VMExistsInVcenter(vmName string, vcenterVMs []vjailbreakv1alpha1.VMInfo) bo
 	return false
 }
 
+
 func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	if err := DeleteVMwareMachinesForVMwareCreds(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting VMs")
 	}
+
 
 	if err := DeleteVMwarecredsSecret(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting secret")
@@ -882,6 +975,8 @@ func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwa
 
 	return nil
 }
+
+
 
 func DeleteVMwarecredsSecret(ctx context.Context, scope *scope.VMwareCredsScope) error {
 	secret := corev1.Secret{
@@ -903,13 +998,16 @@ func DeleteVMwareMachinesForVMwareCreds(ctx context.Context, scope *scope.VMware
 	if err != nil {
 		return errors.Wrap(err, "Error filtering VMs")
 	}
+
 	for i := range vmList.Items {
 		vm := &vmList.Items[i]
 		if err := scope.Client.Delete(ctx, vm); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, fmt.Sprintf("Error deleting VM '%s'", vm.Name))
+
 			}
 		}
 	}
 	return nil
 }
+

@@ -23,8 +23,10 @@ func AddDebugOutputToFile(cmd *exec.Cmd) {
 		// Ensure logs directory exists
 		if err := os.MkdirAll(constants.LogsDir, 0755); err == nil {
 			// Create log file with the migration object name
+
 			logFilePath := fmt.Sprintf("%s/%s.log", constants.LogsDir, migrationName)
 			logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
 			if err == nil {
 				PrintLog(fmt.Sprintf("Debug mode enabled. Command output will be logged to %s", logFilePath))
 

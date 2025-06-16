@@ -30,30 +30,31 @@ import (
 )
 
 type Migrate struct {
-	URL                 string
-	UserName            string
-	Password            string
-	Insecure            bool
-	Networknames        []string
-	Networkports        []string
-	Volumetypes         []string
-	Virtiowin           string
-	Ostype              string
-	Thumbprint          string
-	Convert             bool
-	Openstackclients    openstack.OpenstackOperations
-	Vcclient            vcenter.VCenterOperations
-	VMops               vm.VMOperations
-	Nbdops              []nbd.NBDOperations
-	EventReporter       chan string
-	PodLabelWatcher     chan string
-	InPod               bool
-	MigrationTimes      MigrationTimes
-	MigrationType       string
-	PerformHealthChecks bool
-	HealthCheckPort     string
-	K8sClient           client.Client
-	TargetFlavorId      string
+	URL                    string
+	UserName               string
+	Password               string
+	Insecure               bool
+	Networknames           []string
+	Networkports           []string
+	Volumetypes            []string
+	Virtiowin              string
+	Ostype                 string
+	Thumbprint             string
+	Convert                bool
+	Openstackclients       openstack.OpenstackOperations
+	Vcclient               vcenter.VCenterOperations
+	VMops                  vm.VMOperations
+	Nbdops                 []nbd.NBDOperations
+	EventReporter          chan string
+	PodLabelWatcher        chan string
+	InPod                  bool
+	MigrationTimes         MigrationTimes
+	MigrationType          string
+	PerformHealthChecks    bool
+	HealthCheckPort        string
+	K8sClient              client.Client
+	TargetFlavorId         string
+	TargetAvailabilityZone string
 }
 
 type MigrationTimes struct {
@@ -63,10 +64,13 @@ type MigrationTimes struct {
 }
 
 func (migobj *Migrate) logMessage(message string) {
+
 	utils.PrintLog(message)
+
 	if migobj.InPod {
 		migobj.EventReporter <- message
 	}
+	utils.PrintLog(message)
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
@@ -233,7 +237,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
 
-	vminfo, err = vmops.UpdateDiskInfo(vminfo)
+	err = vmops.UpdateDisksInfo(&vminfo)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to update disk info: %s", err)
 	}
@@ -302,11 +306,21 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					// 11. Copy Changed Blocks over
 					done = false
+					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						return vminfo, fmt.Errorf("failed to copy changed blocks: %s", err)
+						changedBlockCopySuccess = false
+					}
+
+					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
+					if err != nil {
+						return vminfo, fmt.Errorf("failed to update disk info: %s", err)
+					}
+					if !changedBlockCopySuccess {
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
+						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
 					}
 					migobj.logMessage("Finished copying changed blocks")
 					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
@@ -335,10 +349,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// Update old change id to the new base change id value
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
-		vminfo, err = vmops.UpdateDiskInfo(vminfo)
-		if err != nil {
-			return vminfo, fmt.Errorf("failed to update disk info: %s", err)
-		}
+
 		err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
@@ -385,9 +396,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		useSingleDisk               bool
 	)
 
-	if vminfo.OSType == "windows" {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		getBootCommand = "ls /Windows"
-	} else if vminfo.OSType == "linux" {
+	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		getBootCommand = "ls /boot"
 	} else {
 		getBootCommand = "inspect-os"
@@ -427,7 +438,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		break
 	}
 
-	if vminfo.OSType == "linux" {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if useSingleDisk {
 			// skip checking LVM, because its a single disk
 			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
@@ -448,7 +459,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
 			if err != nil {
-				return fmt.Errorf("failed to get os release: %s", err)
+				return fmt.Errorf("failed to get os release: %s: %s\n", err, strings.TrimSpace(osRelease))
 			}
 		}
 		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
@@ -482,7 +493,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 		utils.PrintLog("OS compatibility check passed")
 
+
 	} else if vminfo.OSType == "windows" {
+
 		utils.PrintLog("OS compatibility check passed")
 	} else {
 		return fmt.Errorf("unsupported OS type: %s", vminfo.OSType)
@@ -494,14 +507,14 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if migobj.Convert {
 		firstbootscripts := []string{}
 		// Fix NTFS
-		if vminfo.OSType == "windows" {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 			err = virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path)
 			if err != nil {
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
 		// Turn on DHCP for interfaces in rhel VMs
-		if vminfo.OSType == "linux" {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 			if strings.Contains(osRelease, "rhel") {
 				firstbootscriptname := "rhel_enable_dhcp"
 				firstbootscript := constants.RhelFirstBootScript
@@ -526,7 +539,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	//TODO(omkar): can disable DHCP here
-	if vminfo.OSType == "linux" {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Add Wildcard Netplan
 			utils.PrintLog("Adding wildcard netplan")
@@ -545,21 +558,21 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) error {
+func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	networknames := migobj.Networknames
 	var flavor *flavors.Flavor
 	var err error
 
-	if flavorId == "" {
+	if migobj.TargetFlavorId == "" {
 		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	} else {
-		flavor, err = openstackops.GetFlavor(flavorId)
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
 		if err != nil {
 			return fmt.Errorf("failed to get OpenStack flavor: %s", err)
 		}
@@ -614,7 +627,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, flavorId string) e
 	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}
@@ -763,17 +776,19 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	return nil
 }
 
-func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo) {
+func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.CancelFunc) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
+	cancel()
 	migobj.cleanup(vminfo, "Migration terminated")
 	os.Exit(0)
 }
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -784,6 +799,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
 	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
@@ -792,16 +808,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if len(vminfo.Mac) != len(migobj.Networknames) {
 		return errors.Errorf("number of mac addresses does not match number of network names")
 	}
-
 	// Graceful Termination clean-up volumes and snapshots
-	go migobj.gracefulTerminate(vminfo)
+	go migobj.gracefulTerminate(vminfo, cancel)
 
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to add volumes to host")
 	}
-
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
@@ -834,7 +848,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(vminfo, migobj.TargetFlavorId)
+	err = migobj.CreateTargetInstance(vminfo)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
@@ -842,7 +856,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
-
+	cancel()
 	return nil
 }
 

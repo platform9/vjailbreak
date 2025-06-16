@@ -50,7 +50,9 @@ func main() {
 			<-ackChan
 		}
 		utils.PrintLog(msg)
+
 		os.Exit(1)
+
 	}
 
 	client, err := utils.GetInclusterClient()
@@ -126,11 +128,12 @@ func main() {
 			VMCutoverStart: cutstart,
 			VMCutoverEnd:   cutend,
 		},
-		MigrationType:       migrationparams.MigrationType,
-		PerformHealthChecks: migrationparams.PerformHealthChecks,
-		HealthCheckPort:     migrationparams.HealthCheckPort,
-		K8sClient:           client,
-		TargetFlavorId:      migrationparams.TARGET_FLAVOR_ID,
+		MigrationType:          migrationparams.MigrationType,
+		PerformHealthChecks:    migrationparams.PerformHealthChecks,
+		HealthCheckPort:        migrationparams.HealthCheckPort,
+		K8sClient:              client,
+		TargetFlavorId:         migrationparams.TARGET_FLAVOR_ID,
+		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

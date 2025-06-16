@@ -19,12 +19,21 @@ spec:
       name: Phase
       type: string
     - jsonPath: .status.agentName
-      name: AgentName
+      name: Agent Name
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Migration is the Schema for the migrations API
+        description: |-
+          Migration is the Schema for the migrations API that represents a single virtual machine
+          migration job from VMware to OpenStack. It tracks the complete migration lifecycle
+          including validation, data transfer, disk conversion, and cutover phases. Migration resources
+          provide detailed status monitoring, error handling, and manual intervention points like
+          cutover initiation. Each Migration is associated with a MigrationPlan and executes on a specific
+          VjailbreakNode agent, tracking progress via status updates and condition changes.
         properties:
           apiVersion:
             description: |-
@@ -120,6 +129,18 @@ spec:
                 type: array
               phase:
                 description: Phase is the current phase of the migration
+                enum:
+                - Pending
+                - Validating
+                - AwaitingDataCopyStart
+                - CopyingBlocks
+                - CopyingChangedBlocks
+                - ConvertingDisk
+                - AwaitingCutOverStartTime
+                - AwaitingAdminCutOver
+                - Succeeded
+                - Failed
+                - Unknown
                 type: string
             required:
             - phase

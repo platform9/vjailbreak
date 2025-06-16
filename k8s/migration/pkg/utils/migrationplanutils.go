@@ -1,3 +1,9 @@
+// Package utils provides utility functions for migration plan management and validation.
+// It includes functions for generating Kubernetes-compatible resource names, validating
+// migration plans between VMware and OpenStack environments, managing migration-related
+// resources like config maps, and ensuring proper resource naming conventions.
+// These utilities support the core migration planning process, including name conversion,
+// path handling, and validation of migration specifications.
 package utils
 
 import (
@@ -13,14 +19,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// MigrationNameFromVMName generates a migration name from a VM name
 func MigrationNameFromVMName(vmname string) string {
 	return fmt.Sprintf("migration-%s", vmname)
 }
 
+// GetMigrationConfigMapName generates a config map name for a migration
 func GetMigrationConfigMapName(vmname string) string {
 	return fmt.Sprintf("migration-config-%s", vmname)
 }
 
+// ConvertToK8sName converts a name to be Kubernetes-compatible
 func ConvertToK8sName(name string) (string, error) {
 	// Convert to lowercase
 	name = strings.ToLower(name)
@@ -43,11 +52,13 @@ func ConvertToK8sName(name string) (string, error) {
 	return name, fmt.Errorf("name '%s' is not a valid K8s name: %v", name, nameerrors)
 }
 
+// NewHostPathType creates a new HostPathType from a string
 func NewHostPathType(pathType string) *corev1.HostPathType {
 	hostPathType := corev1.HostPathType(pathType)
 	return &hostPathType
 }
 
+// ValidateMigrationPlan validates a MigrationPlan object
 func ValidateMigrationPlan(migrationplan *vjailbreakv1alpha1.MigrationPlan) error {
 	// Validate Time Field
 	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {

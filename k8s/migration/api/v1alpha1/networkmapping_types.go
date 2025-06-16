@@ -20,34 +20,38 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NetworkMappingSpec defines the desired state of NetworkMapping
+// NetworkMappingSpec defines the desired state of NetworkMapping including
+// mappings between VMware and OpenStack networks
 type NetworkMappingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Networks is the list of networks
+	// Networks is the list of network mappings between source (VMware) and target (OpenStack) environments
 	Networks []Network `json:"networks"`
 }
 
+// Network represents a mapping between source and target networks
 type Network struct {
+	// Source is the name of the source network in VMware
 	Source string `json:"source"`
+	// Target is the name of the target network in OpenStack
 	Target string `json:"target"`
 }
 
 // NetworkMappingStatus defines the observed state of NetworkMapping
 type NetworkMappingStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	NetworkmappingValidationStatus  string `json:"networkMappingValidationStatus,omitempty"`
+	// NetworkmappingValidationStatus indicates the validation status of the network mapping
+	// Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
+	NetworkmappingValidationStatus string `json:"networkMappingValidationStatus,omitempty"`
+	// NetworkmappingValidationMessage provides detailed validation information including
+	// information about available networks and any validation errors
 	NetworkmappingValidationMessage string `json:"networkMappingValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.NetworkmappingValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.networkMappingValidationStatus"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// NetworkMapping is the Schema for the networkmappings API
+// NetworkMapping is the Schema for the networkmappings API that defines
+// mappings between VMware and OpenStack networks to be used during migration
 type NetworkMapping struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

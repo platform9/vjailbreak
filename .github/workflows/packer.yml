@@ -25,6 +25,7 @@ env:
   UI_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-ui
   V2V_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-v2v-helper
   CONTROLLER_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-controller
+  VPWNED_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-vpwned
 
 jobs:
   determine-release:
@@ -36,6 +37,7 @@ jobs:
       v2v_img: ${{ steps.set_env.outputs.v2v_img }}
       controller_img: ${{ steps.set_env.outputs.controller_img }}
       qcow2_img: ${{ steps.set_env.outputs.qcow2_img }}
+      vpwned_img: ${{ steps.set_env.outputs.vpwned_img }}
 
     steps:
       - name: Checkout repository
@@ -59,6 +61,13 @@ jobs:
         id: check_release
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "release_found=true" >> $GITHUB_ENV
+          fi
+
+      - name: Check if manual trigger
+        id: check_manual
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
           fi
 
@@ -95,6 +104,7 @@ jobs:
           echo "ui_img=${{ env.UI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "v2v_img=${{ env.V2V_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "controller_img=${{ env.CONTROLLER_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "vpwned_img=${{ env.VPWNED_IMG }}:${TAG}" >> $GITHUB_OUTPUT
 
   build-ui:
     runs-on: ubuntu-latest
@@ -181,14 +191,42 @@ jobs:
       - name: Build controller image
         run: make -o v2v-helper vjail-controller
 
+  build-vpwned:
+    runs-on: ubuntu-latest
+    needs: determine-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+
+      - name: Set environment variables
+        run: |
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+
+      - name: Build vpwned image
+        run: make build-vpwned
+
   post-build:
     runs-on: ubuntu-latest
-    needs: [determine-release, build-ui, build-v2v-helper, build-controller]
+    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned]
     if: |
       always() && 
       (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped')
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped')
 
     steps:
       - name: Login to Docker Hub
@@ -212,6 +250,7 @@ jobs:
           echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
 
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
@@ -240,7 +279,15 @@ jobs:
 
       - name: Download ubuntu base image
         if: env.release_found == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base
+        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
+      
+      - name: Download images and export as tar
+        if: env.release_found == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y containerd.
+          sudo mkdir -p image_builder/images
+          sudo chmod +x image_builder/scripts/download_images.sh
+          sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
 
       - name: Enable KVM group perms
         if: env.release_found == 'true'
@@ -251,7 +298,7 @@ jobs:
 
       - name: Set up QEMU
         if: env.release_found == 'true'
-        run: sudo apt-get update && sudo apt-get install qemu-system qemu-utils -y
+        run: sudo apt-get install qemu-system qemu-utils -y
 
       - name: Setup packer
         if: env.release_found == 'true'
@@ -274,10 +321,11 @@ jobs:
         if: env.release_found == 'true'
         uses: oras-project/setup-oras@v1.2.1
 
-      - name: Run packer build
+      - name: Run packer build for normal image
         if: env.release_found == 'true'
-        id: build
+        id: build-1
         run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+
 
       - name: Upload vjailbreak qcow2 to quay
         if: env.release_found == 'true'

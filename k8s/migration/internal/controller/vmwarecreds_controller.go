@@ -46,16 +46,11 @@ type VMwareCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarecreds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarehosts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwareclusters,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the VMwareCreds object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx)
 
@@ -79,12 +74,12 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	// Always close the scope when exiting this function such that we can persist any vmwarecreds changes.
 	defer func() {
-		ctxlog.Info("Closing scope for VMWareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
 		if err := scope.Close(); err != nil && reterr == nil {
 			reterr = err
 		}
 	}()
-	if vmwcreds.ObjectMeta.DeletionTimestamp.IsZero() {
+
+	if vmwcreds.DeletionTimestamp.IsZero() {
 		return r.reconcileNormal(ctx, scope)
 	}
 	return r.reconcileDelete(ctx, scope)
@@ -94,34 +89,38 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
-	if _, err := utils.ValidateVMwareCreds(scope.VMwareCreds); err != nil {
+	if _, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds); err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-			return ctrl.Result{}, errors.Wrap(err,
-				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'",
-					scope.Name())).Error())
+			return ctrl.Result{}, errors.Wrap(
+				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name())),
+				err.Error())
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
-	scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
+	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
 	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
 
+	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-	ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", scope.VMwareCreds.Finalizers)
 
-	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	vminfo, err := utils.GetAllVMs(ctx, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
+	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
+	}
+
+	vminfo, err := utils.GetAllVMs(ctx, r.Client, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}
-	err = utils.CreateOrUpdateVMwareMachines(ctx, scope.Client, scope.VMwareCreds, vminfo)
+	err = utils.CreateOrUpdateVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
@@ -130,7 +129,9 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
 	}
 
+
 	return ctrl.Result{RequeueAfter: constants.VMwareCredsRequeueAfter}, nil
+
 }
 
 // nolint:unparam
@@ -138,8 +139,14 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
+	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s'", scope.Name()))
+	}
+
 	// Delete the associated secret
-	err := r.Client.Delete(ctx, &corev1.Secret{
+	client := r.Client
+	err = client.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
 			Namespace: constants.NamespaceMigrationSystem,

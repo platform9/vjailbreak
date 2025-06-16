@@ -20,22 +20,38 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// VMInfo contains detailed information about a VMware virtual machine to be migrated,
+// including resource allocation, network configuration, storage details, and host placement.
+// This comprehensive data is necessary for accurately recreating the VM in the target environment.
 type VMInfo struct {
-	Name       string   `json:"name"`
+	// Name is the name of the virtual machine
+	Name string `json:"name"`
+	// Datastores is the list of datastores for the virtual machine
 	Datastores []string `json:"datastores,omitempty"`
-	Disks      []string `json:"disks,omitempty"`
-	Networks   []string `json:"networks,omitempty"`
-	IPAddress  string   `json:"ipAddress,omitempty"`
-	VMState    string   `json:"vmState,omitempty"`
-	OSType     string   `json:"osType,omitempty"`
-	CPU        int      `json:"cpu,omitempty"`
-	Memory     int      `json:"memory,omitempty"`
+	// Disks is the list of disks for the virtual machine
+	Disks []string `json:"disks,omitempty"`
+	// Networks is the list of networks for the virtual machine
+	Networks []string `json:"networks,omitempty"`
+	// IPAddress is the IP address of the virtual machine
+	IPAddress string `json:"ipAddress,omitempty"`
+	// VMState is the state of the virtual machine
+	VMState string `json:"vmState,omitempty"`
+	// OSFamily is the OS family of the virtual machine
+	OSFamily string `json:"osFamily,omitempty"`
+	// CPU is the number of CPUs in the virtual machine
+	CPU int `json:"cpu,omitempty"`
+	// Memory is the amount of memory in the virtual machine
+	Memory int `json:"memory,omitempty"`
+	// ESXiName is the name of the ESXi host
+	ESXiName string `json:"esxiName,omitempty"`
+	// ClusterName is the name of the cluster
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMInfo is the info of the VMs in the VMwareMachine
-	VMs VMInfo `json:"vms,omitempty"`
+	VMInfo VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
@@ -55,7 +71,12 @@ type VMwareMachineStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// VMwareMachine is the Schema for the vmwaremachines API
+// VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
+// in the VMware source environment targeted for migration. It tracks VM configuration,
+// resource allocation, migration status, and target environment specifications.
+// VMwareMachine resources are the primary workloads migrated from VMware to OpenStack
+// as part of the migration process and contain all necessary information to recreate
+// equivalent virtual machines in the target environment.
 type VMwareMachine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

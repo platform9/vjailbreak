@@ -6,6 +6,8 @@ TAG ?= 1.0.4
 
 export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-v2v:${TAG}
+export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 
@@ -85,8 +87,8 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate # fmt vet ## Build manager binary.
+	CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "-X github.com/platform9/vjailbreak/k8s/migration/internal/controller.v2vimage=${V2V_IMG}" -o manager cmd/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -96,7 +98,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: build ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${CONTROLLER_IMG} .
 
 .PHONY: docker-push
@@ -123,7 +125,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${REGISTRY}/${REPO}/vjailbreak-controller:$$TAG
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
+	cd config/addons && $(KUSTOMIZE) edit set image vpwned=${VPWNED_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	cp dist/install.yaml ../../deploy/00crds.yaml
 
@@ -168,7 +171,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 KUSTOMIZE_VERSION ?= v5.4.1
 CONTROLLER_TOOLS_VERSION ?= v0.17.1
 ENVTEST_VERSION ?= release-0.18
-GOLANGCI_LINT_VERSION ?= v1.57.2
+GOLANGCI_LINT_VERSION ?= v2.1.6
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -188,7 +191,7 @@ $(ENVTEST): $(LOCALBIN)
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,${GOLANGCI_LINT_VERSION})
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,${GOLANGCI_LINT_VERSION})
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)

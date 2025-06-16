@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,9 +70,13 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 
 	opts := volumes.CreateOpts{
 		VolumeType: volumetype,
-		Size:       int(float64(size) / (1024 * 1024 * 1024)),
+		Size:       int(math.Ceil(float64(size) / (1024 * 1024 * 1024))),
 		Name:       name,
 	}
+
+	// Add 1GB to the size to account for the extra space
+	opts.Size += 1
+
 	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume: %s", err)
@@ -94,7 +99,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		}
 	}
 
-	if ostype == "windows" {
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		err = osclient.SetVolumeImageMetadata(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
@@ -130,6 +135,7 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get instance ID: %s", err)
 		}
+
 
 		// Check if the volume is available from nova side as well
 		server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
@@ -269,7 +275,7 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume)
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
-			"os_type":     "windows",
+			"os_type":     constants.OSFamilyWindows,
 		},
 	}
 	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
@@ -414,7 +420,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string) (*servers.Server, error) {
 
 	uuid := ""
 	bootableDiskIndex := 0
@@ -448,7 +454,10 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		FlavorRef: flavor.ID,
 		Networks:  openstacknws,
 	}
-
+	if availabilityZone != "" {
+		// for PCD, this will be set to cluster name
+		serverCreateOpts.AvailabilityZone = availabilityZone
+	}
 	createOpts := bootfromvolume.CreateOptsExt{
 		CreateOptsBuilder: serverCreateOpts,
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},

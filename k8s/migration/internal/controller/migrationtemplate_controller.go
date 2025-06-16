@@ -45,13 +45,6 @@ type MigrationTemplateReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the MigrationTemplate object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.ctxlog = log.FromContext(ctx)
 	r.ctxlog.Info("Reconciling MigrationTemplate")
@@ -77,9 +70,7 @@ func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
 		false, openstackcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -95,10 +86,22 @@ func (r *MigrationTemplateReconciler) checkStatusSuccess(ctx context.Context,
 		return false, fmt.Errorf("failed to get Creds: %w", err)
 	}
 
-	if isvmware && credsobj.(*vjailbreakv1alpha1.VMwareCreds).Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.VMwareCreds).Name)
-	} else if !isvmware && credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
-		return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", credsobj.(*vjailbreakv1alpha1.OpenstackCreds).Name)
+	if isvmware {
+		vmwareCreds, ok := credsobj.(*vjailbreakv1alpha1.VMwareCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to VMwareCreds")
+		}
+		if vmwareCreds.Status.VMwareValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("VMwareCreds '%s' CR is not validated", vmwareCreds.Name)
+		}
+	} else {
+		openstackCreds, ok := credsobj.(*vjailbreakv1alpha1.OpenstackCreds)
+		if !ok {
+			return false, fmt.Errorf("failed to convert credentials to OpenstackCreds")
+		}
+		if openstackCreds.Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
+			return false, fmt.Errorf("OpenstackCreds '%s' CR is not validated", openstackCreds.Name)
+		}
 	}
 	return true, nil
 }

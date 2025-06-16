@@ -471,7 +471,7 @@ func TestCreateTargetInstance(t *testing.T) {
 			{IPAddress: "ip-address"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -494,8 +494,9 @@ func TestCreateTargetInstance(t *testing.T) {
 		Openstackclients: mockOpenStackOps,
 		Networknames:     []string{"network-name-1", "network-name-2"},
 		InPod:            false,
+		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo, "flavor-id")
+	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.NoError(t, err)
 }
 
@@ -522,7 +523,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 			{IPAddress: "ip-address-2"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -546,8 +547,9 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		Networknames:     []string{"network-name-1", "network-name-2"},
 		Networkports:     []string{"port-1", "port-2"},
 		InPod:            false,
+		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo, "flavor-id")
+	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.NoError(t, err)
 }
 
@@ -579,7 +581,8 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		Networknames:     []string{"network-name-1", "network-name-2"},
 		Networkports:     []string{"port-1"},
 		InPod:            false,
+		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo, "flavor-id")
+	err := migobj.CreateTargetInstance(inputvminfo)
 	assert.Contains(t, err.Error(), "number of network ports does not match number of network names")
 }

@@ -4,6 +4,11 @@ k8s/migration/dist/*
 k8s/migration/vendor/*
 v2v-helper/vendor/*
 v2v-helper/manager
+pkg/vpwned/vendor/*
+k8s/migration/manager
+bin/*
+pkg/vpwned/vendor/*
+bin/*
 .vite
 .env
 .env.local
@@ -11,3 +16,5 @@ v2v-helper/manager
 node_modules
 openstack.rc
 .qodo
+pkg/vpwned/vendor/*
+pkg/vpwned/bin/vpwctl

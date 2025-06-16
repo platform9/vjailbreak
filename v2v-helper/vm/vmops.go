@@ -5,8 +5,11 @@ package vm
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -21,13 +24,15 @@ import (
 type VMOperations interface {
 	GetVMInfo(ostype string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
-	UpdateDiskInfo(vminfo VMInfo) (VMInfo, error)
+	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
+	UpdateDisksInfo(*VMInfo) error
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
 	DeleteSnapshot(name string) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
 	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
+	VMGuestShutdown() error
 	VMPowerOff() error
 	VMPowerOn() error
 }
@@ -83,15 +88,6 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
 
-// func getVMs(ctx context.Context, finder *find.Finder) ([]*object.VirtualMachine, error) {
-// 	// Find all virtual machines on the host
-// 	vms, err := finder.VirtualMachineList(ctx, "*")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return vms, nil
-// }
-
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vm := vmops.VMObj
 
@@ -118,15 +114,14 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		}
 	}
 
-	vmdisks := []VMDisk{} // Create an empty slice of Disk structs
+	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
 		if disk, ok := device.(*types.VirtualDisk); ok {
 			vmdisks = append(vmdisks, VMDisk{
 				Name: disk.DeviceInfo.GetDescription().Label,
 				Size: disk.CapacityInBytes,
 				Disk: disk,
-			},
-			)
+			})
 		}
 	}
 	uefi := false
@@ -134,10 +129,10 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		uefi = true
 	}
 	if ostype == "" {
-		if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyWindowsGuest) {
-			ostype = "windows"
-		} else if o.Guest.GuestFamily == string(types.VirtualMachineGuestOsFamilyLinuxGuest) {
-			ostype = "linux"
+		if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyWindowsGuest)) {
+			ostype = constants.OSFamilyWindows
+		} else if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyLinuxGuest)) {
+			ostype = constants.OSFamilyLinux
 		} else {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
 		}
@@ -193,7 +188,7 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
+func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	vm := vmops.VMObj
 	var snapbackingdisk []string
@@ -203,7 +198,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 	var o mo.VirtualMachine
 	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 	if err != nil {
-		return vminfo, fmt.Errorf("failed to get VM properties: %s", err)
+		return fmt.Errorf("failed to get VM properties: %s", err)
 	}
 
 	if o.Snapshot != nil {
@@ -211,7 +206,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 		var s mo.VirtualMachineSnapshot
 		err := pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
 		if err != nil {
-			return vminfo, fmt.Errorf("failed to get snapshot properties: %s", err)
+			return fmt.Errorf("failed to get snapshot properties: %s", err)
 		}
 
 		for _, device := range s.Config.Hardware.Device {
@@ -223,7 +218,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 				snapname = append(snapname, o.Snapshot.CurrentSnapshot.Value)
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					return vminfo, fmt.Errorf("failed to get change ID: %s", err)
+					return fmt.Errorf("failed to get change ID: %s", err)
 				}
 				snapid = append(snapid, changeid.Value)
 			}
@@ -235,7 +230,61 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo VMInfo) (VMInfo, error) {
 		}
 	}
 
-	return vminfo, nil
+	return nil
+}
+
+func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess bool) error {
+	pc := vmops.vcclient.VCPropertyCollector
+	vm := vmops.VMObj
+	var snapbackingdisk []string
+	var snapname []string
+	var snapid []string
+
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	if err != nil {
+		return fmt.Errorf("failed to get VM properties: %s", err)
+	}
+
+	if o.Snapshot != nil {
+		// get backing disk of snapshot
+		var s mo.VirtualMachineSnapshot
+		err := pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		if err != nil {
+			return fmt.Errorf("failed to get snapshot properties: %s", err)
+		}
+
+		for _, device := range s.Config.Hardware.Device {
+			switch disk := device.(type) {
+			case *types.VirtualDisk:
+				backing := disk.Backing.(types.BaseVirtualDeviceFileBackingInfo)
+				info := backing.GetVirtualDeviceFileBackingInfo()
+				snapbackingdisk = append(snapbackingdisk, info.FileName)
+				snapname = append(snapname, o.Snapshot.CurrentSnapshot.Value)
+				changeid, err := getChangeID(disk)
+				if err != nil {
+					return fmt.Errorf("failed to get change ID: %s", err)
+				}
+				snapid = append(snapid, changeid.Value)
+			}
+		}
+		for idx, _ := range vminfo.VMDisks {
+			if vminfo.VMDisks[idx].Name == disk.Name {
+				if blockCopySuccess {
+					vminfo.VMDisks[idx].ChangeID = snapid[idx]
+				}
+				vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
+				vminfo.VMDisks[idx].Snapname = snapname[idx]
+				log.Println(fmt.Sprintf("Updated disk info for %s", disk.Name))
+				log.Println(fmt.Sprintf("Snapshot backing disk: %s", snapbackingdisk[idx]))
+				log.Println(fmt.Sprintf("Snapshot name: %s", snapname[idx]))
+				log.Println(fmt.Sprintf("Change ID: %s", snapid[idx]))
+				break
+			}
+		}
+	}
+
+	return nil
 }
 
 func (vmops *VMOps) IsCBTEnabled() (bool, error) {
@@ -336,6 +385,48 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 	return changedblocks, nil
 }
 
+func (vmops *VMOps) VMGuestShutdown() error {
+	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get VM power state: %s", err)
+	}
+	if currstate == types.VirtualMachinePowerStatePoweredOff {
+		return nil
+	}
+	
+	// Attempt guest OS shutdown
+	err = vmops.VMObj.ShutdownGuest(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initiate guest shutdown: %s", err)
+	}
+	
+	// Wait for up to 2 minutes for the VM to power off
+	poweredOff := false
+	ctx, cancel := context.WithTimeout(vmops.ctx, 2*time.Minute)
+	defer cancel()
+	
+	for !poweredOff {
+		state, err := vmops.VMObj.PowerState(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get VM power state: %s", err)
+		}
+		if state == types.VirtualMachinePowerStatePoweredOff {
+			poweredOff = true
+			break
+		}
+		
+		// Check if timeout occurred
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("guest shutdown timed out after 2 minutes")
+		default:
+			time.Sleep(5 * time.Second)
+		}
+	}
+	
+	return nil
+}
+
 func (vmops *VMOps) VMPowerOff() error {
 	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
 	if err != nil {
@@ -344,6 +435,18 @@ func (vmops *VMOps) VMPowerOff() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
+	
+	// First try a clean guest shutdown
+	err = vmops.VMGuestShutdown()
+	if err == nil {
+		// Guest shutdown succeeded
+		return nil
+	}
+	
+	// If guest shutdown failed, log the error and fall back to power off
+	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
+	
+	// Fall back to power off
 	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
 		return err
