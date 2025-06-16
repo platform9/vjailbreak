@@ -213,8 +213,8 @@ github.com/onsi/gomega v1.37.0/go.mod h1:8D9+Txp43QWKhM24yyOBEdpkzN8FvJyAwecBgsU
 github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
-github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250614174148-2c86b39486c3 h1:rssNsq/aiDTx7zV/tHT7UiJxWUxQONQAMlp0G4/zItw=
-github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250614174148-2c86b39486c3/go.mod h1:hqditU2IGPlZuSUpKYkwgnop+AryDjdSOXxVh5kIhhE=
+github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250616065306-c8bf49a49541 h1:7SLAscG2Y+lWGpmtfmIbSwTNQKVvcdTS3CtZM9UDcT8=
+github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250616065306-c8bf49a49541/go.mod h1:hqditU2IGPlZuSUpKYkwgnop+AryDjdSOXxVh5kIhhE=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
