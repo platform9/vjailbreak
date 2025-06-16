@@ -362,8 +362,8 @@ export default function VmsSelectionStep({
       const selectedVmNames = rowSelectionModel as string[];
 
       const updatePromises = selectedVmNames.map(vmName => {
-        let vmwareMachineName = vmList.find(vm => vm.name === vmName)?.vmWareMachineName
-        let payload = {
+        const vmwareMachineName = vmList.find(vm => vm.name === vmName)?.vmWareMachineName
+        const payload = {
           spec: {
             targetFlavorId: isAutoAssign ? "" : selectedFlavor
           }

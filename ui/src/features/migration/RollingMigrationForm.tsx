@@ -1,6 +1,6 @@
-import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link, Select, MenuItem } from "@mui/material"
+import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link, Select, MenuItem, GlobalStyles, FormLabel } from "@mui/material"
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid"
+import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
 import Footer from "../../components/forms/Footer"
 import Header from "../../components/forms/Header"
@@ -37,7 +37,7 @@ import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
 import WarningIcon from '@mui/icons-material/Warning';
 import { useClusterData } from "./useClusterData"
-import EditIcon from '@mui/icons-material/Edit';
+
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import { TextField, CircularProgress } from "@mui/material"
@@ -101,6 +101,9 @@ const StyledDrawer = styled(Drawer)(() => ({
         width: "1400px",
         maxWidth: "90vw",
     },
+    "& .hidden-column": {
+        display: "none"
+    },
 }))
 
 interface ESXHost {
@@ -124,6 +127,9 @@ interface VM {
     cpu?: number;
     memory?: number;
     powerState: string;
+    osFamily?: string;
+    flavor?: string;
+    targetFlavorId?: string;
     ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating';
     ipValidationMessage?: string;
 }
@@ -195,24 +201,36 @@ const esxColumns: GridColDef[] = [
 ];
 
 const CustomToolbarWithActions = (props) => {
-    const { rowSelectionModel, onEditIPs, ...toolbarProps } = props;
+    const { rowSelectionModel, onEditIPs, onAssignFlavor, ...toolbarProps } = props;
 
     return (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-            {rowSelectionModel && rowSelectionModel.length > 0 && (
-                <>
-                    <Button
-                        variant="text"
-                        color="primary"
-                        onClick={onEditIPs}
-                        size="small"
-                        sx={{ ml: 1 }}
-                    >
-                        Assign/Edit IPs ({rowSelectionModel.length})
-                    </Button>
-                </>
-            )}
-            <CustomSearchToolbar {...toolbarProps} />
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GridToolbarColumnsButton />
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {rowSelectionModel && rowSelectionModel.length > 0 && (
+                    <>
+                        <Button
+                            variant="text"
+                            color="primary"
+                            onClick={onEditIPs}
+                            size="small"
+                        >
+                            Assign/Edit IPs ({rowSelectionModel.length})
+                        </Button>
+                        <Button
+                            variant="text"
+                            color="primary"
+                            onClick={onAssignFlavor}
+                            size="small"
+                        >
+                            Assign Flavor ({rowSelectionModel.length})
+                        </Button>
+                    </>
+                )}
+                <CustomSearchToolbar {...toolbarProps} />
+            </Box>
         </Box>
     );
 };
@@ -347,6 +365,10 @@ export default function RollingMigrationFormDrawer({
     const [ipValidationStatus, setIpValidationStatus] = useState<Record<string, 'pending' | 'valid' | 'invalid' | 'validating'>>({});
     const [ipValidationMessages, setIpValidationMessages] = useState<Record<string, string>>({});
 
+    // OS assignment state
+    const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({});
+    const [osValidationError, setOsValidationError] = useState<string>("");
+
     // Migration Options state
     const { params, getParamsUpdater } = useParams<FormValues>({});
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -370,6 +392,11 @@ export default function RollingMigrationFormDrawer({
     const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, string>>({});
     const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, 'empty' | 'valid' | 'invalid' | 'validating'>>({});
     const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, string>>({});
+
+    // Flavor assignment state
+    const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
+    const [selectedFlavor, setSelectedFlavor] = useState("");
+    const [updating, setUpdating] = useState(false);
 
     const paginationModel = { page: 0, pageSize: 5 };
 
@@ -484,6 +511,11 @@ export default function RollingMigrationFormDrawer({
             const mappedVMs: VM[] = filteredVMs.map((vm: VMwareMachine) => {
                 const esxiHost = vm.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "";
 
+                // Get flavor information from the VM spec  
+                const targetFlavorId = vm.spec.targetFlavorId || "";
+                // We'll resolve flavor names later when openstackFlavors is available
+                const flavorName = targetFlavorId || "auto-assign";
+
                 return {
                     id: vm.metadata.name,
                     name: vm.spec.vms.name || vm.metadata.name,
@@ -493,7 +525,9 @@ export default function RollingMigrationFormDrawer({
                     datastores: vm.spec.vms.datastores,
                     cpu: vm.spec.vms.cpu,
                     memory: vm.spec.vms.memory,
-                    osType: vm.spec.vms.osFamily,
+                    osFamily: vm.spec.vms.osFamily,
+                    flavor: flavorName,
+                    targetFlavorId: targetFlavorId,
                     powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off",
                     ipValidationStatus: 'pending',
                     ipValidationMessage: ''
@@ -525,6 +559,8 @@ export default function RollingMigrationFormDrawer({
             setVmsWithAssignments(sortedVMs);
         }
     }, [orderedESXHosts]);
+
+
 
 
     const handleCloseMaasConfig = () => {
@@ -613,10 +649,7 @@ export default function RollingMigrationFormDrawer({
         };
     };
 
-    const handleStartEditingIP = (vmId: string, currentIp: string) => {
-        setEditingIpFor(vmId);
-        setTempIpValue(currentIp === "—" ? "" : currentIp);
-    };
+
 
     const handleCancelEditingIP = () => {
         setEditingIpFor(null);
@@ -690,6 +723,35 @@ export default function RollingMigrationFormDrawer({
         }
     };
 
+    // OS assignment handler
+    const handleOSAssignment = async (vmId: string, osFamily: string) => {
+        try {
+            setVmOSAssignments(prev => ({ ...prev, [vmId]: osFamily }));
+
+            await patchVMwareMachine(vmId, {
+                spec: {
+                    vms: {
+                        osFamily: osFamily
+                    }
+                }
+            }, VJAILBREAK_DEFAULT_NAMESPACE);
+
+            const updatedVMs = vmsWithAssignments.map(v =>
+                v.id === vmId ? { ...v, osFamily: osFamily } : v
+            );
+            setVmsWithAssignments(updatedVMs);
+
+        } catch (error) {
+            console.error("Failed to assign OS family:", error);
+            // Revert local state on error
+            setVmOSAssignments(prev => {
+                const newState = { ...prev };
+                delete newState[vmId];
+                return newState;
+            });
+        }
+    };
+
 
     const availableVmwareNetworks = useMemo(() => {
         if (!vmsWithAssignments.length || !selectedVMs.length) return [];
@@ -704,8 +766,8 @@ export default function RollingMigrationFormDrawer({
         if (extractedNetworks.length > 0) {
             return Array.from(new Set(extractedNetworks)).sort();
         }
+        return [];
 
-        return Array.from(new Set(["VM Network", "Management Network", "Storage Network"]));
     }, [vmsWithAssignments, selectedVMs]);
 
     const availableVmwareDatastores = useMemo(() => {
@@ -721,8 +783,8 @@ export default function RollingMigrationFormDrawer({
         if (extractedDatastores.length > 0) {
             return Array.from(new Set(extractedDatastores)).sort();
         }
+        return [];
 
-        return Array.from(new Set(["datastore1", "datastore2", "ssd-storage"]));
     }, [vmsWithAssignments, selectedVMs]);
 
     // Calculate ESX host to PCD config mapping status
@@ -748,6 +810,36 @@ export default function RollingMigrationFormDrawer({
         const volumeTypes = openstackCredData?.status?.openstack?.volumeTypes || [];
         return volumeTypes.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     }, [openstackCredData]);
+
+    const openstackFlavors = useMemo(() => {
+        if (!openstackCredData) return [];
+
+        return openstackCredData?.spec?.flavors || [];
+    }, [openstackCredData]);
+
+    // Update VM flavor names when OpenStack flavors become available
+    useEffect(() => {
+        if (openstackFlavors.length > 0 && vmsWithAssignments.length > 0) {
+            const updatedVMs = vmsWithAssignments.map(vm => {
+                if (vm.targetFlavorId) {
+                    const flavorObj = openstackFlavors.find(f => f.id === vm.targetFlavorId);
+                    if (flavorObj && vm.flavor !== flavorObj.name) {
+                        return { ...vm, flavor: flavorObj.name };
+                    }
+                }
+                return vm;
+            });
+
+            // Only update if there are actual changes
+            const hasChanges = updatedVMs.some((vm, index) =>
+                vm.flavor !== vmsWithAssignments[index]?.flavor
+            );
+
+            if (hasChanges) {
+                setVmsWithAssignments(updatedVMs);
+            }
+        }
+    }, [openstackFlavors, vmsWithAssignments]);
 
     const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
         if (key === "networkMappings") {
@@ -797,6 +889,30 @@ export default function RollingMigrationFormDrawer({
             return { hasError: false, hostsWithoutConfigs: [] };
         }
     }, [orderedESXHosts]);
+
+    // Validate OS assignment for selected powered-off VMs
+    const osValidation = useMemo(() => {
+        if (selectedVMs.length === 0) {
+            setOsValidationError("");
+            return { hasError: false, vmsWithoutOS: [] };
+        }
+
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const poweredOffVMsWithoutOS = selectedVMsData.filter(vm => {
+            const assignedOS = vmOSAssignments[vm.id];
+            const currentOS = assignedOS || vm.osFamily;
+            return vm.powerState === "powered-off" && (!currentOS || currentOS === "Unknown");
+        });
+
+        if (poweredOffVMsWithoutOS.length > 0) {
+            const errorMessage = `Cannot proceed with Migration: ${poweredOffVMsWithoutOS.length} powered-off VM${poweredOffVMsWithoutOS.length === 1 ? '' : 's'} do not have Operating System assigned. Please assign OS to all powered-off VMs before continuing.`;
+            setOsValidationError(errorMessage);
+            return { hasError: true, vmsWithoutOS: poweredOffVMsWithoutOS };
+        } else {
+            setOsValidationError("");
+            return { hasError: false, vmsWithoutOS: [] };
+        }
+    }, [selectedVMs, vmsWithAssignments, vmOSAssignments]);
 
     const handleSubmit = async () => {
         setSubmitting(true);
@@ -992,7 +1108,10 @@ export default function RollingMigrationFormDrawer({
         // IP validation - ensure all selected VMs have IP addresses assigned
         const ipValidationPassed = !vmIpValidation.hasError;
 
-        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !esxHostConfigValid || !ipValidationPassed;
+        // OS validation - ensure all selected powered-off VMs have OS assigned
+        const osValidationPassed = !osValidation.hasError;
+
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !esxHostConfigValid || !ipValidationPassed || !osValidationPassed;
     }, [
         sourceCluster,
         destinationPCD,
@@ -1009,7 +1128,8 @@ export default function RollingMigrationFormDrawer({
         selectedESXHosts,
         orderedESXHosts,
         vmIpValidation.hasError,
-        esxHostConfigValidation.hasError
+        esxHostConfigValidation.hasError,
+        osValidation.hasError
     ]);
 
     useKeyboardSubmit({
@@ -1088,6 +1208,7 @@ export default function RollingMigrationFormDrawer({
             field: "name",
             headerName: "VM Name",
             flex: 1.5,
+            hideable: false, // Always show VM name
             renderCell: (params) => (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Tooltip title={params.row.powerState === "powered-on" ? "Powered On" : "Powered Off"}>
@@ -1105,8 +1226,10 @@ export default function RollingMigrationFormDrawer({
             field: "ip",
             headerName: "Current IP",
             flex: 1,
+            hideable: true,
             renderCell: (params) => {
                 const vmId = params.row.id;
+                const isSelected = selectedVMs.includes(vmId);
                 const isEditing = editingIpFor === vmId;
                 const validationStatus = ipValidationStatus[vmId];
                 const validationMessage = ipValidationMessages[vmId];
@@ -1127,22 +1250,38 @@ export default function RollingMigrationFormDrawer({
                     }
                 };
 
-                if (isEditing) {
+                // Show input field if VM is selected or being edited
+                if (isSelected || isEditing) {
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', }}>
                             <TextField
-                                value={tempIpValue}
-                                onChange={(e) => setTempIpValue(e.target.value)}
-                                onBlur={() => handleSaveIP(vmId)}
+                                value={isEditing ? tempIpValue : currentIp === "—" ? "" : currentIp}
+                                onChange={(e) => {
+                                    if (!isEditing) {
+                                        setTempIpValue(e.target.value);
+                                        setEditingIpFor(vmId);
+                                    } else {
+                                        setTempIpValue(e.target.value);
+                                    }
+                                }}
+                                onBlur={() => {
+                                    if (isEditing) {
+                                        handleSaveIP(vmId);
+                                    }
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
-                                        handleSaveIP(vmId);
+                                        if (isEditing) {
+                                            handleSaveIP(vmId);
+                                        } else {
+                                            setEditingIpFor(vmId);
+                                            handleSaveIP(vmId);
+                                        }
                                     } else if (e.key === 'Escape') {
                                         handleCancelEditingIP();
                                     }
                                 }}
                                 size="small"
-                                autoFocus
                                 placeholder="Enter IP address"
                                 sx={{
                                     '& .MuiInputBase-input': {
@@ -1160,61 +1299,112 @@ export default function RollingMigrationFormDrawer({
                     );
                 }
 
+                // Show read-only display for unselected VMs
                 return (
-                    <Tooltip
-                        title={"Double-click to edit IP address"}
-                        placement="top"
-                    >
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                padding: '4px 0',
-                                height: '100%',
-                                '&:hover': {
-                                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                                    borderRadius: '4px'
-                                }
-                            }}
-                            onDoubleClick={() => handleStartEditingIP(vmId, currentIp)}
-                        >
-                            <Typography variant="body2">
-                                {currentIp}
-                            </Typography>
-                            {!isEditing && currentIp === "—" && (
-                                <EditIcon sx={{ ml: 1, fontSize: 14, color: 'text.secondary' }} />
-                            )}
-                            {getValidationIcon()}
-                        </Box>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="body2">
+                            {currentIp}
+                        </Typography>
+                        {getValidationIcon()}
+                    </Box>
                 );
             },
         },
         {
-            field: "osType",
-            headerName: "OS",
-            flex: 0.5,
+            field: "osFamily",
+            headerName: "Operating System",
+            flex: 1,
+            hideable: true,
             renderCell: (params) => {
-                const osType = params.row.osType || "Unknown";
-                let displayValue = osType;
+                const vmId = params.row.id;
+                const isSelected = selectedVMs.includes(vmId);
+                const powerState = params.row?.powerState;
+                const detectedOsType = params.row?.osFamily;
+                const assignedOsType = vmOSAssignments[vmId];
+                const currentOsType = assignedOsType || detectedOsType;
+
+
+                // Show dropdown for ALL powered-off VMs (allows changing selection)
+                if (isSelected && powerState === "powered-off") {
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                            <Select
+                                size="small"
+                                value={(() => {
+                                    if (!currentOsType || currentOsType === "Unknown") return "";
+                                    const osLower = currentOsType.toLowerCase();
+                                    if (osLower.includes("windows")) return "windows";
+                                    if (osLower.includes("linux")) return "linux";
+                                    return "";
+                                })()}
+                                onChange={(e) => handleOSAssignment(vmId, e.target.value)}
+                                displayEmpty
+                                sx={{
+                                    minWidth: 120,
+                                    '& .MuiSelect-select': {
+                                        padding: '4px 8px',
+                                        fontSize: '0.875rem'
+                                    }
+                                }}
+                            >
+                                <MenuItem value="">
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                                        <WarningIcon sx={{ fontSize: 16 }} />
+                                        <em>Select OS</em>
+                                    </Box>
+                                </MenuItem>
+                                <MenuItem value="windows">
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <img src={WindowsIcon} alt="Windows" style={{ width: 16, height: 16 }} />
+                                        Windows
+                                    </Box>
+                                </MenuItem>
+                                <MenuItem value="linux">
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <img src={LinuxIcon} alt="Linux" style={{ width: 16, height: 16 }} />
+                                        Linux
+                                    </Box>
+                                </MenuItem>
+                            </Select>
+                        </Box>
+                    );
+                }
+
+                // Show OS with icon for assigned/detected OS
+                let displayValue = currentOsType || "Unknown";
                 let icon: React.ReactNode = null;
 
-                if (osType.includes("windows")) {
+                if (currentOsType && currentOsType.toLowerCase().includes("windows")) {
                     displayValue = "Windows";
                     icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-                } else if (osType.includes("linux")) {
+                } else if (currentOsType && currentOsType.toLowerCase().includes("linux")) {
                     displayValue = "Linux";
-                    icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
-                } else {
+                    icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20 }} />;
+                } else if (currentOsType && currentOsType !== "Unknown") {
                     displayValue = "Other";
                 }
 
                 return (
-                    <Tooltip title={displayValue}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                    <Tooltip title={powerState === "powered-off" ?
+                        ((!currentOsType || currentOsType === "Unknown") ?
+                            "OS assignment required for powered-off VMs" :
+                            "Click to change OS selection") :
+                        displayValue}>
+                        <Box sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            height: '100%',
+                            gap: 1
+                        }}>
                             {icon}
+                            {powerState === "powered-off" && (!currentOsType || currentOsType === "Unknown") && (
+                                <WarningIcon sx={{ color: 'warning.main', fontSize: 16 }} />
+                            )}
+                            <Typography variant="body2" sx={{
+                                color: (!currentOsType || currentOsType === "Unknown") ? 'text.secondary' : 'text.primary'
+                            }}>
+                                {displayValue}
+                            </Typography>
                         </Box>
                     </Tooltip>
                 );
@@ -1224,36 +1414,91 @@ export default function RollingMigrationFormDrawer({
             field: "networks",
             headerName: "Network Interface(s)",
             flex: 1,
+            hideable: true,
             valueGetter: (value) => value || "—",
         },
         {
             field: "cpu",
             headerName: "CPU",
             flex: 0.3,
+            hideable: true,
             valueGetter: (value) => value || "- ",
         },
         {
             field: "memory",
             headerName: "Memory (MB)",
             flex: 0.8,
+            hideable: true,
             valueGetter: (value) => value || "—",
         },
         {
             field: "esxHost",
             headerName: "ESX Host",
             flex: 1,
+            hideable: true,
             valueGetter: (value) => value || "—",
         },
         {
-            field: "auto-assign",
+            field: "flavor",
             headerName: "Flavor",
-            flex: 0.8,
-            renderCell: () => (
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography variant="body2">auto-assign</Typography>
-                </Box>
-            ),
+            flex: 1,
+            hideable: true,
+            renderCell: (params) => {
+                const vmId = params.row.id;
+                const isSelected = selectedVMs.includes(vmId);
+                const currentFlavor = params.value || "auto-assign";
+
+                if (isSelected) {
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+                            <Select
+                                size="small"
+                                value={(() => {
+                                    if (currentFlavor === "auto-assign") return "auto-assign";
+                                    const flavorByName = openstackFlavors.find(f => f.name === currentFlavor);
+                                    const flavorById = openstackFlavors.find(f => f.id === currentFlavor);
+                                    return flavorByName?.id || flavorById?.id || currentFlavor;
+                                })()}
+                                onChange={(e) => handleIndividualFlavorChange(vmId, e.target.value)}
+                                displayEmpty
+                                sx={{
+                                    minWidth: 120,
+                                    width: '100%',
+                                    '& .MuiSelect-select': {
+                                        padding: '4px 8px',
+                                        fontSize: '0.875rem'
+                                    }
+                                }}
+                            >
+                                <MenuItem value="auto-assign">
+                                    <Typography variant="body2">Auto Assign</Typography>
+                                </MenuItem>
+                                {openstackFlavors.map((flavor) => (
+                                    <MenuItem key={flavor.id} value={flavor.id}>
+                                        <Typography variant="body2">{flavor.name}</Typography>
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </Box>
+                    );
+                }
+
+                return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="body2">
+                            {currentFlavor}
+                        </Typography>
+                    </Box>
+                );
+            },
         },
+        {
+            field: "powerState",
+            headerName: "Power State",
+            hideable: true,
+            flex: 0.8,
+            valueGetter: (value) => value || "—",
+        }
     ];
 
     const handleOpenBulkEditDialog = () => {
@@ -1425,317 +1670,474 @@ export default function RollingMigrationFormDrawer({
         handleOpenBulkEditDialog();
     };
 
-    return (
-        <StyledDrawer
-            anchor="right"
-            open={open}
-            onClose={handleClose}
-            ModalProps={{ keepMounted: false }}
-        >
-            <Header title="Cluster Conversion " />
+    // Flavor assignment handlers
+    const handleOpenFlavorDialog = () => {
+        if (selectedVMs.length === 0) return;
+        setFlavorDialogOpen(true);
+    };
 
-            {/* Experimental Feature Banner */}
-            <Box sx={{ p: 3, pb: 0 }}>
-                <Alert
-                    severity="warning"
-                    icon={<WarningIcon />}
-                    sx={{
-                        mb: 2,
-                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                        border: '1px solid rgba(255, 152, 0, 0.3)',
-                        '& .MuiAlert-message': {
-                            width: '100%'
+    const handleCloseFlavorDialog = () => {
+        setFlavorDialogOpen(false);
+        setSelectedFlavor("");
+    };
+
+    const handleFlavorChange = (event) => {
+        setSelectedFlavor(event.target.value);
+    };
+
+    const handleIndividualFlavorChange = async (vmId: string, flavorValue: string) => {
+        try {
+            const isAutoAssign = flavorValue === "auto-assign";
+            const selectedFlavorObj = !isAutoAssign ? openstackFlavors.find(f => f.id === flavorValue) : null;
+            const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : flavorValue);
+
+            // Update VM via API
+            const payload = {
+                spec: {
+                    targetFlavorId: isAutoAssign ? "" : flavorValue
+                }
+            };
+
+            await patchVMwareMachine(vmId, payload, VJAILBREAK_DEFAULT_NAMESPACE);
+
+            // Update local state
+            const updatedVMs = vmsWithAssignments.map(vm => {
+                if (vm.id === vmId) {
+                    return {
+                        ...vm,
+                        flavor: flavorName,
+                        targetFlavorId: isAutoAssign ? "" : flavorValue
+                    };
+                }
+                return vm;
+            });
+            setVmsWithAssignments(updatedVMs);
+
+            console.log(`Successfully assigned flavor "${flavorName}" to VM ${vmId}`);
+
+        } catch (error) {
+            console.error(`Failed to update flavor for VM ${vmId}:`, error);
+            alert(`Failed to assign flavor to VM: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    };
+
+    const handleApplyFlavor = async () => {
+        if (!selectedFlavor) {
+            handleCloseFlavorDialog();
+            return;
+        }
+
+        setUpdating(true);
+
+        try {
+            const isAutoAssign = selectedFlavor === "auto-assign";
+            const selectedFlavorObj = !isAutoAssign ? openstackFlavors.find(f => f.id === selectedFlavor) : null;
+            const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : selectedFlavor);
+
+            // Update VMs via API
+            const updatePromises = selectedVMs.map(async (vmId) => {
+                try {
+                    const payload = {
+                        spec: {
+                            targetFlavorId: isAutoAssign ? "" : selectedFlavor
                         }
-                    }}
-                >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box>
-                            <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
-                                🧪 Experimental Feature - Cluster Conversion (Beta)
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                This feature is in beta stage and may have significant limitations. Use with caution in production environments.
-                            </Typography>
-                        </Box>
-                        <Link
-                            href="/docs/rolling-migration-beta"
-                            target="_blank"
-                            sx={{
-                                ml: 2,
-                                textDecoration: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.875rem'
-                            }}
-                        >
-                            Learn More →
-                        </Link>
-                    </Box>
-                </Alert>
-            </Box>
+                    };
 
-            <DrawerContent>
-                <Box sx={{ display: "grid", gap: 4 }}>
-                    <SourceDestinationClusterSelection
-                        onChange={() => () => { }}
-                        errors={{}}
-                        stepNumber="1"
-                        stepLabel="Source & Destination"
-                        onVmwareClusterChange={handleSourceClusterChange}
-                        onPcdClusterChange={handleDestinationPCDChange}
-                        vmwareCluster={sourceCluster}
-                        pcdCluster={destinationPCD}
-                        loadingVMware={loading}
-                        loadingPCD={loadingPCD}
-                    />
-                    <Box>
-                        <Step stepNumber="2" label="MAAS Config (Verify the configuration)" />
-                        <Box sx={{ ml: 5, mt: 1 }}>
-                            {loadingMaasConfig ? (
-                                <Typography variant="body2">Loading MAAS Config...</Typography>
-                            ) : maasConfigs.length === 0 ? (
-                                <Typography variant="body2">No MAAS Config available</Typography>
-                            ) : (
-                                <Typography
-                                    variant="subtitle2"
-                                    component="a"
-                                    sx={{
-                                        color: 'primary.main',
-                                        textDecoration: 'underline',
-                                        cursor: 'pointer',
-                                        fontWeight: "500"
-                                    }}
-                                    onClick={handleViewMaasConfig}
-                                >
-                                    View MAAS Config Details
-                                </Typography>
-                            )}
-                        </Box>
-                    </Box>
+                    await patchVMwareMachine(vmId as string, payload, VJAILBREAK_DEFAULT_NAMESPACE);
+                    return { success: true, vmId };
+                } catch (error) {
+                    console.error(`Failed to update flavor for VM ${vmId}:`, error);
+                    return { success: false, vmId, error };
+                }
+            });
 
-                    <Box>
-                        <Step stepNumber="3" label="ESXi Hosts" />
-                        <Box sx={{ ml: 5, mt: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    Select ESXi hosts and assign PCD host configurations
-                                </Typography>
-                                {esxHostMappingStatus.fullyMapped && esxHostMappingStatus.total > 0 ? (
-                                    <Typography variant="body2" color="success.main">
-                                        All hosts mapped ✓
-                                    </Typography>
-                                ) :
-                                    <Typography variant="body2" color="warning.main">
-                                        {esxHostMappingStatus.mapped} of {esxHostMappingStatus.total} hosts unmapped
-                                    </Typography>
-                                }
-                            </Box>
-                            <Paper sx={{ width: "100%", height: 389 }}>
-                                <DataGrid
-                                    rows={orderedESXHosts}
-                                    columns={esxColumns}
-                                    initialState={{
-                                        pagination: { paginationModel },
-                                        columns: {
-                                            columnVisibilityModel: {}
-                                        }
-                                    }}
-                                    pageSizeOptions={[5, 10, 25]}
-                                    rowHeight={45}
-                                    checkboxSelection
-                                    onRowSelectionModelChange={setSelectedESXHosts}
-                                    rowSelectionModel={selectedESXHosts}
-                                    slots={{
-                                        toolbar: (props) => (
-                                            <CustomESXToolbarWithActions
-                                                {...props}
-                                                rowSelectionModel={selectedESXHosts}
-                                                onAddPcdHost={handleOpenPcdHostConfigDialog}
-                                            />
-                                        )
-                                    }}
-                                    disableColumnMenu
-                                    disableColumnFilter
-                                    loading={loadingHosts}
-                                />
-                            </Paper>
-                            {esxHostConfigValidationError && (
-                                <Alert severity="error" sx={{ mt: 2 }}>
-                                    {esxHostConfigValidationError}
-                                </Alert>
-                            )}
-                        </Box>
-                    </Box>
+            const results = await Promise.all(updatePromises);
+            const failedUpdates = results.filter(result => !result.success);
 
-                    <Box>
-                        <Step stepNumber="4" label="Select Virtual Machines to Migrate" />
-                        <Box sx={{ ml: 5, mt: 2 }}>
-                            <Paper sx={{ width: "100%", height: 389 }}>
-                                <DataGrid
-                                    rows={vmsWithAssignments}
-                                    columns={vmColumns}
-                                    initialState={{
-                                        pagination: { paginationModel },
-                                        columns: {
-                                            columnVisibilityModel: {}
-                                        }
-                                    }}
-                                    pageSizeOptions={[5, 10, 25]}
-                                    rowHeight={45}
-                                    checkboxSelection
-                                    onRowSelectionModelChange={setSelectedVMs}
-                                    rowSelectionModel={selectedVMs}
-                                    slots={{
-                                        toolbar: (props) => (
-                                            <CustomToolbarWithActions
-                                                {...props}
-                                                rowSelectionModel={selectedVMs}
-                                                onEditIPs={handleEditIPs}
-                                            />
-                                        ),
-                                        noRowsOverlay: () => (
-                                            <Box sx={{
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                height: '100%',
-                                                p: 2
-                                            }}>
-                                                <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
-                                                    {loadingVMs ? 'Loading VMs...' : 'No VMs found for the selected cluster.'}
-                                                </Typography>
-                                            </Box>
-                                        )
-                                    }}
-                                    disableColumnMenu
-                                    disableColumnFilter
-                                    disableRowSelectionOnClick
-                                    loading={loadingVMs}
-                                />
-                            </Paper>
-                            {vmIpValidationError && (
-                                <Alert severity="error" sx={{ mt: 2 }}>
-                                    {vmIpValidationError}
-                                </Alert>
-                            )}
-                        </Box>
-                    </Box>
+            if (failedUpdates.length > 0) {
+                console.error(`Failed to update flavor for ${failedUpdates.length} VMs`);
+                alert(`Failed to assign flavor to ${failedUpdates.length} VM${failedUpdates.length > 1 ? 's' : ''}`);
+            } else {
+                // Update local state only if all API calls succeeded
+                const updatedVMs = vmsWithAssignments.map(vm => {
+                    if (selectedVMs.includes(vm.id)) {
+                        return {
+                            ...vm,
+                            flavor: flavorName,
+                            targetFlavorId: isAutoAssign ? "" : selectedFlavor
+                        };
+                    }
+                    return vm;
+                });
+                setVmsWithAssignments(updatedVMs);
 
-                    <Box>
-                        {sourceCluster && destinationPCD ? (
-                            <>
-                                <NetworkAndStorageMappingStep
-                                    vmwareNetworks={availableVmwareNetworks}
-                                    vmWareStorage={availableVmwareDatastores}
-                                    openstackNetworks={openstackNetworks}
-                                    openstackStorage={openstackVolumeTypes}
-                                    params={{
-                                        networkMappings: networkMappings,
-                                        storageMappings: storageMappings
-                                    }}
-                                    onChange={handleMappingsChange}
-                                    networkMappingError={networkMappingError}
-                                    storageMappingError={storageMappingError}
-                                    stepNumber="5"
-                                    loading={loadingOpenstackDetails}
-                                />
-                                <MigrationOptions
-                                    stepNumber="6"
-                                    params={params}
-                                    onChange={getParamsUpdater}
-                                    selectedMigrationOptions={selectedMigrationOptions}
-                                    updateSelectedMigrationOptions={updateSelectedMigrationOptions}
-                                    errors={fieldErrors}
-                                    getErrorsUpdater={getFieldErrorsUpdater}
-                                />
-                            </>
+                const actionText = isAutoAssign ? "cleared flavor assignment for" : "assigned flavor to";
+                console.log(`Successfully ${actionText} ${selectedVMs.length} VM${selectedVMs.length > 1 ? 's' : ''}`);
 
+                // Refresh VM list to get updated flavor information from API
+                await fetchClusterVMs();
+            }
 
-                        ) : (
-                            <Typography variant="body2" color="text.secondary">
-                                Please select both source cluster and destination PCD to configure mappings.
-                            </Typography>
-                        )}
-                    </Box>
-                </Box>
-            </DrawerContent>
-            <Footer
-                submitButtonLabel="Run"
-                onClose={handleClose}
-                onSubmit={handleSubmit}
-                disableSubmit={isSubmitDisabled}
-                submitting={submitting}
+            handleCloseFlavorDialog();
+        } catch (error) {
+            console.error("Error updating flavors:", error);
+            alert("Failed to assign flavor to VMs");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    return (
+        <>
+            <GlobalStyles
+                styles={{
+                    '.MuiDataGrid-columnsManagement, .MuiDataGrid-columnsManagementPopover': {
+                        '& .MuiFormControlLabel-label': {
+                            fontSize: '0.875rem !important',
+                        },
+                        '& .MuiCheckbox-root': {
+                            padding: '4px !important',
+                        },
+                        '& .MuiListItem-root': {
+                            fontSize: '0.875rem !important',
+                            minHeight: '32px !important',
+                            padding: '2px 8px !important',
+                        },
+                        '& .MuiTypography-root': {
+                            fontSize: '0.875rem !important',
+                        },
+                        '& .MuiInputBase-input': {
+                            fontSize: '0.875rem !important',
+                        },
+                        '& .MuiTextField-root .MuiInputBase-input': {
+                            fontSize: '0.875rem !important',
+                        }
+                    }
+                }}
             />
-
-            <MaasConfigDialog
-                open={maasConfigDialogOpen}
-                onClose={handleCloseMaasConfig}
-                aria-labelledby="maas-config-dialog-title"
+            <StyledDrawer
+                anchor="right"
+                open={open}
+                onClose={handleClose}
+                ModalProps={{ keepMounted: false }}
             >
-                <DialogTitle id="maas-config-dialog-title">
-                    <Typography variant="h6">ESXi - MAAS Configuration</Typography>
-                </DialogTitle>
-                <DialogContent dividers>
-                    {loadingMaasConfig ? (
-                        <Typography>Loading configuration details...</Typography>
-                    ) : !selectedMaasConfig ? (
-                        <Typography>No configuration available</Typography>
-                    ) : (
-                        <>
-                            <ConfigSection>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Provider Configuration</Typography>
-                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
-                                    <ConfigField>
-                                        <FieldLabel>Provider Type:</FieldLabel>
-                                        <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
-                                    </ConfigField>
-                                    <ConfigField>
-                                        <FieldLabel>MAAS URL:</FieldLabel>
-                                        <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
-                                    </ConfigField>
-                                    <ConfigField>
-                                        <FieldLabel>Insecure:</FieldLabel>
-                                        <FieldValue>{selectedMaasConfig.spec.insecure ? "Yes" : "No"}</FieldValue>
-                                    </ConfigField>
-                                    {selectedMaasConfig.spec.os && (
-                                        <ConfigField>
-                                            <FieldLabel>OS:</FieldLabel>
-                                            <FieldValue>{selectedMaasConfig.spec.os}</FieldValue>
-                                        </ConfigField>
-                                    )}
-                                    <ConfigField>
-                                        <FieldLabel>Status:</FieldLabel>
-                                        <FieldValue>
-                                            {selectedMaasConfig.status?.validationStatus || "Pending validation"}
-                                        </FieldValue>
-                                    </ConfigField>
-                                    {selectedMaasConfig.status?.validationMessage && (
-                                        <ConfigField>
-                                            <FieldLabel>Validation Message:</FieldLabel>
-                                            <FieldValue>{selectedMaasConfig.status.validationMessage}</FieldValue>
-                                        </ConfigField>
-                                    )}
-                                </Box>
-                            </ConfigSection>
+                <Header title="Cluster Conversion " />
 
-                            {selectedMaasConfig.spec.userDataSecretRef && (
-                                <ConfigSection>
-                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Cloud-Init Configuration</Typography>
-                                    <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
-                                        User data is stored in a secret: {selectedMaasConfig.spec.userDataSecretRef.name}
+                {/* Experimental Feature Banner */}
+                <Box sx={{ p: 3, pb: 0 }}>
+                    <Alert
+                        severity="warning"
+                        icon={<WarningIcon />}
+                        sx={{
+                            mb: 2,
+                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            border: '1px solid rgba(255, 152, 0, 0.3)',
+                            '& .MuiAlert-message': {
+                                width: '100%'
+                            }
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box>
+                                <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
+                                    🧪 Experimental Feature - Cluster Conversion (Beta)
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    This feature is in beta stage and may have significant limitations. Use with caution in production environments.
+                                </Typography>
+                            </Box>
+                            <Link
+                                href="/docs/rolling-migration-beta"
+                                target="_blank"
+                                sx={{
+                                    ml: 2,
+                                    textDecoration: 'none',
+                                    fontWeight: 500,
+                                    fontSize: '0.875rem'
+                                }}
+                            >
+                                Learn More →
+                            </Link>
+                        </Box>
+                    </Alert>
+                </Box>
+
+                <DrawerContent>
+                    <Box sx={{ display: "grid", gap: 4 }}>
+                        <SourceDestinationClusterSelection
+                            onChange={() => () => { }}
+                            errors={{}}
+                            stepNumber="1"
+                            stepLabel="Source & Destination"
+                            onVmwareClusterChange={handleSourceClusterChange}
+                            onPcdClusterChange={handleDestinationPCDChange}
+                            vmwareCluster={sourceCluster}
+                            pcdCluster={destinationPCD}
+                            loadingVMware={loading}
+                            loadingPCD={loadingPCD}
+                        />
+                        <Box>
+                            <Step stepNumber="2" label="MAAS Config (Verify the configuration)" />
+                            <Box sx={{ ml: 5, mt: 1 }}>
+                                {loadingMaasConfig ? (
+                                    <Typography variant="body2">Loading MAAS Config...</Typography>
+                                ) : maasConfigs.length === 0 ? (
+                                    <Typography variant="body2">No MAAS Config available</Typography>
+                                ) : (
+                                    <Typography
+                                        variant="subtitle2"
+                                        component="a"
+                                        sx={{
+                                            color: 'primary.main',
+                                            textDecoration: 'underline',
+                                            cursor: 'pointer',
+                                            fontWeight: "500"
+                                        }}
+                                        onClick={handleViewMaasConfig}
+                                    >
+                                        View MAAS Config Details
                                     </Typography>
-                                    <CodeEditorContainer>
-                                        <SyntaxHighlighter
-                                            language="yaml"
-                                            style={oneLight}
-                                            showLineNumbers
-                                            wrapLongLines
-                                            customStyle={{
-                                                margin: 0,
-                                                maxHeight: '100%',
-                                            }}
-                                        >
-                                            {`# Cloud-init configuration is stored in Kubernetes Secret: 
+                                )}
+                            </Box>
+                        </Box>
+
+                        <Box>
+                            <Step stepNumber="3" label="ESXi Hosts" />
+                            <Box sx={{ ml: 5, mt: 2 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Select ESXi hosts and assign PCD host configurations
+                                    </Typography>
+                                    {esxHostMappingStatus.fullyMapped && esxHostMappingStatus.total > 0 ? (
+                                        <Typography variant="body2" color="success.main">
+                                            All hosts mapped ✓
+                                        </Typography>
+                                    ) :
+                                        <Typography variant="body2" color="warning.main">
+                                            {esxHostMappingStatus.mapped} of {esxHostMappingStatus.total} hosts unmapped
+                                        </Typography>
+                                    }
+                                </Box>
+                                <Paper sx={{ width: "100%", height: 389 }}>
+                                    <DataGrid
+                                        rows={orderedESXHosts}
+                                        columns={esxColumns}
+                                        initialState={{
+                                            pagination: { paginationModel },
+                                            columns: {
+                                                columnVisibilityModel: {}
+                                            }
+                                        }}
+                                        pageSizeOptions={[5, 10, 25]}
+                                        rowHeight={45}
+                                        checkboxSelection
+                                        onRowSelectionModelChange={setSelectedESXHosts}
+                                        rowSelectionModel={selectedESXHosts}
+                                        slots={{
+                                            toolbar: (props) => (
+                                                <CustomESXToolbarWithActions
+                                                    {...props}
+                                                    rowSelectionModel={selectedESXHosts}
+                                                    onAddPcdHost={handleOpenPcdHostConfigDialog}
+                                                />
+                                            )
+                                        }}
+                                        disableColumnMenu
+                                        disableColumnFilter
+                                        loading={loadingHosts}
+                                    />
+                                </Paper>
+                                {esxHostConfigValidationError && (
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
+                                        {esxHostConfigValidationError}
+                                    </Alert>
+                                )}
+                            </Box>
+                        </Box>
+
+                        <Box>
+                            <Step stepNumber="4" label="Select Virtual Machines to Migrate" />
+                            <Box sx={{ ml: 5, mt: 2 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Select VMs to migrate
+                                    </Typography>
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', mb: 1 }}>
+                                    💡 Tip: Powered-off VMs require IP Address and OS assignment for proper migration configuration
+                                </Typography>
+                                <Paper sx={{ width: "100%", height: 389 }}>
+                                    <DataGrid
+                                        rows={vmsWithAssignments}
+                                        columns={vmColumns}
+                                        initialState={{
+                                            pagination: { paginationModel },
+                                            columns: {
+                                                columnVisibilityModel: {}
+                                            }
+                                        }}
+                                        pageSizeOptions={[5, 10, 25]}
+                                        rowHeight={45}
+                                        checkboxSelection
+                                        onRowSelectionModelChange={setSelectedVMs}
+                                        rowSelectionModel={selectedVMs}
+                                        slots={{
+                                            toolbar: (props) => (
+                                                <CustomToolbarWithActions
+                                                    {...props}
+                                                    rowSelectionModel={selectedVMs}
+                                                    onEditIPs={handleEditIPs}
+                                                    onAssignFlavor={handleOpenFlavorDialog}
+                                                />
+                                            ),
+                                            noRowsOverlay: () => (
+                                                <Box sx={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    height: '100%',
+                                                    p: 2
+                                                }}>
+                                                    <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
+                                                        {loadingVMs ? 'Loading VMs...' : 'No VMs found for the selected cluster.'}
+                                                    </Typography>
+                                                </Box>
+                                            )
+                                        }}
+                                        disableColumnFilter
+                                        disableRowSelectionOnClick
+                                        loading={loadingVMs}
+                                    />
+                                </Paper>
+                                {vmIpValidationError && (
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
+                                        {vmIpValidationError}
+                                    </Alert>
+                                )}
+                                {osValidationError && (
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
+                                        {osValidationError}
+                                    </Alert>
+                                )}
+                            </Box>
+                        </Box>
+
+                        <Box>
+                            {sourceCluster && destinationPCD ? (
+                                <>
+                                    <NetworkAndStorageMappingStep
+                                        vmwareNetworks={availableVmwareNetworks}
+                                        vmWareStorage={availableVmwareDatastores}
+                                        openstackNetworks={openstackNetworks}
+                                        openstackStorage={openstackVolumeTypes}
+                                        params={{
+                                            networkMappings: networkMappings,
+                                            storageMappings: storageMappings
+                                        }}
+                                        onChange={handleMappingsChange}
+                                        networkMappingError={networkMappingError}
+                                        storageMappingError={storageMappingError}
+                                        stepNumber="5"
+                                        loading={loadingOpenstackDetails}
+                                    />
+                                    <MigrationOptions
+                                        stepNumber="6"
+                                        params={params}
+                                        onChange={getParamsUpdater}
+                                        selectedMigrationOptions={selectedMigrationOptions}
+                                        updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                                        errors={fieldErrors}
+                                        getErrorsUpdater={getFieldErrorsUpdater}
+                                    />
+                                </>
+
+
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    Please select both source cluster and destination PCD to configure mappings.
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                </DrawerContent>
+                <Footer
+                    submitButtonLabel="Run"
+                    onClose={handleClose}
+                    onSubmit={handleSubmit}
+                    disableSubmit={isSubmitDisabled}
+                    submitting={submitting}
+                />
+
+                <MaasConfigDialog
+                    open={maasConfigDialogOpen}
+                    onClose={handleCloseMaasConfig}
+                    aria-labelledby="maas-config-dialog-title"
+                >
+                    <DialogTitle id="maas-config-dialog-title">
+                        <Typography variant="h6">ESXi - MAAS Configuration</Typography>
+                    </DialogTitle>
+                    <DialogContent dividers>
+                        {loadingMaasConfig ? (
+                            <Typography>Loading configuration details...</Typography>
+                        ) : !selectedMaasConfig ? (
+                            <Typography>No configuration available</Typography>
+                        ) : (
+                            <>
+                                <ConfigSection>
+                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Provider Configuration</Typography>
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
+                                        <ConfigField>
+                                            <FieldLabel>Provider Type:</FieldLabel>
+                                            <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
+                                        </ConfigField>
+                                        <ConfigField>
+                                            <FieldLabel>MAAS URL:</FieldLabel>
+                                            <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
+                                        </ConfigField>
+                                        <ConfigField>
+                                            <FieldLabel>Insecure:</FieldLabel>
+                                            <FieldValue>{selectedMaasConfig.spec.insecure ? "Yes" : "No"}</FieldValue>
+                                        </ConfigField>
+                                        {selectedMaasConfig.spec.os && (
+                                            <ConfigField>
+                                                <FieldLabel>OS:</FieldLabel>
+                                                <FieldValue>{selectedMaasConfig.spec.os}</FieldValue>
+                                            </ConfigField>
+                                        )}
+                                        <ConfigField>
+                                            <FieldLabel>Status:</FieldLabel>
+                                            <FieldValue>
+                                                {selectedMaasConfig.status?.validationStatus || "Pending validation"}
+                                            </FieldValue>
+                                        </ConfigField>
+                                        {selectedMaasConfig.status?.validationMessage && (
+                                            <ConfigField>
+                                                <FieldLabel>Validation Message:</FieldLabel>
+                                                <FieldValue>{selectedMaasConfig.status.validationMessage}</FieldValue>
+                                            </ConfigField>
+                                        )}
+                                    </Box>
+                                </ConfigSection>
+
+                                {selectedMaasConfig.spec.userDataSecretRef && (
+                                    <ConfigSection>
+                                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Cloud-Init Configuration</Typography>
+                                        <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
+                                            User data is stored in a secret: {selectedMaasConfig.spec.userDataSecretRef.name}
+                                        </Typography>
+                                        <CodeEditorContainer>
+                                            <SyntaxHighlighter
+                                                language="yaml"
+                                                style={oneLight}
+                                                showLineNumbers
+                                                wrapLongLines
+                                                customStyle={{
+                                                    margin: 0,
+                                                    maxHeight: '100%',
+                                                }}
+                                            >
+                                                {`# Cloud-init configuration is stored in Kubernetes Secret: 
 # ${selectedMaasConfig.spec.userDataSecretRef.name}
 # in namespace: ${selectedMaasConfig.spec.userDataSecretRef.namespace || VJAILBREAK_DEFAULT_NAMESPACE}
 
@@ -1747,174 +2149,235 @@ export default function RollingMigrationFormDrawer({
 # - and other system setup parameters
 
 # This will be used when provisioning ESXi hosts in the bare metal environment.`}
-                                        </SyntaxHighlighter>
-                                    </CodeEditorContainer>
+                                            </SyntaxHighlighter>
+                                        </CodeEditorContainer>
+                                    </ConfigSection>
+                                )}
+
+                                <ConfigSection>
+                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Resource Information</Typography>
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
+                                        <ConfigField>
+                                            <FieldLabel>Name:</FieldLabel>
+                                            <FieldValue>{selectedMaasConfig.metadata.name}</FieldValue>
+                                        </ConfigField>
+                                        <ConfigField>
+                                            <FieldLabel>Namespace:</FieldLabel>
+                                            <FieldValue>{selectedMaasConfig.metadata.namespace}</FieldValue>
+                                        </ConfigField>
+                                        <ConfigField>
+                                            <FieldLabel>Created:</FieldLabel>
+                                            <FieldValue>
+                                                {new Date(selectedMaasConfig.metadata.creationTimestamp).toLocaleString()}
+                                            </FieldValue>
+                                        </ConfigField>
+                                    </Box>
                                 </ConfigSection>
-                            )}
+                            </>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="contained" onClick={handleCloseMaasConfig}>
+                            Close
+                        </Button>
+                    </DialogActions>
+                </MaasConfigDialog>
 
-                            <ConfigSection>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>Resource Information</Typography>
-                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
-                                    <ConfigField>
-                                        <FieldLabel>Name:</FieldLabel>
-                                        <FieldValue>{selectedMaasConfig.metadata.name}</FieldValue>
-                                    </ConfigField>
-                                    <ConfigField>
-                                        <FieldLabel>Namespace:</FieldLabel>
-                                        <FieldValue>{selectedMaasConfig.metadata.namespace}</FieldValue>
-                                    </ConfigField>
-                                    <ConfigField>
-                                        <FieldLabel>Created:</FieldLabel>
-                                        <FieldValue>
-                                            {new Date(selectedMaasConfig.metadata.creationTimestamp).toLocaleString()}
-                                        </FieldValue>
-                                    </ConfigField>
-                                </Box>
-                            </ConfigSection>
-                        </>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="contained" onClick={handleCloseMaasConfig}>
-                        Close
-                    </Button>
-                </DialogActions>
-            </MaasConfigDialog>
+                {
+                    maasConfigs && maasConfigs.length > 0 && (
+                        <MaasConfigDetailsModal
+                            open={maasDetailsModalOpen}
+                            onClose={handleCloseMaasDetailsModal}
+                            configName={maasConfigs[0].metadata.name}
+                            namespace={maasConfigs[0].metadata.namespace}
+                        />
+                    )
+                }
 
-            {
-                maasConfigs && maasConfigs.length > 0 && (
-                    <MaasConfigDetailsModal
-                        open={maasDetailsModalOpen}
-                        onClose={handleCloseMaasDetailsModal}
-                        configName={maasConfigs[0].metadata.name}
-                        namespace={maasConfigs[0].metadata.namespace}
-                    />
-                )
-            }
-
-            {/* PCD Host Config Assignment Dialog */}
-            <Dialog
-                open={pcdHostConfigDialogOpen}
-                onClose={handleClosePcdHostConfigDialog}
-                fullWidth
-                maxWidth="sm"
-            >
-                <DialogTitle>
-                    Assign Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ my: 2 }}>
-                        <Typography variant="body2" gutterBottom>
-                            Select Host Configuration
-                        </Typography>
-                        <Select
-                            fullWidth
-                            value={selectedPcdHostConfig}
-                            onChange={handlePcdHostConfigChange}
-                            size="small"
-                            sx={{ mt: 1 }}
-                            displayEmpty
+                {/* PCD Host Config Assignment Dialog */}
+                <Dialog
+                    open={pcdHostConfigDialogOpen}
+                    onClose={handleClosePcdHostConfigDialog}
+                    fullWidth
+                    maxWidth="sm"
+                >
+                    <DialogTitle>
+                        Assign Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
+                    </DialogTitle>
+                    <DialogContent>
+                        <Box sx={{ my: 2 }}>
+                            <Typography variant="body2" gutterBottom>
+                                Select Host Configuration
+                            </Typography>
+                            <Select
+                                fullWidth
+                                value={selectedPcdHostConfig}
+                                onChange={handlePcdHostConfigChange}
+                                size="small"
+                                sx={{ mt: 1 }}
+                                displayEmpty
+                            >
+                                <MenuItem value="">
+                                    <em>Select a  host configuration</em>
+                                </MenuItem>
+                                {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
+                                    <MenuItem key={config.id} value={config.id}>
+                                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                            <Typography variant="body1">{config.name}</Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Management Interface: {config.mgmtInterface}
+                                            </Typography>
+                                        </Box>
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleClosePcdHostConfigDialog}>Cancel</Button>
+                        <Button
+                            onClick={handleApplyPcdHostConfig}
+                            variant="contained"
+                            color="primary"
+                            disabled={!selectedPcdHostConfig || updatingPcdMapping}
                         >
-                            <MenuItem value="">
-                                <em>Select a  host configuration</em>
-                            </MenuItem>
-                            {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
-                                <MenuItem key={config.id} value={config.id}>
+                            {updatingPcdMapping ? "Applying..." : "Apply to selected hosts"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Bulk IP Editor Dialog */}
+                <Dialog
+                    open={bulkEditDialogOpen}
+                    onClose={handleCloseBulkEditDialog}
+                    maxWidth="md"
+                >
+                    <DialogTitle>
+                        Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+                    </DialogTitle>
+                    <DialogContent>
+                        <Box sx={{ my: 2 }}>
+                            {/* Quick Actions */}
+                            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
+                                    Clear All
+                                </Button>
+                            </Box>
+
+                            {/* IP Editor Fields */}
+                            <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                                {Object.entries(bulkEditIPs).map(([vmId, ip]) => {
+                                    const vm = vmsWithAssignments.find(v => v.id === vmId);
+                                    if (!vm) return null;
+
+                                    const status = bulkValidationStatus[vmId];
+                                    const message = bulkValidationMessages[vmId];
+
+                                    return (
+                                        <Box key={vmId} sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                                            <Box sx={{ width: 400, flexShrink: 0, pr: 3 }}>
+                                                <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                                                    {vm.name}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Current: {vm.ip}
+                                                </Typography>
+                                            </Box>
+                                            <Box sx={{ width: 400, height: 60, display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                <TextField
+                                                    value={ip}
+                                                    onChange={(e) => handleBulkIpChange(vmId, e.target.value)}
+                                                    placeholder="Enter IP address"
+                                                    size="small"
+                                                    sx={{ width: 260 }}
+                                                    error={status === 'invalid'}
+                                                    helperText={message}
+                                                />
+                                                <Box sx={{ width: 24, display: 'flex' }}>
+                                                    {status === 'validating' && <CircularProgress size={20} />}
+                                                    {status === 'valid' && <CheckCircleIcon color="success" fontSize="small" />}
+                                                    {status === 'invalid' && <ErrorIcon color="error" fontSize="small" sx={{ mb: 3 }} />}
+                                                </Box>
+                                            </Box>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
+                        <Button
+                            onClick={handleApplyBulkIPs}
+                            variant="contained"
+                            color="primary"
+                            disabled={Object.values(bulkEditIPs).every(ip => !ip.trim()) || assigningIPs}
+                        >
+                            {assigningIPs ? "Applying..." : "Apply Changes"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+
+
+                {/* Flavor Assignment Dialog */}
+                <Dialog
+                    open={flavorDialogOpen}
+                    onClose={handleCloseFlavorDialog}
+                    fullWidth
+                    maxWidth="sm"
+                >
+                    <DialogTitle>
+                        Assign Flavor to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+                    </DialogTitle>
+                    <DialogContent>
+                        <Box sx={{ my: 2 }}>
+                            <FormLabel>Select Flavor</FormLabel>
+                            <Select
+                                fullWidth
+                                value={selectedFlavor}
+                                onChange={handleFlavorChange}
+                                size="small"
+                                sx={{ mt: 1 }}
+                                displayEmpty
+                            >
+                                <MenuItem value="">
+                                    <em>Select a flavor</em>
+                                </MenuItem>
+                                <MenuItem value="auto-assign">
                                     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                                        <Typography variant="body1">{config.name}</Typography>
+                                        <Typography variant="body1">Auto Assign</Typography>
                                         <Typography variant="caption" color="text.secondary">
-                                            Management Interface: {config.mgmtInterface}
+                                            Let OpenStack automatically assign the most suitable flavor
                                         </Typography>
                                     </Box>
                                 </MenuItem>
-                            ))}
-                        </Select>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleClosePcdHostConfigDialog}>Cancel</Button>
-                    <Button
-                        onClick={handleApplyPcdHostConfig}
-                        variant="contained"
-                        color="primary"
-                        disabled={!selectedPcdHostConfig || updatingPcdMapping}
-                    >
-                        {updatingPcdMapping ? "Applying..." : "Apply to selected hosts"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Bulk IP Editor Dialog */}
-            <Dialog
-                open={bulkEditDialogOpen}
-                onClose={handleCloseBulkEditDialog}
-                maxWidth="md"
-            >
-                <DialogTitle>
-                    Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
-                </DialogTitle>
-                <DialogContent>
-                    <Box sx={{ my: 2 }}>
-                        {/* Quick Actions */}
-                        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                            <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
-                                Clear All
-                            </Button>
-                        </Box>
-
-                        {/* IP Editor Fields */}
-                        <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
-                            {Object.entries(bulkEditIPs).map(([vmId, ip]) => {
-                                const vm = vmsWithAssignments.find(v => v.id === vmId);
-                                if (!vm) return null;
-
-                                const status = bulkValidationStatus[vmId];
-                                const message = bulkValidationMessages[vmId];
-
-                                return (
-                                    <Box key={vmId} sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                                        <Box sx={{ width: 400, flexShrink: 0, pr: 3 }}>
-                                            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                                                {vm.name}
-                                            </Typography>
+                                {openstackFlavors.map((flavor) => (
+                                    <MenuItem key={flavor.id} value={flavor.id}>
+                                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                            <Typography variant="body1">{flavor.name}</Typography>
                                             <Typography variant="caption" color="text.secondary">
-                                                Current: {vm.ip}
+                                                {flavor.vcpus} vCPU, {flavor.ram / 1024}GB RAM, {flavor.disk}GB Storage
                                             </Typography>
                                         </Box>
-                                        <Box sx={{ width: 400, height: 60, display: 'flex', alignItems: 'center', gap: 2 }}>
-                                            <TextField
-                                                value={ip}
-                                                onChange={(e) => handleBulkIpChange(vmId, e.target.value)}
-                                                placeholder="Enter IP address"
-                                                size="small"
-                                                sx={{ width: 260 }}
-                                                error={status === 'invalid'}
-                                                helperText={message}
-                                            />
-                                            <Box sx={{ width: 24, display: 'flex' }}>
-                                                {status === 'validating' && <CircularProgress size={20} />}
-                                                {status === 'valid' && <CheckCircleIcon color="success" fontSize="small" />}
-                                                {status === 'invalid' && <ErrorIcon color="error" fontSize="small" sx={{ mb: 3 }} />}
-                                            </Box>
-                                        </Box>
-                                    </Box>
-                                );
-                            })}
+                                    </MenuItem>
+                                ))}
+                            </Select>
                         </Box>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
-                    <Button
-                        onClick={handleApplyBulkIPs}
-                        variant="contained"
-                        color="primary"
-                        disabled={Object.values(bulkEditIPs).every(ip => !ip.trim()) || assigningIPs}
-                    >
-                        {assigningIPs ? "Applying..." : "Apply Changes"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </StyledDrawer>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
+                        <Button
+                            onClick={handleApplyFlavor}
+                            variant="contained"
+                            color="primary"
+                            disabled={!selectedFlavor || updating}
+                        >
+                            {updating ? "Applying..." : "Apply to selected VMs"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            </StyledDrawer>
+        </>
     );
 } 
