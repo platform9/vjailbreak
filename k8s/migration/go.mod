@@ -16,7 +16,9 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
+
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250614174148-2c86b39486c3
+
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
