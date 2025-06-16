@@ -67,7 +67,7 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
     cutoverStartTime: boolean;
     cutoverEndTime: boolean;
     postMigrationScript: boolean;
-    osType: boolean;
+    osFamily: boolean;
 }
 
 // Default state for checkboxes
@@ -78,7 +78,7 @@ const defaultMigrationOptions = {
     cutoverStartTime: false,
     cutoverEndTime: false,
     postMigrationScript: false,
-    osType: false,
+    osFamily: false,
 }
 
 type FieldErrors = { [formId: string]: string };
@@ -493,7 +493,7 @@ export default function RollingMigrationFormDrawer({
                     datastores: vm.spec.vms.datastores,
                     cpu: vm.spec.vms.cpu,
                     memory: vm.spec.vms.memory,
-                    osType: vm.spec.vms.osType,
+                    osType: vm.spec.vms.osFamily,
                     powerState: vm.status.powerState === "running" ? "powered-on" : "powered-off",
                     ipValidationStatus: 'pending',
                     ipValidationMessage: ''

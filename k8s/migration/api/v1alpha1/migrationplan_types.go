@@ -54,6 +54,7 @@ type AdvancedOptions struct {
 	GranularPorts []string `json:"granularPorts,omitempty"`
 }
 
+// PostMigrationAction defines the post migration action for the virtual machine
 type PostMigrationAction struct {
 	RenameVM     *bool  `json:"renameVm,omitempty"`
 	Suffix       string `json:"suffix,omitempty"`
