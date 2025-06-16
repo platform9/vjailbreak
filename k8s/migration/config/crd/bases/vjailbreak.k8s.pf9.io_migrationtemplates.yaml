@@ -60,8 +60,8 @@ spec:
                 description: NetworkMapping is the reference to the NetworkMapping
                   resource that defines source to destination network mappings
                 type: string
-              osType:
-                description: OSType is the OS type of the virtual machine
+              osFamily:
+                description: OSFamily is the OS type of the virtual machine
                 enum:
                 - windows
                 - linux

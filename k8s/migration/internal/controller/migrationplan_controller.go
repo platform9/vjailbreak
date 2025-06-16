@@ -225,7 +225,10 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	defer func() {
 		if vcClient.VCClient != nil {
 			sessionManager := session.NewManager(vcClient.VCClient)
-			_ = sessionManager.Logout(ctx) // Best effort logout
+			err = sessionManager.Logout(ctx) // Best effort logout
+			if err != nil {
+				ctxlog.Error(err, "Failed to logout from vCenter")
+			}
 		}
 	}()
 
@@ -1158,6 +1161,8 @@ func MergeLabels(a, b map[string]string) map[string]string {
 	return result
 }
 
+// EnsureVMFolderExists ensures that the specified folder exists in the datacenter.
+// If the folder does not exist, it creates a new folder with the specified name.
 func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.Datacenter, folderName string) (*object.Folder, error) {
 	finder.SetDatacenter(dc)
 
