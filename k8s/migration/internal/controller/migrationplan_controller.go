@@ -698,9 +698,8 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 			}
 		}
 	}
-
 	if len(openstacknws) != len(vmnws) {
-		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping")
+		return nil, fmt.Errorf("VMware Network(s) not found in NetworkMapping vm(%d) openstack(%d)", len(vmnws), len(openstacknws))
 	}
 
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
@@ -744,7 +743,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 		}
 	}
 	if len(openstackvolumetypes) != len(vmds) {
-		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping")
+		return nil, fmt.Errorf("VMware Datastore(s) not found in StorageMapping vm(%d) openstack(%d)", len(vmds), len(openstackvolumetypes))
 	}
 	if storagemap.Status.StoragemappingValidationStatus != string(corev1.PodSucceeded) {
 		err = utils.VerifyStorage(ctx, r.Client, openstackcreds, openstackvolumetypes)
