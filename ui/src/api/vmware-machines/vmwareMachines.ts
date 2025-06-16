@@ -38,6 +38,7 @@ export const patchVMwareMachine = async (
       targetFlavorId?: string
       vms?: {
         assignedIp?: string
+        osFamily?: string
       }
     }
   },
