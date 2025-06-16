@@ -21,8 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-
-
 // MigrationPlanStrategy defines the strategy for executing a migration plan including
 // scheduling options and migration type (hot or cold)
 type MigrationPlanStrategy struct {
@@ -56,10 +54,6 @@ type AdvancedOptions struct {
 	GranularPorts []string `json:"granularPorts,omitempty"`
 }
 
-<<<<<<< HEAD
-// MigrationPlanSpec defines the desired state of MigrationPlan including
-// the migration template, strategy, and the list of virtual machines to migrate
-=======
 type PostMigrationAction struct {
 	RenameVM     *bool  `json:"renameVm,omitempty"`
 	Suffix       string `json:"suffix,omitempty"`
@@ -67,8 +61,8 @@ type PostMigrationAction struct {
 	FolderName   string `json:"folderName,omitempty"`
 }
 
-// MigrationPlanSpec defines the desired state of MigrationPlan
->>>>>>> 03c1fda1 (Added post-migration actions for renaming and moving VMs in vCenter (release) (#463))
+// MigrationPlanSpec defines the desired state of MigrationPlan including
+// the migration template, strategy, and the list of virtual machines to migrate
 type MigrationPlanSpec struct {
 	// MigrationPlanSpecPerVM is the migration plan specification per virtual machine
 	MigrationPlanSpecPerVM `json:",inline"`

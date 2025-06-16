@@ -766,7 +766,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	} else {
 		// Initialize labels map if needed
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-		currentOSFamily := vmwvm.Spec.VMs.OSFamily
+		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
 		// Check if label already exists with same value
 		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
 			// Initialize labels map if needed
