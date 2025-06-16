@@ -790,8 +790,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		}
 
 		// Check if assigned IP is set
-		if vmMachine.Spec.VMInfo.AssignedIp != "" {
-			configMap.Data["ASSIGNED_IP"] = vmMachine.Spec.VMInfo.AssignedIp
+		if vmMachine.Spec.VMInfo.AssignedIP != "" {
+			configMap.Data["ASSIGNED_IP"] = vmMachine.Spec.VMInfo.AssignedIP
 		} else {
 			configMap.Data["ASSIGNED_IP"] = ""
 		}

@@ -797,7 +797,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			if assignedIP != "" {
 				vmwvm.Spec.VMInfo.AssignedIP = assignedIP
 			}
-			if osType != "" {
+			if osType != "" && vmwvm.Spec.VMInfo.OSType == "" {
 				vmwvm.Spec.VMInfo.OSType = osType
 			}
 			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
