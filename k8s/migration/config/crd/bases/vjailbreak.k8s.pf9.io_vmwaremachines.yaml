@@ -88,6 +88,7 @@ spec:
                       type: string
                     type: array
                   osFamily:
+                    description: OSFamily is the OS family of the virtual machine
                     type: string
                   vmState:
                     description: VMState is the state of the virtual machine

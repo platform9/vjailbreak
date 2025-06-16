@@ -35,10 +35,6 @@ import (
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
-	"github.com/go-logr/logr"
-	// "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -415,7 +411,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 				}
 				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.MigrationPhaseSucceeded:
+			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
 				if err != nil {
 					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
@@ -811,14 +807,14 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
 
-		if vmMachine.Spec.VMs.OSFamily == "" {
+		if vmMachine.Spec.VMInfo.OSFamily == "" {
 			return nil, fmt.Errorf(
 				"OSFamily is not available for the VM '%s', "+
 					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
 				vmMachine.Name)
 		}
 
-		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMs.OSFamily
+		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
 
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
