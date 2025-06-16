@@ -789,6 +789,13 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
 		}
 
+		// Check if assigned IP is set
+		if vmMachine.Spec.VMInfo.AssignedIP != "" {
+			configMap.Data["ASSIGNED_IP"] = vmMachine.Spec.VMInfo.AssignedIP
+		} else {
+			configMap.Data["ASSIGNED_IP"] = ""
+		}
+
 		// Check if target flavor is set
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID

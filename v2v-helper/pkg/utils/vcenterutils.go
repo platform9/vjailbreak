@@ -35,6 +35,7 @@ type MigrationParams struct {
 	Debug                  bool
 	TARGET_FLAVOR_ID       string
 	TargetAvailabilityZone string
+	AssignedIP             string
 }
 
 // GetMigrationConfigMapName is function that returns the name of the secret
@@ -78,5 +79,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		Debug:                  string(configMap.Data["DEBUG"]) == constants.TrueString,
 		TARGET_FLAVOR_ID:       string(configMap.Data["TARGET_FLAVOR_ID"]),
 		TargetAvailabilityZone: string(configMap.Data["TARGET_AVAILABILITY_ZONE"]),
+		AssignedIP:             string(configMap.Data["ASSIGNED_IP"]),
 	}, nil
 }
