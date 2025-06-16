@@ -126,7 +126,11 @@ func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, h
 // UpdatePCDClusterFromResmgrCluster updates an existing PCDCluster with data from resmgr Cluster
 func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	oldPCDCluster := vjailbreakv1alpha1.PCDCluster{}
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: cluster.Name, Namespace: constants.NamespaceMigrationSystem}, &oldPCDCluster); err != nil {
+	k8sClusterName, err := ConvertToK8sName(cluster.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: k8sClusterName, Namespace: constants.NamespaceMigrationSystem}, &oldPCDCluster); err != nil {
 		return errors.Wrap(err, "failed to get PCD cluster")
 	}
 

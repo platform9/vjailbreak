@@ -477,19 +477,22 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"network"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"config", "network"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
-	pc := property.DefaultCollector(c)
-	for _, netRef := range o.Network {
-		var netObj mo.Network
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+	for _, device := range o.Config.Hardware.Device {
+		switch dev := device.(type) {
+		case *govmitypes.VirtualE1000e:
+			if netBacking, ok := dev.Backing.(*govmitypes.VirtualEthernetCardNetworkBackingInfo); ok {
+				networks = append(networks, netBacking.DeviceName)
+			}
+		case *govmitypes.VirtualVmxnet3:
+			if netBacking, ok := dev.Backing.(*govmitypes.VirtualEthernetCardNetworkBackingInfo); ok {
+				networks = append(networks, netBacking.DeviceName)
+			}
 		}
-		networks = append(networks, netObj.Name)
 	}
 
 	return networks, nil
@@ -540,7 +543,7 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 				return nil, fmt.Errorf("failed to get datastore: %w", err)
 			}
 
-			datastores = AppendUnique(datastores, ds.Name)
+			datastores = append(datastores, ds.Name)
 		}
 	}
 	return datastores, nil
