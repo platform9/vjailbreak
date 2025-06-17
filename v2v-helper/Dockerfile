@@ -23,7 +23,7 @@ COPY manager manager
 
 # Stage 2: Runtime environment
 # Using same Fedora version for consistency and required runtime dependencies
-FROM fedora:41
+FROM fedora:43
 
 # Add virtio-win repository for Windows drivers
 # Required for VM migration and conversion support
