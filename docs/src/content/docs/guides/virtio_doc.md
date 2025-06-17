@@ -25,17 +25,15 @@ In vjailbreak VM there is already a folder named `virtio-win` at `/home/ubuntu/`
 If the user has scaled up vJailbreak, the ISO is propagated to all the agents. 
 When a Windows VM migration is initiated: 
 
-- The migration logic checks for `/home/ubuntu/virtio-win/virtio-win.iso` on the source node.
+The migration logic checks for `/home/ubuntu/virtio-win/virtio-win.iso` on the source node.
 
-## If found:
-- The ISO is used for injecting **VirtIO drivers** into the migrated disk.
-- The ISO is **automatically propagated** to all agent nodes if needed.
-
-## If not found:
-- vJailbreak attempts to **download** the ISO from a known upstream source (e.g., [fedoraproject.org](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/)).
-
-## If both methods fail:
-- Migration fails gracefully with a clear error message.
+- **If found:**
+  - The ISO is used for injecting **VirtIO drivers** into the migrated disk.
+  - The ISO is **automatically propagated** to all agent nodes if needed.
+- **If not found:**
+  - vJailbreak attempts to **download** the ISO from a known upstream source (e.g., [fedoraproject.org](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/)).
+- **If both methods fail:**
+  - Migration fails gracefully with a clear error message.
 
 
 
