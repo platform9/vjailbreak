@@ -1,6 +1,6 @@
 # Stage 1: Build environment
 # Using Fedora 42 which includes Go 1.24 required by our go.mod
-FROM fedora:42 AS builder
+FROM fedora:43 AS builder
 
 # Build arguments for multi-platform support and versioning
 ARG TARGETOS
