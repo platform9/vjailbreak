@@ -26,6 +26,8 @@ export VPWNED_IMG ?= ${REPO}/vjailbreak-vpwned:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
 export KUBECONFIG ?= ~/.kube/config
 export CONTAINER_TOOL ?= docker
+export REGISTRY ?= quay.io
+
 
 .PHONY: ui
 ui:
