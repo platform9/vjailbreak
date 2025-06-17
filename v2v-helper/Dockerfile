@@ -23,7 +23,27 @@ COPY manager manager
 
 # Stage 2: Runtime environment
 # Using same Fedora version for consistency and required runtime dependencies
-FROM quay.io/platform9/vjailbreak-v2v-helper:v0.1.12
+FROM fedora:43
+
+# Add virtio-win repository for Windows drivers
+# Required for VM migration and conversion support
+# This provides Windows VirtIO drivers needed during VM conversion
+ADD https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo /etc/yum.repos.d/virtio-win.repo
+
+# Install runtime dependencies:
+# - nbdkit: Network Block Device toolkit for accessing disk images
+# - nbdkit-vddk-plugin: VMware VDDK plugin for accessing VMware disks
+# - libnbd: Network Block Device client library
+# - virt-v2v: Convert VMs between platforms (e.g., VMware to OpenStack)
+# - virtio-win: VirtIO drivers for Windows guests
+RUN dnf install -y \
+    nbdkit \
+    nbdkit-vddk-plugin \
+    libnbd \
+    virt-v2v \
+    virtio-win && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
