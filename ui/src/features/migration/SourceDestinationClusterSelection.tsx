@@ -259,7 +259,7 @@ export default function SourceDestinationClusterSelection({
                                 pcdData.map((pcd) => (
                                     <MenuItem
                                         key={pcd.id}
-                                        value={pcd.name}
+                                        value={pcd.id}
                                     >
                                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                             <CdsIconWrapper>
