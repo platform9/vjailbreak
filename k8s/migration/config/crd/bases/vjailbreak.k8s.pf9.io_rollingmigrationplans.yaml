@@ -197,6 +197,8 @@ spec:
                   migration
                 type: string
               postMigrationAction:
+                description: PostMigrationAction defines the post migration action
+                  for the virtual machine
                 properties:
                   folderName:
                     type: string

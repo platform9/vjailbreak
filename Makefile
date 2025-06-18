@@ -19,13 +19,15 @@ VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
 export REPO ?= platform9
 export TAG ?= $(VERSION)
-export UI_IMG ?= ${REPO}/vjailbreak-ui:${TAG}
-export V2V_IMG ?= ${REPO}/v2v-helper:${TAG}
-export CONTROLLER_IMG ?= ${REPO}/vjailbreak-controller:${TAG}
-export VPWNED_IMG ?= ${REPO}/vjailbreak-vpwned:${TAG}
+export UI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ui:${TAG}
+export V2V_IMG ?= ${REGISTRY}/${REPO}/v2v-helper:${TAG}
+export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
+export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
 export KUBECONFIG ?= ~/.kube/config
 export CONTAINER_TOOL ?= docker
+export REGISTRY ?= quay.io
+
 
 .PHONY: ui
 ui:
