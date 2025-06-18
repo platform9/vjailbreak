@@ -1065,12 +1065,10 @@ export default function RollingMigrationFormDrawer({
         const basicRequirementsMissing = !sourceCluster ||
             !destinationPCD ||
             !selectedMaasConfig ||
+            !selectedVMs.length ||
             submitting;
 
-        if (selectedVMs.length === 0) {
-            return basicRequirementsMissing;
-        }
-
+        
         const mappingsValid = !(availableVmwareNetworks.some(network =>
             !networkMappings.some(mapping => mapping.source === network)) ||
             availableVmwareDatastores.some(datastore =>

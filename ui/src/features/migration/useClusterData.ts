@@ -135,7 +135,7 @@ export const useClusterData = (
           ""
 
         return {
-          id: cluster.metadata.name,
+          id: clusterName,
           name: clusterName,
           openstackCredName: openstackCredName,
         }
