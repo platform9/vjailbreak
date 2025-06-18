@@ -1,5 +1,5 @@
 ---
-title: Scaling vJailbreak 
+title: Scale vJailbreak 
 description: You can scale up vJailbreak to perform more parallel migrations
 ---
 

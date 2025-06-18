@@ -1,5 +1,5 @@
 ---
-title: "vJailbreak Debug Log Collection Guide"
+title: "Debug Logs"
 description: "Learn how vJailbreak collects and stores migration debug logs directly on the host."
 ---
 

@@ -49,17 +49,17 @@ export default defineConfig({
 				},
 				{
 					label: 'Guide',
-					//autogenerate: { directory: 'guides' },
-					items: [
-						{ label: 'Scaling', slug: 'guides/scaling' },
-						{ label: 'Troubleshooting', slug: 'guides/troubleshooting' },
-						{ label: 'Building', slug: 'guides/building' },
-						{ label: 'Using APIs', slug: 'guides/using_apis' },
-						{ label: 'Injecting Custom Environment Variables', slug: 'guides/injecting_custom_env' },
-						{ label: 'Debug Log Collection', slug: 'guides/debuglogs' },
-						{ label: 'Debug vJailbreak Installation', slug: 'guides/debug_vjailbreak_install' },
-						{ label: 'User-Provided VirtIO Windows Driver Support', slug: 'guides/virtio_doc' },
-					],
+					autogenerate: { directory: 'guides' },
+					// items: [
+					// 	{ label: 'Scaling', slug: 'guides/How-to/scaling' },
+					// 	{ label: 'Troubleshooting', autogenerate: { directory: 'guides/troubleshooting' } },
+					// 	{ label: 'Building', slug: 'guides/How-to/building' },
+					// 	{ label: 'Using APIs', slug: 'guides/How-to/using_apis' },
+					// 	{ label: 'Injecting Custom Environment Variables', slug: 'guides/How-to/injecting_custom_env' },
+					// 	{ label: 'Debug Log Collection', slug: 'guides/How-to/debuglogs' },
+					// 	{ label: 'Debug vJailbreak Installation', slug: 'guides/How-to/debug_vjailbreak_install' },
+					// 	{ label: 'VirtIO Windows Driver Support', slug: 'guides/How-to/virtio_doc' },
+					// ],
 				},
 				{
 					label: 'Reference',
@@ -70,6 +70,10 @@ export default defineConfig({
 				{
 					label: 'Release Notes',
 					autogenerate: { directory: 'release_docs' },
+				},
+				{
+					label: 'Archives',
+					autogenerate: { directory: 'archives' },
 				},
 			],
 			customCss: [

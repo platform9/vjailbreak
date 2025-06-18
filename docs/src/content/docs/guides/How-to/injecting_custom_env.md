@@ -1,5 +1,5 @@
 ---
-title: "v2v-helper Environment Variable Injection via ConfigMap"
+title: "Inject Environment Variables"
 description: "Enabling environment variable injection for the v2v-helper pod using a Kubernetes ConfigMap"
 ---
 
