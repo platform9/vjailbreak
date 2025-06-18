@@ -1,5 +1,5 @@
 ---
-title: "vJailbreak Installation Debug Guide"
+title: "Debug vJailbreak Installation"
 description: "Learn how to debug installation issues related to vJailbreak, including where the install script is located, how it works, and what to check when things go wrong."
 ---
 
