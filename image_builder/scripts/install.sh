@@ -139,7 +139,7 @@ else
   log "K3S_TOKEN: $K3S_TOKEN"
 
   # Install K3s worker
-  sudo /etc/pf9/k3s-setup/k3s-install.sh | K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_SKIP_DOWNLOAD=true sh -
+  K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh
   check_command "Installing K3s worker"
 
   log "K3s worker setup completed."
