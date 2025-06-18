@@ -1,5 +1,5 @@
 ---
-title: Building vJailbreak 
+title: Build vJailbreak
 description: How to compile vJailbreak
 ---
 

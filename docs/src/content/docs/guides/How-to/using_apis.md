@@ -1,5 +1,5 @@
 ---
-title: Using vJailbreak via APIs
+title: Use vJailbreak via APIs
 description: Usage
 ---
 
