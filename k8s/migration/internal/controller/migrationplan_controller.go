@@ -826,6 +826,10 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 
 		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
 
+		if migrationtemplate.Spec.OSFamily != "" {
+			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
+		}
+
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
