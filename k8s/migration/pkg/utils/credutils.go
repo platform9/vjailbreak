@@ -20,6 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -720,6 +721,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			continue
 		}
 		if len(rdmDiskInfos) > 0 {
+			fmt.Println("VM : ", vm.Name(), " has RDM disks, populating RDM disk info from attributes", attributes)
 			rdmDiskInfos, err = populateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
 			if err != nil {
 				ctxlog.Error(err, "failed to populate RDM disk info from attributes for vm", "vm", vm.Name)
@@ -1127,8 +1129,8 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 		for i, disk := range vminfo.RDMDisks {
 			if existingDisk, ok := existingDisks[disk.DiskName]; ok {
 				// Preserve OpenStack volume reference if new one is nil
-				if vminfo.RDMDisks[i].OpenstackVolumeRef == nil &&
-					existingDisk.OpenstackVolumeRef != nil {
+				if reflect.DeepEqual(vminfo.RDMDisks[i].OpenstackVolumeRef, v1alpha1.OpenStackVolumeRefInfo{}) &&
+					!reflect.DeepEqual(existingDisk.OpenstackVolumeRef, v1alpha1.OpenStackVolumeRefInfo{}) {
 					vminfo.RDMDisks[i].OpenstackVolumeRef = existingDisk.OpenstackVolumeRef
 				} else {
 					// Preserve CinderBackendPool if new one is nil
@@ -1179,44 +1181,43 @@ func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 //
 //	VJB_RDM:Hard Disk:volumeRef:"source-id"="abac111"
 func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDiskInfo, attributes []string) ([]vjailbreakv1alpha1.RDMDiskInfo, error) {
-	rdmMap := make(map[string]*vjailbreakv1alpha1.RDMDiskInfo)
+	rdmMap := make(map[string]vjailbreakv1alpha1.RDMDiskInfo)
 	log := ctrllog.FromContext(ctx)
 
 	// Create copies of base RDM disks to preserve existing data
 	for i := range baseRDMDisks {
 		diskCopy := baseRDMDisks[i] // Make a copy
-		rdmMap[diskCopy.DiskName] = &diskCopy
+		rdmMap[strings.TrimSpace(diskCopy.DiskName)] = diskCopy
 	}
-
 	// Process attributes for additional RDM information
 	for _, attr := range attributes {
-		if strings.HasPrefix(attr, "VJB_RDM:") {
+		if strings.Contains(attr, "VJB_RDM:") {
+			fmt.Println("Processing RDM attribute:", attr)
 			parts := strings.Split(attr, ":")
 			if len(parts) != 4 {
 				continue
 			}
 
-			diskName := parts[1]
+			diskName := strings.TrimSpace(parts[1])
 			key := parts[2]
 			value := parts[3]
 
 			// Get or create RDMDiskInfo
 			rdmInfo, exists := rdmMap[diskName]
-			if exists && rdmInfo != nil {
-				// Initialize OpenstackVolumeRef if nil
-				if rdmInfo.OpenstackVolumeRef == nil {
-					rdmInfo.OpenstackVolumeRef = &vjailbreakv1alpha1.OpenStackVolumeRefInfo{}
-				}
-
+			if exists {
 				// Update fields only if new value is provided
-				if key == "volumeRef" && value != "" {
+				if strings.TrimSpace(key) == "volumeRef" && value != "" {
 					splotVolRef := strings.Split(value, "=")
 					if len(splotVolRef) != 2 {
 						return nil, fmt.Errorf("invalid volume reference format: %s", rdmInfo.OpenstackVolumeRef.VolumeRef)
 					}
 					mp := make(map[string]string)
 					mp[splotVolRef[0]] = splotVolRef[1]
-					rdmInfo.OpenstackVolumeRef.VolumeRef = mp
+					fmt.Println("Setting OpenStack Volume Ref for RDM disk:", diskName, "to", mp, rdmInfo)
+					rdmInfo.OpenstackVolumeRef = vjailbreakv1alpha1.OpenStackVolumeRefInfo{
+						VolumeRef: mp,
+					}
+					rdmMap[diskName] = rdmInfo
 				}
 			} else {
 				log.Info("RDM attributes exist on VM but disk not found in  RDM disks")
@@ -1226,8 +1227,7 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 	// Convert map back to slice while preserving all data
 	rdmDisks := make([]vjailbreakv1alpha1.RDMDiskInfo, 0, len(rdmMap))
 	for _, rdmInfo := range rdmMap {
-		rdmDisks = append(rdmDisks, *rdmInfo)
+		rdmDisks = append(rdmDisks, rdmInfo)
 	}
-
 	return rdmDisks, nil
 }
