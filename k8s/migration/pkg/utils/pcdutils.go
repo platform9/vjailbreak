@@ -122,7 +122,7 @@ func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, op
 			},
 		},
 		Spec: vjailbreakv1alpha1.PCDClusterSpec{
-			ClusterName:                   fmt.Sprintf("%s-%s", openstackCreds.Name, constants.PCDClusterNameNoCluster),
+			ClusterName:                   fmt.Sprintf("%s - %s", openstackCreds.Name, constants.PCDClusterNameNoCluster),
 			Description:                   "",
 			Hosts:                         []string{},
 			VMHighAvailability:            false,
@@ -312,7 +312,7 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 	}
 	upstreamClusterNames := []string{}
 	for _, cluster := range upstreamClusterList {
-		upstreamClusterNames = append(upstreamClusterNames, cluster.Name, fmt.Sprintf("%s-%s", openstackCreds.Name, constants.PCDClusterNameNoCluster))
+		upstreamClusterNames = append(upstreamClusterNames, cluster.Name, fmt.Sprintf("%s - %s", openstackCreds.Name, constants.PCDClusterNameNoCluster))
 	}
 
 	downstreamClusterList, err := filterPCDClustersOnOpenstackCreds(ctx, k8sClient, openstackCreds)
