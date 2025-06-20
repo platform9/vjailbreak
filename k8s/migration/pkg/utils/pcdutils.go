@@ -110,6 +110,7 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 	return nil
 }
 
+// CreateEntryForNoPCDCluster creates a PCDCluster for no cluster
 func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	pcdCluster := vjailbreakv1alpha1.PCDCluster{
 		ObjectMeta: metav1.ObjectMeta{
