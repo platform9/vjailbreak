@@ -928,6 +928,17 @@ func AppendUnique(slice []string, values ...string) []string {
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
 	var wg sync.WaitGroup
+	
+	// Create a thread-safe error collection
+	type vmError struct {
+		vmName string
+		err    error
+	}
+	errMu := sync.Mutex{}
+	vmErrors := []vmError{}
+	panicMu := sync.Mutex{}
+	panicErrors := []interface{}{}
+	
 	for i := range vminfo {
 		wg.Add(1)
 		go func(i int) {
@@ -935,18 +946,43 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 			// Don't panic on error
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("Panic: %v\n", r)
+					panicMu.Lock()
+					panicErrors = append(panicErrors, r)
+					panicMu.Unlock()
 				}
 			}()
 			vm := &vminfo[i] // Use a pointer
 			err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
 			if err != nil {
-				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name, err: err})
+				errMu.Unlock()
 			}
 		}(i)
 	}
+	
 	// Wait for all vms to be created or updated
 	wg.Wait()
+	
+	// Print all errors at the end
+	if len(panicErrors) > 0 {
+		fmt.Printf("\nEncountered %d panic(s):\n", len(panicErrors))
+		for _, p := range panicErrors {
+			fmt.Printf("Panic: %v\n", p)
+		}
+	}
+	
+	if len(vmErrors) > 0 {
+		fmt.Printf("\nEncountered %d error(s):\n", len(vmErrors))
+		for _, e := range vmErrors {
+			fmt.Printf("Error creating or updating VM '%s': %v\n", e.vmName, e.err)
+		}
+	}
+	
+	if len(vmErrors) > 0 || len(panicErrors) > 0 {
+		return fmt.Errorf("encountered %d error(s) and %d panic(s) while processing %d VMs", 
+			len(vmErrors), len(panicErrors), len(vminfo))
+	}
 	return nil
 }
 
