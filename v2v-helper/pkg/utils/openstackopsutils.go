@@ -453,7 +453,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		FlavorRef: flavor.ID,
 		Networks:  openstacknws,
 	}
-	if availabilityZone != "" {
+	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
