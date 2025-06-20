@@ -229,8 +229,15 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 	}
 
+	// clean up snapshots
+	utils.PrintLog("Cleaning up snapshots before copy")
+	err := vmops.CleanUpSnapshots(false)
+	if err != nil {
+		return vminfo, fmt.Errorf("failed to clean up snapshots: %s", err)
+	}
+
 	utils.PrintLog("Starting NBD server")
-	err := vmops.TakeSnapshot(constants.MigrationSnapshotName)
+	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return vminfo, fmt.Errorf("failed to take snapshot of source VM: %s", err)
 	}
@@ -242,7 +249,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	for idx, vmdisk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Copying disk %d, Completed: 0%%", idx))
-		err := nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
+		err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to start NBD server: %s", err)
 		}
@@ -375,7 +382,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 
 	utils.PrintLog("Deleting migration snapshot")
-	err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
+	err = vmops.CleanUpSnapshots(true)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf(`Failed to delete snapshot of source VM: %s, since copy is completed, 
 		continuing with the migration`, err))
@@ -870,7 +877,7 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to delete all volumes from host: %s\n", err))
 	}
-	err = migobj.VMops.DeleteSnapshot(constants.MigrationSnapshotName)
+	err = migobj.VMops.CleanUpSnapshots(true)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))

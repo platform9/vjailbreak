@@ -30,7 +30,11 @@ type VMOperations interface {
 	EnableCBT() error
 	TakeSnapshot(name string) error
 	DeleteSnapshot(name string) error
+	DeleteSnapshotByRef(snap *types.ManagedObjectReference) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
+	ListSnapshots() ([]types.VirtualMachineSnapshotTree, error)
+	CleanUpSnapshots(ignoreerror bool) error
+	DeleteMigrationSnapshots(snapshots []types.VirtualMachineSnapshotTree, ignoreerror bool) error
 	CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error)
 	VMGuestShutdown() error
 	VMPowerOff() error
@@ -341,6 +345,32 @@ func (vmops *VMOps) DeleteSnapshot(name string) error {
 	return nil
 }
 
+func (vmops *VMOps) DeleteSnapshotByRef(snap *types.ManagedObjectReference) error {
+	// Create a method to remove snapshot using the reference
+	var consolidate = true
+
+	// Create a RemoveSnapshot_Task request
+	req := types.RemoveSnapshot_Task{
+		This:           *snap,
+		RemoveChildren: true,
+		Consolidate:    &consolidate,
+	}
+
+	// Send the request
+	res, err := methods.RemoveSnapshot_Task(vmops.ctx, vmops.vcclient.VCClient, &req)
+	if err != nil {
+		return fmt.Errorf("failed to remove snapshot by ref: %s", err)
+	}
+
+	// Create a task object and wait for completion
+	task := object.NewTask(vmops.vcclient.VCClient, res.Returnval)
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
+	return nil
+}
+
 func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, error) {
 	vm := vmops.VMObj
 	snap, err := vm.FindSnapshot(vmops.ctx, name)
@@ -393,18 +423,18 @@ func (vmops *VMOps) VMGuestShutdown() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
-	
+
 	// Attempt guest OS shutdown
 	err = vmops.VMObj.ShutdownGuest(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initiate guest shutdown: %s", err)
 	}
-	
+
 	// Wait for up to 2 minutes for the VM to power off
 	poweredOff := false
 	ctx, cancel := context.WithTimeout(vmops.ctx, 2*time.Minute)
 	defer cancel()
-	
+
 	for !poweredOff {
 		state, err := vmops.VMObj.PowerState(ctx)
 		if err != nil {
@@ -414,7 +444,7 @@ func (vmops *VMOps) VMGuestShutdown() error {
 			poweredOff = true
 			break
 		}
-		
+
 		// Check if timeout occurred
 		select {
 		case <-ctx.Done():
@@ -423,7 +453,7 @@ func (vmops *VMOps) VMGuestShutdown() error {
 			time.Sleep(5 * time.Second)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -435,17 +465,17 @@ func (vmops *VMOps) VMPowerOff() error {
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
-	
+
 	// First try a clean guest shutdown
 	err = vmops.VMGuestShutdown()
 	if err == nil {
 		// Guest shutdown succeeded
 		return nil
 	}
-	
+
 	// If guest shutdown failed, log the error and fall back to power off
 	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
-	
+
 	// Fall back to power off
 	task, err := vmops.VMObj.PowerOff(vmops.ctx)
 	if err != nil {
@@ -475,4 +505,54 @@ func (vmops *VMOps) VMPowerOn() error {
 		return fmt.Errorf("failed while waiting for power on task: %s", err)
 	}
 	return nil
+}
+
+func (vmops *VMOps) ListSnapshots() ([]types.VirtualMachineSnapshotTree, error) {
+	vm := vmops.VMObj
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"snapshot"}, &o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM properties: %s", err)
+	}
+	return o.Snapshot.RootSnapshotList, nil
+}
+
+func (vmops *VMOps) DeleteMigrationSnapshots(snapshots []types.VirtualMachineSnapshotTree, ignoreerror bool) error {
+	var lastError error
+	snapshotsDeleted := 0
+
+	for _, snapshot := range snapshots {
+		if snapshot.Name == constants.MigrationSnapshotName {
+			// Delete snapshot by snapshot reference instead of name to handle duplicate names
+			err := vmops.DeleteSnapshotByRef(&snapshot.Snapshot)
+			if err != nil {
+				if ignoreerror {
+					lastError = err
+					log.Printf("Failed to delete snapshot %s: %v (ignoring error)", snapshot.Name, err)
+					continue
+				} else {
+					return fmt.Errorf("failed to delete snapshot %s: %v", snapshot.Name, err)
+				}
+			}
+			snapshotsDeleted++
+		}
+	}
+
+	if snapshotsDeleted > 0 {
+		log.Printf("Successfully deleted %d snapshots with name '%s'", snapshotsDeleted, constants.MigrationSnapshotName)
+	}
+
+	if ignoreerror && lastError != nil {
+		return nil // We're ignoring errors as requested
+	}
+
+	return nil
+}
+
+func (vmops *VMOps) CleanUpSnapshots(ignoreerror bool) error {
+	snapshotlist, err := vmops.ListSnapshots()
+	if err != nil {
+		return err
+	}
+	return vmops.DeleteMigrationSnapshots(snapshotlist, ignoreerror)
 }
