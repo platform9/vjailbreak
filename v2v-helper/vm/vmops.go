@@ -514,6 +514,11 @@ func (vmops *VMOps) ListSnapshots() ([]types.VirtualMachineSnapshotTree, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %s", err)
 	}
+	// Check if o.Snapshot is nil before accessing RootSnapshotList
+	if o.Snapshot == nil {
+		// VM has no snapshots
+		return []types.VirtualMachineSnapshotTree{}, nil
+	}
 	return o.Snapshot.RootSnapshotList, nil
 }
 
@@ -521,29 +526,46 @@ func (vmops *VMOps) DeleteMigrationSnapshots(snapshots []types.VirtualMachineSna
 	var lastError error
 	snapshotsDeleted := 0
 
-	for _, snapshot := range snapshots {
-		if snapshot.Name == constants.MigrationSnapshotName {
-			// Delete snapshot by snapshot reference instead of name to handle duplicate names
-			err := vmops.DeleteSnapshotByRef(&snapshot.Snapshot)
-			if err != nil {
-				if ignoreerror {
-					lastError = err
-					log.Printf("Failed to delete snapshot %s: %v (ignoring error)", snapshot.Name, err)
-					continue
-				} else {
-					return fmt.Errorf("failed to delete snapshot %s: %v", snapshot.Name, err)
-				}
+	// Helper function to recursively process snapshot tree
+	var processSnapshotTree func(trees []types.VirtualMachineSnapshotTree) int
+	processSnapshotTree = func(trees []types.VirtualMachineSnapshotTree) int {
+		deleted := 0
+		for _, snapshot := range trees {
+			// First process any child snapshots
+			if len(snapshot.ChildSnapshotList) > 0 {
+				deleted += processSnapshotTree(snapshot.ChildSnapshotList)
 			}
-			snapshotsDeleted++
+
+			// Then process this snapshot if it matches
+			if snapshot.Name == constants.MigrationSnapshotName {
+				// Delete snapshot by snapshot reference instead of name to handle duplicate names
+				err := vmops.DeleteSnapshotByRef(&snapshot.Snapshot)
+				if err != nil {
+					if ignoreerror {
+						lastError = err
+						log.Printf("Failed to delete snapshot %s: %v (ignoring error)", snapshot.Name, err)
+						continue
+					} else {
+						// Propagate error up
+						lastError = fmt.Errorf("failed to delete snapshot %s: %v", snapshot.Name, err)
+						return deleted
+					}
+				}
+				deleted++
+			}
 		}
+		return deleted
 	}
+
+	// Start the recursive processing
+	snapshotsDeleted = processSnapshotTree(snapshots)
 
 	if snapshotsDeleted > 0 {
 		log.Printf("Successfully deleted %d snapshots with name '%s'", snapshotsDeleted, constants.MigrationSnapshotName)
 	}
 
-	if ignoreerror && lastError != nil {
-		return nil // We're ignoring errors as requested
+	if !ignoreerror && lastError != nil {
+		return lastError
 	}
 
 	return nil

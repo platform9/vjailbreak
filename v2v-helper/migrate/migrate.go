@@ -355,7 +355,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// Only do this after you have gone through all disks with old change id.
 		// If you dont, only your first disk will have the updated changes
 
-		err = vmops.DeleteSnapshot(constants.MigrationSnapshotName)
+		err = vmops.CleanUpSnapshots(false)
 		if err != nil {
 			return vminfo, fmt.Errorf("failed to delete snapshot of source VM: %s", err)
 		}
