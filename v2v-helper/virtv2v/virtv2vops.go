@@ -287,14 +287,14 @@ func CheckForLVM(disks []vm.VMDisk) (string, error) {
 	command := "inspect-os"
 	osPath, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s\n", command, err, strings.TrimSpace(osPath))
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(osPath))
 	}
 
 	// Get the lvs list
 	command = "lvs"
 	lvsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s\n", command, err, strings.TrimSpace(lvsStr))
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(lvsStr))
 	}
 
 	lvs := strings.Split(string(lvsStr), "\n")
@@ -340,7 +340,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
 	}
 
-	partitions := strings.Split(string(partitionsStr), "\n")
+	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
 	for _, partition := range partitions {
 		command := "part-to-dev"
 		device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
