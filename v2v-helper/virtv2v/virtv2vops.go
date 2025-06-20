@@ -274,7 +274,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
 	return strings.ToLower(strings.TrimSpace(string(out))), nil
 }
@@ -328,7 +328,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	log.Printf("Executing %s", cmd.String())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v", command, err)
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
 	return strings.ToLower(string(out)), nil
 }
@@ -337,7 +337,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
-		return -1, fmt.Errorf("failed to run command (%s): %v: %s\n", command, err, strings.TrimSpace(partitionsStr))
+		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
 	}
 
 	partitions := strings.Split(string(partitionsStr), "\n")
