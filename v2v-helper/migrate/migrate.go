@@ -233,7 +233,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog("Cleaning up snapshots before copy")
 	err := vmops.CleanUpSnapshots(false)
 	if err != nil {
-		return vminfo, fmt.Errorf("failed to clean up snapshots: %s", err)
+		return vminfo, fmt.Errorf("failed to clean up snapshots: %s, please delete manually before starting again", err)
 	}
 
 	utils.PrintLog("Starting NBD server")
