@@ -6,7 +6,6 @@ import {
   styled,
   TextField,
 } from "@mui/material"
-import { parse } from "dotenv"
 import React, { useState, useImperativeHandle, forwardRef } from "react"
 
 const requiredFields = [
@@ -68,11 +67,12 @@ const OpenstackRCFileUploader = forwardRef<OpenstackRCFileUploaderRef, Openstack
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        setError(null) // Clear any previous errors
+        setError(null) 
         const content = e.target?.result as string
         const parsedFields = parseFields(content)
         const isValid = validateFields(parsedFields)
         if (isValid) {
+          console.log("Sending parsedFields to backend:", parsedFields);
           onChange(parsedFields)
         }
       } catch {
@@ -86,20 +86,34 @@ const OpenstackRCFileUploader = forwardRef<OpenstackRCFileUploaderRef, Openstack
   }
 
   const parseFields = (content: string) => {
-    // Remove 'export' from each line before parsing with dotenv
-    const cleanedContent = content.replace(/^export\s+/gm, "")
-    const parsedFields = parse(cleanedContent)
-
-    // Map alternative field names if they exist
+   
+    const cleanedContent = content.replace(/^export\s+/gm, "");
+    const parsedFields: Record<string, string> = {};
+    const lines = cleanedContent.split('\n');
+  
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let value = trimmed.slice(eqIdx + 1).trim();
+  
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      parsedFields[key] = value;
+    }
     if (parsedFields.OS_PROJECT_DOMAIN_NAME && !parsedFields.OS_DOMAIN_NAME) {
-      parsedFields.OS_DOMAIN_NAME = parsedFields.OS_PROJECT_DOMAIN_NAME
+      parsedFields.OS_DOMAIN_NAME = parsedFields.OS_PROJECT_DOMAIN_NAME;
     }
-
     if (parsedFields.OS_PROJECT_NAME && !parsedFields.OS_TENANT_NAME) {
-      parsedFields.OS_TENANT_NAME = parsedFields.OS_PROJECT_NAME
+      parsedFields.OS_TENANT_NAME = parsedFields.OS_PROJECT_NAME;
     }
-
-    return parsedFields
+    return parsedFields;
   }
 
   const validateFields = (fields: Record<string, string>) => {
