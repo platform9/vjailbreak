@@ -28,6 +28,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -380,6 +382,90 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
+
+		// --- Begin IP Allocation/Pool Check ---
+		for _, vmName := range parallelvms {
+			// Get VMwareMachine for this VM
+			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
+			if err := r.Get(ctx, types.NamespacedName{Name: vmName, Namespace: migrationplan.Namespace}, vmMachine); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get VMwareMachine for VM '%s': %w", vmName, err)
+			}
+			ip := vmMachine.Spec.VMInfo.IPAddress
+			if ip == "" {
+				continue // skip VMs with no IP
+			}
+			// Get OpenStack networking client
+			openstackClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get OpenStack clients: %w", err)
+			}
+			// --- BEGIN subnetID lookup logic ---
+			// 1. Load NetworkMapping CR
+			networkMapping := &vjailbreakv1alpha1.NetworkMapping{}
+			if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.NetworkMapping, Namespace: migrationplan.Namespace}, networkMapping); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get NetworkMapping: %w", err)
+			}
+			// 2. For each network in VMInfo.Networks, find the mapped OpenStack network name
+			var subnetID string
+			for _, srcNet := range vmMachine.Spec.VMInfo.Networks {
+				var openstackNetName string
+				for _, mapping := range networkMapping.Spec.Networks {
+					if mapping.Source == srcNet {
+						openstackNetName = mapping.Target
+						break
+					}
+				}
+				if openstackNetName == "" {
+					continue // skip if no mapping found for this network
+				}
+				// 3. Use OpenStack API to get network ID and subnets
+				netList, err := networks.List(openstackClients.NetworkingClient, networks.ListOpts{Name: openstackNetName}).AllPages()
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to list OpenStack networks: %w", err)
+				}
+				nets, err := networks.ExtractNetworks(netList)
+				if err != nil || len(nets) == 0 {
+					return ctrl.Result{}, fmt.Errorf("OpenStack network not found: %s", openstackNetName)
+				}
+				networkID := nets[0].ID
+				// List subnets for this network
+				subnetList, err := subnets.List(openstackClients.NetworkingClient, subnets.ListOpts{NetworkID: networkID}).AllPages()
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to list subnets: %w", err)
+				}
+				allSubnets, err := subnets.ExtractSubnets(subnetList)
+				if err != nil || len(allSubnets) == 0 {
+					return ctrl.Result{}, fmt.Errorf("no subnets found for OpenStack network %s", openstackNetName)
+				}
+				// If only one subnet, use it. If multiple, pick by CIDR match or just use the first.
+				subnetID = allSubnets[0].ID
+				break // use the first found mapping/subnet for this VM
+			}
+			if subnetID == "" {
+				return ctrl.Result{}, fmt.Errorf("subnetID for VM '%s' is not set; cannot check IP allocation", vmName)
+			}
+			// --- END subnetID lookup logic ---
+			allocated, err := utils.IsIPAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, subnetID, ip)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to check if IP is allocated in OpenStack: %w", err)
+			}
+			if allocated {
+				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is already allocated in OpenStack target subnet.", ip, vmName)
+				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
+				return ctrl.Result{}, fmt.Errorf(msg)
+			}
+			inPool, err := utils.IsIPInAllocationPool(ctx, openstackClients.NetworkingClient, subnetID, ip)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to check if IP is in allocation pool: %w", err)
+			}
+			if !inPool {
+				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is not within allocation pool of OpenStack subnet.", ip, vmName)
+				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
+				return ctrl.Result{}, fmt.Errorf(msg)
+			}
+		}
+		// --- End IP Allocation/Pool Check ---
+
 		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {

@@ -2,10 +2,12 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -19,6 +21,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -47,6 +50,53 @@ type OpenStackClients struct {
 	ComputeClient *gophercloud.ServiceClient
 	// NetworkingClient is the client for interacting with OpenStack Networking
 	NetworkingClient *gophercloud.ServiceClient
+}
+
+// IsIPAllocatedInOpenStack checks if the given IP is already allocated to any port in the specified subnet
+func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	listOpts := ports.ListOpts{
+		FixedIPs: []ports.FixedIPOpts{{
+			SubnetID:  subnetID,
+			IPAddress: ip,
+		}},
+	}
+	allPages, err := ports.List(networkingClient, listOpts).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list ports for IP allocation check")
+	}
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract ports for IP allocation check")
+	}
+	return len(allPorts) > 0, nil
+}
+
+// IsIPInAllocationPool checks if the given IP is within the allocation pool of the specified subnet
+func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	subnet, err := subnets.Get(networkingClient, subnetID).Extract()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get subnet for allocation pool check")
+	}
+	for _, pool := range subnet.AllocationPools {
+		if ipInRange(ip, pool.Start, pool.End) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ipInRange checks if the ip is between start and end (inclusive)
+func ipInRange(ip, start, end string) bool {
+	ipAddr := net.ParseIP(ip)
+	startAddr := net.ParseIP(start)
+	endAddr := net.ParseIP(end)
+	if ipAddr == nil || startAddr == nil || endAddr == nil {
+		return false
+	}
+	if bytes.Compare(ipAddr, startAddr) >= 0 && bytes.Compare(ipAddr, endAddr) <= 0 {
+		return true
+	}
+	return false
 }
 
 const (

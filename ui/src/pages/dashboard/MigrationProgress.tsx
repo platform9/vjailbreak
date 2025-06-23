@@ -1,8 +1,10 @@
-import { useMemo } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import { CircularProgress, styled, Typography, Box } from "@mui/material"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom"
+import Snackbar from "@mui/material/Snackbar"
+import MuiAlert from "@mui/material/Alert"
 import { Phase } from "src/api/migrations/model"
 
 const ProgressContainer = styled(Box)({
@@ -47,12 +49,41 @@ export default function MigrationProgress({
     }
   }, [phase])
 
+  // Show error popup if migration is blocked
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (
+      phase === Phase.Failed &&
+      progressText &&
+      progressText.toLowerCase().includes("migration blocked")
+    ) {
+      setOpen(true)
+    } else {
+      setOpen(false)
+    }
+  }, [phase, progressText])
+
+  const handleClose = (_?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return
+    }
+    setOpen(false)
+  }
+
   return (
-    <ProgressContainer>
-      {statusIcon}
-      <Typography variant="body2" sx={{ ml: 2 }}>
-        {progressText}
-      </Typography>
-    </ProgressContainer>
+    <>
+      <ProgressContainer>
+        {statusIcon}
+        <Typography variant="body2" sx={{ ml: 2 }}>
+          {progressText}
+        </Typography>
+      </ProgressContainer>
+      <Snackbar open={open} autoHideDuration={7000} onClose={handleClose} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <MuiAlert onClose={handleClose} severity="error" elevation={6} variant="filled">
+          {progressText}
+        </MuiAlert>
+      </Snackbar>
+    </>
   )
 }
