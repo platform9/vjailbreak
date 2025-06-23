@@ -72,7 +72,6 @@ const OpenstackRCFileUploader = forwardRef<OpenstackRCFileUploaderRef, Openstack
         const parsedFields = parseFields(content)
         const isValid = validateFields(parsedFields)
         if (isValid) {
-          console.log("Sending parsedFields to backend:", parsedFields);
           onChange(parsedFields)
         }
       } catch {
@@ -87,18 +86,20 @@ const OpenstackRCFileUploader = forwardRef<OpenstackRCFileUploaderRef, Openstack
 
   const parseFields = (content: string) => {
    
+    // Remove 'export' keywords from each line
     const cleanedContent = content.replace(/^export\s+/gm, "");
     const parsedFields: Record<string, string> = {};
     const lines = cleanedContent.split('\n');
-  
+    // Parse each line as key=value, handling special cases:
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
+      if (!trimmed || trimmed.startsWith('#')) continue; // Skip empty lines and lines starting with '#' (treated as comments)
+      const eqIdx = trimmed.indexOf('='); // Only process lines containing '='
       if (eqIdx === -1) continue;
       const key = trimmed.slice(0, eqIdx).trim();
       let value = trimmed.slice(eqIdx + 1).trim();
   
+      // Remove surrounding quotes from values, if present
       if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
