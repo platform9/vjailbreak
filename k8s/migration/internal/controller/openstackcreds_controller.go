@@ -199,8 +199,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 				}
 			}
 		}
-
-		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+		ctxlog.Info("Checking if PCD info needs to be synced", "openstackcreds", scope.OpenstackCreds.Name)
+		isPCD := utils.IsOpenstackPCD(*scope.OpenstackCreds)
+		ctxlog.Info("PCD info needs to be synced", "openstackcreds", scope.OpenstackCreds.Name, "isPCD", isPCD)
+		if isPCD {
+			ctxlog.Info("Syncing PCD info", "openstackcreds", scope.OpenstackCreds.Name)
 			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")

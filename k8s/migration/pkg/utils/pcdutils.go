@@ -16,10 +16,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	log "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // SyncPCDInfo syncs PCD info from resmgr
 func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials")
@@ -44,6 +46,7 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 	if err != nil {
 		return errors.Wrap(err, "failed to list clusters")
 	}
+	ctxlog.Info("Syncing PCD clusters", "openstackcreds", openstackCreds.Name)
 	err = CreateEntryForNoPCDCluster(ctx, k8sClient, &openstackCreds)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create dummy PCD cluster")
@@ -113,6 +116,8 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 
 // CreateEntryForNoPCDCluster creates a PCDCluster for no cluster
 func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
+	ctxlog.Info("Creating PCD cluster", "openstackcreds", openstackCreds.Name)
 	pcdCluster := vjailbreakv1alpha1.PCDCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      openstackCreds.Name,
@@ -135,6 +140,7 @@ func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, op
 			UpdatedAt:   "",
 		},
 	}
+	ctxlog.Info("Creating PCD cluster", "openstackcreds", openstackCreds.Name)
 	if err := k8sClient.Create(ctx, &pcdCluster); err != nil {
 		return errors.Wrap(err, "failed to create PCD cluster")
 	}
