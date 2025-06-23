@@ -445,21 +445,29 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				return ctrl.Result{}, fmt.Errorf("subnetID for VM '%s' is not set; cannot check IP allocation", vmName)
 			}
 			// --- END subnetID lookup logic ---
+			r.ctxlog.Info("🔍 Checking OpenStack IP allocation", "vm", vmName, "ip", ip, "subnetID", subnetID)
 			allocated, err := utils.IsIPAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, subnetID, ip)
 			if err != nil {
+				r.ctxlog.Error(err, "❌ Error during IP allocation check", "ip", ip, "subnetID", subnetID)
 				return ctrl.Result{}, fmt.Errorf("failed to check if IP is allocated in OpenStack: %w", err)
 			}
+			r.ctxlog.Info("✅ IP allocation check result", "ip", ip, "allocated", allocated)
 			if allocated {
 				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is already allocated in OpenStack target subnet.", ip, vmName)
+				r.ctxlog.Info("🚫 Migration blocked: IP is already allocated in target subnet", "ip", ip, "vm", vmName, "subnetID", subnetID)
 				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
 				return ctrl.Result{}, fmt.Errorf(msg)
 			}
+			r.ctxlog.Info("🔍 Checking OpenStack allocation pool", "vm", vmName, "ip", ip, "subnetID", subnetID)
 			inPool, err := utils.IsIPInAllocationPool(ctx, openstackClients.NetworkingClient, subnetID, ip)
 			if err != nil {
+				r.ctxlog.Error(err, "❌ Error during allocation pool check", "ip", ip, "subnetID", subnetID)
 				return ctrl.Result{}, fmt.Errorf("failed to check if IP is in allocation pool: %w", err)
 			}
+			r.ctxlog.Info("✅ Allocation pool check result", "ip", ip, "inPool", inPool)
 			if !inPool {
 				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is not within allocation pool of OpenStack subnet.", ip, vmName)
+				r.ctxlog.Info("🚫 Migration blocked: IP not in allocation pool", "ip", ip, "vm", vmName, "subnetID", subnetID)
 				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
 				return ctrl.Result{}, fmt.Errorf(msg)
 			}
