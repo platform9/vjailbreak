@@ -44,11 +44,16 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 	if err != nil {
 		return errors.Wrap(err, "failed to list clusters")
 	}
+	fmt.Println("Adding dummy PCD cluster", "openstackcreds", openstackCreds.Name)
 	err = CreateEntryForNoPCDCluster(ctx, k8sClient, &openstackCreds)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create dummy PCD cluster")
 	}
+	if err != nil {
+		fmt.Println("PCD Cluster dummy entry already exists", "openstackcreds", openstackCreds.Name)
+	}
 
+	fmt.Println("Adding Actual PCD clusters", "openstackcreds", openstackCreds.Name)
 	for _, cluster := range clusterList {
 		err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
 		if err != nil {

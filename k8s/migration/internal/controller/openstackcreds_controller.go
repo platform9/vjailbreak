@@ -201,6 +201,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 
 		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+			ctxlog.Info("Syncing PCD info because this credential is for PCD", "openstackcreds", scope.OpenstackCreds.Name)
 			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
