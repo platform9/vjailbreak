@@ -368,8 +368,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	}
 
-	// Sleep for 12 hours for debug.
-	time.Sleep(12 * time.Hour)
+	// Sleep for 36 hours for debug.
+	message := "Sleeping for 36 hours for debug."
+	migobj.logMessage(message)
+	time.Sleep(36 * time.Hour)
 
 	err = migobj.DetachAllVolumes(vminfo)
 	if err != nil {
