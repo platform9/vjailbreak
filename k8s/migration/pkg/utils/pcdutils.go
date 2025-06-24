@@ -136,6 +136,7 @@ func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, op
 	return nil
 }
 
+// DeleteEntryForNoPCDCluster deletes the PCDCluster for null cluster
 func DeleteEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	pcdCluster := vjailbreakv1alpha1.PCDCluster{
 		ObjectMeta: metav1.ObjectMeta{
