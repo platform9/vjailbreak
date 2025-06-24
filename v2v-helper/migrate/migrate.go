@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -548,6 +549,18 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	//TODO(omkar): can disable DHCP here
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
+			// Check if netplan is supported
+			versionID := parseVersionID(osRelease)
+			utils.PrintLog(fmt.Sprintf("Version ID: %s", versionID))
+			if versionID == "" {
+				return fmt.Errorf("failed to get version ID")
+			}
+			if !isNetplanSupported(versionID) {
+				message := fmt.Sprintf("Netplan is not supported for version %s", versionID)
+				utils.PrintLog(message)
+				return nil
+			}
+
 			// Add Wildcard Netplan
 			utils.PrintLog("Adding wildcard netplan")
 			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
@@ -671,6 +684,28 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	}
 
 	return nil
+}
+func parseVersionID(osRelease string) string {
+	for _, line := range strings.Split(osRelease, "\n") {
+		if strings.HasPrefix(line, "version_id=") {
+			return strings.Trim(line[len("version_id="):], `"`)
+		}
+	}
+	return ""
+}
+
+func isNetplanSupported(version string) bool {
+	// Return true if VERSION_ID >= 17.10
+	v, err := versionAsFloat(version)
+	if err != nil {
+		log.Printf("Warning: couldn't parse VERSION_ID (%s): %v", version, err)
+		return true // Assume modern system if in doubt
+	}
+	return v >= 17.10
+}
+
+func versionAsFloat(v string) (float64, error) {
+	return strconv.ParseFloat(strings.TrimSpace(v), 64)
 }
 
 func (migobj *Migrate) pingVM(ips []string) error {
