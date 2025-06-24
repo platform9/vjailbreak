@@ -368,6 +368,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	}
 
+	// Sleep for 12 hours for debug.
+	time.Sleep(12 * time.Hour)
+
 	err = migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
@@ -569,7 +572,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	var err error
 
 	if migobj.TargetFlavorId == "" {
-		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
+		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory, migobj.IsPcd)
 		if err != nil {
 			return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 		}
