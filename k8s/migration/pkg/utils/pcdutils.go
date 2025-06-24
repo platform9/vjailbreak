@@ -333,10 +333,13 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "failed to list clusters")
 	}
+
 	upstreamClusterNames := []string{}
 	for _, cluster := range upstreamClusterList {
-		upstreamClusterNames = append(upstreamClusterNames, cluster.Name, constants.PCDClusterNameNoCluster)
+		upstreamClusterNames = append(upstreamClusterNames, cluster.Name)
 	}
+
+	upstreamClusterNames = append(upstreamClusterNames, constants.PCDClusterNameNoCluster)
 
 	downstreamClusterList, err := filterPCDClustersOnOpenstackCreds(ctx, k8sClient, openstackCreds)
 	if err != nil {
