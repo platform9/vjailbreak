@@ -137,6 +137,12 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 
+		ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
+		err = utils.CreateEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return ctrl.Result{}, errors.Wrap(err, "failed to create dummy PCD cluster")
+		}
+
 		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
@@ -198,12 +204,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
 				}
 			}
-		}
-
-		ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-		err = utils.CreateEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to create dummy PCD cluster")
 		}
 
 		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
