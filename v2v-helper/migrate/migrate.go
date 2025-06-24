@@ -360,6 +360,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	}
 
+	// sleep for 36hours to allow debug
+	utils.PrintLog("Sleeping for 36hours to allow debug")
+	time.Sleep(36 * time.Hour)
+
 	err = migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
