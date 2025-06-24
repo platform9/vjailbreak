@@ -6,7 +6,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -41,12 +40,8 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 	}
 
 	clusterList, err := resmgrClient.ListClusters(ctx)
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to list clusters")
-	}
-	err = CreateEntryForNoPCDCluster(ctx, k8sClient, &openstackCreds)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "failed to create dummy PCD cluster")
 	}
 
 	for _, cluster := range clusterList {
@@ -122,7 +117,7 @@ func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, op
 			},
 		},
 		Spec: vjailbreakv1alpha1.PCDClusterSpec{
-			ClusterName:                   fmt.Sprintf("%s - %s", openstackCreds.Name, constants.PCDClusterNameNoCluster),
+			ClusterName:                   constants.PCDClusterNameNoCluster,
 			Description:                   "",
 			Hosts:                         []string{},
 			VMHighAvailability:            false,
@@ -137,6 +132,22 @@ func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, op
 	}
 	if err := k8sClient.Create(ctx, &pcdCluster); err != nil {
 		return errors.Wrap(err, "failed to create PCD cluster")
+	}
+	return nil
+}
+
+func DeleteEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	pcdCluster := vjailbreakv1alpha1.PCDCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      openstackCreds.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel: openstackCreds.Name,
+			},
+		},
+	}
+	if err := k8sClient.Delete(ctx, &pcdCluster); err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete PCD cluster")
 	}
 	return nil
 }
@@ -312,7 +323,7 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 	}
 	upstreamClusterNames := []string{}
 	for _, cluster := range upstreamClusterList {
-		upstreamClusterNames = append(upstreamClusterNames, cluster.Name, fmt.Sprintf("%s - %s", openstackCreds.Name, constants.PCDClusterNameNoCluster))
+		upstreamClusterNames = append(upstreamClusterNames, cluster.Name, constants.PCDClusterNameNoCluster)
 	}
 
 	downstreamClusterList, err := filterPCDClustersOnOpenstackCreds(ctx, k8sClient, openstackCreds)
