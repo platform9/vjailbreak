@@ -271,6 +271,7 @@ export default function SourceDestinationClusterSelection({
                                                 <Typography variant="body1">{pcd.name}</Typography>
                                                 <Typography variant="caption" color="text.secondary">
                                                     Credential: {pcd.openstackCredName} | Tenant: {pcd.tenantName}
+
                                                 </Typography>
                                             </Box>
                                         </Box>

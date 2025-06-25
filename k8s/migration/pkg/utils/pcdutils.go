@@ -6,6 +6,8 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -40,9 +42,10 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 	}
 
 	clusterList, err := resmgrClient.ListClusters(ctx)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "failed to list clusters")
 	}
+
 	for _, cluster := range clusterList {
 		err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
 		if err != nil {
@@ -105,6 +108,61 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 	return nil
 }
 
+// CreateEntryForNoPCDCluster creates a PCDCluster for no cluster
+func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	k8sClusterName, err := getK8sClusterObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
+	pcdCluster := vjailbreakv1alpha1.PCDCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      k8sClusterName,
+			Namespace: constants.NamespaceMigrationSystem,
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel: openstackCreds.Name,
+			},
+		},
+		Spec: vjailbreakv1alpha1.PCDClusterSpec{
+			ClusterName:                   constants.PCDClusterNameNoCluster,
+			Description:                   "",
+			Hosts:                         []string{},
+			VMHighAvailability:            false,
+			EnableAutoResourceRebalancing: false,
+			RebalancingFrequencyMins:      0,
+		},
+		Status: vjailbreakv1alpha1.PCDClusterStatus{
+			AggregateID: 0,
+			CreatedAt:   "",
+			UpdatedAt:   "",
+		},
+	}
+	if err := k8sClient.Create(ctx, &pcdCluster); err != nil {
+		return errors.Wrap(err, "failed to create PCD cluster")
+	}
+	return nil
+}
+
+// DeleteEntryForNoPCDCluster deletes the PCDCluster for null cluster
+func DeleteEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+	k8sClusterName, err := getK8sClusterObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
+	pcdCluster := vjailbreakv1alpha1.PCDCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      k8sClusterName,
+			Namespace: constants.NamespaceMigrationSystem,
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel: openstackCreds.Name,
+			},
+		},
+	}
+	if err := k8sClient.Delete(ctx, &pcdCluster); err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete PCD cluster")
+	}
+	return nil
+}
+
 // UpdatePCDHostFromResmgrHost updates an existing PCDHost with data from resmgr Host
 func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, host resmgr.Host, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	pcdHost := generatePCDHostFromResmgrHost(openstackCreds, host)
@@ -126,7 +184,8 @@ func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, h
 // UpdatePCDClusterFromResmgrCluster updates an existing PCDCluster with data from resmgr Cluster
 func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	oldPCDCluster := vjailbreakv1alpha1.PCDCluster{}
-	k8sClusterName, err := ConvertToK8sName(cluster.Name)
+
+	k8sClusterName, err := getK8sClusterObjectName(cluster.Name, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -195,9 +254,9 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 }
 
 func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, cluster resmgr.Cluster) (*vjailbreakv1alpha1.PCDCluster, error) {
-	k8sClusterName, err := ConvertToK8sName(cluster.Name)
+	k8sClusterName, err := getK8sClusterObjectName(cluster.Name, openstackCreds.Name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 	return &vjailbreakv1alpha1.PCDCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -271,13 +330,16 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 		return errors.Wrap(err, "failed to get resmgr client")
 	}
 	upstreamClusterList, err := resmgrClient.ListClusters(ctx)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "failed to list clusters")
 	}
+
 	upstreamClusterNames := []string{}
 	for _, cluster := range upstreamClusterList {
 		upstreamClusterNames = append(upstreamClusterNames, cluster.Name)
 	}
+
+	upstreamClusterNames = append(upstreamClusterNames, constants.PCDClusterNameNoCluster)
 
 	downstreamClusterList, err := filterPCDClustersOnOpenstackCreds(ctx, k8sClient, openstackCreds)
 	if err != nil {
@@ -290,7 +352,7 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 					Name:      cluster.Name,
 					Namespace: constants.NamespaceMigrationSystem,
 				},
-			}); err != nil {
+			}); err != nil && !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, "failed to delete stale PCD cluster")
 			}
 		}
@@ -408,4 +470,13 @@ func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, open
 		}
 	}
 	return false, nil
+}
+
+func getK8sClusterObjectName(clusterName, openstackCredsName string) (string, error) {
+	k8sClusterName, err := ConvertToK8sName(clusterName)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
+	name := fmt.Sprintf("%s-%s", k8sClusterName, openstackCredsName)
+	return name[:min(len(name), 63)], nil
 }

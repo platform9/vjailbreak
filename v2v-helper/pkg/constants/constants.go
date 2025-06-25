@@ -44,4 +44,6 @@ systemctl enable --now serial-getty@ttyS0.service`
 
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
+
+	PCDClusterNameNoCluster = "NO CLUSTER"
 )
