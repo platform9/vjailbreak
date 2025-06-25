@@ -71,6 +71,22 @@ func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud
 	return len(allPorts) > 0, nil
 }
 
+// IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
+func IsMacAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
+	listOpts := ports.ListOpts{
+		MACAddress: mac,
+	}
+	allPages, err := ports.List(networkingClient, listOpts).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list ports for MAC allocation check")
+	}
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract ports for MAC allocation check")
+	}
+	return len(allPorts) > 0, nil
+}
+
 // IsIPInAllocationPool checks if the given IP is within the allocation pool of the specified subnet
 func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
 	subnet, err := subnets.Get(networkingClient, subnetID).Extract()
