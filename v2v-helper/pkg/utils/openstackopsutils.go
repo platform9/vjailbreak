@@ -453,8 +453,11 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		FlavorRef: flavor.ID,
 		Networks:  openstacknws,
 	}
+	PrintLog(fmt.Sprintf("Availability Zone: %s", availabilityZone))
+	PrintLog(fmt.Sprintf("Availability Zone is PCD: %t", availabilityZone == constants.PCDClusterNameNoCluster))
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
+		PrintLog(fmt.Sprintf("Setting Availability Zone: %s", availabilityZone))
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
 	createOpts := bootfromvolume.CreateOptsExt{
