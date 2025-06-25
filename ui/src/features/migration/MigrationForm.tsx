@@ -46,6 +46,7 @@ import { CUTOVER_TYPES, OS_TYPES } from "./constants"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
+import { useClusterData } from "./useClusterData"
 
 const stringsCompareFn = (a, b) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
@@ -161,6 +162,7 @@ export default function MigrationFormDrawer({
 }: MigrationFormDrawerProps) {
   const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
+  const { pcdData } = useClusterData()
   const [error, setError] = useState<{ title: string; message: string } | null>(
     null
   )
@@ -261,7 +263,9 @@ export default function MigrationFormDrawer({
     const createMigrationTemplate = async () => {
       let targetPCDClusterName: string | undefined = undefined;
       if (params.pcdCluster) {
-        targetPCDClusterName = params.pcdCluster;
+
+        const selectedPCD = pcdData.find(p => p.id === params.pcdCluster);
+        targetPCDClusterName = selectedPCD?.name;
       }
 
       const body = createMigrationTemplateJson({
