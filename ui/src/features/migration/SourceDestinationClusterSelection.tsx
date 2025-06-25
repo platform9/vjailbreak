@@ -270,7 +270,8 @@ export default function SourceDestinationClusterSelection({
                                             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                                                 <Typography variant="body1">{pcd.name}</Typography>
                                                 <Typography variant="caption" color="text.secondary">
-                                                    OpenStack Credential: {pcd.openstackCredName} | Tenant: {pcd.tenantName}
+                                                    Credential: {pcd.openstackCredName} | Tenant: {pcd.tenantName}
+
                                                 </Typography>
                                             </Box>
                                         </Box>

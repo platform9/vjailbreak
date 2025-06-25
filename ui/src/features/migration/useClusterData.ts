@@ -147,7 +147,6 @@ export const useClusterData = (
 
           // Try to find secret with exact name format: {openstackCredName}-openstack-secret
           if (openstackCredName) {
-            console.log("currentSecrets", currentSecrets)
             // @ts-expect-error - currentSecrets is a SecretList
             const secret = currentSecrets?.items?.find((secret) =>
               secret?.metadata?.name?.includes(openstackCredName)
@@ -157,11 +156,10 @@ export const useClusterData = (
             } else if (secret?.data?.OS_PROJECT_NAME) {
               tenantName = atob(secret.data.OS_PROJECT_NAME)
             }
-            console.log("secret", secret, "tenantName", tenantName)
           }
 
           return {
-            id: clusterName,
+            id: openstackCredName + " - " + tenantName + " - " + clusterName,
             name: clusterName,
             openstackCredName: openstackCredName,
             tenantName: tenantName,
