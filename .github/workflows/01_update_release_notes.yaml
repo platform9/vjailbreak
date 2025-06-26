@@ -2,12 +2,11 @@ name: Update Release Notes on PR to Main
 
 on:
   pull_request:
-    branches:
-      - main
-    types: [closed]  # Trigger on merge into main branch
+    branches: [main]
+    types: [closed]
   release:
-    types: [published]  # Trigger on new published releases
-  workflow_dispatch: # Enable manual triggering
+    types: [published]
+  workflow_dispatch:
     inputs:
       logLevel:
         description: 'Log level'
@@ -22,7 +21,11 @@ on:
         description: 'Environment to run in'
         type: environment
         required: true
-
+      process_all_releases:
+        description: 'Process all releases (including past ones)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   update-release-notes:
@@ -31,9 +34,10 @@ jobs:
       pull-requests: write
       id-token: write
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.head_ref, 'release-v'))
-      || (github.event_name == 'release' && github.event.release.published)
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.head_ref, 'release-v')) ||
+      (github.event_name == 'release' && github.event.release.published) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.process_all_releases == 'true')
 
     steps:
       - name: Checkout code
@@ -43,119 +47,120 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install gh
-          echo "gh cli installed"
 
-      - name: Set release variables
-        id: set_vars
+      - name: Process releases
+        id: process_releases
         run: |
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            echo "RELEASE_EVENT=true" >> $GITHUB_OUTPUT
-            echo "RELEASE_TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-            echo "RELEASE_BRANCH=${{ github.event.release.target_commitish }}" >> $GITHUB_OUTPUT
-          else
-            echo "RELEASE_EVENT=false" >> $GITHUB_OUTPUT
-            echo "RELEASE_BRANCH=${{ github.head_ref }}" >> $GITHUB_OUTPUT
-            echo "RELEASE_TAG=${{ github.head_ref#release- }}" >> $GITHUB_OUTPUT
+          # Function to process a single release
+          process_release() {
+            local RELEASE_TAG=$1
+            local IS_MANUAL_TRIGGER=$2
+            
+            echo "Processing release: $RELEASE_TAG"
+            
+            # Skip if this is a manual trigger and the file already exists
+            if [[ "$IS_MANUAL_TRIGGER" == "true" ]]; then
+              if [ -f "docs/src/content/docs/release_docs/$RELEASE_TAG.md" ]; then
+                echo "Documentation already exists for $RELEASE_TAG, skipping."
+                return 0
+              fi
+            fi
+
+            # Get release notes
+            RELEASE_NOTES=$(gh release view $RELEASE_TAG --json body --template '{{.body}}')
+            
+            if [ -z "$RELEASE_NOTES" ]; then
+              echo "No release notes found for $RELEASE_TAG"
+              return 0
+            fi
+
+            # Create documentation
+            FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
+            mkdir -p "$(dirname "$FILE_NAME")"
+            
+            # Get previous tag
+            git fetch --tags
+            PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" "$RELEASE_TAG^" 2>/dev/null || echo "")
+            
+            # Update version references if this is the latest release
+            if [ -z "$PREV_TAG" ] || [ "$RELEASE_TAG" == "$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null)" ]; then
+              if [ -f "docs/src/content/docs/introduction/getting_started.mdx" ]; then
+                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
+              fi
+              if [ -f "docs/src/components/githubRelease.astro" ]; then
+                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
+              fi
+              if [ -f "docs/src/content/docs/index.mdx" ]; then
+                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
+              fi
+            fi
+
+            # Create release notes file
+            echo "---" > "$FILE_NAME"
+            echo "title: $RELEASE_TAG" >> "$FILE_NAME"
+            echo "description: Release Notes for $RELEASE_TAG for vJailbreak" >> "$FILE_NAME"
+            echo "---" >> "$FILE_NAME"
+            echo "" >> "$FILE_NAME"
+            echo "$RELEASE_NOTES" >> "$FILE_NAME"
+            
+            echo "Created documentation for $RELEASE_TAG"
+            echo "PROCESSED_RELEASES=${PROCESSED_RELEASES:+$PROCESSED_RELEASES,}$RELEASE_TAG" >> $GITHUB_OUTPUT
+          }
+
+          # Export the function so it's available in subshells
+          export -f process_release
+
+          # Get all releases
+          ALL_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | sort -Vr)
+          echo "Found releases: $ALL_RELEASES"
+
+          # Initialize output
+          echo "PROCESSED_RELEASES=" >> $GITHUB_OUTPUT
+
+          # For manual trigger with process_all_releases=true
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.process_all_releases }}" == "true" ]]; then
+            echo "Processing all releases..."
+            for TAG in $ALL_RELEASES; do
+              process_release "$TAG" "true"
+            done
+          # For release events
+          elif [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.published }}" == "true" ]]; then
+            echo "Processing new release..."
+            process_release "${{ github.event.release.tag_name }}" "false"
+          # For PR merges (legacy)
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "Processing PR merge..."
+            process_release "${{ github.head_ref#release- }}" "false"
           fi
-
-      - name: Create draft release (only for PR merges)
-        if: steps.set_vars.outputs.RELEASE_EVENT == 'false'
-        id: draft_release
-        run: |
-          DRAFT_RELEASE_ID="${{ steps.set_vars.outputs.RELEASE_TAG }}"
-          gh release create --draft $DRAFT_RELEASE_ID --generate-notes --target ${{ steps.set_vars.outputs.RELEASE_BRANCH }}
-          echo "DRAFT_RELEASE_ID=${DRAFT_RELEASE_ID}" >> $GITHUB_OUTPUT
         env:
-          DRAFT_RELEASE_ID: ${{ steps.set_vars.outputs.RELEASE_TAG }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-      - name: Generate release notes
-        id: generate_notes
-        run: |
-          if [[ "${{ steps.set_vars.outputs.RELEASE_EVENT }}" == "true" ]]; then
-            RELEASE_TAG="${{ steps.set_vars.outputs.RELEASE_TAG }}"
-          else
-            RELEASE_TAG="${{ steps.draft_release.outputs.DRAFT_RELEASE_ID }}"
-          fi
-          FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
-          RELEASE_NOTES=$(gh release view $RELEASE_TAG --json body --template {{.body}})
-
-          echo "Release Notes:\n$RELEASE_NOTES"
-
-          # Check if RELEASE_NOTES is empty
-          if [ -z "$RELEASE_NOTES" ]; then
-            echo "No commits found since the last release. Skipping file update."
-            echo "SKIP_UPDATE=true" >> $GITHUB_OUTPUT
-            exit 0  # Exit gracefully without failing the action
-          fi
-          
-          # Fetch changes from origin and prune stale remote tracking branches
-          git fetch origin --prune
-          
-          # Get the commits specific to this release branch since the last release (tag)
-          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
-          git fetch --tags
-
-          # Get the commits specific to this release branch since the last release (tag)
-          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
-          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*"  $(git rev-list --tags --max-count=1))
-
-          if [[ -z "$LAST_TAG" ]]; then
-            echo "No previous release tag found!  Using the initial commit."
-            #If you are working on a repo with no initial release, you need to add a commit message.
-            LAST_TAG=$RELEASE_TAG
-          fi
-          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
-          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
-          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
-
-          # Add a header to the file
-          echo "---" > "$FILE_NAME"
-          echo "title:  $RELEASE_TAG" >> "$FILE_NAME"
-          echo "description: Release Notes for $RELEASE_TAG for vJailbreak" >> "$FILE_NAME"
-          echo "---" >> "$FILE_NAME"
-          echo "" >> "$FILE_NAME"
-          # Append the new release notes to the file
-          echo "$RELEASE_NOTES" >> "$FILE_NAME"
-
-          echo "File updated: $FILE_NAME"
-          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
-          echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create PR with changes
-        if: steps.generate_notes.outputs.SKIP_UPDATE != 'true'
+        if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
         run: |
           # Configure Git
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions Bot"
-          # Create a new branch
-          NEW_BRANCH="update-release-notes-${{ steps.set_vars.outputs.RELEASE_TAG }}"
+          
+          # Create branch name with timestamp
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          NEW_BRANCH="update-release-notes-$TIMESTAMP"
           git checkout -b $NEW_BRANCH
 
           # Add and commit changes
-          git add docs/src/content/docs/*
-          git commit -m "Update release notes for ${{ steps.set_vars.outputs.RELEASE_TAG }}"
-
-          # Push the new branch
-          git push origin $NEW_BRANCH
-          # Create a pull request
-          gh pr create --base main --head $NEW_BRANCH --title "Update release notes for ${{ steps.set_vars.outputs.RELEASE_TAG }}" --body "Automatically generated PR to update release notes"
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "Update release notes for: ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+            git push origin $NEW_BRANCH
+            
+            # Create PR
+            gh pr create \
+              --base main \
+              --head $NEW_BRANCH \
+              --title "Update release notes" \
+              --body "Automatically generated PR to update release notes for: ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+          else
+            echo "No changes to commit"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete draft release (only for PR merges)
-        if: steps.set_vars.outputs.RELEASE_EVENT == 'false'
-        id: delete_draft_release
-        run: |
-          gh release delete ${{ steps.draft_release.outputs.DRAFT_RELEASE_ID }} -y
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
