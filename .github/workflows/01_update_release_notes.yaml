@@ -43,10 +43,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install GitHub CLI
+      - name: Install GitHub CLI and jq
         run: |
           sudo apt-get update
-          sudo apt-get install gh
+
+          sudo apt-get install -y gh jq
+
+      - name: Set release tag for PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+        id: set_pr_tag
+        run: |
+          # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
+          RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
 
       - name: Process releases
         id: process_releases
@@ -74,28 +85,31 @@ jobs:
               return 0
             fi
 
-            # Create documentation
-            FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
-            mkdir -p "$(dirname "$FILE_NAME")"
-            
-            # Get previous tag
+
+            # Get the latest tag before this release
             git fetch --tags
-            PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" "$RELEASE_TAG^" 2>/dev/null || echo "")
+            LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" "$RELEASE_TAG^" 2>/dev/null || echo "")
             
-            # Update version references if this is the latest release
-            if [ -z "$PREV_TAG" ] || [ "$RELEASE_TAG" == "$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null)" ]; then
+            # Update version references in documentation files
+            if [ -n "$LAST_TAG" ]; then
+              echo "Updating version references from $LAST_TAG to $RELEASE_TAG"
               if [ -f "docs/src/content/docs/introduction/getting_started.mdx" ]; then
-                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
+                sed -i "s|$LAST_TAG|$RELEASE_TAG|g" "docs/src/content/docs/introduction/getting_started.mdx" || true
               fi
               if [ -f "docs/src/components/githubRelease.astro" ]; then
-                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
+                sed -i "s|$LAST_TAG|$RELEASE_TAG|g" "docs/src/components/githubRelease.astro" || true
               fi
               if [ -f "docs/src/content/docs/index.mdx" ]; then
-                sed -i "s|$PREV_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
+                sed -i "s|$LAST_TAG|$RELEASE_TAG|g" "docs/src/content/docs/index.mdx" || true
+
               fi
             fi
 
             # Create release notes file
+
+            FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
+            mkdir -p "$(dirname "$FILE_NAME")"
+
             echo "---" > "$FILE_NAME"
             echo "title: $RELEASE_TAG" >> "$FILE_NAME"
             echo "description: Release Notes for $RELEASE_TAG for vJailbreak" >> "$FILE_NAME"
@@ -110,16 +124,29 @@ jobs:
           # Export the function so it's available in subshells
           export -f process_release
 
-          # Get all releases
-          ALL_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' | sort -Vr)
-          echo "Found releases: $ALL_RELEASES"
+          # Calculate date 3 months ago in ISO 8601 format
+          THREE_MONTHS_AGO=$(date -d "3 months ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Fetching releases since $THREE_MONTHS_AGO"
+
+          # Get recent releases (last 3 months)
+          ALL_RELEASES=$(gh api -X GET "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.published_at > "'$THREE_MONTHS_AGO'") | .tag_name' | sort -Vr)
+          
+          if [ -z "$ALL_RELEASES" ]; then
+            echo "No recent releases found in the last 3 months"
+            exit 0
+          fi
+          
+          echo "Found recent releases: $ALL_RELEASES"
+
 
           # Initialize output
           echo "PROCESSED_RELEASES=" >> $GITHUB_OUTPUT
 
           # For manual trigger with process_all_releases=true
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.process_all_releases }}" == "true" ]]; then
-            echo "Processing all releases..."
+
+            echo "Processing recent releases (last 3 months)..."
+
             for TAG in $ALL_RELEASES; do
               process_release "$TAG" "true"
             done
@@ -130,10 +157,13 @@ jobs:
           # For PR merges (legacy)
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             echo "Processing PR merge..."
-            process_release "${{ github.head_ref#release- }}" "false"
+
+            process_release "${{ steps.set_pr_tag.outputs.RELEASE_TAG }}" "false"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
 
       - name: Create PR with changes
         if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
@@ -148,17 +178,21 @@ jobs:
           git checkout -b $NEW_BRANCH
 
           # Add and commit changes
-          git add .
+
+          git add docs/src/content/docs/* docs/src/components/githubRelease.astro
           if ! git diff --cached --quiet; then
-            git commit -m "Update release notes for: ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+            git commit -m "docs: update release notes and version references for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+
             git push origin $NEW_BRANCH
             
             # Create PR
             gh pr create \
               --base main \
               --head $NEW_BRANCH \
-              --title "Update release notes" \
-              --body "Automatically generated PR to update release notes for: ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+
+              --title "Update release notes for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}" \
+              --body "Automatically generated PR to update release notes and version references"
+
           else
             echo "No changes to commit"
           fi
