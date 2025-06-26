@@ -59,6 +59,16 @@ jobs:
         env:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
 
+      - name: Set release tag for PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+        id: set_pr_tag
+        run: |
+          # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
+          RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+
       - name: Process releases
         id: process_releases
         run: |
@@ -85,7 +95,6 @@ jobs:
               return 0
             fi
 
-
             # Get the latest tag before this release
             git fetch --tags
             LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" "$RELEASE_TAG^" 2>/dev/null || echo "")
@@ -101,7 +110,6 @@ jobs:
               fi
               if [ -f "docs/src/content/docs/index.mdx" ]; then
                 sed -i "s|$LAST_TAG|$RELEASE_TAG|g" "docs/src/content/docs/index.mdx" || true
-
               fi
             fi
 
@@ -129,15 +137,14 @@ jobs:
           echo "Fetching releases since $THREE_MONTHS_AGO"
 
           # Get recent releases (last 3 months)
-          ALL_RELEASES=$(gh api -X GET "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.published_at > "'$THREE_MONTHS_AGO'") | .tag_name' | sort -Vr)
-          
+          ALL_RELEASES=$(gh api -X GET "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.published_at > "'$THREE_MONTHS_AGO'") | .tag_name' | sort -V)
+          echo "Found recent releases (oldest to newest): $ALL_RELEASES"
           if [ -z "$ALL_RELEASES" ]; then
             echo "No recent releases found in the last 3 months"
             exit 0
           fi
           
           echo "Found recent releases: $ALL_RELEASES"
-
 
           # Initialize output
           echo "PROCESSED_RELEASES=" >> $GITHUB_OUTPUT
@@ -157,13 +164,11 @@ jobs:
           # For PR merges (legacy)
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             echo "Processing PR merge..."
-
             process_release "${{ steps.set_pr_tag.outputs.RELEASE_TAG }}" "false"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-
 
       - name: Create PR with changes
         if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
