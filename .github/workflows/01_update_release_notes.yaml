@@ -95,7 +95,6 @@ jobs:
               return 0
             fi
 
-
             # Get the latest tag before this release
             git fetch --tags
             LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" "$RELEASE_TAG^" 2>/dev/null || echo "")
@@ -111,7 +110,6 @@ jobs:
               fi
               if [ -f "docs/src/content/docs/index.mdx" ]; then
                 sed -i "s|$LAST_TAG|$RELEASE_TAG|g" "docs/src/content/docs/index.mdx" || true
-
               fi
             fi
 
