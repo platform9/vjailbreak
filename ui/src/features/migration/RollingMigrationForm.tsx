@@ -1840,14 +1840,14 @@ export default function RollingMigrationFormDrawer({
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Box>
                                 <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
-                                    🧪 Experimental Feature - Cluster Conversion (Beta)
+                                    Cluster Conversion
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    This feature is in beta stage and may have significant limitations. Use with caution in production environments.
+                                    Migrate your entire cluster to a new OpenStack environment.
                                 </Typography>
                             </Box>
                             <Link
-                                href="/docs/rolling-migration-beta"
+                                href="/docs/cluster-conversion"
                                 target="_blank"
                                 sx={{
                                     ml: 2,
