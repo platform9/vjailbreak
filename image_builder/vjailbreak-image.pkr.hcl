@@ -88,7 +88,6 @@ build {
     "sudo mv /tmp/yamls /etc/pf9/yamls",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
-    "sudo mv /tmp/version-config.yaml /etc/pf9/yamls/version-config.yaml",
     "sudo mv /tmp/env /etc/pf9/env",
     "sudo chmod +x /etc/pf9/install.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
