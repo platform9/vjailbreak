@@ -137,8 +137,8 @@ jobs:
           echo "Fetching releases since $THREE_MONTHS_AGO"
 
           # Get recent releases (last 3 months)
-          ALL_RELEASES=$(gh api -X GET "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.published_at > "'$THREE_MONTHS_AGO'") | .tag_name' | sort -Vr)
-          
+          ALL_RELEASES=$(gh api -X GET "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.published_at > "'$THREE_MONTHS_AGO'") | .tag_name' | sort -V)
+          echo "Found recent releases (oldest to newest): $ALL_RELEASES"
           if [ -z "$ALL_RELEASES" ]; then
             echo "No recent releases found in the last 3 months"
             exit 0
