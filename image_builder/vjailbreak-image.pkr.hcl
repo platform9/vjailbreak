@@ -59,11 +59,6 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/configs/version-config.yaml"
-    destination = "/tmp/version-config.yaml"
-  }
-
-  provisioner "file" {
     source      = "${path.root}/configs/rsyncd.conf"
     destination = "/tmp/rsyncd.conf"
   }
