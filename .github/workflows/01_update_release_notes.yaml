@@ -48,6 +48,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install gh
 
+      - name: Set release tag for PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+        id: set_pr_tag
+        run: |
+          # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
+          RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+
       - name: Process releases
         id: process_releases
         run: |
@@ -130,7 +140,7 @@ jobs:
           # For PR merges (legacy)
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             echo "Processing PR merge..."
-            process_release "${{ github.head_ref#release- }}" "false"
+            process_release "${{ steps.set_pr_tag.outputs.RELEASE_TAG }}" "false"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
