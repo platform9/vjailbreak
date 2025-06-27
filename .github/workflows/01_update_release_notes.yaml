@@ -73,6 +73,76 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
+      - name: Creating a draft release
+        id: draft_release
+        run: |
+          # Function to process a single release
+          process_release() {
+            local RELEASE_TAG=$1
+            local IS_MANUAL_TRIGGER=$2
+            
+            # Skip if this is a manual trigger and the file already exists
+            if [[ "$IS_MANUAL_TRIGGER" == "true" ]]; then
+              if [ -f "docs/src/content/docs/release_docs/$RELEASE_TAG.md" ]; then
+                echo "Documentation already exists for $RELEASE_TAG, skipping."
+                return 0
+              fi
+            fi
+
+
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          RELEASE_TAG="${{  steps.draft_release.outputs.DRAFT_RELEASE_ID }}"
+          FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"  # Important
+
+          RELEASE_NOTES=$(gh release view $RELEASE_TAG --json body --template {{.body}})
+
+          echo "Release Notes:\n$RELEASE_NOTES"
+
+          # Check if RELEASE_NOTES is empty
+          if [ -z "$RELEASE_NOTES" ]; then
+            echo "No commits found since the last release. Skipping file update."
+            echo "SKIP_UPDATE=true" >> $GITHUB_OUTPUT
+            exit 0  # Exit gracefully without failing the action
+          fi
+          
+          # Fetch changes from origin and prune stale remote tracking branches
+          git fetch origin --prune
+          
+          # Get the commits specific to this release branch since the last release (tag)
+          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
+          git fetch --tags
+
+          # Get the commits specific to this release branch since the last release (tag)
+          # Assumes tags are named v1.2.3, v2.0.0, etc.  Adjust if your tagging scheme is different.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*"  $(git rev-list --tags --max-count=1))
+
+          if [[ -z "$LAST_TAG" ]]; then
+            echo "No previous release tag found!  Using the initial commit."
+            #If you are working on a repo with no initial release, you need to add a commit message.
+            LAST_TAG=$RELEASE_TAG
+          fi
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
+          sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
+
+          # Add a header to the file
+          echo "---" > "$FILE_NAME"
+          echo "title:  $RELEASE_TAG" >> "$FILE_NAME"
+          echo "description: Release Notes for $RELEASE_TAG for vJailbreak" >> "$FILE_NAME"
+          echo "---" >> "$FILE_NAME"
+          echo "" >> "$FILE_NAME"
+          # Append the new release notes to the file
+          echo "$RELEASE_NOTES" >> "$FILE_NAME"
+
+          echo "File updated: $FILE_NAME"
+          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_OUTPUT
+          echo "SKIP_UPDATE=false" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
       - name: Process releases
         id: process_releases
         run: |
@@ -223,6 +293,57 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}    
 
+      - name: archive old release notes
+        run: |
+          echo "Checking for older release notes"
+          # strip leading 'v', sort semantically, pick top-5, then subtract
+          mapfile -t ALL < <(ls docs/src/content/docs/release_docs/v* 2>/dev/null | sed 's/^v//' | sort -V)
+          mapfile -t TOP5 < <(printf '%s\n' "${ALL[@]}" | tail -n 5)
+
+          # build a lookup for TOP5
+          declare -A is_top5
+          for v in "${TOP5[@]}"; do
+            is_top5["$v"]=1
+          done
+
+          echo "Top 5 versions"
+          for v in "${TOP5[@]}"; do
+            echo "v$v"
+          done
+
+          echo "Archived versions"
+          for v in "${ALL[@]}"; do
+            if [[ -z "${is_top5[$v]}" ]]; then
+              echo "trying to archive v$v"
+              awk '
+              BEGIN { in_yaml=0 }
+              # Toggle YAML block
+              /^---$/ {
+              in_yaml = !in_yaml
+              next
+              }
+
+              # While inside YAML block
+              in_yaml {
+              if ($1 == "title:") {
+              sub(/^title:[[:space:]]*v/, "## v")
+              print
+              }
+              next
+              }
+
+              # Outside YAML: convert all ## to ###
+              {
+              sub(/^##/, "###")
+              print
+              }
+              ' docs/src/content/docs/release_docs/v$v.md >> docs/src/content/docs/archives/release_notes.md
+            fi 
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}    
+
       - name: Create PR with changes
         if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
         run: |
@@ -241,12 +362,10 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "docs: update release notes and version references for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
 
-            git push origin $NEW_BRANCH
-            
-            # Create PR
-            gh pr create \
-              --base gh-pages \
-              --head $NEW_BRANCH \
+          # Create PR
+          gh pr create \
+            --base gh-pages \
+            --head $NEW_BRANCH \
 
               --title "Update release notes for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}" \
               --body "Automatically generated PR to update release notes and version references"
