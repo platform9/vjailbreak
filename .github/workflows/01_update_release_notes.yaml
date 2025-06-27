@@ -1,9 +1,6 @@
-name: Update Release Notes on PR to Main
+name: Update Release Notes on Release Event
 
 on:
-  pull_request:
-    branches: [main]
-    types: [closed]
   release:
     types: [published]
   workflow_dispatch:
@@ -24,8 +21,12 @@ on:
       process_all_releases:
         description: 'Process all releases (including past ones)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
+      branch:
+        description: 'Branch to use'
+        required: true
+        default: 'gh-pages'
 
 jobs:
   update-release-notes:
@@ -35,7 +36,6 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.head_ref, 'release-v')) ||
       (github.event_name == 'release' && github.event.release.published) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.process_all_releases == 'true')
 
@@ -46,12 +46,11 @@ jobs:
       - name: Install GitHub CLI and jq
         run: |
           sudo apt-get update
-
           sudo apt-get install -y gh jq
 
-      - name: Set release tag for PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
-        id: set_pr_tag
+      - name: Set release tag for release_event
+        if: github.event_name == 'release' && github.event.release.published == 'true'
+        id: set_release_tag
         run: |
           # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
           RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
@@ -59,15 +58,20 @@ jobs:
         env:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
 
-      - name: Set release tag for PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
-        id: set_pr_tag
+      - name: Get latest release info
+        id: latest_release
         run: |
-          # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
-          RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
-          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          RELEASE_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+          LATEST_RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
+          IS_LATEST=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
+          echo "Latest release name: $LATEST_RELEASE_NAME"
+          echo "Is latest release: $IS_LATEST"
+          echo "LATEST_RELEASE_NAME=$LATEST_RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "IS_LATEST=$IS_LATEST" >> $GITHUB_OUTPUT
         env:
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Process releases
         id: process_releases
@@ -76,8 +80,6 @@ jobs:
           process_release() {
             local RELEASE_TAG=$1
             local IS_MANUAL_TRIGGER=$2
-            
-            echo "Processing release: $RELEASE_TAG"
             
             # Skip if this is a manual trigger and the file already exists
             if [[ "$IS_MANUAL_TRIGGER" == "true" ]]; then
@@ -170,6 +172,57 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
+      - name: archive old release notes
+        run: |
+          echo "Checking for older release notes"
+          # strip leading 'v', sort semantically, pick top-5, then subtract
+          mapfile -t ALL < <(ls docs/src/content/docs/release_docs/v* 2>/dev/null | sed 's/^v//' | sort -V)
+          mapfile -t TOP5 < <(printf '%s\n' "${ALL[@]}" | tail -n 5)
+
+          # build a lookup for TOP5
+          declare -A is_top5
+          for v in "${TOP5[@]}"; do
+            is_top5["$v"]=1
+          done
+
+          echo "Top 5 versions"
+          for v in "${TOP5[@]}"; do
+            echo "v$v"
+          done
+
+          echo "Archived versions"
+          for v in "${ALL[@]}"; do
+            if [[ -z "${is_top5[$v]}" ]]; then
+              echo "trying to archive v$v"
+              awk '
+              BEGIN { in_yaml=0 }
+              # Toggle YAML block
+              /^---$/ {
+              in_yaml = !in_yaml
+              next
+              }
+
+              # While inside YAML block
+              in_yaml {
+              if ($1 == "title:") {
+              sub(/^title:[[:space:]]*v/, "## v")
+              print
+              }
+              next
+              }
+
+              # Outside YAML: convert all ## to ###
+              {
+              sub(/^##/, "###")
+              print
+              }
+              ' docs/src/content/docs/release_docs/v$v.md >> docs/src/content/docs/archives/release_notes.md
+            fi 
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}    
+
       - name: Create PR with changes
         if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
         run: |
@@ -192,7 +245,7 @@ jobs:
             
             # Create PR
             gh pr create \
-              --base main \
+              --base gh-pages \
               --head $NEW_BRANCH \
 
               --title "Update release notes for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}" \
