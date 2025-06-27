@@ -132,6 +132,8 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 
 // createVMwareCluster creates a VMware cluster resource in Kubernetes
 func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster VMwareClusterInfo, scope *scope.VMwareCredsScope) error {
+	log := scope.Logger
+
 	clusterk8sName, err := ConvertToK8sName(cluster.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
@@ -152,6 +154,7 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 
 	// Create hosts and collect their k8s names
 	for _, host := range cluster.Hosts {
+		log.Info("Processing VMware host", "host", host.Name)
 		hostk8sName, err := createVMwareHost(ctx, k3sclient, host, scope.Name(), cluster.Name, scope.Namespace())
 		if err != nil {
 			return err
@@ -181,12 +184,15 @@ func createVMwareCluster(ctx context.Context, k3sclient client.Client, cluster V
 
 // CreateVMwareClustersAndHosts creates VMware clusters and hosts
 func CreateVMwareClustersAndHosts(ctx context.Context, k3sclient client.Client, scope *scope.VMwareCredsScope) error {
+	log := scope.Logger
+
 	clusters, err := GetVMwareClustersAndHosts(ctx, k3sclient, scope)
 	if err != nil {
 		return errors.Wrap(err, "failed to get clusters and hosts")
 	}
 
 	for _, cluster := range clusters {
+		log.Info("Processing VMware cluster", "cluster", cluster.Name)
 		if err := createVMwareCluster(ctx, k3sclient, cluster, scope); err != nil {
 			return err
 		}
