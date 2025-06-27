@@ -91,13 +91,17 @@ func createVMwareHost(ctx context.Context, k3sclient client.Client, host VMwareH
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert host name to k8s name")
 	}
+	clusterk8sName, err := ConvertToK8sName(clusterName)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
 
 	vmwareHost := vjailbreakv1alpha1.VMwareHost{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      hostk8sName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				constants.VMwareClusterLabel: clusterName,
+				constants.VMwareClusterLabel: clusterk8sName,
 				constants.VMwareCredsLabel:   credName,
 			},
 		},
