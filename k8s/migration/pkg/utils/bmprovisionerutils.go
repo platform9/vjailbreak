@@ -341,6 +341,21 @@ func GetBMConfigForRollingMigrationPlan(ctx context.Context,
 	return bmConfig, nil
 }
 
+// GetOpenstackCredsForRollingMigrationPlan retrieves the OpenstackCreds associated with a RollingMigrationPlan
+func GetOpenstackCredsForRollingMigrationPlan(ctx context.Context,
+	k8sClient client.Client,
+	rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenstackCreds, error) {
+	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get migration template")
+	}
+	openstackCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: migrationTemplate.Spec.Destination.OpenstackRef, Namespace: constants.NamespaceMigrationSystem}, openstackCreds); err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenstackCreds for rolling migration plan")
+	}
+	return openstackCreds, nil
+}
+
 // GetUserDataForBMConfig retrieves user data configuration for a BMConfig from the RollingMigrationPlan
 func GetUserDataForBMConfig(ctx context.Context, scope *scope.RollingMigrationPlanScope) (string, error) {
 	bmConfig, err := GetBMConfig(ctx, scope.Client, scope.RollingMigrationPlan.Spec.BMConfigRef)
