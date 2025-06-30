@@ -17,7 +17,35 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"context"
+    	"go.opentelemetry.io/otel"
+    	"go.opentelemetry.io/otel/trace"
+    	"go.opentelemetry.io/otel/sdk/trace"
+    	"go.opentelemetry.io/otel/exporters/jaeger"
+    	"log"
 )
+
+func InitTracer(serviceName string) func() {
+    exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint("http://localhost:14268/api/traces")))
+    if err != nil {
+        log.Fatalf("failed to create jaeger exporter: %v", err)
+    }
+
+    tp := sdktrace.NewTracerProvider(
+        sdktrace.WithBatcher(exporter),
+        sdktrace.WithResource(
+            resource.NewWithAttributes(
+                semconv.SchemaURL,
+                semconv.ServiceNameKey.String(serviceName),
+            ),
+        ),
+    )
+
+    otel.SetTracerProvider(tp)
+    return func() {
+        _ = tp.Shutdown(context.Background())
+    }
+}
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
