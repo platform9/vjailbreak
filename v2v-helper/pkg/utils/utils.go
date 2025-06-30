@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -96,6 +97,28 @@ func IsDebug(ctx context.Context, client client.Client) (bool, error) {
 func PrintLog(logMessage string) error {
 	log.Println(logMessage)
 	return WriteToLogFile(logMessage)
+}
+
+// RunAndLogCommand runs the given exec.Cmd, captures stdout/stderr, and logs detailed output on failure.
+// contextStr is a string describing the context (e.g., "running guestfish").
+func RunAndLogCommand(cmd *exec.Cmd) (string, error) {
+	var stdoutBuf, stderrBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	PrintLog(fmt.Sprintf("[CMD] %s", cmd.String()))
+	err := cmd.Run()
+	stdoutStr := stdoutBuf.String()
+	stderrStr := stderrBuf.String()
+
+	if err != nil {
+		PrintLog(fmt.Sprintf("[CMD-FAIL] %s | Error: %v\nStdout: %s\nStderr: %s", cmd.String(), err, stdoutStr, stderrStr))
+		return stdoutStr + stderrStr, fmt.Errorf("command failed: %w | stdout: %s | stderr: %s", err, stdoutStr, stderrStr)
+	}
+
+	PrintLog(fmt.Sprintf("[CMD-SUCCESS] %s\nStdout: %s\nStderr: %s", cmd.String(), stdoutStr, stderrStr))
+
+	return stdoutStr, nil
 }
 
 func GetMigrationObjectName() (string, error) {

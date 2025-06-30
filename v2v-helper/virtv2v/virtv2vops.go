@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -270,9 +271,10 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"-a",
 		path,
 		"-i")
-	cmd.Stdin = strings.NewReader(command)
-	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	out, err := utils.RunAndLogCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
@@ -326,7 +328,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
-	out, err := cmd.CombinedOutput()
+	out, err := utils.RunAndLogCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
