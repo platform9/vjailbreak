@@ -17,43 +17,51 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-	"context"
-    	"go.opentelemetry.io/otel"
-    	"go.opentelemetry.io/otel/trace"
-    	"go.opentelemetry.io/otel/sdk/trace"
-    	"go.opentelemetry.io/otel/exporters/jaeger"
-    	"log"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-func InitTracer(serviceName string) func() {
-    exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint("http://localhost:14268/api/traces")))
-    if err != nil {
-        log.Fatalf("failed to create jaeger exporter: %v", err)
-    }
-
-    tp := sdktrace.NewTracerProvider(
-        sdktrace.WithBatcher(exporter),
-        sdktrace.WithResource(
-            resource.NewWithAttributes(
-                semconv.SchemaURL,
-                semconv.ServiceNameKey.String(serviceName),
-            ),
-        ),
-    )
-
-    otel.SetTracerProvider(tp)
-    return func() {
-        _ = tp.Shutdown(context.Background())
-    }
+func InitTracer(ctx context.Context, serviceName string) (func(context.Context) error, error) {
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpoint("localhost:4318"), otlptracehttp.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(serviceName),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Ensure context is canceled when we exit
+	ctx := context.Background()
+	shutdown, err := InitTracer(ctx, "vjailbreak-v2v-helper")
+	if err != nil {
+		fmt.Printf("Failed to init tracer: %v\n", err)
+		os.Exit(1)
+	}
+	defer shutdown(ctx)
+	tracer := otel.Tracer("vjailbreak")
+	ctx, span := tracer.Start(ctx, "main")
+	defer span.End()
 
-	utils.WriteToLogFile(fmt.Sprintf("-----	 Migration started at %s for VM %s -----", time.Now().Format(time.RFC3339), os.Getenv("SOURCE_VM_NAME")))
-	// Initialize error reporter early
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	utils.WriteToLogFile(fmt.Sprintf("----- Migration started at %s for VM %s -----", time.Now().Format(time.RFC3339), os.Getenv("SOURCE_VM_NAME")))
+
+	ctx, span = tracer.Start(ctx, "reporter.NewReporter")
 	eventReporter, err := reporter.NewReporter()
+	span.End()
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to create reporter: %v", err))
 		return
@@ -62,31 +70,31 @@ func main() {
 	eventReporterChan := make(chan string)
 	podLabelWatcherChan := make(chan string)
 	ackChan := make(chan struct{})
-
 	defer close(eventReporterChan)
 	defer close(podLabelWatcherChan)
 
-	// Start reporter goroutines
 	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
 	eventReporter.WatchPodLabels(ctx, podLabelWatcherChan)
 
-	// Helper function to report and handle errors
 	handleError := func(msg string) {
 		if reporter.IsRunningInPod() {
 			eventReporterChan <- msg
-			// Wait for the reporter to process the message
 			<-ackChan
 		}
 		utils.PrintLog(msg)
 		return
 	}
 
+	ctx, span = tracer.Start(ctx, "utils.GetInclusterClient")
 	client, err := utils.GetInclusterClient()
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get in-cluster client: %v", err))
 	}
 
+	ctx, span = tracer.Start(ctx, "utils.GetMigrationParams")
 	migrationparams, err := utils.GetMigrationParams(ctx, client)
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get migration parameters: %v", err))
 	}
@@ -103,29 +111,33 @@ func main() {
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
 
-	// Validate vCenter connection
+	ctx, span = tracer.Start(ctx, "vcenter.VCenterClientBuilder")
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
 	}
-	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
+	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s", vCenterURL))
 
-	// Validate OpenStack connection
+	ctx, span = tracer.Start(ctx, "openstack.NewOpenStackClients")
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
 	utils.PrintLog("Connected to OpenStack")
 
-	// Get thumbprint
+	ctx, span = tracer.Start(ctx, "vcenter.GetThumbprint")
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get thumbprint: %s", err))
 	}
-	utils.PrintLog(fmt.Sprintf("VCenter Thumbprint: %s\n", thumbprint))
+	utils.PrintLog(fmt.Sprintf("VCenter Thumbprint: %s", thumbprint))
 
-	// Retrieve the source VM
+	ctx, span = tracer.Start(ctx, "vm.VMOpsBuilder")
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
+	span.End()
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
@@ -163,11 +175,15 @@ func main() {
 		AssignedIP:             migrationparams.AssignedIP,
 	}
 
+	ctx, span = tracer.Start(ctx, "migrationobj.MigrateVM")
 	if err := migrationobj.MigrateVM(ctx); err != nil {
+		span.End()
 		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
 
-		// Try to power on the VM if migration failed
+		ctx, span = tracer.Start(ctx, "vmops.VMPowerOn")
 		powerOnErr := vmops.VMPowerOn()
+		span.End()
+
 		if powerOnErr != nil {
 			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
 		} else {
@@ -176,6 +192,7 @@ func main() {
 
 		handleError(msg)
 	}
+	span.End()
 
 	utils.PrintLog(fmt.Sprintf("----- Migration completed successfully at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))
 }
