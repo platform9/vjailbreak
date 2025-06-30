@@ -17,6 +17,11 @@ require (
 	k8s.io/client-go v0.32.1
 	libguestfs.org/libnbd v1.20.0
 	sigs.k8s.io/controller-runtime v0.20.3
+  	go.opentelemetry.io/otel
+	go.opentelemetry.io/otel/sdk
+	go.opentelemetry.io/otel/sdk/trace
+	go.opentelemetry.io/otel/exporters/jaeger
+	go.opentelemetry.io/otel/exporters/prometheus
 )
 
 require (
