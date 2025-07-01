@@ -18,6 +18,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -40,7 +41,14 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
+
 	// +kubebuilder:scaffold:imports
+	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 var (
@@ -54,7 +62,36 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// InitTracer initializes OpenTelemetry tracing
+func InitTracer(ctx context.Context, serviceName string) (func(context.Context) error, error) {
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpoint("localhost:4318"), otlptracehttp.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(serviceName),
+		)),
+	)
+	gootel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
+}
+
 func main() {
+	// --- OpenTelemetry Tracing Initialization ---
+	ctx := context.Background()
+	shutdown, err := InitTracer(ctx, "vjailbreak-migration-controller")
+	if err != nil {
+		setupLog.Error(err, "Failed to init tracer")
+		os.Exit(1)
+	}
+	defer shutdown(ctx)
+	tracer := gootel.Tracer("vjailbreak-migration")
+	ctx, span := tracer.Start(ctx, "main")
+	defer span.End()
+
 	var metricsAddr, probeAddr string
 	var secureMetrics, enableLeaderElection, enableHTTP2, local bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -97,49 +134,86 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
-	// create manager
+	// --- Tracing: GetManager ---
+	ctx, getMgrSpan := tracer.Start(ctx, "GetManager")
 	mgr, err := GetManager(metricsAddr, secureMetrics, tlsOpts, webhookServer, probeAddr, enableLeaderElection)
+	getMgrSpan.End()
 	if err != nil {
+		getMgrSpan.RecordError(err)
+		getMgrSpan.SetStatus(codes.Error, "unable to set up overall controller manager")
 		setupLog.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
 	}
 
+	// --- Tracing: SetupControllers ---
+	ctx, setupCtrlSpan := tracer.Start(ctx, "SetupControllers")
 	if err = SetupControllers(mgr, local); err != nil {
+		setupCtrlSpan.RecordError(err)
+		setupCtrlSpan.SetStatus(codes.Error, "unable to set up controllers")
 		setupLog.Error(err, "unable to set up controllers")
 		os.Exit(1)
 	}
+	setupCtrlSpan.End()
 
+	// --- Tracing: ESXIMigrationReconciler ---
+	ctx, esxiSpan := tracer.Start(ctx, "ESXIMigrationReconciler.SetupWithManager")
 	if err = (&controller.ESXIMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
+		esxiSpan.RecordError(err)
+		esxiSpan.SetStatus(codes.Error, "unable to create controller: ESXIMigration")
 		setupLog.Error(err, "unable to create controller", "controller", "ESXIMigration")
 		os.Exit(1)
 	}
+	esxiSpan.End()
+
+	// --- Tracing: ClusterMigrationReconciler ---
+	ctx, clusterSpan := tracer.Start(ctx, "ClusterMigrationReconciler.SetupWithManager")
 	if err = (&controller.ClusterMigrationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
+		clusterSpan.RecordError(err)
+		clusterSpan.SetStatus(codes.Error, "unable to create controller: ClusterMigration")
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMigration")
 		os.Exit(1)
 	}
+	clusterSpan.End()
+
+	// --- Tracing: BMConfigReconciler ---
+	ctx, bmconfigSpan := tracer.Start(ctx, "BMConfigReconciler.SetupWithManager")
 	if err = (&controller.BMConfigReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
+		bmconfigSpan.RecordError(err)
+		bmconfigSpan.SetStatus(codes.Error, "unable to create controller: BMConfig")
 		setupLog.Error(err, "unable to create controller", "controller", "BMConfig")
 		os.Exit(1)
 	}
+	bmconfigSpan.End()
 	// +kubebuilder:scaffold:builder
 
+	// --- Tracing: AddHealthzCheck ---
+	ctx, healthzSpan := tracer.Start(ctx, "AddHealthzCheck")
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		healthzSpan.RecordError(err)
+		healthzSpan.SetStatus(codes.Error, "unable to set up health check")
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
+	healthzSpan.End()
+
+	// --- Tracing: AddReadyzCheck ---
+	ctx, readyzSpan := tracer.Start(ctx, "AddReadyzCheck")
 	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		readyzSpan.RecordError(err)
+		readyzSpan.SetStatus(codes.Error, "unable to set up ready check")
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+	readyzSpan.End()
 
 	// handleStartupError logs the error and exits
 	handleStartupError := func(err error, msg string) {
@@ -149,26 +223,38 @@ func main() {
 	}
 
 	// Create a single ctx from signal handler to be reused
-	ctx := ctrl.SetupSignalHandler()
+	ctx = ctrl.SetupSignalHandler()
 
 	setupLog.Info("starting manager")
-	// Start the manager's cache first
+	// --- Tracing: mgr.Start ---
+	ctx, startMgrSpan := tracer.Start(ctx, "mgr.Start")
 	go func() {
 		if err = mgr.Start(ctx); err != nil {
+			startMgrSpan.RecordError(err)
+			startMgrSpan.SetStatus(codes.Error, "problem running manager")
 			setupLog.Error(err, "problem running manager")
 			os.Exit(1)
 		}
+		startMgrSpan.End()
 	}()
 
-	// Wait for cache to sync before using the client
+	// --- Tracing: WaitForCacheSync ---
+	ctx, cacheSyncSpan := tracer.Start(ctx, "WaitForCacheSync")
 	if ok := mgr.GetCache().WaitForCacheSync(ctx); !ok {
+		cacheSyncSpan.RecordError(fmt.Errorf("failed to wait for caches to sync"))
+		cacheSyncSpan.SetStatus(codes.Error, "Failed to sync cache")
 		handleStartupError(fmt.Errorf("failed to wait for caches to sync"), "Failed to sync cache")
 	}
+	cacheSyncSpan.End()
 
-	// Now that cache is synced, we can create master node entry
+	// --- Tracing: CheckAndCreateMasterNodeEntry ---
+	ctx, masterNodeSpan := tracer.Start(ctx, "CheckAndCreateMasterNodeEntry")
 	if err = utils.CheckAndCreateMasterNodeEntry(ctx, mgr.GetClient(), local); err != nil {
+		masterNodeSpan.RecordError(err)
+		masterNodeSpan.SetStatus(codes.Error, "Problem creating master node entry")
 		handleStartupError(err, "Problem creating master node entry")
 	}
+	masterNodeSpan.End()
 
 	// Block forever
 	select {}
