@@ -17,7 +17,8 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-
+	
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -63,6 +64,9 @@ func main() {
 	eventReporter, err := reporter.NewReporter()
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get NewReporter")
+	
 		utils.PrintLog(fmt.Sprintf("Failed to create reporter: %v", err))
 		return
 	}
@@ -89,6 +93,8 @@ func main() {
 	client, err := utils.GetInclusterClient()
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get NewGetInclusterClientReporter")
 		handleError(fmt.Sprintf("Failed to get in-cluster client: %v", err))
 	}
 
@@ -96,6 +102,8 @@ func main() {
 	migrationparams, err := utils.GetMigrationParams(ctx, client)
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get GetMigrationParams")
 		handleError(fmt.Sprintf("Failed to get migration parameters: %v", err))
 	}
 
@@ -115,6 +123,8 @@ func main() {
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get VCenterClientBuilder")
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
 	}
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s", vCenterURL))
@@ -123,6 +133,8 @@ func main() {
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get NewOpenStackClients")
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
 	utils.PrintLog("Connected to OpenStack")
@@ -131,6 +143,8 @@ func main() {
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get GetThumbprint")
 		handleError(fmt.Sprintf("Failed to get thumbprint: %s", err))
 	}
 	utils.PrintLog(fmt.Sprintf("VCenter Thumbprint: %s", thumbprint))
@@ -139,6 +153,8 @@ func main() {
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName)
 	span.End()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get VMOpsBuilder")
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
 
@@ -178,6 +194,8 @@ func main() {
 	ctx, span = tracer.Start(ctx, "migrationobj.MigrateVM")
 	if err := migrationobj.MigrateVM(ctx); err != nil {
 		span.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed MigrateVM")
 		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
 
 		ctx, span = tracer.Start(ctx, "vmops.VMPowerOn")
@@ -185,6 +203,8 @@ func main() {
 		span.End()
 
 		if powerOnErr != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to get VMPowerOn")
 			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
 		} else {
 			msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
