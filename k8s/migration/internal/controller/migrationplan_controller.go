@@ -53,6 +53,8 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/session"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
@@ -64,6 +66,8 @@ type MigrationPlanReconciler struct {
 	Scheme *runtime.Scheme
 	ctxlog logr.Logger
 }
+
+var tracer = otel.Tracer("vjailbreak-migrationplan-controller")
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 
@@ -86,6 +90,8 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 
 // Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
 func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	ctx, span := tracer.Start(ctx, "MigrationPlanReconciler.Reconcile")
+	defer span.End()
 	r.ctxlog = log.FromContext(ctx)
 	migrationplan := &vjailbreakv1alpha1.MigrationPlan{}
 
@@ -93,12 +99,16 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Unexpected error reading MigrationPlan")
 		r.ctxlog.Error(err, fmt.Sprintf("Unexpected error reading MigrationPlan '%s' object", migrationplan.Name))
 		return ctrl.Result{}, err
 	}
 
 	err := utils.ValidateMigrationPlan(migrationplan)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to validate MigrationPlan")
 		return ctrl.Result{}, errors.Wrap(err, "failed to validate MigrationPlan")
 	}
 
@@ -108,6 +118,8 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		MigrationPlan: migrationplan,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create scope")
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
 
@@ -127,6 +139,8 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	ctx, span := tracer.Start(ctx, "MigrationPlanReconciler.reconcileNormal")
+	defer span.End()
 	migrationplan := scope.MigrationPlan
 	log := scope.Logger
 	log.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
@@ -134,6 +148,8 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
 
 	if res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to reconcile migration plan job")
 		return res, err
 	}
 	return ctrl.Result{}, nil
@@ -143,6 +159,8 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	ctx, span := tracer.Start(ctx, "MigrationPlanReconciler.reconcileDelete")
+	defer span.End()
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -153,6 +171,8 @@ func (r *MigrationPlanReconciler) reconcileDelete(
 	// to allow deletion of the Migration object
 	controllerutil.RemoveFinalizer(migrationplan, migrationPlanFinalizer)
 	if err := r.Update(ctx, migrationplan); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to update migrationplan during delete")
 		return reconcile.Result{}, err
 	}
 
@@ -344,27 +364,37 @@ func extractVCenterCredentials(secret *corev1.Secret) (username, password, host 
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	ctx, span := tracer.Start(ctx, "MigrationPlanReconciler.ReconcileMigrationPlanJob")
+	defer span.End()
 	// Fetch MigrationTemplate CR
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
 		migrationtemplate); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get MigrationTemplate")
 		return ctrl.Result{}, fmt.Errorf("failed to get MigrationTemplate: %w", err)
 	}
 	// Fetch VMwareCreds CR
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get VMwareCreds")
 		return ctrl.Result{}, err
 	}
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
 		false, openstackcreds); !ok {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get OpenStackCreds")
 		return ctrl.Result{}, err
 	}
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
 		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress")
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to update MigrationPlan status")
 			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 		}
 	}
