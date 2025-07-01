@@ -42,8 +42,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
 
-	// +kubebuilder:scaffold:imports
-	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -75,7 +74,7 @@ func InitTracer(ctx context.Context, serviceName string) (func(context.Context) 
 			semconv.ServiceNameKey.String(serviceName),
 		)),
 	)
-	gootel.SetTracerProvider(tp)
+	otel.SetTracerProvider(tp)
 	return tp.Shutdown, nil
 }
 
@@ -88,7 +87,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer shutdown(ctx)
-	tracer := gootel.Tracer("vjailbreak-migration")
+	tracer := otel.Tracer("vjailbreak-migration")
 	ctx, span := tracer.Start(ctx, "main")
 	defer span.End()
 
