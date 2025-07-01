@@ -27,6 +27,8 @@ import (
 
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type Migrate struct {
@@ -796,6 +798,9 @@ func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.Cancel
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+	tracer := otel.Tracer("migration")
+	ctx, span := tracer.Start(ctx, "main")
+	defer span.End()
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -806,14 +811,22 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get GetVMInfo")
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
 	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
-		return fmt.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
+		err := fmt.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Number of volume types mismatch")
+		return err
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
-		return fmt.Errorf("number of mac addresses does not match number of network names mac(%d) network(%d)", len(vminfo.Mac), len(migobj.Networknames))
+		err := fmt.Errorf("number of mac addresses does not match number of network names mac(%d) network(%d)", len(vminfo.Mac), len(migobj.Networknames))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Number of MAC addresses mismatch")
+		return err
 	}
 	// Graceful Termination clean-up volumes and snapshots
 	go migobj.gracefulTerminate(vminfo, cancel)
@@ -821,11 +834,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get CreateVolumes")
 		return errors.Wrap(err, "failed to add volumes to host")
 	}
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get EnableCBTWrapper")
 		migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
 		return errors.Wrap(err, "CBT Failure")
 	}
@@ -840,8 +857,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
 			// combine both errors
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to live replicate disks")
 			return errors.Wrapf(err, "failed to live replicate disks: %s", cleanuperror)
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to live replicate disks")
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
 
@@ -850,8 +871,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
 			// combine both errors
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to convert volumes")
 			return errors.Wrapf(err, "failed to convert disks: %s", cleanuperror)
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to convert volumes")
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
@@ -859,8 +884,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to create target instance")
 			return errors.Wrapf(err, "failed to create target instance: %s", cleanuperror)
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create target instance")
 		return errors.Wrap(err, "failed to create target instance")
 	}
 	cancel()

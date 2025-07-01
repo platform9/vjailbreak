@@ -17,13 +17,12 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-	
-	"go.opentelemetry.io/otel/codes"
+
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
@@ -66,7 +65,6 @@ func main() {
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to get NewReporter")
-	
 		utils.PrintLog(fmt.Sprintf("Failed to create reporter: %v", err))
 		return
 	}
