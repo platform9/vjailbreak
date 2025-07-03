@@ -153,26 +153,31 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
-	// Try to clean up dependant objects, but don't fail if it doesn't work
-	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
-	if err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s', continuing with deletion", scope.Name()))
-		// Continue with deletion even if cleanup fails
-	}
+	// Check if the credential is in a failed state
+	isFailedState := scope.VMwareCreds.Status.VMwareValidationStatus == string(corev1.PodFailed) ||
+		scope.VMwareCreds.Status.VMwareValidationStatus == "Unknown"
 
-	// Always try to delete the associated secret
-	if scope.VMwareCreds.Spec.SecretRef.Name != "" {
-		ctxlog.Info("Deleting associated secret", "secretName", scope.VMwareCreds.Spec.SecretRef.Name)
-		err = r.Client.Delete(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-				Namespace: constants.NamespaceMigrationSystem,
-			},
-		})
-		if err != nil && !apierrors.IsNotFound(err) {
-			ctxlog.Error(err, "Failed to delete associated secret")
-			// Continue with deletion even if secret deletion fails
+	if !isFailedState {
+		// Only attempt to clean up dependant objects if not in a failed state
+		ctxlog.Info("Cleaning up dependant objects for VMwareCreds")
+		if err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope); err != nil {
+			ctxlog.Error(err, "Error cleaning up dependant objects, continuing with deletion")
 		}
+
+		// Try to delete the associated secret if it exists
+		if scope.VMwareCreds.Spec.SecretRef.Name != "" {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+					Namespace: constants.NamespaceMigrationSystem,
+				},
+			}
+			if err := r.Client.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
+				ctxlog.Error(err, "Failed to delete associated secret, continuing with deletion")
+			}
+		}
+	} else {
+		ctxlog.Info("Skipping cleanup of dependant objects for failed/unknown credential")
 	}
 
 	// Always remove the finalizer to allow deletion
@@ -185,8 +190,10 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, "Failed to update VMwareCreds to remove finalizer")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer from VMwareCreds")
 	}
+
+	ctxlog.Info("Successfully removed finalizer from VMwareCreds")
 	return ctrl.Result{}, nil
 }
 
