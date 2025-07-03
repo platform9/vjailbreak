@@ -3,6 +3,13 @@ title: Getting Started
 description: Usage
 ---
 
+vJailbreak works by running itself a a VM on the target OpenStack cloud. It connects remotely
+to the VMware vSphere environment to perform the migration. vJailbreak  uses the VMware VDDK
+library to interact with the VMware environment and perform the necessary disk copy operations.
+
+It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
+provisioning operations including creation of volumes, VMs.
+
 ### Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
 
@@ -10,8 +17,9 @@ Ensure that your vJailbreak VM can communicate with your OpenStack and VMware en
 
 ### Install ORAS and download vJailbreak
 
-Download and install [ORAS](https://oras.land/docs/installation). Then, download the latest version of the vJailbreak image with the following command:
+Download and install [ORAS](https://oras.land/docs/installation). A toolkit to dowload the qcow2 image of vJailbreak. Then, download the latest version of the vJailbreak image with the following command:
   ```shell
+  # remember the actual version would vary
   oras pull quay.io/platform9/vjailbreak:v0.1.15
   ```
 This will download the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
@@ -26,11 +34,15 @@ These example instructions are for any version of [Private Cloud Director](https
   openstack image create --os-interface admin --insecure --container-format bare --disk-format qcow2 --file vjailbreak-image.qcow2 vjailbreak-image.qcow2
   ```
 - Deploy a new VM from image, choosing the _m1.xlarge_ flavor.
+- Use larger flavor or larger VM migration
 - Choose a network that can reach your VMware vCenter environment.
-- Give the VM a name, optionally assign an SSH key, and set a password using cloud-init.
+- Give the VM a name, assign an SSH key, and set a password using cloud-init.
 - Assign a network security group that allows inbound and outbound traffic.
 
 ### Copy VDDK Libraries
+:::note
+VMware VDDK library is required for vJailbreak to interact with the VMware environment and it must be configured in the vJailbreak VM.
+:::
 - Copy the latest version of the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vJailbreak VM. Untar it to a folder named `vmware-vix-disklib-distrib` in the `/home/ubuntu` directory.
 
 ### Launch vJailbreak

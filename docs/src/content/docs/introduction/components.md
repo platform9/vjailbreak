@@ -3,7 +3,15 @@ title: vJailbreak Components
 description: Overview of vJailbreak components
 ---
 
-vJailbreak is composed of several key components that work together to facilitate the migration of virtual machines from VMware environments to OpenStack-compliant clouds. Below is an overview of each component and its role in the migration process.
+
+# Architecture
+Below is high level architecture of how vJailbreak works. vJailbreak runs
+in a virtual machine in the target OpenStack environment. vJailbreak connects with VMware environment via vSphere APIs and the VDDK library. It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary provisioning operations including creation of volumes, VMs.
+
+![vJailbreak Architecture](/deployment-architecture.png)
+
+# Components
+ Below is an overview of each component and its role in the migration process.
 
 ### v2v-helper
 The `v2v-helper` is the main application responsible for executing the migration process. It is designed to run as a pod within the vJailbreak virtual machine (VM) in the target OpenStack environment.
