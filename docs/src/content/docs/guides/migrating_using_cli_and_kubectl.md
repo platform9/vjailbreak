@@ -21,11 +21,11 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 
 * **NetworkMapping**: Defines how source VMware networks map to destination OpenStack networks. Required for configuring network interfaces for VM's during migration.
 * **StorageMapping**: Maps source VMware datastores to OpenStack storage backends.
-* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMwareto OpenStack.
+* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStack.
 * **MigrationPlan**: MigrationPlan contains the VM's to be migrated, provides reference to migration template which needs to be followed, and also specifies the way VM's have to be migrated. A migration plan can be used for migrating multiple VM's in batches.
 * **Migration**: For each VM, there is an individual migration custom resource, which provides reference to the migration plan to be followed and the pod which is going to execute the migration. Migration custom resource is maintained by the vJailbreak controller itself.
 * **Job**: With migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
-* **v2v-helper pods**: Based on the definition of the job created by vJailbreak controller, kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, transfer, and creation of OpenStack OpenStack resources.
+* **v2v-helper pods**: Based on the definition of the job created by vJailbreak controller, kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, transfer, and creation of OpenStack resources.
 
 **Note**: `NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
 
