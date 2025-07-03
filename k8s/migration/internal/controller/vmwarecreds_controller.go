@@ -172,8 +172,20 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 					Namespace: constants.NamespaceMigrationSystem,
 				},
 			}
-			if err := r.Client.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
-				ctxlog.Error(err, "Failed to delete associated secret, continuing with deletion")
+			// First try to get the secret to see if it exists
+			err := r.Get(ctx, client.ObjectKey{
+				Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+				Namespace: constants.NamespaceMigrationSystem,
+			}, secret)
+			
+			if err == nil {
+				// Secret exists, try to delete it
+				if delErr := r.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
+					ctxlog.Error(delErr, "Failed to delete associated secret, continuing with deletion")
+				}
+			} else if !apierrors.IsNotFound(err) {
+				// Only log error if it's not a NotFound error
+				ctxlog.Error(err, "Error checking if secret exists, continuing with deletion")
 			}
 		}
 	} else {

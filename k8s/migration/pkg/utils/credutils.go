@@ -368,6 +368,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create openstack client")
 	}
+
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
@@ -390,12 +391,14 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		caCertPool.AddCert(caCert)
 		tlsConfig.RootCAs = caCertPool
 	}
+
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
 	}
+
 	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
 		Username:         openstackCredential.Username,
@@ -405,6 +408,16 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to authenticate to openstack")
+	}
+
+	// Verify that these credentials can access the current instance
+	matches, err := VerifyCredentialsMatchCurrentEnvironment(providerClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to verify credentials against current environment")
+	}
+	if !matches {
+		return nil, fmt.Errorf("the provided credentials do not have access to this OpenStack environment. " +
+			"Please provide credentials for the current OpenStack environment where vJailbreak is running")
 	}
 
 	return providerClient, nil

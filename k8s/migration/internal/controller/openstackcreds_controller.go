@@ -244,16 +244,27 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	// Always try to delete the associated secret
 	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
 	if secretName != "" {
-		ctxlog.Info("Deleting associated secret", "secretName", secretName)
-		err := r.Client.Delete(ctx, &corev1.Secret{
+		// Always try to delete the associated secret if it exists
+		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
+				Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
 				Namespace: constants.NamespaceMigrationSystem,
 			},
-		})
-		if err != nil && !apierrors.IsNotFound(err) {
-			ctxlog.Error(err, "Failed to delete associated secret")
-			// Continue with deletion even if secret deletion fails
+		}
+		// First try to get the secret to see if it exists
+		err := r.Get(ctx, client.ObjectKey{
+			Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
+			Namespace: constants.NamespaceMigrationSystem,
+		}, secret)
+		
+		if err == nil {
+			// Secret exists, try to delete it
+			if delErr := r.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
+				ctxlog.Error(delErr, "Failed to delete associated secret, continuing with deletion")
+			}
+		} else if !apierrors.IsNotFound(err) {
+			// Only log error if it's not a NotFound error
+			ctxlog.Error(err, "Error checking if secret exists, continuing with deletion")
 		}
 	}
 
