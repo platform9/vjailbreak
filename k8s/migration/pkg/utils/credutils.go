@@ -633,8 +633,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		// Update properties to include guest.net for MAC addresses
-		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network", "guest.net"}, &vmProps)
+		err = vm.Properties(ctx, vm.Reference(), []string{"config", "guest", "runtime", "network"}, &vmProps)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
@@ -646,18 +645,12 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		var datastores []string
 		var networks []string
 		var disks []string
-		var macAddresses []string
 		var clusterName string
-
-		// Collect MAC addresses if guest info is available
-		if vmProps.Guest != nil && vmProps.Guest.Net != nil {
-			for _, net := range vmProps.Guest.Net {
-				if net.MacAddress != "" {
-					macAddresses = append(macAddresses, net.MacAddress)
-				}
-			}
+		if vmProps.Config == nil {
+			// VM is not powered on or is in creating state
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
+			continue
 		}
-
 		pc := property.DefaultCollector(c)
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
@@ -705,24 +698,52 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 
 		// Get the cluster name from the host's parent
 		if host.Parent != nil {
-			// ... (existing cluster name resolution code remains the same)
+			// Determine parent type based on the object reference type
+			parentType := host.Parent.Type
+			// Get the parent name
+			var parentEntity mo.ManagedEntity
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
+			if err != nil {
+				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
+			} else {
+				// Handle based on the parent's type
+				switch parentType {
+				case "ClusterComputeResource":
+					var cluster mo.ClusterComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+					if err != nil {
+						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = cluster.Name
+					}
+				case "ComputeResource":
+					var compute mo.ComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
+					if err != nil {
+						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = compute.Name
+					}
+				default:
+					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+				}
+			}
 		} else {
 			clusterName = ""
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:         vmProps.Config.Name,
-			Datastores:   datastores,
-			Disks:        disks,
-			Networks:     networks,
-			MacAddresses: macAddresses,
-			IPAddress:    vmProps.Guest.IpAddress,
-			VMState:      vmProps.Guest.GuestState,
-			OSFamily:     vmProps.Guest.GuestFamily,
-			CPU:          int(vmProps.Config.Hardware.NumCPU),
-			Memory:       int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:     host.Name,
-			ClusterName:  clusterName,
+			Name:        vmProps.Config.Name,
+			Datastores:  datastores,
+			Disks:       disks,
+			Networks:    networks,
+			IPAddress:   vmProps.Guest.IpAddress,
+			VMState:     vmProps.Guest.GuestState,
+			OSFamily:    vmProps.Guest.GuestFamily,
+			CPU:         int(vmProps.Config.Hardware.NumCPU),
+			Memory:      int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:    host.Name,
+			ClusterName: clusterName,
 		})
 	}
 	return vminfo, nil
