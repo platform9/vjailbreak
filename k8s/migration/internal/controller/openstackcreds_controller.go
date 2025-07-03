@@ -152,6 +152,16 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 
+		// Add finalizer if not already present
+		finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+		if !controllerutil.ContainsFinalizer(scope.OpenstackCreds, finalizerName) {
+			ctxlog.Info("Adding finalizer to OpenstackCreds", "finalizer", finalizerName)
+			controllerutil.AddFinalizer(scope.OpenstackCreds, finalizerName)
+			if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to OpenstackCreds")
+			}
+		}
+
 		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
@@ -248,8 +258,9 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	}
 
 	// Always remove the finalizer to allow deletion
-	ctxlog.Info("Removing finalizer", "finalizer", constants.OpenstackCredsFinalizer)
-	controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
+	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+	ctxlog.Info("Removing finalizer", "finalizer", finalizerName)
+	controllerutil.RemoveFinalizer(scope.OpenstackCreds, finalizerName)
 	if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object was already deleted, nothing to do

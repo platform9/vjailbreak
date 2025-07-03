@@ -108,8 +108,15 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
 
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	// Add finalizer if not already present
+	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+	if !controllerutil.ContainsFinalizer(scope.VMwareCreds, finalizerName) {
+		ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", finalizerName)
+		controllerutil.AddFinalizer(scope.VMwareCreds, finalizerName)
+		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to VMwareCreds")
+		}
+	}
 
 	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
 	if err != nil {
@@ -169,7 +176,9 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	}
 
 	// Always remove the finalizer to allow deletion
-	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+	ctxlog.Info("Removing finalizer", "finalizer", finalizerName)
+	controllerutil.RemoveFinalizer(scope.VMwareCreds, finalizerName)
 	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object was already deleted, nothing to do
