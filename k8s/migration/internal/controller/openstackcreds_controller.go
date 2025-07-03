@@ -219,34 +219,38 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
-	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
+	scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
 	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling deletion", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
-	// Delete the associated secret
-	client := r.Client
-	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
 
-	ctxlog.Info("Deleting PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-	if err := utils.DeleteEntryForNoPCDCluster(ctx, client, scope.OpenstackCreds); err != nil {
-		ctxlog.Error(err, "Failed to delete PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete PCD cluster")
+	// Delete the associated PCD cluster
+	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Failed to delete PCD cluster")
+		return ctrl.Result{}, err
 	}
 
-	ctxlog.Info("Deleting associated secret", "secretName", secretName, "namespace", constants.NamespaceMigrationSystem)
-	err := client.Delete(ctx, &corev1.Secret{
+	// Delete the associated secret
+	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
+	ctxlog.Info("Deleting associated secret", "secretName", secretName)
+	err := r.Client.Delete(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: constants.NamespaceMigrationSystem,
 		},
 	})
 	if err != nil && !apierrors.IsNotFound(err) {
-		ctxlog.Error(err, "Failed to delete associated secret", "secretName", secretName)
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
+		ctxlog.Error(err, "Failed to delete associated secret")
+		return ctrl.Result{}, err
 	}
-	ctxlog.Info("Successfully deleted associated secret or it was already gone", "secretName", secretName)
+
 	ctxlog.Info("Removing finalizer", "finalizer", constants.OpenstackCredsFinalizer)
 	controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
+	if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Failed to update OpenstackCreds to remove finalizer")
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
+
 }
 
 // SetupWithManager sets up the controller with the Manager.

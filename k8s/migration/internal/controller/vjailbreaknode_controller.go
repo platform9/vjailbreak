@@ -71,7 +71,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, errors.Wrap(err, "failed to create vjailbreak node scope")
 	}
 
-	err = utils.AddFinalizerToCreds(ctx, r.Client)
+	//err = utils.AddFinalizerToCreds(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to openstack creds")
 	}
