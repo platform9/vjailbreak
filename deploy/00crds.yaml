@@ -2141,6 +2141,12 @@ spec:
                   ipAddress:
                     description: IPAddress is the IP address of the virtual machine
                     type: string
+                  macAddresses:
+                    description: MacAddresses is the list of MAC addresses assigned
+                      to the VM's network interfaces
+                    items:
+                      type: string
+                    type: array
                   memory:
                     description: Memory is the amount of memory in the virtual machine
                     type: integer
@@ -3288,7 +3294,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: platform9/vjailbreak-controller:v0.1.13
+        image: quay.io/platform9/vjailbreak-controller:v0.1.13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3360,7 +3366,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: platform9/vjailbreak-vpwned:v0.1.13
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.1.13
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

@@ -633,71 +633,33 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
-		// Update properties to include guest.net for MAC addresses
-		// Get detailed VM properties including network information
+		// In the GetAllVMs function, update the properties being fetched:
 		err = vm.Properties(ctx, vm.Reference(), []string{
 			"config",
 			"guest",
 			"runtime",
 			"network",
 			"guest.net",
-			"guest.net.config",
-			"guest.net.dnsConfig",
-			"guest.net.ipConfig",
-			"guest.net.routes",
 		}, &vmProps)
 		if err != nil {
-			fmt.Printf("⚠️ Failed to get VM properties for %s: %v\n", vm.Name(), err)
-			continue
+			return nil, fmt.Errorf("failed to get VM properties: %w", err)
 		}
-
 		if vmProps.Config == nil {
 			// VM is not powered on or is in creating state
-			fmt.Printf("⚠️ VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
 			continue
 		}
-
 		var datastores []string
 		var networks []string
 		var disks []string
-		var macAddresses []string
 		var clusterName string
-
-		// Debug logging for VM properties
-		fmt.Printf("ℹ️ VM %s properties: Guest=%v, Network=%v\n",
-			vm.Name(),
-			vmProps.Guest != nil,
-			vmProps.Network != nil)
-
-		// Collect MAC addresses if guest info is available
-		if vmProps.Guest != nil {
-			if vmProps.Guest.Net == nil {
-				fmt.Printf("ℹ️ No network interfaces found in guest properties for VM %s\n", vm.Name())
-			} else {
-				fmt.Printf("ℹ️ Found %d network interfaces for VM %s\n", len(vmProps.Guest.Net), vm.Name())
-				for i, net := range vmProps.Guest.Net {
-					fmt.Printf("  Interface %d: MAC=%s, Connected=%v, IPs=%v\n",
-						i, net.MacAddress, net.Connected, net.IpAddress)
-					if net.MacAddress != "" {
-						macAddresses = append(macAddresses, net.MacAddress)
-					}
+		var macAddresses []string
+		if vmProps.Guest != nil && vmProps.Guest.Net != nil {
+			for _, net := range vmProps.Guest.Net {
+				if net.MacAddress != "" {
+					macAddresses = append(macAddresses, net.MacAddress)
 				}
 			}
-
-			// If no MACs found in guest properties, try to get them from the VM config
-			if len(macAddresses) == 0 && vmProps.Config != nil && len(vmProps.Config.Hardware.Device) > 0 {
-				fmt.Printf("ℹ️ Trying to get MACs from VM config for %s\n", vm.Name())
-				for _, device := range vmProps.Config.Hardware.Device {
-					if nic, ok := device.(*govmitypes.VirtualEthernetCard); ok {
-						if nic.MacAddress != "" {
-							fmt.Printf("  Found MAC in config: %s\n", nic.MacAddress)
-							macAddresses = append(macAddresses, nic.MacAddress)
-						}
-					}
-				}
-			}
-		} else {
-			fmt.Printf("⚠️ Guest properties not available for VM %s - VM may be powered off\n", vm.Name())
 		}
 
 		pc := property.DefaultCollector(c)
@@ -786,8 +748,8 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			Datastores:   datastores,
 			Disks:        disks,
 			Networks:     networks,
-			MacAddresses: macAddresses,
 			IPAddress:    vmProps.Guest.IpAddress,
+			MacAddresses: macAddresses,
 			VMState:      vmProps.Guest.GuestState,
 			OSFamily:     vmProps.Guest.GuestFamily,
 			CPU:          int(vmProps.Config.Hardware.NumCPU),
