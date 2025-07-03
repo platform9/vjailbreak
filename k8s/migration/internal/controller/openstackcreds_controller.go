@@ -107,8 +107,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	ctxlog := scope.Logger
 	ctxlog.Info("Starting normal reconciliation", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 
-	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
-
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		// Update the status of the OpenstackCreds object
@@ -223,34 +221,44 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling deletion", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
 
-	// Delete the associated PCD cluster
-	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
-		ctxlog.Error(err, "Failed to delete PCD cluster")
-		return ctrl.Result{}, err
+	// Skip PCD cluster deletion if credentials are in a failed/unknown state
+	if scope.OpenstackCreds.Status.OpenStackValidationStatus != string(corev1.PodFailed) &&
+	   scope.OpenstackCreds.Status.OpenStackValidationStatus != "Unknown" {
+		// Delete the associated PCD cluster
+		if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Failed to delete PCD cluster")
+			// Continue with deletion even if PCD cluster deletion fails
+		}
 	}
 
-	// Delete the associated secret
+	// Always try to delete the associated secret
 	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
-	ctxlog.Info("Deleting associated secret", "secretName", secretName)
-	err := r.Client.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: constants.NamespaceMigrationSystem,
-		},
-	})
-	if err != nil && !apierrors.IsNotFound(err) {
-		ctxlog.Error(err, "Failed to delete associated secret")
-		return ctrl.Result{}, err
+	if secretName != "" {
+		ctxlog.Info("Deleting associated secret", "secretName", secretName)
+		err := r.Client.Delete(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+		})
+		if err != nil && !apierrors.IsNotFound(err) {
+			ctxlog.Error(err, "Failed to delete associated secret")
+			// Continue with deletion even if secret deletion fails
+		}
 	}
 
+	// Always remove the finalizer to allow deletion
 	ctxlog.Info("Removing finalizer", "finalizer", constants.OpenstackCredsFinalizer)
 	controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
 	if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Object was already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
 		ctxlog.Error(err, "Failed to update OpenstackCreds to remove finalizer")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
-
 }
 
 // SetupWithManager sets up the controller with the Manager.

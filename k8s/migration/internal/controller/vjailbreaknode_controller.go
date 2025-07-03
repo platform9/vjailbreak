@@ -202,12 +202,6 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 		log.Info("Skipping master node deletion")
 
 		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
-
-		// Remove finalizer from openstack creds
-		err := utils.DeleteFinalizerFromCreds(ctx, r.Client)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer from openstack creds")
-		}
 		return ctrl.Result{}, nil
 	}
 

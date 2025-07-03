@@ -146,23 +146,38 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
+	// Try to clean up dependant objects, but don't fail if it doesn't work
 	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s'", scope.Name()))
+		ctxlog.Error(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s', continuing with deletion", scope.Name()))
+		// Continue with deletion even if cleanup fails
 	}
 
-	// Delete the associated secret
-	client := r.Client
-	err = client.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-			Namespace: constants.NamespaceMigrationSystem,
-		},
-	})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
+	// Always try to delete the associated secret
+	if scope.VMwareCreds.Spec.SecretRef.Name != "" {
+		ctxlog.Info("Deleting associated secret", "secretName", scope.VMwareCreds.Spec.SecretRef.Name)
+		err = r.Client.Delete(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+		})
+		if err != nil && !apierrors.IsNotFound(err) {
+			ctxlog.Error(err, "Failed to delete associated secret")
+			// Continue with deletion even if secret deletion fails
+		}
 	}
+
+	// Always remove the finalizer to allow deletion
 	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Object was already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
+		ctxlog.Error(err, "Failed to update VMwareCreds to remove finalizer")
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
