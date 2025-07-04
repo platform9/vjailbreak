@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -134,7 +134,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-
 		}
 		ctxlog.Info("Successfully updated status to failed")
 	} else {
@@ -167,7 +166,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		scope.OpenstackCreds.Spec.Flavors = flavors
 		if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-
 		}
 
 		// Add finalizer if not already present
@@ -195,7 +193,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		ctxlog.Info("Updating OpenstackCreds status with info", "openstackcreds", scope.OpenstackCreds.Name)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-
 		}
 
 		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
@@ -250,7 +247,8 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	// Delete associated PCD clusters first
 	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		logger.Error(err, "Failed to delete PCD cluster")
-		// Continue with deletion even if PCD cluster deletion fails
+		// Return with requeue to retry PCD cluster deletion
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	// Delete associated secret if it exists

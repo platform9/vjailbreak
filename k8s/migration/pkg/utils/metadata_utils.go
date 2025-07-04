@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -33,9 +34,8 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 		return nil, errors.Wrap(err, "failed to fetch instance metadata")
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			// Log the error but don't fail the function as we've already read the body
-			// This is a best-effort cleanup operation
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("[WARN] Failed to close response body: %v", closeErr)
 		}
 	}()
 
