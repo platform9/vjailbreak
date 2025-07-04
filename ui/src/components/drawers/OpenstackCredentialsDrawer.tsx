@@ -127,13 +127,41 @@ export default function OpenstackCredentialsDrawer({
             setValidatingOpenstackCreds(false);
 
             // Handle different error types
-            const errorMessage = error instanceof Error
-                ? error.message
-                : (typeof error === 'object' && error !== null && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'message' in error.response.data)
-                    ? String(error.response.data.message)
-                    : String(error);
+            let errorMessage = "An unknown error occurred";
+            
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            } else if (typeof error === 'object' && error !== null) {
+                // Handle API error responses
+                const apiError = error as any;
+                if (apiError.response?.data?.message) {
+                    errorMessage = apiError.response.data.message;
+                } else if (apiError.message) {
+                    errorMessage = apiError.message;
+                }
+            }
 
-            setError("Error creating OpenStack credentials: " + errorMessage);
+            // Clean up the error message for better UX
+            errorMessage = errorMessage
+                .replace(/^Error: /, '') // Remove leading 'Error: '
+                .replace(/\n.*$/, '')     // Remove any newlines and anything after
+                .trim();
+
+            // Map common error patterns to user-friendly messages
+            if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
+                errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
+            } else if (errorMessage.includes("already exists")) {
+                errorMessage = "A credential with this name already exists. Please use a different name.";
+            } else if (errorMessage.includes("connection refused")) {
+                errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
+            } else if (errorMessage.includes("authentication failed")) {
+                errorMessage = "Authentication failed. Please check your username and password.";
+            } else if (!errorMessage.endsWith('.')) {
+                // Ensure the error message ends with a period
+                errorMessage += '.';
+            }
+
+            setError(errorMessage);
             setSubmitting(false);
         }
     }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
@@ -158,7 +186,28 @@ export default function OpenstackCredentialsDrawer({
         } else if (status === "Failed") {
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
-            setError(message || "Validation failed");
+            
+            // Format the error message to be more user-friendly
+            let errorMessage = "Validation failed";
+            if (message) {
+                // Remove any technical details or stack traces
+                errorMessage = message.split('\n')[0];
+                
+                // Map specific error messages to more user-friendly ones
+                if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
+                    errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
+                } else if (errorMessage.includes("authentication failed")) {
+                    errorMessage = "Authentication failed. Please check your username and password.";
+                } else if (errorMessage.includes("connection refused")) {
+                    errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
+                } else if (errorMessage.includes("domain not found")) {
+                    errorMessage = "The specified domain was not found. Please check the domain name.";
+                } else if (errorMessage.includes("project not found")) {
+                    errorMessage = "The specified project/tenant was not found. Please check the project/tenant name.";
+                }
+            }
+            
+            setError(errorMessage);
 
             // Try to delete the failed credential to clean up
             if (createdCredentialName) {

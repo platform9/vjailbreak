@@ -71,12 +71,11 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, errors.Wrap(err, "failed to create vjailbreak node scope")
 	}
 
-	//err = utils.AddFinalizerToCreds(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to openstack creds")
-	}
+	// if err := utils.AddFinalizerToCreds(ctx, r.Client); err != nil {
+	// 	return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to openstack creds")
+	// }
 
-	// Always close the scope when exiting this function such that we can persist any VjailbreakNode changes.
+	// Always close the scope when exiting this function so that we can persist any VjailbreakNode changes.
 	defer func() {
 		if err := vjailbreakNodeScope.Close(); err != nil && reterr == nil {
 			reterr = err

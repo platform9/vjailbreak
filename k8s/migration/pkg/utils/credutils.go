@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -433,8 +434,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		return nil, errors.Wrap(err, "failed to verify credentials against current environment")
 	}
 	if !matches {
-		return nil, fmt.Errorf("the provided credentials are valid but do not have access to this OpenStack environment. " +
-			"Please provide credentials for the OpenStack environment where this vJailbreak instance is running")
+		return nil, fmt.Errorf("credentials are valid but for a different OpenStack environment. Please use credentials for this environment")
 	}
 
 	return providerClient, nil
@@ -1093,6 +1093,42 @@ func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwa
 
 	if err := DeleteVMwarecredsSecret(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting secret")
+	}
+
+	return nil
+}
+
+// DeleteAssociatedSecret deletes a secret if it exists, logging any non-NotFound errors
+func DeleteAssociatedSecret(ctx context.Context, c client.Client, secretName, namespace string) error {
+	if secretName == "" {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+	}
+
+	// First try to get the secret to see if it exists
+	err := c.Get(ctx, client.ObjectKey{
+		Name:      secretName,
+		Namespace: namespace,
+	}, secret)
+
+	if err == nil {
+		// Secret exists, try to delete it
+		if delErr := c.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
+			logger.Error(delErr, "Failed to delete associated secret")
+			return delErr
+		}
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		// Only return error if it's not a NotFound error
+		logger.Error(err, "Error checking if secret exists")
+		return err
 	}
 
 	return nil

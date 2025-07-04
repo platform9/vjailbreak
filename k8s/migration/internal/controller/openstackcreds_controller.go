@@ -22,19 +22,19 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
@@ -53,6 +53,11 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
+
+const (
+	// OpenstackCredsFinalizer is the finalizer for OpenstackCreds resources
+	OpenstackCredsFinalizer = "vjailbreak.k8s.pf9.io/finalizer"
+)
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -228,58 +233,50 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
-	ctxlog := scope.Logger
-	ctxlog.Info("Reconciling deletion", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
+	logger := log.FromContext(ctx)
 
-	// Skip PCD cluster deletion if credentials are in a failed/unknown state
-	if scope.OpenstackCreds.Status.OpenStackValidationStatus != string(corev1.PodFailed) &&
-	   scope.OpenstackCreds.Status.OpenStackValidationStatus != "Unknown" {
-		// Delete the associated PCD cluster
-		if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Failed to delete PCD cluster")
-			// Continue with deletion even if PCD cluster deletion fails
+	// Delete associated PCD clusters first
+	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
+		logger.Error(err, "Failed to delete PCD cluster")
+		// Continue with deletion even if PCD cluster deletion fails
+	}
+
+	// Delete associated secret if it exists
+	if scope.OpenstackCreds.Spec.SecretRef.Name != "" {
+		if err := utils.DeleteAssociatedSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name, constants.NamespaceMigrationSystem); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
-	// Always try to delete the associated secret
-	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
-	if secretName != "" {
-		// Always try to delete the associated secret if it exists
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
-				Namespace: constants.NamespaceMigrationSystem,
-			},
-		}
-		// First try to get the secret to see if it exists
-		err := r.Get(ctx, client.ObjectKey{
-			Name:      scope.OpenstackCreds.Spec.SecretRef.Name,
-			Namespace: constants.NamespaceMigrationSystem,
-		}, secret)
-		
-		if err == nil {
-			// Secret exists, try to delete it
-			if delErr := r.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
-				ctxlog.Error(delErr, "Failed to delete associated secret, continuing with deletion")
-			}
-		} else if !apierrors.IsNotFound(err) {
-			// Only log error if it's not a NotFound error
-			ctxlog.Error(err, "Error checking if secret exists, continuing with deletion")
-		}
-	}
+	// Remove finalizer
+	controllerutil.RemoveFinalizer(scope.OpenstackCreds, OpenstackCredsFinalizer)
 
-	// Always remove the finalizer to allow deletion
-	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
-	ctxlog.Info("Removing finalizer", "finalizer", finalizerName)
-	controllerutil.RemoveFinalizer(scope.OpenstackCreds, finalizerName)
-	if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+	// Get the latest version of the resource
+	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      scope.OpenstackCreds.Name,
+		Namespace: scope.OpenstackCreds.Namespace,
+	}, latestCreds); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object was already deleted, nothing to do
 			return ctrl.Result{}, nil
 		}
-		ctxlog.Error(err, "Failed to update OpenstackCreds to remove finalizer")
+		logger.Error(err, "Failed to get latest version of OpenstackCreds")
 		return ctrl.Result{}, err
 	}
+
+	// Remove the finalizer and update
+	controllerutil.RemoveFinalizer(latestCreds, OpenstackCredsFinalizer)
+	if err := r.Update(ctx, latestCreds); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Object was already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "Failed to update OpenstackCreds to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Successfully deleted OpenstackCreds")
 	return ctrl.Result{}, nil
 }
 

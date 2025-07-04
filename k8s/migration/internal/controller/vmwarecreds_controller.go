@@ -20,21 +20,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -165,27 +163,9 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 		}
 
 		// Try to delete the associated secret if it exists
-		if scope.VMwareCreds.Spec.SecretRef.Name != "" {
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-					Namespace: constants.NamespaceMigrationSystem,
-				},
-			}
-			// First try to get the secret to see if it exists
-			err := r.Get(ctx, client.ObjectKey{
-				Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-				Namespace: constants.NamespaceMigrationSystem,
-			}, secret)
-			
-			if err == nil {
-				// Secret exists, try to delete it
-				if delErr := r.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
-					ctxlog.Error(delErr, "Failed to delete associated secret, continuing with deletion")
-				}
-			} else if !apierrors.IsNotFound(err) {
-				// Only log error if it's not a NotFound error
-				ctxlog.Error(err, "Error checking if secret exists, continuing with deletion")
+		if secretName := scope.VMwareCreds.Spec.SecretRef.Name; secretName != "" {
+			if err := utils.DeleteAssociatedSecret(ctx, r.Client, secretName, constants.NamespaceMigrationSystem); err != nil {
+				ctxlog.Error(err, "Failed to delete associated secret, continuing with deletion")
 			}
 		}
 	} else {
