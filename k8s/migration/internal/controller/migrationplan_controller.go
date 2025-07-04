@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/user"
 	"reflect"
@@ -445,16 +446,25 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				return ctrl.Result{}, fmt.Errorf("failed to get NetworkMapping: %w", err)
 			}
 
+			// Track if we found a mapped network
+			foundMappedNetwork := false
 			var subnetID string
+
 			for _, srcNet := range vmMachine.Spec.VMInfo.Networks {
 				var openstackNetName string
 				for _, mapping := range networkMapping.Spec.Networks {
 					if mapping.Source == srcNet {
 						openstackNetName = mapping.Target
+						foundMappedNetwork = true
 						break
 					}
 				}
+
+				// Skip unmapped networks
 				if openstackNetName == "" {
+					r.ctxlog.Info("ℹ️ Network is not mapped, skipping IP validation",
+						"vm", vmName,
+						"network", srcNet)
 					continue
 				}
 
@@ -462,41 +472,85 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				netList, err := networks.List(openstackClients.NetworkingClient,
 					networks.ListOpts{Name: openstackNetName}).AllPages()
 				if err != nil {
+					r.ctxlog.Error(err, "❌ Failed to list OpenStack networks", "network", openstackNetName)
 					return ctrl.Result{}, fmt.Errorf("failed to list OpenStack networks: %w", err)
 				}
 
 				nets, err := networks.ExtractNetworks(netList)
 				if err != nil || len(nets) == 0 {
-					return ctrl.Result{}, fmt.Errorf("OpenStack network not found: %s", openstackNetName)
+					errMsg := fmt.Errorf("OpenStack network not found: %s", openstackNetName)
+					r.ctxlog.Error(errMsg, "❌ Network not found")
+					return ctrl.Result{}, errMsg
 				}
 
-				// Get subnets for this network
+				// Get all subnets for this network
 				subnetList, err := subnets.List(openstackClients.NetworkingClient,
 					subnets.ListOpts{NetworkID: nets[0].ID}).AllPages()
 				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to list subnets: %w", err)
+					r.ctxlog.Error(err, "❌ Failed to list subnets", "network", openstackNetName)
+					return ctrl.Result{}, fmt.Errorf("failed to list subnets for network %s: %w", openstackNetName, err)
 				}
 
 				allSubnets, err := subnets.ExtractSubnets(subnetList)
 				if err != nil || len(allSubnets) == 0 {
-					return ctrl.Result{}, fmt.Errorf("no subnets found for OpenStack network %s", openstackNetName)
+					errMsg := fmt.Errorf("no subnets found for OpenStack network %s", openstackNetName)
+					r.ctxlog.Error(errMsg, "❌ No subnets found")
+					return ctrl.Result{}, errMsg
 				}
 
-				subnetID = allSubnets[0].ID
-				break
+				// Try to find the correct subnet that contains our IP
+				for _, subnet := range allSubnets {
+					_, ipNet, err := net.ParseCIDR(subnet.CIDR)
+					if err != nil {
+						r.ctxlog.Error(err, "❌ Invalid subnet CIDR", "cidr", subnet.CIDR)
+						continue
+					}
+
+					if ipNet.Contains(net.ParseIP(ip)) {
+						subnetID = subnet.ID
+						r.ctxlog.Info("✅ Found matching subnet for IP",
+							"ip", ip,
+							"subnet", subnet.ID,
+							"cidr", subnet.CIDR)
+						break
+					}
+				}
+
+				if subnetID != "" {
+					break
+				}
 			}
 
-			if subnetID == "" {
-				return ctrl.Result{}, fmt.Errorf("failed to determine target subnet for VM %s", vmName)
+			// If no mapped networks were found, skip IP validation
+			if !foundMappedNetwork {
+				r.ctxlog.Info("ℹ️ No mapped networks found for VM, skipping IP validation",
+					"vm", vmName,
+					"ip", ip)
+				continue
 			}
+
+			// If we have an IP but couldn't find a matching subnet, fail the migration
+			if subnetID == "" {
+				errMsg := fmt.Errorf("failed to find target subnet for IP %s in any mapped network for VM %s", ip, vmName)
+				r.ctxlog.Error(errMsg, "❌ Subnet not found")
+				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, errMsg.Error())
+				return ctrl.Result{}, errMsg
+			}
+
 			// --- END subnetID lookup logic ---
 
 			// Check IP allocation
-			r.ctxlog.Info("🔍 Checking OpenStack IP allocation", "vm", vmName, "ip", ip, "subnetID", subnetID)
+			r.ctxlog.Info("🔍 Checking OpenStack IP allocation",
+				"vm", vmName,
+				"ip", ip,
+				"subnetID", subnetID)
+
 			allocated, err := utils.IsIPAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, subnetID, ip)
 			if err != nil {
-				r.ctxlog.Error(err, "❌ Error during IP allocation check", "ip", ip, "subnetID", subnetID)
-				return ctrl.Result{}, fmt.Errorf("failed to check IP allocation in OpenStack: %w", err)
+				errMsg := fmt.Errorf("failed to check IP allocation in OpenStack: %w", err)
+				r.ctxlog.Error(errMsg, "❌ Error during IP allocation check", "ip", ip, "subnetID", subnetID)
+				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, errMsg.Error())
+				return ctrl.Result{}, errMsg
 			}
 
 			r.ctxlog.Info("✅ IP allocation check result", "ip", ip, "allocated", allocated)
@@ -504,15 +558,21 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is already allocated in OpenStack", ip, vmName)
 				r.ctxlog.Info("🚫 Migration blocked: IP conflict", "ip", ip, "vm", vmName)
 				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
-				return ctrl.Result{}, fmt.Errorf("%s", msg)
+				return ctrl.Result{}, errors.New(msg)
 			}
 
 			// Check IP in allocation pool
-			r.ctxlog.Info("🔍 Checking OpenStack allocation pool", "vm", vmName, "ip", ip, "subnetID", subnetID)
+			r.ctxlog.Info("🔍 Checking OpenStack allocation pool",
+				"vm", vmName,
+				"ip", ip,
+				"subnetID", subnetID)
+
 			inPool, err := utils.IsIPInAllocationPool(ctx, openstackClients.NetworkingClient, subnetID, ip)
 			if err != nil {
-				r.ctxlog.Error(err, "❌ Error during allocation pool check", "ip", ip, "subnetID", subnetID)
-				return ctrl.Result{}, fmt.Errorf("failed to check IP in allocation pool: %w", err)
+				errMsg := fmt.Errorf("failed to check IP in allocation pool: %w", err)
+				r.ctxlog.Error(errMsg, "❌ Error during allocation pool check", "ip", ip, "subnetID", subnetID)
+				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, errMsg.Error())
+				return ctrl.Result{}, errMsg
 			}
 
 			r.ctxlog.Info("✅ Allocation pool check result", "ip", ip, "inPool", inPool)

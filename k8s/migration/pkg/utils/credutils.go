@@ -52,53 +52,166 @@ type OpenStackClients struct {
 	NetworkingClient *gophercloud.ServiceClient
 }
 
-// IsIPAllocatedInOpenStack checks if the given IP is already allocated to any port in the specified subnet
+// IsIPAllocatedInOpenStack checks if the given IP is already allocated to any port in OpenStack.
+// If subnetID is provided, it checks only within that subnet. If empty, it checks across all subnets.
 func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	// First, verify the IP is valid
+	if net.ParseIP(ip) == nil {
+		return false, fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	// List all ports with the given IP address
 	listOpts := ports.ListOpts{
 		FixedIPs: []ports.FixedIPOpts{{
-			SubnetID:  subnetID,
 			IPAddress: ip,
 		}},
 	}
+
+	// If subnetID is provided, add it to the filter
+	if subnetID != "" {
+		listOpts.FixedIPs[0].SubnetID = subnetID
+	}
+
 	allPages, err := ports.List(networkingClient, listOpts).AllPages()
 	if err != nil {
-		return false, errors.Wrap(err, "failed to list ports for IP allocation check")
+		return false, errors.Wrapf(err, "failed to list ports for IP %s in subnet %s", ip, subnetID)
 	}
+
 	allPorts, err := ports.ExtractPorts(allPages)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to extract ports for IP allocation check")
+		return false, errors.Wrapf(err, "failed to extract ports for IP %s in subnet %s", ip, subnetID)
 	}
-	return len(allPorts) > 0, nil
+
+	if len(allPorts) > 0 {
+		// Get the network name for better error reporting
+		networkName := ""
+		if len(allPorts[0].NetworkID) > 0 {
+			network, err := networks.Get(networkingClient, allPorts[0].NetworkID).Extract()
+			if err == nil && network != nil {
+				networkName = network.Name
+			}
+		}
+
+		portDetails := make([]string, 0, len(allPorts))
+		for _, p := range allPorts {
+			detail := fmt.Sprintf("port=%s, status=%s", p.ID, p.Status)
+			if len(p.Name) > 0 {
+				detail += fmt.Sprintf(", name=%s", p.Name)
+			}
+			portDetails = append(portDetails, detail)
+		}
+
+		log := ctrllog.FromContext(ctx)
+		log.Info("IP address conflict detected", 
+			"ip", ip, 
+			"subnetID", subnetID,
+			"network", networkName,
+			"ports", portDetails)
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
+// MAC addresses are normalized to lowercase before comparison to handle case differences
 func IsMacAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
-	listOpts := ports.ListOpts{
-		MACAddress: mac,
-	}
-	allPages, err := ports.List(networkingClient, listOpts).AllPages()
+	// Normalize MAC to lowercase and remove any separators
+	normalizedMAC := strings.ToLower(strings.ReplaceAll(mac, ":", ""))
+	normalizedMAC = strings.ReplaceAll(normalizedMAC, "-", "")
+
+	// List all ports
+	allPages, err := ports.List(networkingClient, nil).AllPages()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to list ports for MAC allocation check")
 	}
+
 	allPorts, err := ports.ExtractPorts(allPages)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to extract ports for MAC allocation check")
 	}
-	return len(allPorts) > 0, nil
-}
 
-// IsIPInAllocationPool checks if the given IP is within the allocation pool of the specified subnet
-func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
-	subnet, err := subnets.Get(networkingClient, subnetID).Extract()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get subnet for allocation pool check")
-	}
-	for _, pool := range subnet.AllocationPools {
-		if ipInRange(ip, pool.Start, pool.End) {
+	// Check each port's MAC address after normalization
+	for _, port := range allPorts {
+		portMAC := strings.ToLower(strings.ReplaceAll(port.MACAddress, ":", ""))
+		portMAC = strings.ReplaceAll(portMAC, "-", "")
+		if portMAC == normalizedMAC {
 			return true, nil
 		}
 	}
+
 	return false, nil
+}
+
+// IsIPInAllocationPool checks if the given IP is within any allocation pool of the specified subnet.
+// If subnetID is empty, it checks all subnets in the network.
+func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	// First, verify the IP is valid
+	ipAddr := net.ParseIP(ip)
+	if ipAddr == nil {
+		return false, fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	// If subnetID is provided, just check that specific subnet
+	if subnetID != "" {
+		subnet, err := subnets.Get(networkingClient, subnetID).Extract()
+		if err != nil {
+			return false, errors.Wrapf(err, "failed to get subnet %s for allocation pool check", subnetID)
+		}
+		return isIPInSubnetPools(ipAddr, subnet), nil
+	}
+
+	// If no subnetID provided, find which subnet the IP belongs to
+	allSubnets, err := subnets.List(networkingClient, subnets.ListOpts{}).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list subnets for allocation pool check")
+	}
+
+	subnetList, err := subnets.ExtractSubnets(allSubnets)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract subnets for allocation pool check")
+	}
+
+	// Check each subnet to see if the IP is in its CIDR
+	for _, subnet := range subnetList {
+		// Check if IP is in the subnet's CIDR
+		_, subnetNet, err := net.ParseCIDR(subnet.CIDR)
+		if err != nil {
+			continue // Skip invalid CIDRs
+		}
+
+		if subnetNet.Contains(ipAddr) {
+			// Found the matching subnet, check its pools
+			return isIPInSubnetPools(ipAddr, &subnet), nil
+		}
+	}
+
+	// If we get here, the IP doesn't belong to any known subnet
+	return false, fmt.Errorf("IP %s is not in any known subnet's CIDR", ip)
+}
+
+// isIPInSubnetPools checks if an IP is within any allocation pool of a subnet
+func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
+	for _, pool := range subnet.AllocationPools {
+		start := net.ParseIP(pool.Start)
+		end := net.ParseIP(pool.End)
+
+		// Skip invalid ranges
+		if start == nil || end == nil {
+			continue
+		}
+
+		// Compare IPs as bytes for accurate comparison
+		ipBytes := ip.To16()
+		startBytes := start.To16()
+		endBytes := end.To16()
+
+		if bytes.Compare(ipBytes, startBytes) >= 0 && bytes.Compare(ipBytes, endBytes) <= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ipInRange checks if the ip is between start and end (inclusive)
