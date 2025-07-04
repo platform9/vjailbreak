@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
-
+	"time"
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
@@ -356,30 +356,32 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 	}, nil
 }
 
-// ValidateAndGetProviderClient is a function to get provider client
+// ValidateAndGetProviderClient validates OpenStack credentials and returns a provider client
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
+	// 1. First, get the credentials from the secret
 	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
+		return nil, errors.Wrap(err, "failed to get OpenStack credentials from secret")
 	}
 
+	// 2. Create a new provider client
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create openstack client")
+		return nil, errors.Wrap(err, "failed to create OpenStack client. Please check the Auth URL")
 	}
+
+	// 3. Configure TLS
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
 	if openstackCredential.Insecure {
 		tlsConfig.InsecureSkipVerify = true
 	} else {
-		// Get the certificate for the Openstack endpoint
-		caCert, certerr := GetCert(openstackCredential.AuthURL)
-		if certerr != nil {
-			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
+		caCert, certErr := GetCert(openstackCredential.AuthURL)
+		if certErr != nil {
+			return nil, errors.Wrap(certErr, "failed to get certificate for OpenStack. Please check if the Auth URL is correct and accessible")
 		}
-		// Trying to fetch the system cert pool and add the Openstack certificate to it
 		caCertPool, err := x509.SystemCertPool()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get system cert pool: %w", err)
@@ -390,21 +392,47 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		caCertPool.AddCert(caCert)
 		tlsConfig.RootCAs = caCertPool
 	}
+
+	// 4. Configure HTTP client with the TLS settings
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
+		Timeout:   30 * time.Second, // Add a reasonable timeout
 	}
-	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
+
+	// 5. Authenticate with OpenStack
+	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
 		Username:         openstackCredential.Username,
 		Password:         openstackCredential.Password,
 		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
-	})
+	}
+
+	// 6. Try to authenticate
+	if err := openstack.Authenticate(providerClient, authOpts); err != nil {
+		// Provide more specific error messages based on common authentication failures
+		switch {
+		case strings.Contains(err.Error(), "401"):
+			return nil, fmt.Errorf("authentication failed: invalid username, password, or project/domain. Please verify your credentials")
+		case strings.Contains(err.Error(), "404"):
+			return nil, fmt.Errorf("authentication failed: the authentication URL or tenant/project name is incorrect")
+		case strings.Contains(err.Error(), "timeout"):
+			return nil, fmt.Errorf("connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL")
+		default:
+			return nil, fmt.Errorf("authentication failed: %v. Please verify your OpenStack credentials", err)
+		}
+	}
+
+	// 7. Verify these credentials can access the current instance
+	matches, err := VerifyCredentialsMatchCurrentEnvironment(providerClient)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to authenticate to openstack")
+		return nil, errors.Wrap(err, "failed to verify credentials against current environment")
+	}
+	if !matches {
+		return nil, fmt.Errorf("credentials are valid but for a different OpenStack environment. Please use credentials for this environment")
 	}
 
 	return providerClient, nil
@@ -1063,6 +1091,42 @@ func DeleteDependantObjectsForVMwareCreds(ctx context.Context, scope *scope.VMwa
 
 	if err := DeleteVMwarecredsSecret(ctx, scope); err != nil {
 		return errors.Wrap(err, "Error deleting secret")
+	}
+
+	return nil
+}
+
+// DeleteAssociatedSecret deletes a secret if it exists, logging any non-NotFound errors
+func DeleteAssociatedSecret(ctx context.Context, c client.Client, secretName, namespace string) error {
+	if secretName == "" {
+		return nil
+	}
+
+	logger := ctrllog.FromContext(ctx)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+	}
+
+	// First try to get the secret to see if it exists
+	err := c.Get(ctx, client.ObjectKey{
+		Name:      secretName,
+		Namespace: namespace,
+	}, secret)
+
+	if err == nil {
+		// Secret exists, try to delete it
+		if delErr := c.Delete(ctx, secret); delErr != nil && !apierrors.IsNotFound(delErr) {
+			logger.Error(delErr, "Failed to delete associated secret")
+			return delErr
+		}
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		// Only return error if it's not a NotFound error
+		logger.Error(err, "Error checking if secret exists")
+		return err
 	}
 
 	return nil

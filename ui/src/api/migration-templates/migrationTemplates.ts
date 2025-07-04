@@ -19,14 +19,18 @@ export const getMigrationTemplatesList = async (
 }
 
 export const getMigrationTemplate = async (
-  templateName,
+  templateName?: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
-  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates/${templateName}`
+  if (!templateName) {
+    throw new Error("Template name is required");
+  }
+  
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates/${templateName}`;
   const response = await axios.get<MigrationTemplate>({
     endpoint,
-  })
-  return response
+  });
+  return response;
 }
 
 export const postMigrationTemplate = async (

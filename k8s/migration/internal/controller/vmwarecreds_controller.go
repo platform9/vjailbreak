@@ -20,21 +20,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -108,8 +106,15 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
 
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	// Add finalizer if not already present
+	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+	if !controllerutil.ContainsFinalizer(scope.VMwareCreds, finalizerName) {
+		ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", finalizerName)
+		controllerutil.AddFinalizer(scope.VMwareCreds, finalizerName)
+		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to VMwareCreds")
+		}
+	}
 
 	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
 	if err != nil {
@@ -146,23 +151,41 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
-	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error deleting dependant objects for VMwareCreds '%s'", scope.Name()))
+	// Check if the credential is in a failed state
+	isFailedState := scope.VMwareCreds.Status.VMwareValidationStatus == string(corev1.PodFailed) ||
+		scope.VMwareCreds.Status.VMwareValidationStatus == "Unknown"
+
+	if !isFailedState {
+		// Only attempt to clean up dependant objects if not in a failed state
+		ctxlog.Info("Cleaning up dependant objects for VMwareCreds")
+		if err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope); err != nil {
+			ctxlog.Error(err, "Error cleaning up dependant objects, continuing with deletion")
+		}
+
+		// Try to delete the associated secret if it exists
+		if secretName := scope.VMwareCreds.Spec.SecretRef.Name; secretName != "" {
+			if err := utils.DeleteAssociatedSecret(ctx, r.Client, secretName, constants.NamespaceMigrationSystem); err != nil {
+				ctxlog.Error(err, "Failed to delete associated secret, continuing with deletion")
+			}
+		}
+	} else {
+		ctxlog.Info("Skipping cleanup of dependant objects for failed/unknown credential")
 	}
 
-	// Delete the associated secret
-	client := r.Client
-	err = client.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-			Namespace: constants.NamespaceMigrationSystem,
-		},
-	})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
+	// Always remove the finalizer to allow deletion
+	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
+	ctxlog.Info("Removing finalizer", "finalizer", finalizerName)
+	controllerutil.RemoveFinalizer(scope.VMwareCreds, finalizerName)
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Object was already deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
+		ctxlog.Error(err, "Failed to update VMwareCreds to remove finalizer")
+		return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer from VMwareCreds")
 	}
-	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+
+	ctxlog.Info("Successfully removed finalizer from VMwareCreds")
 	return ctrl.Result{}, nil
 }
 
