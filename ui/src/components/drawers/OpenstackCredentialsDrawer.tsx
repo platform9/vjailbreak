@@ -178,6 +178,7 @@ export default function OpenstackCredentialsDrawer({
         if (status === "Succeeded") {
             setOpenstackCredsValidated(true);
             setValidatingOpenstackCreds(false);
+            setError(null);
             // Close the drawer after a short delay to show success state
             setTimeout(() => {
                 refetchOpenstackCreds();
@@ -188,23 +189,32 @@ export default function OpenstackCredentialsDrawer({
             setValidatingOpenstackCreds(false);
             
             // Format the error message to be more user-friendly
-            let errorMessage = "Validation failed";
-            if (message) {
-                // Remove any technical details or stack traces
-                errorMessage = message.split('\n')[0];
+            let errorMessage = message || "Validation failed";
+            
+            // Clean up the error message
+            errorMessage = errorMessage
+                .split('\n')[0] // Take only the first line
+                .replace(/^error: /i, '') // Remove leading 'error: '
+                .replace(/\.$/, '') // Remove trailing period if it exists
+                .trim();
                 
-                // Map specific error messages to more user-friendly ones
-                if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
-                    errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
-                } else if (errorMessage.includes("authentication failed")) {
-                    errorMessage = "Authentication failed. Please check your username and password.";
-                } else if (errorMessage.includes("connection refused")) {
-                    errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
-                } else if (errorMessage.includes("domain not found")) {
-                    errorMessage = "The specified domain was not found. Please check the domain name.";
-                } else if (errorMessage.includes("project not found")) {
-                    errorMessage = "The specified project/tenant was not found. Please check the project/tenant name.";
-                }
+            // Map specific error messages to more user-friendly ones
+            if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
+                errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
+            } else if (errorMessage.includes("authentication failed")) {
+                errorMessage = "Authentication failed. Please check your username and password.";
+            } else if (errorMessage.includes("connection refused") || errorMessage.includes("ECONNREFUSED")) {
+                errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
+            } else if (errorMessage.includes("domain not found")) {
+                errorMessage = "The specified domain was not found. Please check the domain name.";
+            } else if (errorMessage.includes("project not found") || errorMessage.includes("tenant not found")) {
+                errorMessage = "The specified project/tenant was not found. Please check the project/tenant name.";
+            } else if (errorMessage.includes("404")) {
+                errorMessage = "The requested resource was not found. Please check your configuration.";
+            } else if (errorMessage.includes("401") || errorMessage.includes("403")) {
+                errorMessage = "Authentication failed. Please check your username and password.";
+            } else if (errorMessage.includes("timeout")) {
+                errorMessage = "The request timed out. Please check your network connection and try again.";
             }
             
             setError(errorMessage);
@@ -214,7 +224,9 @@ export default function OpenstackCredentialsDrawer({
                 try {
                     deleteOpenStackCredsWithSecretFlow(createdCredentialName)
                         .then(() => console.log(`Failed credential ${createdCredentialName} deleted`))
-                        .catch((deleteErr) => console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr));
+                        .catch((deleteErr) => {
+                            console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr);
+                        });
                 } catch (deleteErr) {
                     console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr);
                 }
@@ -233,15 +245,48 @@ export default function OpenstackCredentialsDrawer({
         async () => {
             try {
                 const response = await getOpenstackCredentials(createdCredentialName);
+                
+                // If we have a validation status, handle it
                 if (response?.status?.openstackValidationStatus) {
                     handleValidationStatus(
                         response.status.openstackValidationStatus,
                         response.status.openstackValidationMessage
                     );
+                    // If validation failed, we might need to clean up
+                    if (response.status.openstackValidationStatus === 'Failed') {
+                        setValidatingOpenstackCreds(false);
+                        setSubmitting(false);
+                    }
+                } 
+                // If we have an error message but no status, show the error
+                else if (response?.status?.openstackValidationMessage) {
+                    handleValidationStatus(
+                        'Failed',
+                        response.status.openstackValidationMessage
+                    );
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Error validating OpenStack credentials", err);
-                setError("Error validating OpenStack credentials");
+                // Try to extract a meaningful error message from the response
+                let errorMessage = "Error validating OpenStack credentials";
+                
+                // Check for different error formats
+                if (err?.response?.data?.message) {
+                    errorMessage = err.response.data.message;
+                } else if (err?.message) {
+                    errorMessage = err.message;
+                } else if (typeof err === 'string') {
+                    errorMessage = err;
+                }
+                
+                // Clean up the error message
+                errorMessage = errorMessage
+                    .split('\n')[0] // Take only the first line
+                    .replace(/^error: /i, '') // Remove leading 'error: '
+                    .replace(/\.$/, '') // Remove trailing period if it exists
+                    .trim();
+                
+                setError(errorMessage);
                 setValidatingOpenstackCreds(false);
                 setSubmitting(false);
             }

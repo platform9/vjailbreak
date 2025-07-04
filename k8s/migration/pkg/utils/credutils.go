@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
@@ -1104,7 +1102,7 @@ func DeleteAssociatedSecret(ctx context.Context, c client.Client, secretName, na
 		return nil
 	}
 
-	logger := log.FromContext(ctx)
+	logger := ctrllog.FromContext(ctx)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,

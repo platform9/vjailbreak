@@ -4,7 +4,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -32,13 +32,18 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch instance metadata")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log the error but don't fail the function as we've already read the body
+			// This is a best-effort cleanup operation
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code from metadata service: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read metadata response")
 	}

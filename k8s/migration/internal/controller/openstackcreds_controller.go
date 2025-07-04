@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +56,7 @@ type OpenstackCredsReconciler struct {
 
 const (
 	// OpenstackCredsFinalizer is the finalizer for OpenstackCreds resources
+	// #nosec G101 -- This is not a credential, it's just a finalizer name
 	OpenstackCredsFinalizer = "vjailbreak.k8s.pf9.io/finalizer"
 )
 
@@ -115,13 +116,25 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		// Update the status of the OpenstackCreds object
-		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		errMsg := err.Error()
+		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name, "error", errMsg)
+		
+		// Set the status to failed with the actual error message
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Error validating OpenStack credentials"
-		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name)
+		
+		// Use the error message from the validation, or a default message if empty
+		if errMsg == "" {
+			errMsg = "Error validating OpenStack credentials"
+		}
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
+		
+		// Clear the Openstack info since validation failed
+		scope.OpenstackCreds.Status.Openstack = vjailbreakv1alpha1.OpenstackInfo{}
+		
+		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
+
 		}
 		ctxlog.Info("Successfully updated status to failed")
 	} else {
@@ -130,40 +143,39 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			if strings.Contains(err.Error(), "404") {
 				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
 			} else {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
+			return ctrl.Result{}, fmt.Errorf("failed to update master node image id: %w", err)
 			}
 			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 		}
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
+		return ctrl.Result{}, fmt.Errorf("failed to get Openstack credentials from secret: %w", err)
 		}
 
 		ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
 		err = utils.CreateEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to create dummy PCD cluster")
+		return ctrl.Result{}, fmt.Errorf("failed to create dummy PCD cluster: %w", err)
 		}
 
 		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
+		return ctrl.Result{}, fmt.Errorf("failed to get flavors: %w", err)
 		}
 		scope.OpenstackCreds.Spec.Flavors = flavors
 		if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
+
 		}
 
 		// Add finalizer if not already present
-		finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
-		if !controllerutil.ContainsFinalizer(scope.OpenstackCreds, finalizerName) {
-			ctxlog.Info("Adding finalizer to OpenstackCreds", "finalizer", finalizerName)
-			controllerutil.AddFinalizer(scope.OpenstackCreds, finalizerName)
+		if !controllerutil.ContainsFinalizer(scope.OpenstackCreds, OpenstackCredsFinalizer) {
+			ctxlog.Info("Adding finalizer to OpenstackCreds", "finalizer", OpenstackCredsFinalizer)
+			controllerutil.AddFinalizer(scope.OpenstackCreds, OpenstackCredsFinalizer)
 			if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to OpenstackCreds")
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer to OpenstackCreds: %w", err)
 			}
 		}
 
@@ -177,20 +189,20 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
+		return ctrl.Result{}, fmt.Errorf("failed to get Openstack info: %w", err)
 		}
 		scope.OpenstackCreds.Status.Openstack = *openstackinfo
 		ctxlog.Info("Updating OpenstackCreds status with info", "openstackcreds", scope.OpenstackCreds.Name)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
+
 		}
 
 		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
 		// This will help us to create the vmwaremachine object with the correct flavor.
 		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
 		if err := r.List(ctx, vmwaremachineList); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
+		return ctrl.Result{}, fmt.Errorf("failed to list vmwaremachine objects: %w", err)
 		}
 		for i := range vmwaremachineList.Items {
 			vmwaremachine := &vmwaremachineList.Items[i]
@@ -199,22 +211,22 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			memory := vmwaremachine.Spec.VMInfo.Memory
 			computeClient, err := utils.GetOpenStackClients(context.TODO(), r.Client, scope.OpenstackCreds)
 			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
+		return ctrl.Result{}, fmt.Errorf("failed to get OpenStack clients: %w", err)
 			}
 			// Now get the closest flavor based on the cpu and memory
 			flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
 			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
-				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
+		return ctrl.Result{}, fmt.Errorf("failed to get closest flavor: %w", err)
 			}
 			// Now label the vmwaremachine object with the flavor name
 			if flavor == nil {
 				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+			return ctrl.Result{}, fmt.Errorf("failed to update vmwaremachine object: %w", err)
 				}
 			} else {
 				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
+			return ctrl.Result{}, fmt.Errorf("failed to update vmwaremachine object: %w", err)
 				}
 			}
 		}
@@ -223,7 +235,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Info("Syncing PCD info because openstackcreds is PCD", "openstackcreds", scope.OpenstackCreds.Name)
 			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
 			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
+		return ctrl.Result{}, fmt.Errorf("failed to sync PCD info: %w", err)
 			}
 		}
 	}
@@ -247,9 +259,6 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 	}
-
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(scope.OpenstackCreds, OpenstackCredsFinalizer)
 
 	// Get the latest version of the resource
 	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
