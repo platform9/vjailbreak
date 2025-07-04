@@ -41,7 +41,7 @@ First, we will gather some configuration details. We will use those pieces of co
 
 * [Gather Information](#gather-information)
     * [Gather the credentials to VMware vCenter and OpenStack](#gather-the-credentials-to-vmware-vcenter-and-openstack)
-    * [Gather the details of the VM to be migrated](#gather-the-details-of-vms-to-be-migrated)
+    * [Gather the details of the VM to be migrated](#gather-the-details-of-the-vm-to-be-migrated)
     * [Gather the details of OpenStack networks and volumeTypes](#gather-the-details-of-openstack-networks-and-volumetypes)
 * [Creation of Kubernetes resources](#creation-of-kubernetes-resources)
     * [Create the StorageMapping custom resource](#create-the-storagemapping-custom-resource)
