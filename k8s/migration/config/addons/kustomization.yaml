@@ -6,3 +6,4 @@ images:
 - name: vpwned
   newName: quay.io/platform9/vjailbreak-vpwned
   newTag: v0.1.15
+

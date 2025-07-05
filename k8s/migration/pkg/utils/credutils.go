@@ -2,10 +2,12 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -19,6 +21,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,6 +51,182 @@ type OpenStackClients struct {
 	ComputeClient *gophercloud.ServiceClient
 	// NetworkingClient is the client for interacting with OpenStack Networking
 	NetworkingClient *gophercloud.ServiceClient
+}
+
+// IsIPAllocatedInOpenStack checks if the given IP is already allocated to any port in OpenStack.
+// If subnetID is provided, it checks only within that subnet. If empty, it checks across all subnets.
+func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	// First, verify the IP is valid
+	if net.ParseIP(ip) == nil {
+		return false, fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	// List all ports with the given IP address
+	listOpts := ports.ListOpts{
+		FixedIPs: []ports.FixedIPOpts{{
+			IPAddress: ip,
+		}},
+	}
+
+	// If subnetID is provided, add it to the filter
+	if subnetID != "" {
+		listOpts.FixedIPs[0].SubnetID = subnetID
+	}
+
+	allPages, err := ports.List(networkingClient, listOpts).AllPages()
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to list ports for IP %s in subnet %s", ip, subnetID)
+	}
+
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to extract ports for IP %s in subnet %s", ip, subnetID)
+	}
+
+	if len(allPorts) > 0 {
+		// Get the network name for better error reporting
+		networkName := ""
+		if len(allPorts[0].NetworkID) > 0 {
+			network, err := networks.Get(networkingClient, allPorts[0].NetworkID).Extract()
+			if err == nil && network != nil {
+				networkName = network.Name
+			}
+		}
+
+		portDetails := make([]string, 0, len(allPorts))
+		for _, p := range allPorts {
+			detail := fmt.Sprintf("port=%s, status=%s", p.ID, p.Status)
+			if len(p.Name) > 0 {
+				detail += fmt.Sprintf(", name=%s", p.Name)
+			}
+			portDetails = append(portDetails, detail)
+		}
+
+		log := ctrllog.FromContext(ctx)
+		log.Info("IP address conflict detected", 
+			"ip", ip, 
+			"subnetID", subnetID,
+			"network", networkName,
+			"ports", portDetails)
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
+// MAC addresses are normalized to lowercase before comparison to handle case differences
+func IsMacAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
+	// Normalize MAC to lowercase and remove any separators
+	normalizedMAC := strings.ToLower(strings.ReplaceAll(mac, ":", ""))
+	normalizedMAC = strings.ReplaceAll(normalizedMAC, "-", "")
+
+	// List all ports
+	allPages, err := ports.List(networkingClient, nil).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list ports for MAC allocation check")
+	}
+
+	allPorts, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract ports for MAC allocation check")
+	}
+
+	// Check each port's MAC address after normalization
+	for _, port := range allPorts {
+		portMAC := strings.ToLower(strings.ReplaceAll(port.MACAddress, ":", ""))
+		portMAC = strings.ReplaceAll(portMAC, "-", "")
+		if portMAC == normalizedMAC {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// IsIPInAllocationPool checks if the given IP is within any allocation pool of the specified subnet.
+// If subnetID is empty, it checks all subnets in the network.
+func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+	// First, verify the IP is valid
+	ipAddr := net.ParseIP(ip)
+	if ipAddr == nil {
+		return false, fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	// If subnetID is provided, just check that specific subnet
+	if subnetID != "" {
+		subnet, err := subnets.Get(networkingClient, subnetID).Extract()
+		if err != nil {
+			return false, errors.Wrapf(err, "failed to get subnet %s for allocation pool check", subnetID)
+		}
+		return isIPInSubnetPools(ipAddr, subnet), nil
+	}
+
+	// If no subnetID provided, find which subnet the IP belongs to
+	allSubnets, err := subnets.List(networkingClient, subnets.ListOpts{}).AllPages()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to list subnets for allocation pool check")
+	}
+
+	subnetList, err := subnets.ExtractSubnets(allSubnets)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to extract subnets for allocation pool check")
+	}
+
+	// Check each subnet to see if the IP is in its CIDR
+	for _, subnet := range subnetList {
+		// Check if IP is in the subnet's CIDR
+		_, subnetNet, err := net.ParseCIDR(subnet.CIDR)
+		if err != nil {
+			continue // Skip invalid CIDRs
+		}
+
+		if subnetNet.Contains(ipAddr) {
+			// Found the matching subnet, check its pools
+			return isIPInSubnetPools(ipAddr, &subnet), nil
+		}
+	}
+
+	// If we get here, the IP doesn't belong to any known subnet
+	return false, fmt.Errorf("IP %s is not in any known subnet's CIDR", ip)
+}
+
+// isIPInSubnetPools checks if an IP is within any allocation pool of a subnet
+func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
+	for _, pool := range subnet.AllocationPools {
+		start := net.ParseIP(pool.Start)
+		end := net.ParseIP(pool.End)
+
+		// Skip invalid ranges
+		if start == nil || end == nil {
+			continue
+		}
+
+		// Compare IPs as bytes for accurate comparison
+		ipBytes := ip.To16()
+		startBytes := start.To16()
+		endBytes := end.To16()
+
+		if bytes.Compare(ipBytes, startBytes) >= 0 && bytes.Compare(ipBytes, endBytes) <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ipInRange checks if the ip is between start and end (inclusive)
+func ipInRange(ip, start, end string) bool {
+	ipAddr := net.ParseIP(ip)
+	startAddr := net.ParseIP(start)
+	endAddr := net.ParseIP(end)
+	if ipAddr == nil || startAddr == nil || endAddr == nil {
+		return false
+	}
+	if bytes.Compare(ipAddr, startAddr) >= 0 && bytes.Compare(ipAddr, endAddr) <= 0 {
+		return true
+	}
+	return false
 }
 
 const (
@@ -574,6 +753,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			"guest",
 			"runtime",
 			"network",
+			"guest.net",
 			"summary.config.annotation",
 		}, &vmProps)
 		if err != nil {
@@ -588,11 +768,15 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		var networks []string
 		var disks []string
 		var clusterName string
-		if vmProps.Config == nil {
-			// VM is not powered on or is in creating state
-			fmt.Printf("VM properties not available for vm (%s), skipping this VM", vm.Name())
-			continue
+		var macAddresses []string
+		if vmProps.Guest != nil && vmProps.Guest.Net != nil {
+			for _, net := range vmProps.Guest.Net {
+				if net.MacAddress != "" {
+					macAddresses = append(macAddresses, net.MacAddress)
+				}
+			}
 		}
+
 		// Fetch details required for RDM disks
 		hostStorageMap := sync.Map{}
 		controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
@@ -610,6 +794,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			continue
 		}
 		attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
+
 		pc := property.DefaultCollector(c)
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
@@ -673,18 +858,19 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 		}
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:        vmProps.Config.Name,
-			Datastores:  datastores,
-			Disks:       disks,
-			Networks:    networks,
-			IPAddress:   vmProps.Guest.IpAddress,
-			VMState:     vmProps.Guest.GuestState,
-			OSFamily:    vmProps.Guest.GuestFamily,
-			CPU:         int(vmProps.Config.Hardware.NumCPU),
-			Memory:      int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:    host.Name,
-			ClusterName: clusterName,
-			RDMDisks:    rdmDiskInfos,
+			Name:         vmProps.Config.Name,
+			Datastores:   datastores,
+			Disks:        disks,
+			Networks:     networks,
+			IPAddress:    vmProps.Guest.IpAddress,
+			MacAddresses: macAddresses,
+			VMState:      vmProps.Guest.GuestState,
+			OSFamily:     vmProps.Guest.GuestFamily,
+			CPU:          int(vmProps.Config.Hardware.NumCPU),
+			Memory:       int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:     host.Name,
+			ClusterName:  clusterName,
+      RDMDisks:    rdmDiskInfos,
 		})
 	}
 	return vminfo, nil
