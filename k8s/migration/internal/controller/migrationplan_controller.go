@@ -422,10 +422,18 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 					r.ctxlog.Info("✅ MAC allocation check result", "mac", mac, "allocated", macAllocated)
 					if macAllocated {
-						msg := fmt.Sprintf("Migration blocked: MAC %s for VM '%s' is already allocated in OpenStack", mac, vmName)
+						msg := fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s for VM '%s' is already allocated in OpenStack", mac, vmName)
 						r.ctxlog.Info("🚫 Migration blocked: MAC conflict", "mac", mac, "vm", vmName)
-						_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
-						return ctrl.Result{}, fmt.Errorf("%s", msg)
+
+						migrationplan.Status.MigrationStatus = corev1.PodFailed
+						migrationplan.Status.MigrationMessage = msg
+
+						if err := r.Status().Update(ctx, migrationplan); err != nil {
+							r.ctxlog.Error(err, "Failed to update MigrationPlan status")
+							return ctrl.Result{}, err
+						}
+
+						return ctrl.Result{}, nil
 					}
 				}
 			}
@@ -555,10 +563,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 			r.ctxlog.Info("✅ IP allocation check result", "ip", ip, "allocated", allocated)
 			if allocated {
-				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is already allocated in OpenStack", ip, vmName)
+				msg := fmt.Sprintf("CONFLICT:IP_ALREADY_ALLOCATED:IP %s for VM '%s' is already allocated in OpenStack", ip, vmName)
 				r.ctxlog.Info("🚫 Migration blocked: IP conflict", "ip", ip, "vm", vmName)
 				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
-				return ctrl.Result{}, errors.New(msg)
+				return ctrl.Result{}, nil
 			}
 
 			// Check IP in allocation pool
@@ -577,10 +585,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 			r.ctxlog.Info("✅ Allocation pool check result", "ip", ip, "inPool", inPool)
 			if !inPool {
-				msg := fmt.Sprintf("Migration blocked: IP %s for VM '%s' is not within allocation pool", ip, vmName)
+				msg := fmt.Sprintf("CONFLICT:IP_NOT_IN_ALLOCATION_POOL:IP %s for VM '%s' is not within allocation pool", ip, vmName)
 				r.ctxlog.Info("🚫 Migration blocked: IP not in allocation pool", "ip", ip, "vm", vmName)
 				_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
-				return ctrl.Result{}, fmt.Errorf("%s", msg)
+				return ctrl.Result{}, nil
 			}
 		}
 		// --- End IP/MAC Validation ---
