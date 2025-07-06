@@ -446,7 +446,6 @@ func (r *MigrationPlanReconciler) getMigrationCredentials(ctx context.Context, m
 }
 
 // ReconcileMigrationPlanJob reconciles jobs created by the migration plan
-// ReconcileMigrationPlanJob reconciles jobs created by the migration plan
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
@@ -456,97 +455,101 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	// Get all required credentials
-	migrationtemplate, _, openstackcreds, err := r.getMigrationCredentials(ctx, migrationplan)
+	migrationtemplate, vmwcreds, openstackcreds, err := r.getMigrationCredentials(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get migration credentials: %w", err)
 	}
-	// Handle initial migration status
 	if err := r.handleInitialMigrationStatus(ctx, migrationplan); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Check if migration is paused
 	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
 		return r.handlePausedMigration(ctx, migrationplan)
 	}
 
-	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
-		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
+	// This list will be populated after we trigger the migrations.
+	migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 
-		// Validate VMs' internal specs before starting migration
+	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
+		// 1. VALIDATION STAGE
 		if err := r.validateVMsForMigration(ctx, migrationplan, parallelvms); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		// Initialize OpenStack clients
 		openstackClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get OpenStack clients: %w", err)
 		}
 
-		// Validate each VM in OpenStack for conflicts
 		for _, vmName := range parallelvms {
 			validationErr := r.validateVMInOpenStack(ctx, openstackClients, migrationtemplate, vmName, migrationplan.Namespace)
 			if validationErr != nil {
-				// If it's a blocking conflict, update status and stop.
 				if strings.HasPrefix(validationErr.Error(), "CONFLICT:") {
 					r.ctxlog.Info("🚫 Migration blocked", "vm", vmName, "reason", validationErr.Error())
 					if statusErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, validationErr.Error()); statusErr != nil {
 						return ctrl.Result{}, statusErr
 					}
-					return ctrl.Result{}, nil // Stop reconciliation
+					return ctrl.Result{}, nil
 				}
-				// For other validation errors, return the error to retry.
 				return ctrl.Result{}, validationErr
 			}
 		}
 
-		// Process each migration object
-		for i := 0; i < len(migrationobjs.Items); i++ {
-			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if migrationplan.Spec.Retry {
-					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					if err := r.Delete(ctx, &migrationobjs.Items[i]); err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to delete Migration for retry: %w", err)
-					}
-					migrationplan.Status.MigrationStatus = "Retrying"
-					migrationplan.Status.MigrationMessage = fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName)
-					migrationplan.Spec.Retry = false // Use the retry attempt
-					if err := r.Update(ctx, migrationplan); err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to update Migration status for retry: %w", err)
-					}
-					return ctrl.Result{}, nil
-				}
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
-				}
-				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				if err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName); err != nil {
-					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					return ctrl.Result{}, fmt.Errorf("post-migration actions failed for VM %s: %w", migrationobjs.Items[i].Spec.VMName, err)
-				}
-				continue
-			default:
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch to complete: %v", parallelvms))
-				return ctrl.Result{}, nil
-			}
+		// 2. TRIGGER STAGE - This was the missing step
+		r.ctxlog.Info("Validation successful, triggering migrations.", "vms", parallelvms)
+		if err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to trigger migration: %w", err)
 		}
 	}
 
-	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
-	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
-	err = r.Status().Update(ctx, migrationplan)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+	// 3. MONITORING STAGE
+	// List the freshly created or existing migration objects for this plan
+	listOpts := []client.ListOption{
+		client.InNamespace(migrationplan.Namespace),
+		client.MatchingLabels{"migrationplan": migrationplan.Name},
+	}
+	if err := r.List(ctx, migrationobjs, listOpts...); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list migration objects for plan: %w", err)
 	}
 
-	return ctrl.Result{}, nil
+	// If no migration objects were created yet, requeue to check again shortly.
+	if len(migrationobjs.Items) == 0 {
+		r.ctxlog.Info("Waiting for migration objects to be created...")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	completedCount := 0
+	for _, migration := range migrationobjs.Items {
+		switch migration.Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
+			// Handle failed migration for a single VM
+			r.ctxlog.Info("Migration for a VM has failed.", "vm", migration.Spec.VMName)
+			// You can implement retry logic here if needed, or fail the entire plan
+			msg := fmt.Sprintf("Migration for VM '%s' failed", migration.Spec.VMName)
+			return ctrl.Result{}, r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg)
+
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			// Post-migration actions for a single successful VM
+			if err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName); err != nil {
+				return ctrl.Result{}, err
+			}
+			completedCount++
+			continue
+
+		default:
+			// If any migration is still running, the plan is still running.
+			r.ctxlog.Info("Migration plan in progress, waiting for individual migrations to complete.", "vm", migration.Spec.VMName, "phase", migration.Status.Phase)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+	}
+
+	// Check if all migrations for the plan are complete
+	if completedCount == len(migrationobjs.Items) {
+		r.ctxlog.Info("All migrations for the plan have succeeded.")
+		return ctrl.Result{}, r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodSucceeded, "All VMs in MigrationPlan have been successfully migrated")
+	}
+
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 // validateVMInOpenStack checks a single VM for MAC/IP conflicts in OpenStack.
