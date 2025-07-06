@@ -446,9 +446,15 @@ func (r *MigrationPlanReconciler) getMigrationCredentials(ctx context.Context, m
 }
 
 // ReconcileMigrationPlanJob reconciles jobs created by the migration plan
+// ReconcileMigrationPlanJob reconciles jobs created by the migration plan
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	// Check for existing blocked status first
+	if migrationplan.Status.MigrationStatus == corev1.PodFailed && strings.HasPrefix(migrationplan.Status.MigrationMessage, "CONFLICT:") {
+		r.ctxlog.Info("MigrationPlan is in a blocked state, reconciliation will be skipped.")
+		return ctrl.Result{}, nil
+	}
 
 	// Get all required credentials
 	migrationtemplate, _, openstackcreds, err := r.getMigrationCredentials(ctx, migrationplan)
@@ -468,7 +474,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 
-		// Validate VMs before starting migration
+		// Validate VMs' internal specs before starting migration
 		if err := r.validateVMsForMigration(ctx, migrationplan, parallelvms); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -479,161 +485,20 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, fmt.Errorf("failed to get OpenStack clients: %w", err)
 		}
 
-		// Check for MAC and IP conflicts in OpenStack
+		// Validate each VM in OpenStack for conflicts
 		for _, vmName := range parallelvms {
-			// Get VMwareMachine for this VM
-			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
-			if err := r.Get(ctx, types.NamespacedName{Name: vmName, Namespace: migrationplan.Namespace}, vmMachine); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to get VMwareMachine for VM '%s': %w", vmName, err)
-			}
-
-			// Log VM info for debugging
-			r.ctxlog.Info("🔍 Validating VM in OpenStack",
-				"vm", vmName,
-				"hasIP", vmMachine.Spec.VMInfo.IPAddress != "",
-				"hasMACs", len(vmMachine.Spec.VMInfo.MacAddresses) > 0)
-
-			// Check for MAC address conflicts
-			for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
-				if mac == "" {
-					continue // Skip empty MACs
+			validationErr := r.validateVMInOpenStack(ctx, openstackClients, migrationtemplate, vmName, migrationplan.Namespace)
+			if validationErr != nil {
+				// If it's a blocking conflict, update status and stop.
+				if strings.HasPrefix(validationErr.Error(), "CONFLICT:") {
+					r.ctxlog.Info("🚫 Migration blocked", "vm", vmName, "reason", validationErr.Error())
+					if statusErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, validationErr.Error()); statusErr != nil {
+						return ctrl.Result{}, statusErr
+					}
+					return ctrl.Result{}, nil // Stop reconciliation
 				}
-
-				r.ctxlog.Info("🔍 Checking OpenStack MAC allocation", "vm", vmName, "mac", mac)
-				macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
-				if err != nil {
-					r.ctxlog.Error(err, "❌ Error during MAC allocation check", "mac", mac)
-					return ctrl.Result{}, fmt.Errorf("failed to check MAC allocation in OpenStack: %w", err)
-				}
-
-				r.ctxlog.Info("✅ MAC allocation check result", "mac", mac, "allocated", macAllocated)
-				if macAllocated {
-					msg := fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s for VM '%s' is already allocated in OpenStack", mac, vmName)
-					r.ctxlog.Info("🚫 Migration blocked: MAC conflict", "mac", mac, "vm", vmName)
-
-					if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg); err != nil {
-						r.ctxlog.Error(err, "Failed to update MigrationPlan status")
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{}, nil
-				}
-			}
-
-			// Validate IP address if present
-			if ip := vmMachine.Spec.VMInfo.IPAddress; ip != "" {
-				r.ctxlog.Info("🔍 Validating VM IP address in OpenStack", "vm", vmName, "ip", ip)
-
-				// Get network mapping
-				networkMapping := &vjailbreakv1alpha1.NetworkMapping{}
-				if err := r.Get(ctx, types.NamespacedName{
-					Name:      migrationtemplate.Spec.NetworkMapping,
-					Namespace: migrationplan.Namespace,
-				}, networkMapping); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to get NetworkMapping: %w", err)
-				}
-
-				var subnetID string
-				var foundMappedNetwork bool
-
-				// Check each of the VM's source networks to find the correct subnet for its IP
-				for _, srcNet := range vmMachine.Spec.VMInfo.Networks {
-					var openstackNetName string
-					for _, mapping := range networkMapping.Spec.Networks {
-						if mapping.Source == srcNet {
-							openstackNetName = mapping.Target
-							foundMappedNetwork = true
-							break
-						}
-					}
-
-					if openstackNetName == "" {
-						r.ctxlog.Info("ℹ️ Network is not mapped, skipping IP validation for this network", "vm", vmName, "network", srcNet)
-						continue
-					}
-
-					netList, err := networks.List(openstackClients.NetworkingClient,
-						networks.ListOpts{Name: openstackNetName}).AllPages()
-					if err != nil {
-						r.ctxlog.Error(err, "❌ Failed to list OpenStack networks", "network", openstackNetName)
-						return ctrl.Result{}, fmt.Errorf("failed to list OpenStack networks: %w", err)
-					}
-
-					nets, err := networks.ExtractNetworks(netList)
-					if err != nil || len(nets) == 0 {
-						errMsg := fmt.Errorf("OpenStack network not found: %s", openstackNetName)
-						r.ctxlog.Error(errMsg, "❌ Network not found")
-						return ctrl.Result{}, errMsg
-					}
-
-					subnetList, err := subnets.List(openstackClients.NetworkingClient,
-						subnets.ListOpts{NetworkID: nets[0].ID}).AllPages()
-					if err != nil {
-						r.ctxlog.Error(err, "❌ Failed to list subnets", "network", openstackNetName)
-						return ctrl.Result{}, fmt.Errorf("failed to list subnets for network %s: %w", openstackNetName, err)
-					}
-
-					allSubnets, err := subnets.ExtractSubnets(subnetList)
-					if err != nil || len(allSubnets) == 0 {
-						errMsg := fmt.Errorf("no subnets found for OpenStack network %s", openstackNetName)
-						r.ctxlog.Error(errMsg, "❌ No subnets found")
-						return ctrl.Result{}, errMsg
-					}
-
-					for _, subnet := range allSubnets {
-						_, ipNet, err := net.ParseCIDR(subnet.CIDR)
-						if err != nil {
-							r.ctxlog.Error(err, "❌ Invalid subnet CIDR", "cidr", subnet.CIDR)
-							continue
-						}
-
-						if ipNet.Contains(net.ParseIP(ip)) {
-							subnetID = subnet.ID
-							r.ctxlog.Info("✅ Found matching subnet for IP", "ip", ip, "subnet", subnet.ID, "cidr", subnet.CIDR)
-							break
-						}
-					}
-
-					if subnetID != "" {
-						break
-					}
-				}
-
-				if !foundMappedNetwork {
-					r.ctxlog.Info("ℹ️ No mapped networks found for VM, skipping IP validation", "vm", vmName, "ip", ip)
-					continue
-				}
-
-				if subnetID == "" {
-					errMsg := fmt.Errorf("failed to find target subnet for IP %s in any mapped network for VM %s", ip, vmName)
-					r.ctxlog.Error(errMsg, "❌ Subnet not found")
-					if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, errMsg.Error()); err != nil {
-						r.ctxlog.Error(err, "Failed to update migration plan status")
-						return ctrl.Result{}, fmt.Errorf("failed to update migration plan status: %v", err)
-					}
-					return ctrl.Result{}, errMsg
-				}
-
-				allocated, err := utils.IsIPAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, subnetID, ip)
-				if err != nil {
-					errMsg := fmt.Errorf("failed to check IP allocation in OpenStack: %w", err)
-					r.ctxlog.Error(errMsg, "❌ Error during IP allocation check", "ip", ip, "subnetID", subnetID)
-					if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, errMsg.Error()); updateErr != nil {
-						r.ctxlog.Error(updateErr, "Failed to update migration plan status")
-						return ctrl.Result{}, fmt.Errorf("failed to update migration plan status: %v", updateErr)
-					}
-					return ctrl.Result{}, errMsg
-				}
-
-				r.ctxlog.Info("✅ IP allocation check result", "ip", ip, "allocated", allocated)
-				if allocated {
-					msg := fmt.Sprintf("CONFLICT:IP_ALREADY_ALLOCATED:IP %s for VM '%s' is already allocated in OpenStack", ip, vmName)
-					r.ctxlog.Info("🚫 Migration blocked: IP conflict", "ip", ip, "vm", vmName)
-					if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg); err != nil {
-						r.ctxlog.Error(err, "Failed to update MigrationPlan status")
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-				}
+				// For other validation errors, return the error to retry.
+				return ctrl.Result{}, validationErr
 			}
 		}
 
@@ -644,17 +509,14 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if migrationplan.Spec.Retry {
 					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					// Delete the migration so that it can be recreated
-					err := r.Delete(ctx, &migrationobjs.Items[i])
-					if err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to delete Migration: %w", err)
+					if err := r.Delete(ctx, &migrationobjs.Items[i]); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to delete Migration for retry: %w", err)
 					}
 					migrationplan.Status.MigrationStatus = "Retrying"
 					migrationplan.Status.MigrationMessage = fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName)
-					migrationplan.Spec.Retry = false
-					err = r.Update(ctx, migrationplan)
-					if err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to update Migration status: %w", err)
+					migrationplan.Spec.Retry = false // Use the retry attempt
+					if err := r.Update(ctx, migrationplan); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to update Migration status for retry: %w", err)
 					}
 					return ctrl.Result{}, nil
 				}
@@ -665,18 +527,18 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				}
 				return ctrl.Result{}, nil
 			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
-				if err != nil {
+				if err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName); err != nil {
 					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
 					return ctrl.Result{}, fmt.Errorf("post-migration actions failed for VM %s: %w", migrationobjs.Items[i].Spec.VMName, err)
 				}
 				continue
 			default:
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
+				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch to complete: %v", parallelvms))
 				return ctrl.Result{}, nil
 			}
 		}
 	}
+
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
 	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
 	err = r.Status().Update(ctx, migrationplan)
@@ -685,6 +547,125 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// validateVMInOpenStack checks a single VM for MAC/IP conflicts in OpenStack.
+// It returns a specific error starting with "CONFLICT:" if the migration should be blocked.
+func (r *MigrationPlanReconciler) validateVMInOpenStack(
+	ctx context.Context,
+	openstackClients *utils.OpenStackClients,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	vmName string,
+	namespace string,
+) error {
+	log := log.FromContext(ctx)
+
+	// Get VMwareMachine for this VM
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
+	if err := r.Get(ctx, types.NamespacedName{Name: vmName, Namespace: namespace}, vmMachine); err != nil {
+		return fmt.Errorf("failed to get VMwareMachine for VM '%s': %w", vmName, err)
+	}
+
+	log.Info("🔍 Validating VM in OpenStack", "vm", vmName, "hasIP", vmMachine.Spec.VMInfo.IPAddress != "", "hasMACs", len(vmMachine.Spec.VMInfo.MacAddresses) > 0)
+
+	// Check for MAC address conflicts
+	for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
+		if mac == "" {
+			continue // Skip empty MACs
+		}
+		log.Info("🔍 Checking OpenStack MAC allocation", "vm", vmName, "mac", mac)
+		macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
+		if err != nil {
+			return fmt.Errorf("failed to check MAC allocation in OpenStack: %w", err)
+		}
+		if macAllocated {
+			return fmt.Errorf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s for VM '%s' is already allocated in OpenStack", mac, vmName)
+		}
+	}
+
+	// Validate IP address if present
+	if ip := vmMachine.Spec.VMInfo.IPAddress; ip != "" {
+		log.Info("🔍 Validating VM IP address in OpenStack", "vm", vmName, "ip", ip)
+
+		networkMapping := &vjailbreakv1alpha1.NetworkMapping{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.NetworkMapping, Namespace: namespace}, networkMapping); err != nil {
+			return fmt.Errorf("failed to get NetworkMapping: %w", err)
+		}
+
+		var subnetID string
+		var foundMappedNetwork bool
+
+		for _, srcNet := range vmMachine.Spec.VMInfo.Networks {
+			var openstackNetName string
+			for _, mapping := range networkMapping.Spec.Networks {
+				if mapping.Source == srcNet {
+					openstackNetName = mapping.Target
+					foundMappedNetwork = true
+					break
+				}
+			}
+
+			if openstackNetName == "" {
+				continue
+			}
+
+			netList, err := networks.List(openstackClients.NetworkingClient, networks.ListOpts{Name: openstackNetName}).AllPages()
+			if err != nil {
+				return fmt.Errorf("failed to list OpenStack networks: %w", err)
+			}
+			nets, err := networks.ExtractNetworks(netList)
+			if err != nil || len(nets) == 0 {
+				return fmt.Errorf("OpenStack network not found: %s", openstackNetName)
+			}
+
+			subnetList, err := subnets.List(openstackClients.NetworkingClient, subnets.ListOpts{NetworkID: nets[0].ID}).AllPages()
+			if err != nil {
+				return fmt.Errorf("failed to list subnets for network %s: %w", openstackNetName, err)
+			}
+			allSubnets, err := subnets.ExtractSubnets(subnetList)
+			if err != nil || len(allSubnets) == 0 {
+				return fmt.Errorf("no subnets found for OpenStack network %s", openstackNetName)
+			}
+
+			for _, subnet := range allSubnets {
+				if _, ipNet, err := net.ParseCIDR(subnet.CIDR); err == nil {
+					if ipNet.Contains(net.ParseIP(ip)) {
+						subnetID = subnet.ID
+						break
+					}
+				}
+			}
+			if subnetID != "" {
+				break
+			}
+		}
+
+		if !foundMappedNetwork {
+			log.Info("ℹ️ No mapped networks found for VM, skipping IP validation", "vm", vmName, "ip", ip)
+			return nil // Not a failure, just can't validate
+		}
+		if subnetID == "" {
+			return fmt.Errorf("failed to find target subnet for IP %s in any mapped network for VM %s", ip, vmName)
+		}
+
+		inPool, err := utils.IsIPInAllocationPool(ctx, openstackClients.NetworkingClient, subnetID, ip)
+		if err != nil {
+			return fmt.Errorf("error checking IP allocation pool for %s: %w", ip, err)
+		}
+		if !inPool {
+			return fmt.Errorf("CONFLICT:IP_NOT_IN_ALLOCATION_POOL:IP %s for VM '%s' is not in the allocation pool of subnet %s", ip, vmName, subnetID)
+		}
+
+		allocated, err := utils.IsIPAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, subnetID, ip)
+		if err != nil {
+			return fmt.Errorf("failed to check IP allocation in OpenStack: %w", err)
+		}
+		if allocated {
+			return fmt.Errorf("CONFLICT:IP_ALREADY_ALLOCATED:IP %s for VM '%s' is already allocated in OpenStack", ip, vmName)
+		}
+	}
+
+	return nil
 }
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan

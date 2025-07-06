@@ -53,16 +53,13 @@ export default function MigrationProgress({
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (
-      phase === Phase.Failed &&
-      progressText &&
-      progressText.toLowerCase().includes("migration blocked")
-    ) {
-      setOpen(true)
+    // Show the alert if the progress text starts with "Blocked"
+    if (progressText && progressText.toLowerCase().startsWith("blocked:")) {
+      setOpen(true);
     } else {
-      setOpen(false)
+      setOpen(false);
     }
-  }, [phase, progressText])
+  }, [progressText]);
 
   const handleClose = (_?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {

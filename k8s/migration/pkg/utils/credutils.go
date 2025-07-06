@@ -103,8 +103,8 @@ func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud
 		}
 
 		log := ctrllog.FromContext(ctx)
-		log.Info("IP address conflict detected", 
-			"ip", ip, 
+		log.Info("IP address conflict detected",
+			"ip", ip,
 			"subnetID", subnetID,
 			"network", networkName,
 			"ports", portDetails)
@@ -117,7 +117,7 @@ func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud
 
 // IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
 // MAC addresses are normalized to lowercase before comparison to handle case differences
-func IsMacAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
+func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
 	// Normalize MAC to lowercase and remove any separators
 	normalizedMAC := strings.ToLower(strings.ReplaceAll(mac, ":", ""))
 	normalizedMAC = strings.ReplaceAll(normalizedMAC, "-", "")
@@ -147,7 +147,7 @@ func IsMacAllocatedInOpenStack(ctx context.Context, networkingClient *gopherclou
 
 // IsIPInAllocationPool checks if the given IP is within any allocation pool of the specified subnet.
 // If subnetID is empty, it checks all subnets in the network.
-func IsIPInAllocationPool(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
+func IsIPInAllocationPool(_ context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
 	// First, verify the IP is valid
 	ipAddr := net.ParseIP(ip)
 	if ipAddr == nil {
@@ -211,20 +211,6 @@ func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
 		if bytes.Compare(ipBytes, startBytes) >= 0 && bytes.Compare(ipBytes, endBytes) <= 0 {
 			return true
 		}
-	}
-	return false
-}
-
-// ipInRange checks if the ip is between start and end (inclusive)
-func ipInRange(ip, start, end string) bool {
-	ipAddr := net.ParseIP(ip)
-	startAddr := net.ParseIP(start)
-	endAddr := net.ParseIP(end)
-	if ipAddr == nil || startAddr == nil || endAddr == nil {
-		return false
-	}
-	if bytes.Compare(ipAddr, startAddr) >= 0 && bytes.Compare(ipAddr, endAddr) <= 0 {
-		return true
 	}
 	return false
 }
@@ -870,7 +856,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			Memory:       int(vmProps.Config.Hardware.MemoryMB),
 			ESXiName:     host.Name,
 			ClusterName:  clusterName,
-      RDMDisks:    rdmDiskInfos,
+			RDMDisks:     rdmDiskInfos,
 		})
 	}
 	return vminfo, nil
