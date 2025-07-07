@@ -43,6 +43,7 @@ type RollingMigrationPlanReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Logger logr.Logger
+	Local  bool
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=rollingmigrationplans,verbs=get;list;watch;create;update;patch;delete
@@ -124,6 +125,7 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 	configMap, err := utils.GetValidationConfigMapForRollingMigrationPlan(ctx, r.Client, migrationPlan)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			log.Info("Validation configmap not found, creating default validation configmap")
 			if _, err := utils.CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx, r.Client, migrationPlan); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to create default validation configmap")
 			}
@@ -160,7 +162,7 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 
 	if migrationPlan.Spec.CloudInitConfigRef == nil {
 		log.Info("CloudInitConfigRef is not set")
-		err := utils.MergeCloudInitAndCreateSecret(ctx, scope)
+		err := utils.MergeCloudInitAndCreateSecret(ctx, scope, r.Local)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to merge cloud-init config and create secret")
 		}

@@ -67,8 +67,10 @@ type RollingMigartionValidationConfig struct {
 	CheckIfThereAreMoreThanOneHostInCluster bool `json:"checkIfThereAreMoreThanOneHostInCluster"` // Check if there are more than one host in the cluster
 	// CheckClusterRemainingHostCapacity checks if the cluster has enough remaining capacity
 	CheckClusterRemainingHostCapacity bool `json:"checkClusterRemainingHostCapacity"` // Check if the cluster has enough remaining capacity
-	// CheckNoVMsOnHost checks if there are no VMs on the host
-	CheckNoVMsOnHost bool `json:"checkNoVMsOnHost"` // Check if there are no VMs on the host
 	// CheckVMsAreNotBlockedForMigration checks if the VMs are not blocked for migration
 	CheckVMsAreNotBlockedForMigration bool `json:"checkVMsAreNotBlockedForMigration"` // Check if the VMs are not blocked for migration
+	// CheckESXiInMAAS checks if the ESXi host is in MAAS
+	CheckESXiInMAAS bool `json:"checkESXiInMAAS"` // Check if the ESXi host is in MAAS
+	// CheckPCDHasClusterConfigured checks if the PCD has at-least one Cluster configured
+	CheckPCDHasClusterConfigured bool `json:"checkPCDHasClusterConfigured"` // Check if the PCD has at-least one Cluster configured
 }

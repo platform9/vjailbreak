@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -770,9 +769,9 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 // ValidateRollingMigrationPlan validates that a rolling migration plan meets all the prerequisites
 // It checks VMware credentials, MAAS configurations, and ESXi host readiness
 func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, configMap *corev1.ConfigMap) (bool, string, error) {
-	config := RollingMigartionValidationConfig{}
-	if err := json.Unmarshal([]byte(configMap.Data[constants.RollingMigrationPlanValidationConfigKey]), &config); err != nil {
-		return false, "", errors.Wrap(err, "failed to unmarshal validation config")
+	config := GetRollingMigrationPlanValidationConfigFromConfigMap(configMap)
+	if config == nil {
+		return false, "", errors.New("failed to get rolling migration plan validation config")
 	}
 
 	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
@@ -797,7 +796,7 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		// This checks if the ESXi host can enter maintenance mode
 		// with all VMs automatically migrating off to other hosts.
 		// It checks host, VM, and cluster settings that could block automatic VM migration.
-		canEnterMaintenanceMode, reason, err := CanEnterMaintenanceMode(ctx, scope, vmwareCreds, vmwareHost.Spec.Name, config)
+		canEnterMaintenanceMode, reason, err := CanEnterMaintenanceMode(ctx, scope, vmwareCreds, vmwareHost.Spec.Name, *config)
 		if err != nil {
 			return false, "", errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
 		}
@@ -805,23 +804,27 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 			return false, "", fmt.Errorf("esxi %s cannot be put in maintenance mode, due to %v", vmwareHost.Spec.Name, reason)
 		}
 
-		// Ensure the ESXi host is in MAAS
-		inMAAS, message, err := EnsureESXiInMass(ctx, scope, vmwareHost)
-		if err != nil {
-			return false, "", errors.Wrap(err, "failed to ensure ESXi is in MAAS")
-		}
-		if !inMAAS {
-			return false, "", errors.New(message)
+		if config.CheckESXiInMAAS {
+			// Ensure the ESXi host is in MAAS
+			inMAAS, message, err := EnsureESXiInMass(ctx, scope, vmwareHost)
+			if err != nil {
+				return false, "", errors.Wrap(err, "failed to ensure ESXi is in MAAS")
+			}
+			if !inMAAS {
+				return false, "", errors.New(message)
+			}
 		}
 	}
 
-	// Ensure PCD has at-least one Cluster configured
-	inPCD, message, err := EnsurePCDHasClusterConfigured(ctx, scope)
-	if err != nil {
-		return false, "", errors.Wrap(err, "failed to ensure PCD has at-least one Cluster configured")
-	}
-	if !inPCD {
-		return false, "", errors.New(message)
+	if config.CheckPCDHasClusterConfigured {
+		// Ensure PCD has at-least one Cluster configured
+		inPCD, message, err := EnsurePCDHasClusterConfigured(ctx, scope)
+		if err != nil {
+			return false, "", errors.Wrap(err, "failed to ensure PCD has at-least one Cluster configured")
+		}
+		if !inPCD {
+			return false, "", errors.New(message)
+		}
 	}
 
 	return true, "", nil

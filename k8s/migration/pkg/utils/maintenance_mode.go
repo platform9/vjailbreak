@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -147,7 +146,7 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return true, fmt.Sprintf("No VMs on host %s, maintenance mode can be entered", hostName), nil
 	}
 
-	if config.CheckNoVMsOnHost {
+	if config.CheckVMsAreNotBlockedForMigration {
 		// Get properties for all VMs on the host
 		var vms []mo.VirtualMachine
 		var vmRefs []types.ManagedObjectReference
@@ -313,14 +312,30 @@ func GetValidationConfigMapForRollingMigrationPlan(ctx context.Context, k8sClien
 }
 
 func GetRollingMigrationPlanValidationConfigFromConfigMap(configMap *corev1.ConfigMap) *RollingMigartionValidationConfig {
-	data := configMap.Data[constants.RollingMigrationPlanValidationConfigKey]
-	if data == "" {
+	data := configMap.Data
+	if data == nil {
 		return nil
 	}
 	var rollingMigrationPlanValidationConfig RollingMigartionValidationConfig
-	if err := json.Unmarshal([]byte(data), &rollingMigrationPlanValidationConfig); err != nil {
-		return nil
+	for key, value := range data {
+		switch key {
+		case "CheckDRSEnabled":
+			rollingMigrationPlanValidationConfig.CheckDRSEnabled = value == "true"
+		case "CheckDRSIsFullyAutomated":
+			rollingMigrationPlanValidationConfig.CheckDRSIsFullyAutomated = value == "true"
+		case "CheckIfThereAreMoreThanOneHostInCluster":
+			rollingMigrationPlanValidationConfig.CheckIfThereAreMoreThanOneHostInCluster = value == "true"
+		case "CheckClusterRemainingHostCapacity":
+			rollingMigrationPlanValidationConfig.CheckClusterRemainingHostCapacity = value == "true"
+		case "CheckVMsAreNotBlockedForMigration":
+			rollingMigrationPlanValidationConfig.CheckVMsAreNotBlockedForMigration = value == "true"
+		case "CheckESXiInMAAS":
+			rollingMigrationPlanValidationConfig.CheckESXiInMAAS = value == "true"
+		case "CheckPCDHasClusterConfigured":
+			rollingMigrationPlanValidationConfig.CheckPCDHasClusterConfigured = value == "true"
+		}
 	}
+
 	return &rollingMigrationPlanValidationConfig
 }
 
@@ -329,27 +344,21 @@ func getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPl
 }
 
 func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*corev1.ConfigMap, error) {
-	data := RollingMigartionValidationConfig{
-		CheckDRSEnabled:                         true,
-		CheckDRSIsFullyAutomated:                true,
-		CheckIfThereAreMoreThanOneHostInCluster: true,
-		CheckClusterRemainingHostCapacity:       true,
-		CheckNoVMsOnHost:                        true,
-		CheckVMsAreNotBlockedForMigration:       true,
+	data := map[string]string{
+		"CheckDRSEnabled":                         "true",
+		"CheckDRSIsFullyAutomated":                "true",
+		"CheckIfThereAreMoreThanOneHostInCluster": "true",
+		"CheckClusterRemainingHostCapacity":       "true",
+		"CheckVMsAreNotBlockedForMigration":       "true",
+		"CheckESXiInMAAS":                         "true",
+		"CheckPCDHasClusterConfigured":            "true",
 	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	var rollingMigrationPlanValidationConfig corev1.ConfigMap
-	rollingMigrationPlanValidationConfig = corev1.ConfigMap{
+	rollingMigrationPlanValidationConfig := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPlan.Name),
 			Namespace: constants.NamespaceMigrationSystem,
 		},
-		Data: map[string]string{
-			constants.RollingMigrationPlanValidationConfigKey: string(jsonData),
-		},
+		Data: data,
 	}
 	if err := k8sClient.Create(ctx, &rollingMigrationPlanValidationConfig); err != nil {
 		return nil, err

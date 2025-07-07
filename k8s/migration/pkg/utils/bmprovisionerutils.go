@@ -209,7 +209,7 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 }
 
 // MergeCloudInitAndCreateSecret merges cloud-init configurations and creates a secret with the result
-func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope, local bool) error {
 	// Get BMConfig for the rolling migration plan
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
@@ -229,7 +229,7 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 
 	userData := string(userDataSecret.Data[constants.UserDataSecretKey])
 
-	cloudInit, err := generatePCDOnboardingCloudInit(ctx, scope)
+	cloudInit, err := generatePCDOnboardingCloudInit(ctx, scope, local)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate cloud init for BMConfig")
 	}
@@ -280,7 +280,7 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	return nil
 }
 
-func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMigrationPlanScope) (string, error) {
+func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMigrationPlanScope, local bool) (string, error) {
 	openstackCreds, err := GetDestinationOpenstackCredsInfoFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack credentials")
@@ -300,7 +300,13 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 	}
 
 	// read cloud-init template
-	cloudInitTemplateStr, err := os.ReadFile("/pkg/scripts/cloud-init.tmpl.yaml")
+	var cloudInitTemplateLocation string
+	if local {
+		cloudInitTemplateLocation = "./pkg/scripts/cloud-init.tmpl.yaml"
+	} else {
+		cloudInitTemplateLocation = "/pkg/scripts/cloud-init.tmpl.yaml"
+	}
+	cloudInitTemplateStr, err := os.ReadFile(cloudInitTemplateLocation)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read cloud-init template")
 	}

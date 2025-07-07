@@ -79,7 +79,7 @@ const (
 	CloudInitConfigKey = "cloud-init-config"
 
 	// RollingMigrationPlanValidationConfigKey is the key for rolling migration plan validation config
-	RollingMigrationPlanValidationConfigKey = "alidation-config"
+	RollingMigrationPlanValidationConfigKey = "validation-config"
 
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"
