@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -768,7 +769,12 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 
 // ValidateRollingMigrationPlan validates that a rolling migration plan meets all the prerequisites
 // It checks VMware credentials, MAAS configurations, and ESXi host readiness
-func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) (bool, string, error) {
+func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, configMap *corev1.ConfigMap) (bool, string, error) {
+	config := RollingMigartionValidationConfig{}
+	if err := json.Unmarshal([]byte(configMap.Data[constants.RollingMigrationPlanValidationConfigKey]), &config); err != nil {
+		return false, "", errors.Wrap(err, "failed to unmarshal validation config")
+	}
+
 	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to get vmware credentials")
@@ -791,12 +797,12 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		// This checks if the ESXi host can enter maintenance mode
 		// with all VMs automatically migrating off to other hosts.
 		// It checks host, VM, and cluster settings that could block automatic VM migration.
-		canEnterMaintenanceMode, blockedVMs, err := CanEnterMaintenanceMode(ctx, scope, vmwareCreds, vmwareHost.Spec.Name)
+		canEnterMaintenanceMode, reason, err := CanEnterMaintenanceMode(ctx, scope, vmwareCreds, vmwareHost.Spec.Name, config)
 		if err != nil {
 			return false, "", errors.Wrap(err, "failed to check if ESXi can enter maintenance mode")
 		}
 		if !canEnterMaintenanceMode {
-			return false, "", fmt.Errorf("cannot enter maintenance mode for ESXi %s, due to vms %v", vmwareHost.Spec.Name, blockedVMs)
+			return false, "", fmt.Errorf("esxi %s cannot be put in maintenance mode, due to %v", vmwareHost.Spec.Name, reason)
 		}
 
 		// Ensure the ESXi host is in MAAS

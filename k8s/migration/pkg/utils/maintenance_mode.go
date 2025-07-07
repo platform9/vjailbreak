@@ -2,22 +2,28 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // CanEnterMaintenanceMode checks if an ESXi host can successfully enter maintenance mode
 // with all VMs automatically migrating off to other hosts. It checks host, VM, and cluster
 // settings that could block automatic VM migration.
-func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (bool, string, error) {
+func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string, config RollingMigartionValidationConfig) (bool, string, error) {
 	// List of VMs that cannot migrate
 	blockedVMs := make([]string, 0)
 	k8sClient := scope.Client
@@ -70,22 +76,26 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return false, fmt.Sprintf("failed to get cluster information: %v", err), fmt.Errorf("failed to get cluster information: %w", err)
 	}
 
-	// Check if DRS is enabled and in fully automated mode
-	if cluster.Configuration.DrsConfig.Enabled == nil {
-		return false, "cluster configuration not available", nil
-	}
+	if config.CheckDRSEnabled || config.CheckDRSIsFullyAutomated {
+		// Check if DRS is enabled and in fully automated mode
+		if cluster.Configuration.DrsConfig.Enabled == nil {
+			return false, "cluster configuration not available", nil
+		}
 
-	drsEnabled := cluster.Configuration.DrsConfig.Enabled != nil && *cluster.Configuration.DrsConfig.Enabled
-	drsAutomationLevel := cluster.Configuration.DrsConfig.DefaultVmBehavior
+		drsEnabled := cluster.Configuration.DrsConfig.Enabled != nil && *cluster.Configuration.DrsConfig.Enabled
+		drsAutomationLevel := cluster.Configuration.DrsConfig.DefaultVmBehavior
 
-	// Check if DRS automation level supports automatic migration
-	if !drsEnabled {
-		return false, fmt.Sprintf("DRS not enabled on cluster %s, VM migration will not be automatic", cluster.Name), nil
-	}
+		// Check if DRS automation level supports automatic migration
+		if !drsEnabled {
+			return false, fmt.Sprintf("DRS not enabled on cluster %s, VM migration will not be automatic", cluster.Name), nil
+		}
 
-	fullyAutomated := drsAutomationLevel == types.DrsBehaviorFullyAutomated
-	if !fullyAutomated {
-		return false, fmt.Sprintf("DRS not in fully automated mode on cluster %s, some VMs may not migrate automatically", cluster.Name), nil
+		if config.CheckDRSIsFullyAutomated {
+			fullyAutomated := drsAutomationLevel == types.DrsBehaviorFullyAutomated
+			if !fullyAutomated {
+				return false, fmt.Sprintf("DRS not in fully automated mode on cluster %s, some VMs may not migrate automatically", cluster.Name), nil
+			}
+		}
 	}
 
 	// Check if there are any other hosts in the cluster to migrate to
@@ -95,8 +105,10 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return false, fmt.Sprintf("failed to get cluster hosts: %v", err), fmt.Errorf("failed to get cluster hosts: %w", err)
 	}
 
-	if len(clusterHosts.Host) <= 1 {
-		return false, fmt.Sprintf("cluster %s has only one host, nowhere to migrate VMs", cluster.Name), nil
+	if config.CheckIfThereAreMoreThanOneHostInCluster {
+		if len(clusterHosts.Host) <= 1 {
+			return false, fmt.Sprintf("cluster %s has only one host, nowhere to migrate VMs", cluster.Name), nil
+		}
 	}
 
 	// Check cluster resource capacity
@@ -106,24 +118,26 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return false, fmt.Sprintf("failed to get cluster resource summary: %v", err), fmt.Errorf("failed to get cluster resource summary: %w", err)
 	}
 
-	// Check if remaining hosts have enough capacity
-	if clusterResourceUsageSummary.Summary != nil && clusterResourceUsageSummary.Summary.GetComputeResourceSummary() != nil {
-		summary := clusterResourceUsageSummary.Summary.GetComputeResourceSummary()
+	if config.CheckClusterRemainingHostCapacity {
+		// Check if remaining hosts have enough capacity
+		if clusterResourceUsageSummary.Summary != nil && clusterResourceUsageSummary.Summary.GetComputeResourceSummary() != nil {
+			summary := clusterResourceUsageSummary.Summary.GetComputeResourceSummary()
 
-		// Calculate if removing this host would leave enough capacity
-		// This is a basic estimation - in reality vSphere DRS has more sophisticated algorithms
-		effectiveHosts := len(clusterHosts.Host) - 1 // Removing the host we're checking
-		if effectiveHosts > 0 {
-			currentCPUUsage := float64(summary.TotalCpu-summary.EffectiveCpu) / float64(summary.TotalCpu)
-			currentMemUsage := float64(summary.TotalMemory-summary.EffectiveMemory) / float64(summary.TotalMemory)
+			// Calculate if removing this host would leave enough capacity
+			// This is a basic estimation - in reality vSphere DRS has more sophisticated algorithms
+			effectiveHosts := len(clusterHosts.Host) - 1 // Removing the host we're checking
+			if effectiveHosts > 0 {
+				currentCPUUsage := float64(summary.TotalCpu-summary.EffectiveCpu) / float64(summary.TotalCpu)
+				currentMemUsage := float64(summary.TotalMemory-summary.EffectiveMemory) / float64(summary.TotalMemory)
 
-			// A rough estimation assuming equal hosts
-			projectedCPUUsage := currentCPUUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
-			projectedMemUsage := currentMemUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
+				// A rough estimation assuming equal hosts
+				projectedCPUUsage := currentCPUUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
+				projectedMemUsage := currentMemUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
 
-			if projectedCPUUsage > 0.90 || projectedMemUsage > 0.90 {
-				return false, fmt.Sprintf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
-					projectedCPUUsage*100, projectedMemUsage*100), nil
+				if projectedCPUUsage > 1 || projectedMemUsage > 1 {
+					return false, fmt.Sprintf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
+						projectedCPUUsage*100, projectedMemUsage*100), nil
+				}
 			}
 		}
 	}
@@ -133,22 +147,24 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return true, fmt.Sprintf("No VMs on host %s, maintenance mode can be entered", hostName), nil
 	}
 
-	// Get properties for all VMs on the host
-	var vms []mo.VirtualMachine
-	var vmRefs []types.ManagedObjectReference
-	vmRefs = append(vmRefs, hostProps.Vm...)
+	if config.CheckNoVMsOnHost {
+		// Get properties for all VMs on the host
+		var vms []mo.VirtualMachine
+		var vmRefs []types.ManagedObjectReference
+		vmRefs = append(vmRefs, hostProps.Vm...)
 
-	err = pc.Retrieve(ctx, vmRefs, []string{"name", "runtime", "config", "summary"}, &vms)
-	if err != nil {
-		return false, fmt.Sprintf("failed to retrieve VM properties: %v", err), fmt.Errorf("failed to retrieve VM properties: %w", err)
-	}
+		err = pc.Retrieve(ctx, vmRefs, []string{"name", "runtime", "config", "summary"}, &vms)
+		if err != nil {
+			return false, fmt.Sprintf("failed to retrieve VM properties: %v", err), fmt.Errorf("failed to retrieve VM properties: %w", err)
+		}
 
-	for _, vm := range vms {
-		blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(vm))
-	}
+		for _, vm := range vms {
+			blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(vm))
+		}
 
-	if len(blockedVMs) > 0 {
-		return false, fmt.Sprintf("some VMs on host %s are blocked for migration: %v", hostName, blockedVMs), nil
+		if len(blockedVMs) > 0 {
+			return false, fmt.Sprintf("some VMs on host %s are blocked for migration: %v", hostName, blockedVMs), nil
+		}
 	}
 
 	return true, "", nil
@@ -286,4 +302,57 @@ func CheckVMForMaintenanceMode(vm mo.VirtualMachine) string {
 		return fmt.Sprintf("%s (pending question)", vm.Name)
 	}
 	return ""
+}
+
+func GetValidationConfigMapForRollingMigrationPlan(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*corev1.ConfigMap, error) {
+	var rollingMigrationPlanValidationConfig corev1.ConfigMap
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPlan.Name), Namespace: constants.NamespaceMigrationSystem}, &rollingMigrationPlanValidationConfig); err != nil {
+		return nil, err
+	}
+	return &rollingMigrationPlanValidationConfig, nil
+}
+
+func GetRollingMigrationPlanValidationConfigFromConfigMap(configMap *corev1.ConfigMap) *RollingMigartionValidationConfig {
+	data := configMap.Data[constants.RollingMigrationPlanValidationConfigKey]
+	if data == "" {
+		return nil
+	}
+	var rollingMigrationPlanValidationConfig RollingMigartionValidationConfig
+	if err := json.Unmarshal([]byte(data), &rollingMigrationPlanValidationConfig); err != nil {
+		return nil
+	}
+	return &rollingMigrationPlanValidationConfig
+}
+
+func getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPlanName string) string {
+	return fmt.Sprintf("%s-validation-config", rollingMigrationPlanName)
+}
+
+func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*corev1.ConfigMap, error) {
+	data := RollingMigartionValidationConfig{
+		CheckDRSEnabled:                         true,
+		CheckDRSIsFullyAutomated:                true,
+		CheckIfThereAreMoreThanOneHostInCluster: true,
+		CheckClusterRemainingHostCapacity:       true,
+		CheckNoVMsOnHost:                        true,
+		CheckVMsAreNotBlockedForMigration:       true,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	var rollingMigrationPlanValidationConfig corev1.ConfigMap
+	rollingMigrationPlanValidationConfig = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPlan.Name),
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Data: map[string]string{
+			constants.RollingMigrationPlanValidationConfigKey: string(jsonData),
+		},
+	}
+	if err := k8sClient.Create(ctx, &rollingMigrationPlanValidationConfig); err != nil {
+		return nil, err
+	}
+	return &rollingMigrationPlanValidationConfig, nil
 }

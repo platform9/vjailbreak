@@ -120,9 +120,25 @@ func (r *RollingMigrationPlanReconciler) reconcileNormal(ctx context.Context, sc
 		return ctrl.Result{}, nil
 	}
 
+	// check and create default validation configmap
+	configMap, err := utils.GetValidationConfigMapForRollingMigrationPlan(ctx, r.Client, migrationPlan)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if _, err := utils.CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx, r.Client, migrationPlan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to create default validation configmap")
+			}
+		}
+	}
+	if configMap == nil {
+		configMap, err = utils.GetValidationConfigMapForRollingMigrationPlan(ctx, r.Client, migrationPlan)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to get validation configmap for rolling migration plan")
+		}
+	}
+
 	// Do not validate if the rolling migration plan has already started running
 	if migrationPlan.Status.Phase != vjailbreakv1alpha1.RollingMigrationPlanPhaseRunning {
-		valid, message, err := utils.ValidateRollingMigrationPlan(ctx, scope)
+		valid, message, err := utils.ValidateRollingMigrationPlan(ctx, scope, configMap)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to validate rolling migration plan")
 		}

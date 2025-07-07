@@ -37,20 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// CloudInitParams holds OpenStack authentication parameters for cloud-init configuration.
-// These parameters are used when generating cloud-init configurations for bare metal nodes.
-type CloudInitParams struct {
-	AuthURL     string
-	Username    string
-	Password    string
-	RegionName  string
-	TenantName  string
-	Insecure    bool
-	DomainName  string
-	FQDN        string
-	KeystoneURL string
-}
-
 // ConvertESXiToPCDHost converts an ESXi host to a PCD host by reclaiming the hardware
 func ConvertESXiToPCDHost(ctx context.Context,
 	scope *scope.ESXIMigrationScope,

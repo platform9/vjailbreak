@@ -40,16 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OpenStackClients holds clients for interacting with OpenStack services
-type OpenStackClients struct {
-	// BlockStorageClient is the client for interacting with OpenStack Block Storage
-	BlockStorageClient *gophercloud.ServiceClient
-	// ComputeClient is the client for interacting with OpenStack Compute
-	ComputeClient *gophercloud.ServiceClient
-	// NetworkingClient is the client for interacting with OpenStack Networking
-	NetworkingClient *gophercloud.ServiceClient
-}
-
 const (
 	trueString = "true" // Define at package level
 )
