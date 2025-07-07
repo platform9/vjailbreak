@@ -53,33 +53,28 @@ type OpenStackClients struct {
 	NetworkingClient *gophercloud.ServiceClient
 }
 
+// IsIPAllocatedInOpenStack checks if the given IP address is already allocated to any port in OpenStack.
 func IsIPAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, ip string) (bool, error) {
 	if net.ParseIP(ip) == nil {
 		return false, fmt.Errorf("invalid IP address: %s", ip)
 	}
-
-	// List all ports that have the given IP address, regardless of subnet.
 	listOpts := ports.ListOpts{
 		FixedIPs: []ports.FixedIPOpts{{
 			IPAddress: ip,
 		}},
 	}
-
 	allPages, err := ports.List(networkingClient, listOpts).AllPages()
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to list ports for IP %s", ip)
 	}
-
 	allPorts, err := ports.ExtractPorts(allPages)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to extract ports for IP %s", ip)
 	}
-
 	return len(allPorts) > 0, nil
 }
 
 // IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
-// MAC addresses are normalized to lowercase before comparison to handle case differences
 func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
 	// Normalize MAC to lowercase and remove any separators
 	normalizedMAC := strings.ToLower(strings.ReplaceAll(mac, ":", ""))
@@ -109,7 +104,6 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 }
 
 // IsIPInAllocationPool checks if the given IP is within any allocation pool of the specified subnet.
-// If subnetID is empty, it checks all subnets in the network.
 func IsIPInAllocationPool(_ context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
 	// First, verify the IP is valid
 	ipAddr := net.ParseIP(ip)
@@ -713,29 +707,40 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
 			continue
 		}
+		allMacs := make(map[string]struct{})
+		for _, device := range vmProps.Config.Hardware.Device {
+			if nic, ok := device.(govmitypes.BaseVirtualEthernetCard); ok {
+				if nic.GetVirtualEthernetCard().MacAddress != "" {
+					allMacs[nic.GetVirtualEthernetCard().MacAddress] = struct{}{}
+				}
+			}
+		}
+		if vmProps.Guest != nil && vmProps.Guest.Net != nil {
+			for _, net := range vmProps.Guest.Net {
+				if net.MacAddress != "" {
+					allMacs[net.MacAddress] = struct{}{}
+				}
+			}
+		}
+		macAddresses := make([]string, 0, len(allMacs))
+		for mac := range allMacs {
+			macAddresses = append(macAddresses, mac)
+		}
+
 		var datastores []string
 		var networks []string
 		var disks []string
 		var clusterName string
-		var macAddresses []string
-		if vmProps.Guest != nil && vmProps.Guest.Net != nil {
-			for _, net := range vmProps.Guest.Net {
-				if net.MacAddress != "" {
-					macAddresses = append(macAddresses, net.MacAddress)
-				}
-			}
-		}
 
-		// Fetch details required for RDM disks
+		// ... (The rest of the function remains exactly the same) ...
+
 		hostStorageMap := sync.Map{}
 		controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
-		// Collect all SCSI controller to find shared RDM disks
 		for _, device := range vmProps.Config.Hardware.Device {
 			if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
 				controllers[device.GetVirtualDevice().Key] = scsiController
 			}
 		}
-		// Get basic RDM disk info from VM properties
 		rdmDiskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
 		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
 		if err != nil {
@@ -782,7 +787,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
 
-		// Get the host name and parent (cluster) information
 		host := mo.HostSystem{}
 		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
 		if err != nil {
@@ -927,19 +931,17 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	// so we need to know if the object is new or not. if it is new we mark the migrated
 	// field to false and powerstate to the current state of the vm.
 	// If the object is not new, we update the status and persist the migrated status.
-	init := false
+	// init := false
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	vmwvmKey := k8stypes.NamespacedName{Name: sanitizedVMName, Namespace: vmwcreds.Namespace}
 
 	// Try to fetch existing resource
 	err = client.Get(ctx, vmwvmKey, vmwvm)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get VMwareMachine: %w", err)
-	}
-
-	// Check if the object is present or not if not present create a new object and set init to true.
-	if apierrors.IsNotFound(err) {
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get VMwareMachine: %w", err)
+		}
 		// If not found, create a new object
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
@@ -954,84 +956,62 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMInfo: *vminfo,
 			},
+			Status: vjailbreakv1alpha1.VMwareMachineStatus{
+				PowerState: vminfo.VMState,
+				Migrated:   false,
+			},
 		}
-		init = true
-	} else {
-		// Initialize labels map if needed
-		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
-		// Check if label already exists with same value
-		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
-			// Initialize labels map if needed
-			if vmwvm.Labels == nil {
-				vmwvm.Labels = make(map[string]string)
-			}
-			vmwvm.Labels[label] = "true"
-			// Update only if we made changes
-			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
-			}
+		if err := client.Create(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to create VMwareMachine: %w", err)
 		}
-		// Set the new label
-		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
-
-		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
-			syncRDMDisks(vminfo, vmwvm)
-			// update vminfo in case the VM has been moved by vMotion
-			assignedIP := ""
-			osType := ""
-
-			if vmwvm.Spec.VMInfo.AssignedIP != "" {
-				assignedIP = vmwvm.Spec.VMInfo.AssignedIP
-			}
-			if vmwvm.Spec.VMInfo.OSFamily != "" {
-				osType = vmwvm.Spec.VMInfo.OSFamily
-			}
-			vmwvm.Spec.VMInfo = *vminfo
-			if assignedIP != "" {
-				vmwvm.Spec.VMInfo.AssignedIP = assignedIP
-			}
-			if osType != "" && vmwvm.Spec.VMInfo.OSFamily == "" {
-				vmwvm.Spec.VMInfo.OSFamily = osType
-			}
-			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
-			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
-
-			if vmwvm.Spec.VMInfo.OSFamily == "" {
-				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
-			}
-			// Update only if we made changes
-			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine: %w", err)
-			}
-		}
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
+		return client.Status().Update(ctx, vmwvm)
 	}
 
-	// Assumption is if init is true, the object is new and it is not migrated hence mark migrated to false.
-	if init {
-		vmwvm.Status = vjailbreakv1alpha1.VMwareMachineStatus{
-			PowerState: vminfo.VMState,
-			Migrated:   false,
-		}
-	} else {
-		// If the object is not new, update the status and persist migrated status.
-		currentMigratedStatus := vmwvm.Status.Migrated
-		if vmwvm.Status.PowerState != vminfo.VMState {
-			vmwvm.Status.PowerState = vminfo.VMState
-		}
-		vmwvm.Status.Migrated = currentMigratedStatus
+	// --- START OF THE FIX ---
+	// The object already exists, so we merge the new info carefully to avoid data loss.
+
+	existingInfo := vmwvm.Spec.VMInfo.DeepCopy() // Keep a copy of the old data
+
+	// Start with the newly discovered info
+	vmwvm.Spec.VMInfo = *vminfo
+
+	// Now, preserve old data if the new discovery returned empty values for critical fields.
+	if len(vmwvm.Spec.VMInfo.MacAddresses) == 0 && len(existingInfo.MacAddresses) > 0 {
+		vmwvm.Spec.VMInfo.MacAddresses = existingInfo.MacAddresses
+	}
+	if len(vmwvm.Spec.VMInfo.Disks) == 0 && len(existingInfo.Disks) > 0 {
+		vmwvm.Spec.VMInfo.Disks = existingInfo.Disks
+	}
+	if vmwvm.Spec.VMInfo.OSFamily == "" && existingInfo.OSFamily != "" {
+		vmwvm.Spec.VMInfo.OSFamily = existingInfo.OSFamily
+	}
+	// Preserve user-set fields that are not discoverable
+	if existingInfo.AssignedIP != "" {
+		vmwvm.Spec.VMInfo.AssignedIP = existingInfo.AssignedIP
 	}
 
-	// Update the status
-	if err := client.Status().Update(ctx, vmwvm); err != nil {
-		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
+	// Update labels
+	if vmwvm.Labels == nil {
+		vmwvm.Labels = make(map[string]string)
 	}
+	vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
+	vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
+	vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
+
+	// --- END OF THE FIX ---
+
+	if err = client.Update(ctx, vmwvm); err != nil {
+		return fmt.Errorf("failed to update VMwareMachine spec: %w", err)
+	}
+
+	// Update status separately
+	if vmwvm.Status.PowerState != vminfo.VMState {
+		vmwvm.Status.PowerState = vminfo.VMState
+		if err := client.Status().Update(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to update VMwareMachine status: %w", err)
+		}
+	}
+
 	return nil
 }
 

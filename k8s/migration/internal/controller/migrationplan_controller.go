@@ -134,14 +134,12 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
 
-	// Always close the scope when exiting this function such that we can persist any MigrationPlan changes.
 	defer func() {
 		if err := migrationPlanScope.Close(); err != nil && reterr == nil {
 			reterr = err
 		}
 	}()
 
-	// examine DeletionTimestamp to determine if object is under deletion or not
 	if !migrationplan.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, migrationPlanScope)
 	}
@@ -384,7 +382,7 @@ func (r *MigrationPlanReconciler) validateVMsForMigration(ctx context.Context, m
 		}
 
 		// Log VM info for debugging
-		r.ctxlog.Info("🔍 Validating VM",
+		r.ctxlog.Info("Validating VM",
 			"vm", vmName,
 			"numCPUs", vmMachine.Spec.VMInfo.CPU,
 			"memoryMB", vmMachine.Spec.VMInfo.Memory)
@@ -450,7 +448,6 @@ func (r *MigrationPlanReconciler) getMigrationCredentials(ctx context.Context, m
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
-
 	// If the plan is already in a terminal state, we don't need to do anything else.
 	if migrationplan.Status.MigrationStatus == corev1.PodFailed || migrationplan.Status.MigrationStatus == corev1.PodSucceeded {
 		r.ctxlog.Info("MigrationPlan is in a terminal state, reconciliation will be skipped.")
@@ -478,31 +475,31 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		// Restore this important pre-flight check for the VM's basic spec
 		if err := r.validateVMsForMigration(ctx, migrationplan, parallelvms); err != nil {
-			// A failure here is critical and should probably fail the plan
-			r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, err.Error())
+			if statusUpdateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, err.Error()); statusUpdateErr != nil {
+				r.ctxlog.Error(statusUpdateErr, "Failed to update MigrationPlan status after validation failure")
+				return ctrl.Result{}, statusUpdateErr
+			}
 			return ctrl.Result{}, err
 		}
-
 		for _, vmName := range parallelvms {
-			vmK8sName, _ := utils.ConvertToK8sName(vmName)
+			vmK8sName, err := utils.ConvertToK8sName(vmName)
+			if err != nil {
+				r.ctxlog.Error(err, "Could not convert VM name to a valid Kubernetes resource name; skipping this VM", "vmName", vmName)
+				continue
+			}
 			existingMigration := &vjailbreakv1alpha1.Migration{}
-			err := r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmK8sName), Namespace: migrationplan.Namespace}, existingMigration)
-
+			err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmK8sName), Namespace: migrationplan.Namespace}, existingMigration)
 			if err == nil {
-				// Migration object already exists, no need to re-validate or re-create.
 				continue
 			}
 			if !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("failed to check for existing migration for %s: %w", vmName, err)
 			}
-
-			// If we are here, the Migration object does not exist yet. Let's create it.
 			conflictMsg, validationErr := r.validateVMInOpenStack(ctx, openstackClients, migrationtemplate, vmName, migrationplan.Namespace)
 			if validationErr != nil {
 				r.ctxlog.Error(validationErr, "A non-blocking error occurred during validation", "vm", vmName)
 				continue
 			}
-
 			if err := r.createAndLaunchMigration(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds, vmName, conflictMsg); err != nil {
 				r.ctxlog.Error(err, "Failed to create and launch migration for VM", "vm", vmName)
 				continue
@@ -592,7 +589,7 @@ func (r *MigrationPlanReconciler) validateVMInOpenStack(
 		return "", fmt.Errorf("failed to get VMwareMachine for VM '%s': %w", vmName, err)
 	}
 
-	log.Info("🔍 Validating VM in OpenStack", "vm", vmName)
+	log.Info("Validating VM in OpenStack", "vm", vmName)
 
 	// Check for MAC address conflicts
 	for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
@@ -668,7 +665,7 @@ func (r *MigrationPlanReconciler) createAndLaunchMigration(
 
 	// Step 2: If there's a conflict, update status and STOP.
 	if conflictMsg != "" {
-		log.Info("🚫 Blocking migration due to validation conflict", "vm", vmName, "reason", conflictMsg)
+		log.Info("Blocking migration due to validation conflict", "vm", vmName, "reason", conflictMsg)
 		migrationObj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 		migrationObj.Status.Conditions = []corev1.PodCondition{{
 			Type:               "Validation",
@@ -681,7 +678,7 @@ func (r *MigrationPlanReconciler) createAndLaunchMigration(
 	}
 
 	// Step 3: If no conflict, proceed to create ConfigMaps and the Job.
-	log.Info("✅ Validation successful, launching migration job", "vm", vmName)
+	log.Info("Validation successful, launching migration job", "vm", vmName)
 
 	_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationObj, openstackcreds, vmwcreds, vmName, vmMachine)
 	if err != nil {

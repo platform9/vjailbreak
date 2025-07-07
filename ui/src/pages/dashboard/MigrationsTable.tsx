@@ -108,8 +108,12 @@ const columns: GridColDef[] = [
         valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
         flex: 2,
         renderCell: (params) => {
-            const phase = params.row?.status?.phase
             const conditions = params.row?.status?.conditions
+            const latestCondition = conditions?.sort((a, b) => new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime())[0];
+            let phase = params.row?.status?.phase;
+            if (latestCondition?.reason === 'Blocked') {
+                phase = Phase.Blocked;
+            }
             return conditions ? (
                 <MigrationProgress
                     phase={phase}
