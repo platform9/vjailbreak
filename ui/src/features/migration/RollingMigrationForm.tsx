@@ -1823,44 +1823,6 @@ export default function RollingMigrationFormDrawer({
             >
                 <Header title="Cluster Conversion " />
 
-                {/* Experimental Feature Banner */}
-                <Box sx={{ p: 3, pb: 0 }}>
-                    <Alert
-                        severity="warning"
-                        icon={<WarningIcon />}
-                        sx={{
-                            mb: 2,
-                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                            border: '1px solid rgba(255, 152, 0, 0.3)',
-                            '& .MuiAlert-message': {
-                                width: '100%'
-                            }
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box>
-                                <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
-                                    Cluster Conversion
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    Migrate your entire cluster to a new OpenStack environment.
-                                </Typography>
-                            </Box>
-                            <Link
-                                href="/docs/cluster-conversion"
-                                target="_blank"
-                                sx={{
-                                    ml: 2,
-                                    textDecoration: 'none',
-                                    fontWeight: 500,
-                                    fontSize: '0.875rem'
-                                }}
-                            >
-                                Learn More →
-                            </Link>
-                        </Box>
-                    </Alert>
-                </Box>
 
                 <DrawerContent>
                     <Box sx={{ display: "grid", gap: 4 }}>

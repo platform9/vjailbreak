@@ -16,6 +16,8 @@ import { ChevronLeft, ChevronRight } from '@mui/icons-material'
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from '../../types/navigation'
+import { useVersionQuery } from '../../hooks/api/useVersionQuery'
+import theme from 'src/theme/theme'
 
 
 const DRAWER_WIDTH = 280
@@ -87,14 +89,15 @@ const BrandContainer = styled(Box)(() => ({
   width: '100%',
 }))
 
-const BrandText = styled(Box)(() => ({
+const BrandText = styled(Box)(({ theme }) => ({
   fontWeight: 700,
   fontSize: '1.5rem',
-  background: `linear-gradient(135deg, #1C8CC9 0%, #23A7E0 50%, #6CCDEE 100%)`,
+  // color: theme.palette.primary.main,
+  // fontFamily: 'system-ui, -apple-system, sans-serif',
+  background: theme.palette.primary.main,
   backgroundClip: 'text',
   WebkitBackgroundClip: 'text',
   WebkitTextFillColor: 'transparent',
-  letterSpacing: '-0.5px',
 }))
 
 const VersionBadge = styled(Box)(({ theme }) => ({
@@ -106,6 +109,37 @@ const VersionBadge = styled(Box)(({ theme }) => ({
   color: alpha(theme.palette.text.secondary, 0.6),
   fontWeight: 400,
 }))
+
+const VersionDisplay = () => {
+  const { data: versionInfo, isLoading, error } = useVersionQuery()
+
+  if (isLoading) {
+    return (
+      <VersionBadge>
+        Loading version...
+      </VersionBadge>
+    )
+  }
+
+  if (error) {
+    return (
+      <VersionBadge>
+        Version: Unable to load
+      </VersionBadge>
+    )
+  }
+
+  return (
+    <VersionBadge>
+      Version: {versionInfo?.version}
+      {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
+        <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', mt: 0.5 }}>
+          Update available: {versionInfo.upgradeVersion}
+        </Box>
+      )}
+    </VersionBadge>
+  )
+}
 
 
 const StyledListItemButton = styled(ListItemButton, {
@@ -323,11 +357,11 @@ export default function Sidenav({
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <DrawerHeader>
-        {!isCollapsed && (
-          <BrandContainer>
-            <BrandText>vJailbreak</BrandText>
-          </BrandContainer>
-        )}
+        <BrandContainer>
+          <BrandText>
+            {isCollapsed ? 'vJ' : 'vJailbreak'}
+          </BrandText>
+        </BrandContainer>
       </DrawerHeader>
 
       <List sx={{
@@ -353,9 +387,7 @@ export default function Sidenav({
       </List>
 
       {!isCollapsed && (
-        <VersionBadge>
-          Version: 2.1.0 - Mock
-        </VersionBadge>
+        <VersionDisplay />
       )}
     </Box>
   )
