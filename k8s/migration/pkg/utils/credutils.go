@@ -172,10 +172,6 @@ func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
 	return false
 }
 
-const (
-	trueString = "true" // Define at package level
-)
-
 // discoverVMStorage finds all datastores, disks, and RDM info for a VM.
 // It returns the discovered info or a boolean indicating the VM should be skipped.
 func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualMachine, vmProps *mo.VirtualMachine) (datastores, disks []string, rdmDiskInfos []vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
@@ -278,7 +274,7 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
-	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
+	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), constants.TrueString)
 
 	return vjailbreakv1alpha1.VMwareCredsInfo{
 		Host:       host,
@@ -313,7 +309,7 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 	}
 
 	insecureStr := string(secret.Data["OS_INSECURE"])
-	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
+	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), constants.TrueString)
 
 	return vjailbreakv1alpha1.OpenStackCredsInfo{
 		AuthURL:    fields["AuthURL"],

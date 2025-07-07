@@ -573,8 +573,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 // validateVMInOpenStack checks a single VM for MAC/IP conflicts in OpenStack.
 // It returns a specific error starting with "CONFLICT:" if the migration should be blocked.
-// validateVMInOpenStack checks a single VM for conflicts and returns a conflict message string if found.
-// It returns a separate error for operational failures (e.g., can't connect to OpenStack).
 func (r *MigrationPlanReconciler) validateVMInOpenStack(
 	ctx context.Context,
 	openstackClients *utils.OpenStackClients,
@@ -591,19 +589,19 @@ func (r *MigrationPlanReconciler) validateVMInOpenStack(
 
 	log.Info("Validating VM in OpenStack", "vm", vmName)
 
-	// // Check for MAC address conflicts
-	// for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
-	// 	if mac == "" {
-	// 		continue
-	// 	}
-	// 	macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
-	// 	if err != nil {
-	// 		return "", fmt.Errorf("failed to check MAC allocation: %w", err)
-	// 	}
-	// 	if macAllocated {
-	// 		return fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s is already allocated", mac), nil
-	// 	}
-	// }
+	// Check for MAC address conflicts
+	for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
+		if mac == "" {
+			continue
+		}
+		macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
+		if err != nil {
+			return "", fmt.Errorf("failed to check MAC allocation: %w", err)
+		}
+		if macAllocated {
+			return fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s is already allocated", mac), nil
+		}
+	}
 
 	// Validate IP address if present
 	if ip := vmMachine.Spec.VMInfo.IPAddress; ip != "" {
