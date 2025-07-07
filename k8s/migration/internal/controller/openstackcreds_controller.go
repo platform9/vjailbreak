@@ -196,7 +196,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			// Get the cpu and memory of the vmwaremachine object
 			cpu := vmwaremachine.Spec.VMInfo.CPU
 			memory := vmwaremachine.Spec.VMInfo.Memory
-			computeClient, err := utils.GetOpenStackClients(context.TODO(), r.Client, scope.OpenstackCreds)
+			computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
 			}
