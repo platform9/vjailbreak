@@ -258,6 +258,20 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 		}
 	}
 
+	// Delete validation configmap
+	validationConfigMap, err := utils.GetValidationConfigMapForRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "Failed to get validation configmap", "rollingmigrationplan", scope.RollingMigrationPlan.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get validation configmap")
+		}
+	} else {
+		if delErr := r.Delete(ctx, validationConfigMap); delErr != nil {
+			log.Error(delErr, "Failed to delete validation configmap", "rollingmigrationplan", scope.RollingMigrationPlan.Name)
+			return ctrl.Result{}, errors.Wrap(delErr, "failed to delete validation configmap")
+		}
+	}
+
 	controllerutil.RemoveFinalizer(scope.RollingMigrationPlan, constants.RollingMigrationPlanFinalizer)
 	return ctrl.Result{}, nil
 }
