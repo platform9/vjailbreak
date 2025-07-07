@@ -176,6 +176,58 @@ const (
 	trueString = "true" // Define at package level
 )
 
+// discoverVMStorage finds all datastores, disks, and RDM info for a VM.
+// It returns the discovered info or a boolean indicating the VM should be skipped.
+func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualMachine, vmProps *mo.VirtualMachine) (datastores, disks []string, rdmDiskInfos []vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
+	ctxlog := ctrllog.FromContext(ctx)
+	pc := property.DefaultCollector(c)
+
+	// --- This block is extracted from GetAllVMs ---
+	hostStorageMap := sync.Map{}
+	controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
+	for _, device := range vmProps.Config.Hardware.Device {
+		if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
+			controllers[device.GetVirtualDevice().Key] = scsiController
+		}
+	}
+
+	rdmDiskInfos = make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
+	hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
+	if err != nil {
+		ctxlog.Error(err, "failed to get disk info for vm skipping vm", "vm", vm.Name())
+		return nil, nil, nil, true, nil // Treat as skippable error
+	}
+
+	for _, device := range vmProps.Config.Hardware.Device {
+		disk, ok := device.(*govmitypes.VirtualDisk)
+		if !ok {
+			continue
+		}
+		dsref, rdmInfo, shouldSkip, diskErr := processVMDisk(ctx, disk, controllers, hostStorageInfo, vm.Name())
+		if diskErr != nil {
+			return nil, nil, nil, false, diskErr // Return fatal error
+		}
+		if shouldSkip {
+			return nil, nil, nil, true, nil // Skip this VM entirely
+		}
+
+		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDiskInfo{}) {
+			rdmDiskInfos = append(rdmDiskInfos, rdmInfo)
+			continue
+		}
+
+		if dsref != nil {
+			var ds mo.Datastore
+			if err := pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds); err != nil {
+				return nil, nil, nil, false, fmt.Errorf("failed to get datastore: %w", err)
+			}
+			datastores = AppendUnique(datastores, ds.Name)
+			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
+		}
+	}
+	return datastores, disks, rdmDiskInfos, false, nil
+}
+
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	creds := vjailbreakv1alpha1.VMwareCreds{}
@@ -687,26 +739,23 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
 	ctxlog := ctrllog.FromContext(ctx)
-	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
+
 	for _, vm := range vms {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{
-			"config",
-			"guest",
-			"runtime",
-			"network",
-			"guest.net",
-			"summary.config.annotation",
+			"config", "guest", "runtime", "network", "guest.net", "summary.config.annotation",
 		}, &vmProps)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get VM properties: %w", err)
-		}
-		if vmProps.Config == nil {
-			// VM is not powered on or is in creating state
-			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
+			ctxlog.Error(err, "failed to get VM properties, skipping vm", "vm", vm.Name())
 			continue
 		}
+		if vmProps.Config == nil {
+			ctxlog.Info("VM properties not available, skipping vm", "vm", vm.Name())
+			continue
+		}
+
+		// --- Discover MAC Addresses ---
 		allMacs := make(map[string]struct{})
 		for _, device := range vmProps.Config.Hardware.Device {
 			if nic, ok := device.(govmitypes.BaseVirtualEthernetCard); ok {
@@ -727,28 +776,8 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			macAddresses = append(macAddresses, mac)
 		}
 
-		var datastores []string
+		// --- Discover Networks ---
 		var networks []string
-		var disks []string
-		var clusterName string
-
-		// ... (The rest of the function remains exactly the same) ...
-
-		hostStorageMap := sync.Map{}
-		controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
-		for _, device := range vmProps.Config.Hardware.Device {
-			if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
-				controllers[device.GetVirtualDevice().Key] = scsiController
-			}
-		}
-		rdmDiskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
-		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
-		if err != nil {
-			ctxlog.Error(err, "failed to get disk info for vm skipping vm", "vm", vm.Name())
-			continue
-		}
-		attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
-
 		pc := property.DefaultCollector(c)
 		for _, netRef := range vmProps.Network {
 			var netObj mo.Network
@@ -758,58 +787,38 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 			networks = append(networks, netObj.Name)
 		}
-		var skipVM bool
-		for _, device := range vmProps.Config.Hardware.Device {
-			disk, ok := device.(*govmitypes.VirtualDisk)
-			if !ok {
-				continue
-			}
-			dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, controllers, hostStorageInfo, vm.Name())
-			if err != nil {
-				return nil, err
-			}
-			if skip {
-				skipVM = true
-				break
-			}
-			if !reflect.DeepEqual(rdmInfos, vjailbreakv1alpha1.RDMDiskInfo{}) {
-				rdmDiskInfos = append(rdmDiskInfos, rdmInfos)
-				continue
-			}
 
-			var ds mo.Datastore
-			err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get datastore: %w", err)
-			}
-
-			datastores = AppendUnique(datastores, ds.Name)
-			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
+		// --- Call the new helper for storage discovery ---
+		datastores, disks, rdmDiskInfos, skipVM, err := discoverVMStorage(ctx, c, vm, &vmProps)
+		if err != nil {
+			return nil, err // A fatal error occurred during storage discovery
+		}
+		if skipVM {
+			continue // A skippable condition was found (e.g., shared bus)
 		}
 
+		// --- Get Host and Cluster Info ---
 		host := mo.HostSystem{}
-		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
+		err = pc.RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get host name: %w", err)
 		}
+		clusterName := getClusterNameFromHost(ctx, c, host)
 
-		clusterName = getClusterNameFromHost(ctx, c, host)
-
-		if skipVM {
-			continue
-		}
+		// --- Final RDM disk processing ---
 		if len(rdmDiskInfos) >= 1 && len(disks) == 0 {
-			ctxlog.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "vm", vm.Name())
+			ctxlog.Info("Skipping VM: VM has RDM disks but no regular bootable disks found", "vm", vm.Name())
 			continue
 		}
 		if len(rdmDiskInfos) > 0 {
-			fmt.Println("VM : ", vm.Name(), " has RDM disks, populating RDM disk info from attributes", attributes)
+			attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
 			rdmDiskInfos, err = populateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
 			if err != nil {
-				ctxlog.Error(err, "failed to populate RDM disk info from attributes for vm", "vm", vm.Name)
+				ctxlog.Error(err, "failed to populate RDM disk info from attributes, skipping vm", "vm", vm.Name)
 				continue
 			}
 		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:         vmProps.Config.Name,
 			Datastores:   datastores,
@@ -926,17 +935,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
-	// We need this flag because, there can be multiple VMwarecreds and each will
-	// trigger its own reconciliation loop,
-	// so we need to know if the object is new or not. if it is new we mark the migrated
-	// field to false and powerstate to the current state of the vm.
-	// If the object is not new, we update the status and persist the migrated status.
-	// init := false
 
+	init := false
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	vmwvmKey := k8stypes.NamespacedName{Name: sanitizedVMName, Namespace: vmwcreds.Namespace}
 
-	// Try to fetch existing resource
 	err = client.Get(ctx, vmwvmKey, vmwvm)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -956,62 +959,64 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 				VMInfo: *vminfo,
 			},
-			Status: vjailbreakv1alpha1.VMwareMachineStatus{
-				PowerState: vminfo.VMState,
-				Migrated:   false,
-			},
 		}
-		if err := client.Create(ctx, vmwvm); err != nil {
-			return fmt.Errorf("failed to create VMwareMachine: %w", err)
+		init = true
+	} else {
+		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
+		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
+			if vmwvm.Labels == nil {
+				vmwvm.Labels = make(map[string]string)
+			}
+			vmwvm.Labels[label] = "true"
+			if err = client.Update(ctx, vmwvm); err != nil {
+				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
+			}
 		}
-		return client.Status().Update(ctx, vmwvm)
-	}
+		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
+			syncRDMDisks(vminfo, vmwvm)
+			existingInfo := vmwvm.Spec.VMInfo.DeepCopy()
+			vmwvm.Spec.VMInfo = *vminfo
+			if len(vmwvm.Spec.VMInfo.MacAddresses) == 0 && len(existingInfo.MacAddresses) > 0 {
+				vmwvm.Spec.VMInfo.MacAddresses = existingInfo.MacAddresses
+			}
+			if len(vmwvm.Spec.VMInfo.Disks) == 0 && len(existingInfo.Disks) > 0 {
+				vmwvm.Spec.VMInfo.Disks = existingInfo.Disks
+			}
+			if vmwvm.Spec.VMInfo.OSFamily == "" && existingInfo.OSFamily != "" {
+				vmwvm.Spec.VMInfo.OSFamily = existingInfo.OSFamily
+			}
+			if existingInfo.AssignedIP != "" {
+				vmwvm.Spec.VMInfo.AssignedIP = existingInfo.AssignedIP
+			}
 
-	// --- START OF THE FIX ---
-	// The object already exists, so we merge the new info carefully to avoid data loss.
+			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
+			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
 
-	existingInfo := vmwvm.Spec.VMInfo.DeepCopy() // Keep a copy of the old data
-
-	// Start with the newly discovered info
-	vmwvm.Spec.VMInfo = *vminfo
-
-	// Now, preserve old data if the new discovery returned empty values for critical fields.
-	if len(vmwvm.Spec.VMInfo.MacAddresses) == 0 && len(existingInfo.MacAddresses) > 0 {
-		vmwvm.Spec.VMInfo.MacAddresses = existingInfo.MacAddresses
-	}
-	if len(vmwvm.Spec.VMInfo.Disks) == 0 && len(existingInfo.Disks) > 0 {
-		vmwvm.Spec.VMInfo.Disks = existingInfo.Disks
-	}
-	if vmwvm.Spec.VMInfo.OSFamily == "" && existingInfo.OSFamily != "" {
-		vmwvm.Spec.VMInfo.OSFamily = existingInfo.OSFamily
-	}
-	// Preserve user-set fields that are not discoverable
-	if existingInfo.AssignedIP != "" {
-		vmwvm.Spec.VMInfo.AssignedIP = existingInfo.AssignedIP
-	}
-
-	// Update labels
-	if vmwvm.Labels == nil {
-		vmwvm.Labels = make(map[string]string)
-	}
-	vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
-	vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
-	vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
-
-	// --- END OF THE FIX ---
-
-	if err = client.Update(ctx, vmwvm); err != nil {
-		return fmt.Errorf("failed to update VMwareMachine spec: %w", err)
-	}
-
-	// Update status separately
-	if vmwvm.Status.PowerState != vminfo.VMState {
-		vmwvm.Status.PowerState = vminfo.VMState
-		if err := client.Status().Update(ctx, vmwvm); err != nil {
-			return fmt.Errorf("failed to update VMwareMachine status: %w", err)
+			if err = client.Update(ctx, vmwvm); err != nil {
+				return fmt.Errorf("failed to update VMwareMachine: %w", err)
+			}
 		}
 	}
+	if _, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error { return nil }); err != nil {
+		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
+	}
 
+	if init {
+		vmwvm.Status = vjailbreakv1alpha1.VMwareMachineStatus{
+			PowerState: vminfo.VMState,
+			Migrated:   false,
+		}
+	} else {
+		currentMigratedStatus := vmwvm.Status.Migrated
+		if vmwvm.Status.PowerState != vminfo.VMState {
+			vmwvm.Status.PowerState = vminfo.VMState
+		}
+		vmwvm.Status.Migrated = currentMigratedStatus
+	}
+
+	if err := client.Status().Update(ctx, vmwvm); err != nil {
+		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
+	}
 	return nil
 }
 

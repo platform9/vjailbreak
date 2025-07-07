@@ -591,19 +591,19 @@ func (r *MigrationPlanReconciler) validateVMInOpenStack(
 
 	log.Info("Validating VM in OpenStack", "vm", vmName)
 
-	// Check for MAC address conflicts
-	for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
-		if mac == "" {
-			continue
-		}
-		macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
-		if err != nil {
-			return "", fmt.Errorf("failed to check MAC allocation: %w", err)
-		}
-		if macAllocated {
-			return fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s is already allocated", mac), nil
-		}
-	}
+	// // Check for MAC address conflicts
+	// for _, mac := range vmMachine.Spec.VMInfo.MacAddresses {
+	// 	if mac == "" {
+	// 		continue
+	// 	}
+	// 	macAllocated, err := utils.IsMacAllocatedInOpenStack(ctx, openstackClients.NetworkingClient, mac)
+	// 	if err != nil {
+	// 		return "", fmt.Errorf("failed to check MAC allocation: %w", err)
+	// 	}
+	// 	if macAllocated {
+	// 		return fmt.Sprintf("CONFLICT:MAC_ALREADY_ALLOCATED:MAC %s is already allocated", mac), nil
+	// 	}
+	// }
 
 	// Validate IP address if present
 	if ip := vmMachine.Spec.VMInfo.IPAddress; ip != "" {
