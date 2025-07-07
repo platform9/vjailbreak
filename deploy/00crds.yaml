@@ -3380,7 +3380,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.1.15
+        image: quay.io/platform9/vjailbreak-controller:v0.2.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3411,6 +3411,8 @@ spec:
           name: master-token
         - mountPath: /home/ubuntu
           name: vddk
+        - mountPath: /etc/hosts
+          name: hosts-file
       hostNetwork: true
       securityContext:
         runAsGroup: 0
@@ -3426,6 +3428,10 @@ spec:
           path: /home/ubuntu
           type: Directory
         name: vddk
+      - hostPath:
+          path: /etc/hosts
+          type: File
+        name: hosts-file
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -3452,7 +3458,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.1.15
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.2.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -3461,11 +3467,20 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/hosts
+          name: hosts-file
+          readOnly: true
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /etc/hosts
+          type: File
+        name: hosts-file
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
