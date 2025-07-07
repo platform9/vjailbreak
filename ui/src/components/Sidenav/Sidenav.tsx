@@ -17,7 +17,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from '../../types/navigation'
 import { useVersionQuery } from '../../hooks/api/useVersionQuery'
-import theme from 'src/theme/theme'
 
 
 const DRAWER_WIDTH = 280
