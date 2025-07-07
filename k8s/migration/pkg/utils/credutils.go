@@ -35,6 +35,7 @@ import (
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -672,19 +673,101 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				continue
 			}
 		}
+		// Get the cluster name from the host's parent
+		if host.Parent != nil {
+			// Determine parent type based on the object reference type
+			parentType := host.Parent.Type
+			// Get the parent name
+			var parentEntity mo.ManagedEntity
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
+			if err != nil {
+				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
+			} else {
+				// Handle based on the parent's type
+				switch parentType {
+				case "ClusterComputeResource":
+					var cluster mo.ClusterComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+					if err != nil {
+						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = cluster.Name
+					}
+				case "ComputeResource":
+					var compute mo.ComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
+					if err != nil {
+						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = compute.Name
+					}
+				default:
+					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+				}
+			}
+		} else {
+			clusterName = ""
+		}
+
+		// network interfaces and mac addresses, fill the info.
+		nicList := []vjailbreakv1alpha1.NIC{}
+		nicsIndex := 0
+		for _, networkDevice := range vmProps.Config.Hardware.Device {
+			// Get the VirtualDevice
+			var nic *types.VirtualEthernetCard
+			switch device := networkDevice.(type) {
+			case *types.VirtualE1000:
+				nic = &device.VirtualEthernetCard
+			case *types.VirtualE1000e:
+				nic = &device.VirtualEthernetCard
+			case *types.VirtualVmxnet:
+				nic = &device.VirtualEthernetCard
+			case *types.VirtualVmxnet2:
+				nic = &device.VirtualEthernetCard
+			case *types.VirtualVmxnet3:
+				nic = &device.VirtualEthernetCard
+			case *types.VirtualPCNet32:
+				nic = &device.VirtualEthernetCard
+			}
+
+			if nic != nil && nic.Backing != nil {
+				var network string
+				switch backing := networkDevice.GetVirtualDevice().Backing.(type) {
+				case *types.VirtualEthernetCardNetworkBackingInfo:
+					if backing.Network != nil {
+						network = backing.Network.Value
+					}
+				case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+					network = backing.Port.PortgroupKey
+				case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
+					network = backing.OpaqueNetworkId
+				}
+				nicList = append(
+					nicList,
+					vjailbreakv1alpha1.NIC{
+						MAC:     strings.ToLower(nic.MacAddress),
+						Index:   nicsIndex,
+						Network: network,
+					})
+				nicsIndex++
+			}
+
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:        vmProps.Config.Name,
-			Datastores:  datastores,
-			Disks:       disks,
-			Networks:    networks,
-			IPAddress:   vmProps.Guest.IpAddress,
-			VMState:     vmProps.Guest.GuestState,
-			OSFamily:    vmProps.Guest.GuestFamily,
-			CPU:         int(vmProps.Config.Hardware.NumCPU),
-			Memory:      int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:    host.Name,
-			ClusterName: clusterName,
-			RDMDisks:    rdmDiskInfos,
+			Name:              vmProps.Config.Name,
+			Datastores:        datastores,
+			Disks:             disks,
+			Networks:          networks,
+			IPAddress:         vmProps.Guest.IpAddress,
+			VMState:           vmProps.Guest.GuestState,
+			OSFamily:          vmProps.Guest.GuestFamily,
+			CPU:               int(vmProps.Config.Hardware.NumCPU),
+			Memory:            int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:          host.Name,
+			ClusterName:       clusterName,
+			RDMDisks:          rdmDiskInfos,
+			NetworkInterfaces: nicList,
 		})
 	}
 	return vminfo, nil

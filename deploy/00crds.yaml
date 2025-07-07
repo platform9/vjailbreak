@@ -2147,6 +2147,24 @@ spec:
                   name:
                     description: Name is the name of the virtual machine
                     type: string
+                  networkInterfaces:
+                    description: NetworkInterfaces is the list of network interfaces
+                      for the virtual machine expect the lo device
+                    items:
+                      description: Virtual ethernet card.
+                      properties:
+                        mac:
+                          type: string
+                        network:
+                          type: string
+                        order:
+                          type: integer
+                      required:
+                      - mac
+                      - network
+                      - order
+                      type: object
+                    type: array
                   networks:
                     description: Networks is the list of networks for the virtual
                       machine

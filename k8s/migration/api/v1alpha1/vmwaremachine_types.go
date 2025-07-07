@@ -50,6 +50,15 @@ type VMInfo struct {
 	AssignedIP string `json:"assignedIp,omitempty"`
 	// RDMDisks is the list of RDM disks for the virtual machine
 	RDMDisks []RDMDiskInfo `json:"rdmDisks,omitempty"`
+	// NetworkInterfaces is the list of network interfaces for the virtual machine expect the lo device
+	NetworkInterfaces []NIC `json:"networkInterfaces,omitempty"`
+}
+
+// Virtual ethernet card.
+type NIC struct {
+	Network string `json:"network"`
+	MAC     string `json:"mac"`
+	Index   int    `json:"order"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine

@@ -555,19 +555,24 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if versionID == "" {
 				return fmt.Errorf("failed to get version ID")
 			}
-			if !isNetplanSupported(versionID) {
-				message := fmt.Sprintf("Netplan is not supported for version %s", versionID)
-				utils.PrintLog(message)
-				return nil
-			}
+			if isNetplanSupported(versionID) {
+				// Add Wildcard Netplan
+				utils.PrintLog("Adding wildcard netplan")
+				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
+				if err != nil {
+					return fmt.Errorf("failed to add wildcard netplan: %s", err)
+				}
+				utils.PrintLog("Wildcard netplan added successfully")
+			} else {
+				utils.PrintLog("Ubuntu version does not support netplan, skipping...")
+				// Since netplan is not supported need to get the ip,mac and network interface mapping
+				// To inject udev rules so that after migration the network interfaces names are consistent
+				// and they get the correct ip address.
 
-			// Add Wildcard Netplan
-			utils.PrintLog("Adding wildcard netplan")
-			err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
-			if err != nil {
-				return fmt.Errorf("failed to add wildcard netplan: %s", err)
+				// Get the network interface mapping
+				// Get the ip,mac mapping
+
 			}
-			utils.PrintLog("Wildcard netplan added successfully")
 		}
 	}
 	err = migobj.DetachAllVolumes(vminfo)
@@ -687,25 +692,42 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 }
 func parseVersionID(osRelease string) string {
 	for _, line := range strings.Split(osRelease, "\n") {
-		if strings.HasPrefix(line, "version_id=") {
-			return strings.Trim(line[len("version_id="):], `"`)
+		kv := strings.SplitN(line, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(strings.ToUpper(kv[0]))
+		val := strings.Trim(kv[1], `"`) // Remove any quotes
+
+		if key == "VERSION_ID" {
+			return val
 		}
 	}
 	return ""
 }
 
 func isNetplanSupported(version string) bool {
-	// Return true if VERSION_ID >= 17.10
-	v, err := versionAsFloat(version)
-	if err != nil {
-		log.Printf("Warning: couldn't parse VERSION_ID (%s): %v", version, err)
-		return true // Assume modern system if in doubt
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		log.Printf("Warning: unexpected VERSION_ID format: %q", version)
+		return true // assume modern if uncertain
 	}
-	return v >= 17.10
-}
 
-func versionAsFloat(v string) (float64, error) {
-	return strconv.ParseFloat(strings.TrimSpace(v), 64)
+	major, err1 := strconv.Atoi(parts[0])
+	minor, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		log.Printf("Warning: failed to parse VERSION_ID %q: %v %v", version, err1, err2)
+		return true
+	}
+
+	// Compare with 17.10
+	if major > 17 {
+		return true
+	}
+	if major == 17 && minor >= 10 {
+		return true
+	}
+	return false
 }
 
 func (migobj *Migrate) pingVM(ips []string) error {
