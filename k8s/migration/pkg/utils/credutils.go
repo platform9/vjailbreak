@@ -53,66 +53,29 @@ type OpenStackClients struct {
 	NetworkingClient *gophercloud.ServiceClient
 }
 
-// IsIPAllocatedInOpenStack checks if the given IP is already allocated to any port in OpenStack.
-// If subnetID is provided, it checks only within that subnet. If empty, it checks across all subnets.
-func IsIPAllocatedInOpenStack(ctx context.Context, networkingClient *gophercloud.ServiceClient, subnetID, ip string) (bool, error) {
-	// First, verify the IP is valid
+func IsIPAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, ip string) (bool, error) {
 	if net.ParseIP(ip) == nil {
 		return false, fmt.Errorf("invalid IP address: %s", ip)
 	}
 
-	// List all ports with the given IP address
+	// List all ports that have the given IP address, regardless of subnet.
 	listOpts := ports.ListOpts{
 		FixedIPs: []ports.FixedIPOpts{{
 			IPAddress: ip,
 		}},
 	}
 
-	// If subnetID is provided, add it to the filter
-	if subnetID != "" {
-		listOpts.FixedIPs[0].SubnetID = subnetID
-	}
-
 	allPages, err := ports.List(networkingClient, listOpts).AllPages()
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to list ports for IP %s in subnet %s", ip, subnetID)
+		return false, errors.Wrapf(err, "failed to list ports for IP %s", ip)
 	}
 
 	allPorts, err := ports.ExtractPorts(allPages)
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to extract ports for IP %s in subnet %s", ip, subnetID)
+		return false, errors.Wrapf(err, "failed to extract ports for IP %s", ip)
 	}
 
-	if len(allPorts) > 0 {
-		// Get the network name for better error reporting
-		networkName := ""
-		if len(allPorts[0].NetworkID) > 0 {
-			network, err := networks.Get(networkingClient, allPorts[0].NetworkID).Extract()
-			if err == nil && network != nil {
-				networkName = network.Name
-			}
-		}
-
-		portDetails := make([]string, 0, len(allPorts))
-		for _, p := range allPorts {
-			detail := fmt.Sprintf("port=%s, status=%s", p.ID, p.Status)
-			if len(p.Name) > 0 {
-				detail += fmt.Sprintf(", name=%s", p.Name)
-			}
-			portDetails = append(portDetails, detail)
-		}
-
-		log := ctrllog.FromContext(ctx)
-		log.Info("IP address conflict detected",
-			"ip", ip,
-			"subnetID", subnetID,
-			"network", networkName,
-			"ports", portDetails)
-
-		return true, nil
-	}
-
-	return false, nil
+	return len(allPorts) > 0, nil
 }
 
 // IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
