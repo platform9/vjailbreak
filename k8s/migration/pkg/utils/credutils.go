@@ -709,49 +709,47 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			clusterName = ""
 		}
 
-		// network interfaces and mac addresses, fill the info.
-		nicList := []vjailbreakv1alpha1.NIC{}
-		nicsIndex := 0
-		for _, networkDevice := range vmProps.Config.Hardware.Device {
-			// Get the VirtualDevice
-			var nic *types.VirtualEthernetCard
-			switch device := networkDevice.(type) {
-			case *types.VirtualE1000:
-				nic = &device.VirtualEthernetCard
-			case *types.VirtualE1000e:
-				nic = &device.VirtualEthernetCard
-			case *types.VirtualVmxnet:
-				nic = &device.VirtualEthernetCard
-			case *types.VirtualVmxnet2:
-				nic = &device.VirtualEthernetCard
-			case *types.VirtualVmxnet3:
-				nic = &device.VirtualEthernetCard
-			case *types.VirtualPCNet32:
-				nic = &device.VirtualEthernetCard
-			}
+		// Get the virtual NICs
+		nicList, err := ExtractVirtualNICs(&vmProps)
+		if err != nil {
+			return nil, err
+		}
+		// Get the guest network info
+		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
+		if err != nil {
+			return nil, err
+		}
 
-			if nic != nil && nic.Backing != nil {
-				var network string
-				switch backing := networkDevice.GetVirtualDevice().Backing.(type) {
-				case *types.VirtualEthernetCardNetworkBackingInfo:
-					if backing.Network != nil {
-						network = backing.Network.Value
-					}
-				case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
-					network = backing.Port.PortgroupKey
-				case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
-					network = backing.OpaqueNetworkId
-				}
-				nicList = append(
-					nicList,
-					vjailbreakv1alpha1.NIC{
-						MAC:     strings.ToLower(nic.MacAddress),
-						Index:   nicsIndex,
-						Network: network,
-					})
-				nicsIndex++
-			}
+		// Convert VM name to Kubernetes-safe name
+		vmName, err := ConvertToK8sName(vmProps.Config.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert vm name: %w", err)
+		}
 
+		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: vmwcreds.Namespace}
+		err = k3sclient.Get(ctx, vmwvmKey, vmwvm)
+
+		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+
+		switch {
+		case apierrors.IsNotFound(err):
+			// First time creation – use whatever vCenter gave us (could be nil)
+			guestNetworks = guestNetworksFromVmware
+
+		case err != nil:
+			// Unexpected error
+			return nil, fmt.Errorf("failed to get VMwareMachine: %w", err)
+
+		default:
+			// Object exists
+			if len(guestNetworksFromVmware) > 0 {
+				// Only update if we got fresh data from vCenter
+				guestNetworks = guestNetworksFromVmware
+			} else {
+				// Use existing data because VM is switched off and we can't get the info from vCenter
+				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
+			}
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
@@ -768,9 +766,83 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			ClusterName:       clusterName,
 			RDMDisks:          rdmDiskInfos,
 			NetworkInterfaces: nicList,
+			GuestNetworks:     guestNetworks,
 		})
 	}
 	return vminfo, nil
+}
+
+// ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
+// It returns a list of NICs with MAC addresses, backing network identifiers, and index order.
+func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, error) {
+	nicList := []vjailbreakv1alpha1.NIC{}
+	nicsIndex := 0
+
+	for _, device := range vmProps.Config.Hardware.Device {
+		var nic *types.VirtualEthernetCard
+
+		switch d := device.(type) {
+		case *types.VirtualE1000,
+			*types.VirtualE1000e,
+			*types.VirtualVmxnet,
+			*types.VirtualVmxnet2,
+			*types.VirtualVmxnet3,
+			*types.VirtualPCNet32:
+			nic = d.(types.BaseVirtualEthernetCard).GetVirtualEthernetCard()
+		}
+
+		if nic != nil && nic.Backing != nil {
+			var network string
+			switch backing := device.GetVirtualDevice().Backing.(type) {
+			case *types.VirtualEthernetCardNetworkBackingInfo:
+				if backing.Network != nil {
+					network = backing.Network.Value
+				}
+			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+				network = backing.Port.PortgroupKey
+			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
+				network = backing.OpaqueNetworkId
+			}
+
+			nicList = append(nicList, vjailbreakv1alpha1.NIC{
+				MAC:     strings.ToLower(nic.MacAddress),
+				Index:   nicsIndex,
+				Network: network,
+			})
+			nicsIndex++
+		}
+	}
+	return nicList, nil
+}
+
+// ExtractGuestNetworkInfo retrieves the runtime guest network configuration (guest.net)
+// reported by VMware Tools. Returns MAC, IP, DNS, and origin for each NIC in the guest.
+func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.GuestNetwork, error) {
+	guestNetworks := []vjailbreakv1alpha1.GuestNetwork{}
+
+	for i, guestNet := range vmProps.Guest.Net {
+		if guestNet.IpConfig == nil {
+			continue
+		}
+
+		for _, ip := range guestNet.IpConfig.IpAddress {
+			dnsConfigList := []string{}
+			if guestNet.DnsConfig != nil {
+				dnsConfigList = guestNet.DnsConfig.IpAddress
+			}
+
+			guestNetworks = append(guestNetworks, vjailbreakv1alpha1.GuestNetwork{
+				MAC:          strings.ToLower(guestNet.MacAddress),
+				IP:           ip.IpAddress,
+				Origin:       ip.Origin,
+				PrefixLength: ip.PrefixLength,
+				DNS:          dnsConfigList,
+				Device:       fmt.Sprintf("%d", i),
+			})
+		}
+	}
+
+	return guestNetworks, nil
 }
 
 // processVMDisk processes a single virtual disk device and updates the disk information

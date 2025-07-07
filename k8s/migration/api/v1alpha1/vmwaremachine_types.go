@@ -52,6 +52,8 @@ type VMInfo struct {
 	RDMDisks []RDMDiskInfo `json:"rdmDisks,omitempty"`
 	// NetworkInterfaces is the list of network interfaces for the virtual machine expect the lo device
 	NetworkInterfaces []NIC `json:"networkInterfaces,omitempty"`
+	// GuestNetworks is the list of network interfaces for the virtual machine as reported by the guest
+	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
 }
 
 // Virtual ethernet card.
@@ -59,6 +61,15 @@ type NIC struct {
 	Network string `json:"network"`
 	MAC     string `json:"mac"`
 	Index   int    `json:"order"`
+}
+
+type GuestNetwork struct {
+	MAC          string   `json:"mac"`
+	IP           string   `json:"ip"`
+	Origin       string   `json:"origin,omitempty"`       // DHCP or static
+	PrefixLength int32    `json:"prefixLength,omitempty"` // Subnet mask length
+	DNS          []string `json:"dns,omitempty"`          // DNS servers
+	Device       string   `json:"device,omitempty"`       // e.g. eth0
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
