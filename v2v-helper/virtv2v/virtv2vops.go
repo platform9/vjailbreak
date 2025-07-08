@@ -32,7 +32,7 @@ type VirtV2VOperations interface {
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
-	AddUdevRules(disks []vm.VMDisk, interfaces []string, macs []string) error
+	AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error
 	GetNetworkInterfaceNames(path string) ([]string, error)
 }
 
