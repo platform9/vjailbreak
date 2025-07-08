@@ -1,4 +1,4 @@
-import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Link, Select, MenuItem, GlobalStyles, FormLabel } from "@mui/material"
+import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel } from "@mui/material"
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
@@ -1823,44 +1823,6 @@ export default function RollingMigrationFormDrawer({
             >
                 <Header title="Cluster Conversion " />
 
-                {/* Experimental Feature Banner */}
-                <Box sx={{ p: 3, pb: 0 }}>
-                    <Alert
-                        severity="warning"
-                        icon={<WarningIcon />}
-                        sx={{
-                            mb: 2,
-                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                            border: '1px solid rgba(255, 152, 0, 0.3)',
-                            '& .MuiAlert-message': {
-                                width: '100%'
-                            }
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box>
-                                <Typography variant="body2" fontWeight="600" sx={{ mb: 0.5 }}>
-                                    🧪 Experimental Feature - Cluster Conversion (Beta)
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    This feature is in beta stage and may have significant limitations. Use with caution in production environments.
-                                </Typography>
-                            </Box>
-                            <Link
-                                href="/docs/rolling-migration-beta"
-                                target="_blank"
-                                sx={{
-                                    ml: 2,
-                                    textDecoration: 'none',
-                                    fontWeight: 500,
-                                    fontSize: '0.875rem'
-                                }}
-                            >
-                                Learn More →
-                            </Link>
-                        </Box>
-                    </Alert>
-                </Box>
 
                 <DrawerContent>
                     <Box sx={{ display: "grid", gap: 4 }}>
