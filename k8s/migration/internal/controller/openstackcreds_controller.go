@@ -44,15 +44,6 @@ type OpenstackCredsReconciler struct {
 	Local  bool
 }
 
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/finalizers,verbs=update
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/finalizers,verbs=update
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
@@ -62,6 +53,16 @@ type OpenstackCredsReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
+//
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
 func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
 	// Get the OpenstackCreds object
@@ -95,7 +96,10 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	if !openstackcreds.DeletionTimestamp.IsZero() {
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "openstackcreds", req.NamespacedName)
-		return r.reconcileDelete(ctx, scope)
+		if err := r.reconcileDelete(ctx, scope); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 	ctxlog.Info("Reconciling normal state", "openstackcreds", req.NamespacedName)
 	return r.reconcileNormal(ctx, scope)
@@ -210,21 +214,20 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 }
 
-func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
-	scope *scope.OpenstackCredsScope) (ctrl.Result, error) {
+func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) error {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Reconciling deletion for OpenstackCreds")
 
 	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Failed to delete PCD cluster entry")
-		return ctrl.Result{}, fmt.Errorf("failed to delete PCD cluster: %w", err)
+		return fmt.Errorf("failed to delete PCD cluster: %w", err)
 	}
 	ctxlog.Info("Successfully deleted PCD cluster entry")
 
 	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
 	if secretName != "" {
 		ctxlog.Info("Deleting associated secret", "secretName", secretName)
-		err := r.Client.Delete(ctx, &corev1.Secret{
+		err := r.Delete(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
 				Namespace: constants.NamespaceMigrationSystem,
@@ -232,24 +235,27 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 		})
 		if err != nil && !apierrors.IsNotFound(err) {
 			ctxlog.Error(err, "Failed to delete associated secret", "secretName", secretName)
-			return ctrl.Result{}, fmt.Errorf("failed to delete associated secret: %w", err)
+			return fmt.Errorf("failed to delete associated secret: %w", err)
 		}
 		ctxlog.Info("Successfully deleted associated secret or it was already gone", "secretName", secretName)
 	}
+
 	ctxlog.Info("All cleanup successful. Removing finalizer.")
 	if controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer) {
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 			if apierrors.IsNotFound(err) {
-				return ctrl.Result{}, nil
+				return nil
 			}
 			ctxlog.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
+			return err
 		}
 	}
+
 	ctxlog.Info("Successfully reconciled deletion of OpenstackCreds")
-	return ctrl.Result{}, nil
+	return nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
