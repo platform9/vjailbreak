@@ -43,6 +43,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+
 // OpenStackClients holds clients for interacting with OpenStack services
 type OpenStackClients struct {
 	// BlockStorageClient is the client for interacting with OpenStack Block Storage
@@ -223,6 +224,7 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 	}
 	return datastores, disks, rdmDiskInfos, false, nil
 }
+
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
@@ -964,6 +966,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				vmwvm.Labels = make(map[string]string)
 			}
 			vmwvm.Labels[label] = "true"
+
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
 			}
