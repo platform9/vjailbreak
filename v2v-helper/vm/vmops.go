@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -19,7 +20,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 )
 
-//go:generate mockgen -source=../vm/vmops.go -destination=../vm/vmops_mock.go -package=vm
+//go:generate mockgen -source=vmops.go -destination=vmops_mock.go -package=vm
 
 type VMOperations interface {
 	GetVMInfo(ostype string) (VMInfo, error)
@@ -42,17 +43,34 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU     int32
-	Memory  int32
-	State   types.VirtualMachinePowerState
-	Mac     []string
-	IPs     []string
-	UUID    string
-	Host    string
-	VMDisks []VMDisk
-	UEFI    bool
-	Name    string
-	OSType  string
+	CPU               int32
+	Memory            int32
+	State             types.VirtualMachinePowerState
+	Mac               []string
+	IPs               []string
+	UUID              string
+	Host              string
+	VMDisks           []VMDisk
+	UEFI              bool
+	Name              string
+	OSType            string
+	GuestNetworks     []GuestNetwork
+	NetworkInterfaces []NIC
+}
+
+type NIC struct {
+	Network string
+	MAC     string
+	Index   int
+}
+
+type GuestNetwork struct {
+	MAC          string
+	IP           string
+	Origin       string
+	PrefixLength int32
+	DNS          []string
+	Device       string
 }
 
 type ChangeID struct {
@@ -106,13 +124,26 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 			mac = append(mac, nic.GetVirtualEthernetCard().MacAddress)
 		}
 	}
-	// Get IP addresses of the VM
+	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
-	for _, nic := range o.Guest.Net {
-		if nic.IpConfig != nil {
-			for _, ip := range nic.IpConfig.IpAddress {
-				if !strings.Contains(ip.IpAddress, ":") {
-					ips = append(ips, ip.IpAddress)
+	// Get the vmware machine from k8s
+	vmk8sName, err := k8sutils.ConvertToK8sName(o.Name)
+	if err != nil {
+		return VMInfo{}, fmt.Errorf("failed to convert vm name to k8s name: %s", err)
+	}
+
+	vmwareMachine, err := k8sutils.GetVMwareMachine(vmops.ctx, vmk8sName)
+	if err != nil {
+		return VMInfo{}, fmt.Errorf("failed to get vmware machine: %s", err)
+	}
+
+	for _, macAddresss := range mac {
+		// Get the IPs from the vmware machine.
+		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
+			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
+				// Every mac should have a corresponding IP, Ignore link layer ip
+				if guestNetwork.MAC == macAddresss && !strings.Contains(guestNetwork.IP, ":") {
+					ips = append(ips, guestNetwork.IP)
 				}
 			}
 		}
