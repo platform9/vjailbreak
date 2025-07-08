@@ -1,5 +1,5 @@
 ---
-title: vJailbreak Components
+title: Components
 description: Overview of vJailbreak components
 ---
 

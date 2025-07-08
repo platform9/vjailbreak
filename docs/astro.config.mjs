@@ -44,7 +44,14 @@ export default defineConfig({
 						{ label: 'What is vJailbreak', slug: 'introduction/what_is_vjailbreak' },
 						{ label: 'Getting Started', slug: 'introduction/getting_started' },
 						{ label: 'Prerequisites', slug: 'introduction/prerequisites' },
-						{ label: 'Components', slug: 'introduction/components' },
+					],
+				},
+				{
+					label: 'Architecture',
+					items: [
+						{ label: 'Overview', slug: 'architecture/architecture-overview' },
+						{ label: 'vJailbreak VM', slug: 'architecture/vjailbreak-vm' },
+						{ label: 'Components', slug: 'architecture/components' },
 					],
 				},
 				{
