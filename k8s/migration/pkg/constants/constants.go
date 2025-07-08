@@ -63,9 +63,6 @@ const (
 	// ESXiNameLabel is the label for ESXi name
 	ESXiNameLabel = "vjailbreak.k8s.pf9.io/esxi-name"
 
-	// ClusterNameLabel is the label for cluster name
-	ClusterNameLabel = "vjailbreak.k8s.pf9.io/cluster-name"
-
 	// ClusterMigrationLabel is the label for cluster migration
 	ClusterMigrationLabel = "vjailbreak.k8s.pf9.io/clustermigration"
 
@@ -80,6 +77,9 @@ const (
 
 	// CloudInitConfigKey is the key for cloud init config
 	CloudInitConfigKey = "cloud-init-config"
+
+	// RollingMigrationPlanValidationConfigKey is the key for rolling migration plan validation config
+	RollingMigrationPlanValidationConfigKey = "validation-config"
 
 	// NodeRoleMaster is the role of the master node
 	NodeRoleMaster = "master"

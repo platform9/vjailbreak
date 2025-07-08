@@ -40,16 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OpenStackClients holds clients for interacting with OpenStack services
-type OpenStackClients struct {
-	// BlockStorageClient is the client for interacting with OpenStack Block Storage
-	BlockStorageClient *gophercloud.ServiceClient
-	// ComputeClient is the client for interacting with OpenStack Compute
-	ComputeClient *gophercloud.ServiceClient
-	// NetworkingClient is the client for interacting with OpenStack Networking
-	NetworkingClient *gophercloud.ServiceClient
-}
-
 const (
 	trueString = "true" // Define at package level
 )
@@ -779,6 +769,14 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
+	esxiK8sName, err := ConvertToK8sName(vminfo.ESXiName)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
+	}
+	clusterK8sName, err := ConvertToK8sName(vminfo.ClusterName)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
+	}
 	// We need this flag because, there can be multiple VMwarecreds and each will
 	// trigger its own reconciliation loop,
 	// so we need to know if the object is new or not. if it is new we mark the migrated
@@ -803,9 +801,9 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				Name:      vmwvmKey.Name,
 				Namespace: vmwcreds.Namespace,
 				Labels: map[string]string{
-					constants.VMwareCredsLabel: vmwcreds.Name,
-					constants.ESXiNameLabel:    vminfo.ESXiName,
-					constants.ClusterNameLabel: vminfo.ClusterName,
+					constants.VMwareCredsLabel:   vmwcreds.Name,
+					constants.ESXiNameLabel:      esxiK8sName,
+					constants.VMwareClusterLabel: clusterK8sName,
 				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
@@ -818,12 +816,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
 		// Check if label already exists with same value
-		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
+		if vmwvm.Labels == nil || vmwvm.Labels[label] != trueString {
 			// Initialize labels map if needed
 			if vmwvm.Labels == nil {
 				vmwvm.Labels = make(map[string]string)
 			}
-			vmwvm.Labels[label] = "true"
+			vmwvm.Labels[label] = trueString
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
@@ -832,7 +830,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		// Set the new label
 		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
-		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], vminfo.ESXiName) || !reflect.DeepEqual(vmwvm.Labels[constants.ClusterNameLabel], vminfo.ClusterName) {
+		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
 			syncRDMDisks(vminfo, vmwvm)
 			// update vminfo in case the VM has been moved by vMotion
 			assignedIP := ""
@@ -851,8 +849,8 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			if osType != "" && vmwvm.Spec.VMInfo.OSFamily == "" {
 				vmwvm.Spec.VMInfo.OSFamily = osType
 			}
-			vmwvm.Labels[constants.ESXiNameLabel] = vminfo.ESXiName
-			vmwvm.Labels[constants.ClusterNameLabel] = vminfo.ClusterName
+			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
+			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
 
 			if vmwvm.Spec.VMInfo.OSFamily == "" {
 				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily

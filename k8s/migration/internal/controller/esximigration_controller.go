@@ -167,6 +167,11 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 	err = utils.PutESXiInMaintenanceMode(ctx, r.Client, scope)
 	if err != nil {
 		log.Error(err, "Failed to put ESXi in maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+		updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
+		if updateErr != nil {
+			return ctrl.Result{}, errors.Wrap(updateErr, "failed to update ESXi migration status to failed")
+		}
 		return ctrl.Result{}, errors.Wrap(err, "failed to put ESXi in maintenance mode")
 	}
 	log.Info("Successfully updated ESXIMigration status to maintenance")
