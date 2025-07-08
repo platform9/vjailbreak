@@ -306,7 +306,7 @@ func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMig
 	} else {
 		cloudInitTemplateLocation = "/pkg/scripts/cloud-init.tmpl.yaml"
 	}
-	cloudInitTemplateStr, err := os.ReadFile(cloudInitTemplateLocation)
+	cloudInitTemplateStr, err := os.ReadFile(cloudInitTemplateLocation) //nolint: gosec
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read cloud-init template")
 	}
