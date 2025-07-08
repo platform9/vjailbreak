@@ -30,7 +30,7 @@ Before starting the RollingConversion process, ensure the following checks are c
 7. Ensure enough additional hosts on vCenter (Number of hosts will differ on the exact setup configuration)
 * NOTE: We put the ESX hosts in maintenance mode one by one, so the VMs on these hosts are moved off until the host becomes empty. This host is further converted to PCD host. The extra hosts are required to accommodate the moved off VMs
 * NOTE: It is not required to have the equal number of extra hosts, ideally just one.
-Check available disk space on target systems within the PCD environment.
+8. Check available disk space on target systems within the PCD environment.
 
 #### List of incompatible configurations for reference
 * VMs with PCIe passthrough or SR-IOV devices
@@ -42,7 +42,7 @@ Check available disk space on target systems within the PCD environment.
 * VMs using host-only or non-shared network/storage
 * VMs with VMCI or special device interfaces
 * VMs in suspended state (for live vMotion)
-*VMs with outdated VMware Tools or hardware version
+* VMs with outdated VMware Tools or hardware version
 
 ## Configuration
 
@@ -58,21 +58,21 @@ Create VMware and OpenStack/PCD credential with "PCD" configuration only PCD is 
 
 If you have ESXi already deployed through MAAS, you can skip this step, else you will need to import ESXis into MAAS so that MAAS can recognize them.
 
-## Trigger Cluster Conversion
+## How Cluster Conversion works
 After you submit the rolling conversion form, vJailbreak will take the following actions in sequence.
 
 1. Verify your creds, especially **openstack-creds** for checking if they are **PCD creds** or not  
 2. Verify Cluster information submitted in the form.  
 3. Prepare a **special cloud-init script** that will run **post conversion** of this host to a ubuntu machine.  
 4. Go through the list of VMs specified in the rolling conversion form  
-5. Formulate and save a **list of ESXis to be converted**. This list is generated through the **algorithm** described above  
+5. Formulate and save a **list of ESXis to be converted**. 
 6. Trigger the conversion process of these ESXi sequentially.  
 7. Each conversion process includes following steps  
    1. Put that ESXi in **maintenance mode**  
    2. Wait for all VMs on that ESXi to move off of this ESXi to other hosts **(by DRS/vMotion)**  
    3. Once the ESXi is empty, vJailbreak starts the process of converting it to PCD host  
       1. Fetch list of all available **“Machines”** in MAAS  
-      2. Find the correct **“Machine”** for the current ESXi, by checking the **harwareUUID** received both from vCenter API and MAAS API  
+      2. Find the correct **“Machine”** for the current ESXi, by checking the **hardwareUUID** received both from vCenter API and MAAS API  
       3. Once Machine is found, we fetch its **IPMI configuration** from MAAS, and use to set this machine **PXE (net) boot**  
       4. **Release** the machine in MaaS  
       5. **Deploy** the machine via MaaS, using the special cloud-init created in earlier steps  

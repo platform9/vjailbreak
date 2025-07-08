@@ -22,7 +22,7 @@ To copy the content of the `openstack.rc` file, you should navigate to Settings 
 
 If using PCD we recommend toggling the "Is PCD credentials" option. This will automatically indicate to vJailbreak that the credentials are for PCD and would use PCD Cluster as a destination for different migrations.
 
-For non PCD environment the `openstack.rc` file  will be available as part of various distribution and documentation. The `openstack.rc` file is typically used for any automation with the OpenStack CLI.
+For non PCD environment the `openstack.rc` file will be available as part of various distribution and documentation. The `openstack.rc` file is typically used for any automation with the OpenStack CLI.
 
 Here is an example of the `openstack.rc` file:
 

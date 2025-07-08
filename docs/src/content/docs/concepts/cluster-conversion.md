@@ -6,11 +6,11 @@ description: Overview of Cluster Conversion Process
 vJailbreak offers two primary migration options
 
 ## VM Migration
-The default option, where a user selects a set of VM within VMWare, across clusters and migrates them. This keeps
+The default option, where a user selects a set of VMs within VMware, across clusters and migrates them. This keeps
 the source VM intact and creates a new copy of them into OpenStack/PCD.
 
 ## Cluster Conversion
-The second option, where a user selects a cluster within VMWare and migrates it to a PCD cluster. This converts not only the VMs within the cluster but also the individual ESXi into PCD Hypervisor.
+The second option, where a user selects a cluster within VMware and migrates it to a PCD cluster. This converts not only the VMs within the cluster but also the individual ESXi into PCD Hypervisor.
 
 ![Cluster Conversion](/vjailbreak/images/cluster-conversion-1.png)
 

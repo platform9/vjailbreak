@@ -29,7 +29,7 @@ There are 2 options available
 ## Post Migration Options
 
 ### Post Migration Script
-* A script to be executed after the migration is complete. This script is optional and can be used to perform post migration tasks such as starting the application, updating the application configuration, adding VM to domain controller etc.
+A script to be executed after the migration is complete. This script is optional and can be used to perform post migration tasks such as starting the application, updating the application configuration, adding VM to domain controller etc.
 
 ### Rename VM
 An optional parameter. Renames the source VM in VMware to have a specific suffix, good option to indicate a VM is migrated to OpenStack/PCD. The default suffix is "_migrated_to_pcd".
