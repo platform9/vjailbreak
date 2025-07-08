@@ -293,13 +293,22 @@ export default function CredentialsTable() {
         credObject: cred,
     })) || [];
 
-    const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
-        id: `openstack-${cred.metadata.name}`,
-        name: cred.metadata.name,
-        type: 'OpenStack' as const,
-        status: cred.status?.openstackValidationStatus || 'Unknown',
-        credObject: cred,
-    })) || [];
+    useEffect(() => {
+        console.log('VMware Credentials:', vmwareCredentials);
+        console.log('OpenStack Credentials:', openstackCredentials);
+    }, [vmwareCredentials, openstackCredentials]);
+    
+    // Update the openstackItems mapping to ensure all credentials are included
+    const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => {
+        console.log('Processing OpenStack credential:', cred.metadata?.name);
+        return {
+            id: `openstack-${cred.metadata?.name}`,
+            name: cred.metadata?.name || 'Unnamed',
+            type: 'OpenStack' as const,
+            status: cred.status?.openstackValidationStatus || 'Unknown',
+            credObject: cred,
+        };
+    }) || [];
 
     // Combine both credential types
     const allCredentials = [...vmwareItems, ...openstackItems];

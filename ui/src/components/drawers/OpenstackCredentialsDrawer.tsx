@@ -14,6 +14,12 @@ import CheckIcon from "@mui/icons-material/Check";
 import OpenstackRCFileUploader, { OpenstackRCFileUploaderRef } from "src/components/forms/OpenstackRCFileUpload";
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 
+const cleanErrorMessage = (error: string | null | undefined): string => {
+  if (!error) return '';
+  const prefix = 'failed to verify credentials against current environment: ';
+  return error.startsWith(prefix) ? error.substring(prefix.length) : error;
+};
+
 interface OpenstackCredentialsDrawerProps {
     open: boolean;
     onClose: () => void;
@@ -135,7 +141,7 @@ export default function OpenstackCredentialsDrawer({
                     errorMessage = apiError.message;
                 }
             }
-            setError(errorMessage.trim());
+            setError(cleanErrorMessage(errorMessage).trim());
             setSubmitting(false);
         }
     }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
@@ -160,7 +166,7 @@ export default function OpenstackCredentialsDrawer({
         } else if (status === "Failed") {
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
-            setError(message?.trim() || "Validation failed");
+            setError(cleanErrorMessage(message)?.trim() || "Validation failed");
             if (createdCredentialName) {
                 try {
                     deleteOpenStackCredsWithSecretFlow(createdCredentialName)
