@@ -21,7 +21,7 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 
 * **NetworkMapping**: Defines how source VMware networks map to destination OpenStack networks. Required for configuring network interfaces for VM's during migration.
 * **StorageMapping**: Maps source VMware datastores to OpenStack storage backends.
-* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStack.
+* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStackgit .
 * **MigrationPlan**: MigrationPlan contains the VM's to be migrated, provides reference to migration template which needs to be followed, and also specifies the way VM's have to be migrated. A migration plan can be used for migrating multiple VM's in batches.
 * **Migration**: For each VM, there is an individual migration custom resource, which provides reference to the migration plan to be followed and the pod which is going to execute the migration. Migration custom resource is maintained by the vJailbreak controller itself.
 * **Job**: With migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
@@ -290,7 +290,7 @@ Read more about `NetworkMapping` in [the CRDs reference document](https://platfo
 
 #### Create the MigrationTemplate custom resource
 
-Now that we have `StorageMapping` and `NetworkMapping` resources in place, let’s create a `MigrationTemplate`, it will be referenced by `MigrationPlan` resources.
+Now that we have `StorageMapping` and `NetworkMapping` resources in place, let’s create a `MigrationTemplate`. As the name suggests, `MigrationTemplate` can be created once for a set of `VMwareCreds`, `OpenstackCreds` and the corresponding `NetworkMapping` and `StorageMapping`. This can be reused between various `MigrationPlan` resources.
 
 
 ##### Manifest
