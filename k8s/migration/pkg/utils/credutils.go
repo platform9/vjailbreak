@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -43,17 +44,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-
-// OpenStackClients holds clients for interacting with OpenStack services
-type OpenStackClients struct {
-	// BlockStorageClient is the client for interacting with OpenStack Block Storage
-	BlockStorageClient *gophercloud.ServiceClient
-	// ComputeClient is the client for interacting with OpenStack Compute
-	ComputeClient *gophercloud.ServiceClient
-	// NetworkingClient is the client for interacting with OpenStack Networking
-	NetworkingClient *gophercloud.ServiceClient
-}
-
 // IsIPAllocatedInOpenStack checks if the given IP address is already allocated to any port in OpenStack.
 func IsIPAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, ip string) (bool, error) {
 	if net.ParseIP(ip) == nil {
@@ -77,11 +67,10 @@ func IsIPAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.S
 
 // IsMacAllocatedInOpenStack checks if the given MAC address is already allocated to any port in OpenStack
 func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.ServiceClient, mac string) (bool, error) {
-	// Normalize MAC to lowercase and remove any separators
-	normalizedMAC := strings.ToLower(strings.ReplaceAll(mac, ":", ""))
-	normalizedMAC = strings.ReplaceAll(normalizedMAC, "-", "")
+	// Use a regular expression to remove all non-hexadecimal characters (like ':', '-', '.').
+	reg := regexp.MustCompile("[^0-9a-fA-F]+")
+	normalizedMAC := strings.ToLower(reg.ReplaceAllString(mac, ""))
 
-	// List all ports
 	allPages, err := ports.List(networkingClient, nil).AllPages()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to list ports for MAC allocation check")
@@ -92,10 +81,9 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 		return false, errors.Wrap(err, "failed to extract ports for MAC allocation check")
 	}
 
-	// Check each port's MAC address after normalization
 	for _, port := range allPorts {
-		portMAC := strings.ToLower(strings.ReplaceAll(port.MACAddress, ":", ""))
-		portMAC = strings.ReplaceAll(portMAC, "-", "")
+		// Normalize the port's MAC address in the same way before comparing.
+		portMAC := strings.ToLower(reg.ReplaceAllString(port.MACAddress, ""))
 		if portMAC == normalizedMAC {
 			return true, nil
 		}
@@ -155,20 +143,29 @@ func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
 	for _, pool := range subnet.AllocationPools {
 		start := net.ParseIP(pool.Start)
 		end := net.ParseIP(pool.End)
-
-		// Skip invalid ranges
 		if start == nil || end == nil {
 			continue
 		}
+		ip4 := ip.To4()
+		start4 := start.To4()
+		end4 := end.To4()
+		if ip4 != nil && start4 != nil && end4 != nil {
+			if bytes.Compare(ip4, start4) >= 0 && bytes.Compare(ip4, end4) <= 0 {
+				return true
+			}
+			continue
+		}
+		ip16 := ip.To16()
+		start16 := start.To16()
+		end16 := end.To16()
 
-		// Compare IPs as bytes for accurate comparison
-		ipBytes := ip.To16()
-		startBytes := start.To16()
-		endBytes := end.To16()
-
-		if bytes.Compare(ipBytes, startBytes) >= 0 && bytes.Compare(ipBytes, endBytes) <= 0 {
+		if ip16 == nil || start16 == nil || end16 == nil {
+			continue
+		}
+		if bytes.Compare(ip16, start16) >= 0 && bytes.Compare(ip16, end16) <= 0 {
 			return true
 		}
+
 	}
 	return false
 }
@@ -224,7 +221,6 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 	}
 	return datastores, disks, rdmDiskInfos, false, nil
 }
-
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {

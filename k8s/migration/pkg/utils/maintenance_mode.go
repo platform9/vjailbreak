@@ -322,19 +322,19 @@ func GetRollingMigrationPlanValidationConfigFromConfigMap(configMap *corev1.Conf
 	for key, value := range data {
 		switch key {
 		case "CheckDRSEnabled":
-			rollingMigrationPlanValidationConfig.CheckDRSEnabled = value == trueString
+			rollingMigrationPlanValidationConfig.CheckDRSEnabled = value == constants.TrueString
 		case "CheckDRSIsFullyAutomated":
-			rollingMigrationPlanValidationConfig.CheckDRSIsFullyAutomated = value == trueString
+			rollingMigrationPlanValidationConfig.CheckDRSIsFullyAutomated = value == constants.TrueString
 		case "CheckIfThereAreMoreThanOneHostInCluster":
-			rollingMigrationPlanValidationConfig.CheckIfThereAreMoreThanOneHostInCluster = value == trueString
+			rollingMigrationPlanValidationConfig.CheckIfThereAreMoreThanOneHostInCluster = value == constants.TrueString
 		case "CheckClusterRemainingHostCapacity":
-			rollingMigrationPlanValidationConfig.CheckClusterRemainingHostCapacity = value == trueString
+			rollingMigrationPlanValidationConfig.CheckClusterRemainingHostCapacity = value == constants.TrueString
 		case "CheckVMsAreNotBlockedForMigration":
-			rollingMigrationPlanValidationConfig.CheckVMsAreNotBlockedForMigration = value == trueString
+			rollingMigrationPlanValidationConfig.CheckVMsAreNotBlockedForMigration = value == constants.TrueString
 		case "CheckESXiInMAAS":
-			rollingMigrationPlanValidationConfig.CheckESXiInMAAS = value == trueString
+			rollingMigrationPlanValidationConfig.CheckESXiInMAAS = value == constants.TrueString
 		case "CheckPCDHasClusterConfigured":
-			rollingMigrationPlanValidationConfig.CheckPCDHasClusterConfigured = value == trueString
+			rollingMigrationPlanValidationConfig.CheckPCDHasClusterConfigured = value == constants.TrueString
 		}
 	}
 
@@ -349,13 +349,13 @@ func getRollingMigrationPlanValidationConfigFromConfigMapName(rollingMigrationPl
 // CreateDefaultValidationConfigMapForRollingMigrationPlan creates a default validation config map for a rolling migration plan
 func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context, k8sClient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*corev1.ConfigMap, error) {
 	data := map[string]string{
-		"CheckDRSEnabled":                         trueString,
-		"CheckDRSIsFullyAutomated":                trueString,
-		"CheckIfThereAreMoreThanOneHostInCluster": trueString,
-		"CheckClusterRemainingHostCapacity":       trueString,
-		"CheckVMsAreNotBlockedForMigration":       trueString,
-		"CheckESXiInMAAS":                         trueString,
-		"CheckPCDHasClusterConfigured":            trueString,
+		"CheckDRSEnabled":                         constants.TrueString,
+		"CheckDRSIsFullyAutomated":                constants.TrueString,
+		"CheckIfThereAreMoreThanOneHostInCluster": constants.TrueString,
+		"CheckClusterRemainingHostCapacity":       constants.TrueString,
+		"CheckVMsAreNotBlockedForMigration":       constants.TrueString,
+		"CheckESXiInMAAS":                         constants.TrueString,
+		"CheckPCDHasClusterConfigured":            constants.TrueString,
 	}
 	rollingMigrationPlanValidationConfig := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

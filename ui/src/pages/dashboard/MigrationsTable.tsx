@@ -34,31 +34,37 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
         return "Unknown Status";
     }
 
-    // Get the most recent condition
     const latestCondition = conditions?.sort((a, b) =>
         new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime()
     )[0];
 
-    // Use the condition message if available, otherwise use the phase
     const message = latestCondition?.message || phase;
     const reason = latestCondition?.reason || '';
-
-    // Handle blocked status based on reason or phase
     const isBlocked = reason?.toString() === 'Blocked' || phase === Phase.Blocked;
+
     if (isBlocked) {
         if (message.startsWith('CONFLICT:')) {
-            const [_, conflictType, ...details] = message.split(':');
-            switch(conflictType) {
-                case 'MAC_ALREADY_ALLOCATED':
-                    return `Blocked: MAC address conflict - ${details.join(':')}`;
-                case 'IP_ALREADY_ALLOCATED':
-                    return `Blocked: IP address conflict - ${details.join(':')}`;
-                case 'IP_NOT_IN_ALLOCATION_POOL':
-                    return `Blocked: IP not in allocation pool - ${details.join(':')}`;
-                default:
-                    return `Blocked: ${details.join(':')}`;
+            const parts = message.split(':');
+            
+            if (parts.length >= 3) {
+                const conflictType = parts[1];
+                const details = parts.slice(2).join(':');
+
+                switch(conflictType) {
+                    case 'MAC_ALREADY_ALLOCATED':
+                        return `Blocked: MAC address conflict - ${details}`;
+                    case 'IP_ALREADY_ALLOCATED':
+                        return `Blocked: IP address conflict - ${details}`;
+                    case 'IP_NOT_IN_ALLOCATION_POOL':
+                        return `Blocked: IP not in allocation pool - ${details}`;
+                    case 'NETWORK_NOT_MAPPED':
+                        return `Blocked: Configuration error - ${details}`;
+                    default:
+                        return `Blocked: ${conflictType} - ${details}`;
+                }
             }
         }
+        
         return `Blocked: ${message}`;
     }
 
@@ -70,7 +76,7 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
     }
 
     return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`;
-}
+};
 
 const columns: GridColDef[] = [
     {
