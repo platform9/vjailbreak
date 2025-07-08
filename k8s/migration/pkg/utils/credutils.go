@@ -41,16 +41,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OpenStackClients holds clients for interacting with OpenStack services
-type OpenStackClients struct {
-	// BlockStorageClient is the client for interacting with OpenStack Block Storage
-	BlockStorageClient *gophercloud.ServiceClient
-	// ComputeClient is the client for interacting with OpenStack Compute
-	ComputeClient *gophercloud.ServiceClient
-	// NetworkingClient is the client for interacting with OpenStack Networking
-	NetworkingClient *gophercloud.ServiceClient
-}
-
 const (
 	trueString = "true" // Define at package level
 )
@@ -839,12 +829,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
 		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
 		// Check if label already exists with same value
-		if vmwvm.Labels == nil || vmwvm.Labels[label] != "true" {
+		if vmwvm.Labels == nil || vmwvm.Labels[label] != trueString {
 			// Initialize labels map if needed
 			if vmwvm.Labels == nil {
 				vmwvm.Labels = make(map[string]string)
 			}
-			vmwvm.Labels[label] = "true"
+			vmwvm.Labels[label] = trueString
 			// Update only if we made changes
 			if err = client.Update(ctx, vmwvm); err != nil {
 				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
