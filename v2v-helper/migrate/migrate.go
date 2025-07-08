@@ -564,7 +564,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				}
 				utils.PrintLog("Wildcard netplan added successfully")
 			} else {
-				utils.PrintLog("Ubuntu version does not support netplan, skipping...")
+				utils.PrintLog("Ubuntu version does not support netplan, going to use udev rules")
 				// Since netplan is not supported need to get the ip,mac and network interface mapping
 				// To inject udev rules so that after migration the network interfaces names are consistent
 				// and they get the correct ip address.
@@ -574,11 +574,14 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				if err != nil {
 					return fmt.Errorf("failed to get network interface names: %s", err)
 				}
+				utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
 				macs := []string{}
-				// mac addresses sort by device order vminfo.NetworkInterfaces[0].Index
+
+				// By default the network interfaces macs are in the same order as the interfaces
 				for _, nic := range vminfo.NetworkInterfaces {
 					macs = append(macs, nic.MAC)
 				}
+				utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
 				err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 				if err != nil {
 					return fmt.Errorf("failed to add udev rules: %s", err)
