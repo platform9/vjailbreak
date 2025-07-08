@@ -165,7 +165,6 @@ func isIPInSubnetPools(ip net.IP, subnet *subnets.Subnet) bool {
 		if bytes.Compare(ip16, start16) >= 0 && bytes.Compare(ip16, end16) <= 0 {
 			return true
 		}
-
 	}
 	return false
 }
