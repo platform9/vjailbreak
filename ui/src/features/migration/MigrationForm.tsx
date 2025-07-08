@@ -292,23 +292,24 @@ export default function MigrationFormDrawer({
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
   const fetchMigrationTemplate = async () => {
     try {
-      // Add a check for template name
-      const templateName = migrationTemplate?.metadata?.name;
-      if (!templateName) {
-        console.log("No template name provided, skipping fetch");
-        return;
-      }
-  
-      console.log("Fetching migration template:", templateName);
-      const updatedMigrationTemplate = await getMigrationTemplate(templateName);
-      setMigrationTemplate(updatedMigrationTemplate);
+        const templateName = migrationTemplate?.metadata?.name;
+        if (!templateName) {
+            console.log("No template name provided, skipping fetch");
+            return;
+        }
+
+        const updatedMigrationTemplate = await getMigrationTemplate(templateName);
+        
+        // Convert null to undefined before setting state
+        setMigrationTemplate(updatedMigrationTemplate || undefined);
+
     } catch (err) {
-      console.error("Error retrieving migration template", err);
-      getFieldErrorsUpdater("migrationTemplate")(
-        "Error retrieving migration template"
-      );
+        console.error("Error retrieving migration template", err);
+        getFieldErrorsUpdater("migrationTemplate")(
+            "Error retrieving migration template"
+        );
     }
-  }
+}
 
   useInterval(
     async () => {

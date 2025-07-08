@@ -70,7 +70,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	// Always close the scope when exiting this function such that we can persist any vmwarecreds changes.
 	defer func() {
 		if err := scope.Close(); err != nil && reterr == nil {
 			reterr = err
@@ -87,8 +86,16 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
+	if controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer) {
+		ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name())
+		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	if _, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds); err != nil {
-		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
@@ -98,22 +105,12 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
+
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-	// Update the status of the VMwareCreds object
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
 	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
-	}
-
-	// Add finalizer if not already present
-	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
-	if !controllerutil.ContainsFinalizer(scope.VMwareCreds, finalizerName) {
-		ctxlog.Info("Adding finalizer to VMwareCreds", "name", scope.Name(), "finalizer", finalizerName)
-		controllerutil.AddFinalizer(scope.VMwareCreds, finalizerName)
-		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer to VMwareCreds")
-		}
 	}
 
 	err := utils.CreateVMwareClustersAndHosts(ctx, r.Client, scope)
@@ -125,19 +122,17 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}
+
 	err = utils.CreateOrUpdateVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
 	}
 
 	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
 	}
+
 	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, r.Client, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
@@ -151,40 +146,29 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
-	// Check if the credential is in a failed state
-	isFailedState := scope.VMwareCreds.Status.VMwareValidationStatus == string(corev1.PodFailed) ||
-		scope.VMwareCreds.Status.VMwareValidationStatus == "Unknown"
-
-	if !isFailedState {
-		// Only attempt to clean up dependant objects if not in a failed state
-		ctxlog.Info("Cleaning up dependant objects for VMwareCreds")
-		if err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope); err != nil {
-			ctxlog.Error(err, "Error cleaning up dependant objects, continuing with deletion")
-		}
-
-		// Try to delete the associated secret if it exists
-		if secretName := scope.VMwareCreds.Spec.SecretRef.Name; secretName != "" {
-			if err := utils.DeleteAssociatedSecret(ctx, r.Client, secretName, constants.NamespaceMigrationSystem); err != nil {
-				ctxlog.Error(err, "Failed to delete associated secret, continuing with deletion")
+	ctxlog.Info("Cleaning up dependant objects for VMwareCreds")
+	if err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope); err != nil {
+		ctxlog.Error(err, "Error cleaning up dependant objects")
+		return ctrl.Result{}, err
+	}
+	if secretName := scope.VMwareCreds.Spec.SecretRef.Name; secretName != "" {
+		ctxlog.Info("Deleting associated secret", "name", secretName)
+		if err := utils.DeleteAssociatedSecret(ctx, r.Client, secretName, constants.NamespaceMigrationSystem); err != nil {
+			if !apierrors.IsNotFound(err) {
+				ctxlog.Error(err, "Failed to delete associated secret")
+				return ctrl.Result{}, err
 			}
 		}
-	} else {
-		ctxlog.Info("Skipping cleanup of dependant objects for failed/unknown credential")
 	}
-
-	// Always remove the finalizer to allow deletion
-	finalizerName := "vjailbreak.k8s.pf9.io/finalizer"
-	ctxlog.Info("Removing finalizer", "finalizer", finalizerName)
-	controllerutil.RemoveFinalizer(scope.VMwareCreds, finalizerName)
+	ctxlog.Info("Successfully cleaned up dependent objects. Removing finalizer.")
+	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Object was already deleted, nothing to do
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, "Failed to update VMwareCreds to remove finalizer")
 		return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer from VMwareCreds")
 	}
-
 	ctxlog.Info("Successfully removed finalizer from VMwareCreds")
 	return ctrl.Result{}, nil
 }

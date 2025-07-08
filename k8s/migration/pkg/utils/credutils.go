@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
@@ -359,19 +360,14 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 // ValidateAndGetProviderClient validates OpenStack credentials and returns a provider client
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
-	// 1. First, get the credentials from the secret
 	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get OpenStack credentials from secret")
 	}
-
-	// 2. Create a new provider client
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create OpenStack client. Please check the Auth URL")
 	}
-
-	// 3. Configure TLS
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
@@ -392,17 +388,13 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		caCertPool.AddCert(caCert)
 		tlsConfig.RootCAs = caCertPool
 	}
-
-	// 4. Configure HTTP client with the TLS settings
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
-		Timeout:   30 * time.Second, // Add a reasonable timeout
+		Timeout:   60 * time.Second,
 	}
-
-	// 5. Authenticate with OpenStack
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
 		Username:         openstackCredential.Username,
@@ -410,10 +402,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
 	}
-
-	// 6. Try to authenticate
 	if err := openstack.Authenticate(providerClient, authOpts); err != nil {
-		// Provide more specific error messages based on common authentication failures
 		switch {
 		case strings.Contains(err.Error(), "401"):
 			return nil, fmt.Errorf("authentication failed: invalid username, password, or project/domain. Please verify your credentials")
@@ -425,8 +414,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, fmt.Errorf("authentication failed: %v. Please verify your OpenStack credentials", err)
 		}
 	}
-
-	// 7. Verify these credentials can access the current instance
 	matches, err := VerifyCredentialsMatchCurrentEnvironment(providerClient)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to verify credentials against current environment")
@@ -460,7 +447,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
-	// Connect and log in to ESX or vCenter
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,

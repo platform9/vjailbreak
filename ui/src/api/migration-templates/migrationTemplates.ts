@@ -23,7 +23,8 @@ export const getMigrationTemplate = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   if (!templateName) {
-    throw new Error("Template name is required");
+    console.error("Template name is required to fetch a migration template.");
+    return null;
   }
   
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationtemplates/${templateName}`;

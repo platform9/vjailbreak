@@ -65,26 +65,22 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	// Get current instance metadata
 	metadata, err := GetCurrentInstanceMetadata()
 	if err != nil {
-		return false, fmt.Errorf("unable to get current instance metadata: %v. "+
+		return false, fmt.Errorf("unable to get current instance metadata: %w. "+
 			"Please ensure this is running on an OpenStack instance with metadata service enabled", err)
 	}
 
-	// Create compute client
 	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{})
 	if err != nil {
-		return false, fmt.Errorf("failed to create OpenStack compute client: %v", err)
+		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-
-	// Try to get the current instance
 	_, err = servers.Get(computeClient, metadata.UUID).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
-			return false, nil
+			return false, errors.New("Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment")
 		}
-		return false, fmt.Errorf("failed to verify instance access: %v. "+
+		return false, fmt.Errorf("failed to verify instance access: %w. "+
 			"Please check if the provided credentials have compute:get_server permission", err)
 	}
-
 	return true, nil
 }

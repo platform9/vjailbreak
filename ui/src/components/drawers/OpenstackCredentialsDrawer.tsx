@@ -94,17 +94,16 @@ export default function OpenstackCredentialsDrawer({
             setError("Please provide a credential name and upload an RC file");
             return;
         }
-
+    
         if (!isValidCredentialName) {
             setError("Please provide a valid credential name");
             return;
         }
-
+    
         setSubmitting(true);
         setValidatingOpenstackCreds(true);
-
+    
         try {
-            // Use the new helper function that encapsulates the entire flow
             const response = await createOpenstackCredsWithSecretFlow(
                 credentialName,
                 {
@@ -118,21 +117,17 @@ export default function OpenstackCredentialsDrawer({
                 },
                 isPcd
             );
-
             setCreatedCredentialName(response.metadata.name);
-
+    
         } catch (error: unknown) {
             console.error("Error creating OpenStack credentials:", error);
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
-
-            // Handle different error types
+    
             let errorMessage = "An unknown error occurred";
-            
             if (error instanceof Error) {
                 errorMessage = error.message;
             } else if (typeof error === 'object' && error !== null) {
-                // Handle API error responses
                 const apiError = error as any;
                 if (apiError.response?.data?.message) {
                     errorMessage = apiError.response.data.message;
@@ -140,28 +135,7 @@ export default function OpenstackCredentialsDrawer({
                     errorMessage = apiError.message;
                 }
             }
-
-            // Clean up the error message for better UX
-            errorMessage = errorMessage
-                .replace(/^Error: /, '') // Remove leading 'Error: '
-                .replace(/\n.*$/, '')     // Remove any newlines and anything after
-                .trim();
-
-            // Map common error patterns to user-friendly messages
-            if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
-                errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
-            } else if (errorMessage.includes("already exists")) {
-                errorMessage = "A credential with this name already exists. Please use a different name.";
-            } else if (errorMessage.includes("connection refused")) {
-                errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
-            } else if (errorMessage.includes("authentication failed")) {
-                errorMessage = "Authentication failed. Please check your username and password.";
-            } else if (!errorMessage.endsWith('.')) {
-                // Ensure the error message ends with a period
-                errorMessage += '.';
-            }
-
-            setError(errorMessage);
+            setError(errorMessage.trim());
             setSubmitting(false);
         }
     }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
@@ -179,7 +153,6 @@ export default function OpenstackCredentialsDrawer({
             setOpenstackCredsValidated(true);
             setValidatingOpenstackCreds(false);
             setError(null);
-            // Close the drawer after a short delay to show success state
             setTimeout(() => {
                 refetchOpenstackCreds();
                 onClose();
@@ -187,39 +160,7 @@ export default function OpenstackCredentialsDrawer({
         } else if (status === "Failed") {
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
-            
-            // Format the error message to be more user-friendly
-            let errorMessage = message || "Validation failed";
-            
-            // Clean up the error message
-            errorMessage = errorMessage
-                .split('\n')[0] // Take only the first line
-                .replace(/^error: /i, '') // Remove leading 'error: '
-                .replace(/\.$/, '') // Remove trailing period if it exists
-                .trim();
-                
-            // Map specific error messages to more user-friendly ones
-            if (errorMessage.includes("credentials are valid but for a different OpenStack environment")) {
-                errorMessage = "These credentials are valid but for a different OpenStack environment. Please use credentials for this environment.";
-            } else if (errorMessage.includes("authentication failed")) {
-                errorMessage = "Authentication failed. Please check your username and password.";
-            } else if (errorMessage.includes("connection refused") || errorMessage.includes("ECONNREFUSED")) {
-                errorMessage = "Could not connect to the OpenStack API. Please check the auth URL and ensure it's accessible.";
-            } else if (errorMessage.includes("domain not found")) {
-                errorMessage = "The specified domain was not found. Please check the domain name.";
-            } else if (errorMessage.includes("project not found") || errorMessage.includes("tenant not found")) {
-                errorMessage = "The specified project/tenant was not found. Please check the project/tenant name.";
-            } else if (errorMessage.includes("404")) {
-                errorMessage = "The requested resource was not found. Please check your configuration.";
-            } else if (errorMessage.includes("401") || errorMessage.includes("403")) {
-                errorMessage = "Authentication failed. Please check your username and password.";
-            } else if (errorMessage.includes("timeout")) {
-                errorMessage = "The request timed out. Please check your network connection and try again.";
-            }
-            
-            setError(errorMessage);
-
-            // Try to delete the failed credential to clean up
+            setError(message?.trim() || "Validation failed");
             if (createdCredentialName) {
                 try {
                     deleteOpenStackCredsWithSecretFlow(createdCredentialName)
