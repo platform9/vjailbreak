@@ -57,7 +57,7 @@ interface FormValues extends Record<string, unknown> {
     cutoverEndTime?: string;
     postMigrationScript?: string;
     retryOnFailure?: boolean;
-    osType?: string;
+    osFamily?: string;
 }
 
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
@@ -1319,9 +1319,9 @@ export default function RollingMigrationFormDrawer({
                 const vmId = params.row.id;
                 const isSelected = selectedVMs.includes(vmId);
                 const powerState = params.row?.powerState;
-                const detectedOsType = params.row?.osFamily;
-                const assignedOsType = vmOSAssignments[vmId];
-                const currentOsType = assignedOsType || detectedOsType;
+                const detectedOsFamily = params.row?.osFamily;
+                const assignedOsFamily = vmOSAssignments[vmId];
+                const currentOsFamily = assignedOsFamily || detectedOsFamily;
 
 
                 // Show dropdown for ALL powered-off VMs (allows changing selection)
@@ -1331,10 +1331,10 @@ export default function RollingMigrationFormDrawer({
                             <Select
                                 size="small"
                                 value={(() => {
-                                    if (!currentOsType || currentOsType === "Unknown") return "";
-                                    const osLower = currentOsType.toLowerCase();
-                                    if (osLower.includes("windows")) return "windows";
-                                    if (osLower.includes("linux")) return "linux";
+                                    if (!currentOsFamily || currentOsFamily === "Unknown") return "";
+                                    const osLower = currentOsFamily.toLowerCase();
+                                    if (osLower.includes("windows")) return "windowsGuest";
+                                    if (osLower.includes("linux")) return "linuxGuest";
                                     return "";
                                 })()}
                                 onChange={(e) => handleOSAssignment(vmId, e.target.value)}
@@ -1353,13 +1353,13 @@ export default function RollingMigrationFormDrawer({
                                         <em>Select OS</em>
                                     </Box>
                                 </MenuItem>
-                                <MenuItem value="windows">
+                                <MenuItem value="windowsGuest">
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <img src={WindowsIcon} alt="Windows" style={{ width: 16, height: 16 }} />
                                         Windows
                                     </Box>
                                 </MenuItem>
-                                <MenuItem value="linux">
+                                <MenuItem value="linuxGuest">
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <img src={LinuxIcon} alt="Linux" style={{ width: 16, height: 16 }} />
                                         Linux
@@ -1371,22 +1371,22 @@ export default function RollingMigrationFormDrawer({
                 }
 
                 // Show OS with icon for assigned/detected OS
-                let displayValue = currentOsType || "Unknown";
+                let displayValue = currentOsFamily || "Unknown";
                 let icon: React.ReactNode = null;
 
-                if (currentOsType && currentOsType.toLowerCase().includes("windows")) {
+                if (currentOsFamily && currentOsFamily.toLowerCase().includes("windows")) {
                     displayValue = "Windows";
                     icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-                } else if (currentOsType && currentOsType.toLowerCase().includes("linux")) {
+                } else if (currentOsFamily && currentOsFamily.toLowerCase().includes("linux")) {
                     displayValue = "Linux";
                     icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20 }} />;
-                } else if (currentOsType && currentOsType !== "Unknown") {
+                } else if (currentOsFamily && currentOsFamily !== "Unknown") {
                     displayValue = "Other";
                 }
 
                 return (
                     <Tooltip title={powerState === "powered-off" ?
-                        ((!currentOsType || currentOsType === "Unknown") ?
+                        ((!currentOsFamily || currentOsFamily === "Unknown") ?
                             "OS assignment required for powered-off VMs" :
                             "Click to change OS selection") :
                         displayValue}>
@@ -1397,11 +1397,11 @@ export default function RollingMigrationFormDrawer({
                             gap: 1
                         }}>
                             {icon}
-                            {powerState === "powered-off" && (!currentOsType || currentOsType === "Unknown") && (
+                            {powerState === "powered-off" && (!currentOsFamily || currentOsFamily === "Unknown") && (
                                 <WarningIcon sx={{ color: 'warning.main', fontSize: 16 }} />
                             )}
                             <Typography variant="body2" sx={{
-                                color: (!currentOsType || currentOsType === "Unknown") ? 'text.secondary' : 'text.primary'
+                                color: (!currentOsFamily || currentOsFamily === "Unknown") ? 'text.secondary' : 'text.primary'
                             }}>
                                 {displayValue}
                             </Typography>
