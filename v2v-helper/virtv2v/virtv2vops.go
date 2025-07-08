@@ -394,7 +394,7 @@ func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interf
 
 	err := os.WriteFile("/home/fedora/70-persistent-net.rules", []byte(udevRules.String()), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to create netplan file: %s", err)
+		return fmt.Errorf("failed to create udev rules file: %s", err)
 	}
 	log.Println("Uploading udev rules file to disk")
 	// Upload it to the disk
