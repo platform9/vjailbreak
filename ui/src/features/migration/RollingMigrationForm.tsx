@@ -504,7 +504,7 @@ export default function RollingMigrationFormDrawer({
             );
 
             const filteredVMs = vmsResponse.items.filter((vm: VMwareMachine) => {
-                const clusterLabel = vm.metadata?.labels?.[`vjailbreak.k8s.pf9.io/cluster-name`];
+                const clusterLabel = vm.metadata?.labels?.[`vjailbreak.k8s.pf9.io/vmware-cluster`];
                 return clusterLabel === clusterName;
             });
 
