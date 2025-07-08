@@ -88,10 +88,10 @@ Copy the name of the `VMwareCreds` resource that refers to the vCenter hosting t
 ```
 $ kubectl get vmwarecreds -n migration-system
 NAME       STATUS
-vCenter-a  Succeeded
+vcenter-a  Succeeded
 ```
 
-Then, the name of the `VMwareCreds` would be `vCenter-a`.
+Then, the name of the `VMwareCreds` would be `vcenter-a`.
 
 Similarly, check the resource name for the OpenStack credentials using the following command:
 
@@ -107,10 +107,10 @@ For example, if following is the output of the above command:
 ```
 $ kubectl get openstackcreds -n migration-system
 NAME            STATUS
-OpenStack-a     Succeeded
+openstack-a     Succeeded
 ```
 
-Then the name of the `OpenStackcreds` would be `OpenStack-a`.
+Then the name of the `OpenStackcreds` would be `openstack-a`.
 
 
 #### Gather the details of the VM to be migrated
@@ -141,14 +141,17 @@ metadata:
   creationTimestamp: "2025-05-27T09:27:34Z"
   generation: 1
   labels:
-    pcd-vm-OpenStack-a: d3f3d5c7-f6d8-410e-bb9f-a7afe4j8nhg
-    vmwarecreds.k8s.pf9.io-vCenter-a: "true"
+    pcd-vm-openstack-a: d3f3d5c7-f6d8-410e-bb9f-a7afe4j8nhg
+    vmwarecreds.k8s.pf9.io-vcenter-a: "true"
 spec:
   vms:
+    clusterName: cluster-1
+    esxiName: esxi-1
+    ipAddress: <ip-of-the-vm>
     cpu: 1
     memory: 4096
     name: vm-1
-    osType: linuxGuest
+    osFamily: linuxGuest
     vmState: running
     datastores:
       - datastore-1
@@ -164,7 +167,7 @@ spec:
 Then:
 * The name of the datastores would be: `datastore-1` and `datastore-2`
 * The name of the networks would be: `network-1` and `network-2`
-* The OS type would be: `linuxGuest`
+* The OS family would be: `linuxGuest`
 * The VM state would be: `running`
 
 After gathering the information about the source VM’s datastores and networks, we will need to gather the information about the networks and volume types present on the OpenStack, so that we can create proper StorageMapping and NetworkMapping configurations.
@@ -186,11 +189,11 @@ From the YAML, note down the following:
 For example, if following is the output of the above command:
 
 ```
-$ kubectl get openstackcreds -n migration-system OpenStack-a -o yaml
+$ kubectl get openstackcreds -n migration-system openstack-a -o yaml
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: OpenstackCreds
 metadata:
-  name: OpenStack-a
+  name: openstack-a
   # …
 spec:
   # …
@@ -309,11 +312,11 @@ metadata:
 spec:
   networkMapping: networkmapping 
   storageMapping: storagemapping
-  osType: linuxGuest 
+  osFamily: linuxGuest 
   source:
-    vmwareRef: vCenter-a
+    vmwareRef: vcenter-a
   destination:
-    openstackRef: OpenStack-a
+    openstackRef: openstack-a
 ```
 
 
@@ -344,13 +347,12 @@ metadata:
   namespace: migration-system
 spec:
   migrationTemplate: migrationtemplate
-  retry: true
   migrationStrategy: 
     type: hot 
     adminInitiatedCutOver: false
     performHealthChecks: false
     healthCheckPort: "443"
-  virtualmachines:
+  virtualMachines:
     - - vm-1
 ```
 
@@ -386,7 +388,7 @@ kubectl get migration -n <namespace> migration-<vm-name> -o yaml
 
 * MigrationPlan will be available under: `metadata.labels.migrationplan` or `spec.migrationPlan`
 * VM’s name will be placed under: `spec.vmName`
-* Once sure, check the pod prefix under: `spec.podRef`
+* Once sure that the migration resource is related to the VM we want to track the migration of, check the pod prefix under: `spec.podRef`
 
 
 #### Migration Job
