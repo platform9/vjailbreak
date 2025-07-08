@@ -19,7 +19,7 @@ Determines how the data copy is done
 As the name implies, determines when the copy operation should start, typically used to start the migration during off-peak hours.
 
 ## Cutover Options
-There are 3 options available
+There are 2 options available
 
 * **Cutover during time window** - This option allows the user to specify a time window during which the VM would be powered off and the corresponding OpenStack/PCD VM would be configured and powered on. This window also involves copy of any remaining changed blocks to the OpenStack/PCD volumes since the last time the block were copied.
 

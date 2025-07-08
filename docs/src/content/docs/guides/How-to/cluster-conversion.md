@@ -17,7 +17,7 @@ Before starting the RollingConversion process, ensure the following checks are c
 * Verify network setup on PCD aligns with the ClusterBlueprint specifications.
 * Make sure one host is already added to accommodate vJailbreak VM and its agents
 3. Ensure Ubuntu MAAS setup is available and configured
-* Only Ubuntu 22.05 is currently supported for PCD hosts within the Private Cloud Director (PCD).
+* Only Ubuntu 22.04 is currently supported for PCD hosts within the Private Cloud Director (PCD).
 * Ensure that the appropriate PXE image is configured based on requirements; a standard Ubuntu 22 image is recommended.
 * It is presumed that the ESX hosts are pre-configured as “Machines” in the “Allocated or Deployed” state within MAAS.
 * Verify the accuracy of the IPMI configuration for all the MAAS machines.
