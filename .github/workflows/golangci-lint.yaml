@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   golangci:
+  # do not run golangci-lint if the workflow is running on gh-pages or the PR is targeting gh-pages
+    if: ${{ github.ref != 'refs/heads/gh-pages' && (github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'gh-pages') }}
     name: lint
     runs-on: ubuntu-latest
     steps:
