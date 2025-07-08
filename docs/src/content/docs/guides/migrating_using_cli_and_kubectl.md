@@ -21,7 +21,7 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 
 * **NetworkMapping**: Defines how source VMware networks map to destination OpenStack networks. Required for configuring network interfaces for VM's during migration.
 * **StorageMapping**: Maps source VMware datastores to OpenStack storage backends.
-* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStackgit .
+* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStack.
 * **MigrationPlan**: MigrationPlan contains the VM's to be migrated, provides reference to migration template which needs to be followed, and also specifies the way VM's have to be migrated. A migration plan can be used for migrating multiple VM's in batches.
 * **Migration**: For each VM, there is an individual migration custom resource, which provides reference to the migration plan to be followed and the pod which is going to execute the migration. Migration custom resource is maintained by the vJailbreak controller itself.
 * **Job**: With migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
@@ -124,7 +124,7 @@ From the YAML, note down the following:
 * VM's name using `spec.vms.name`
 * Get the datastores under `spec.vms.datastores`. This will be used for storage mapping.
 * Get the networks under `spec.vms.networks`. This will be used for network mapping.
-* (Optional) Get the Operating System type under `spec.vms.osType`. The reason for keeping it optional is that vJailbreak can auto-detect the OS most of the time, if the VM is turned on in VMware. For cold migration or migration of a VM that is in powered off state, this field will be required.
+* (Optional) Get the Operating System type under `spec.vms.osFamily`. The reason for keeping it optional is that vJailbreak can auto-detect the OS most of the time, if the VM is turned on in VMware. For cold migration or migration of a VM that is in powered off state, this field will be required.
 
 **Note**: Make sure that the `spec.vms.vmState` is set to `running`, otherwise the migration will not take place.
 
