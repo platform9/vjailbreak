@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -54,8 +55,8 @@ type VMInfo struct {
 	UEFI              bool
 	Name              string
 	OSType            string
-	GuestNetworks     []GuestNetwork
-	NetworkInterfaces []NIC
+	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
+	NetworkInterfaces []vjailbreakv1alpha1.NIC
 }
 
 type NIC struct {
@@ -174,17 +175,19 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	}
 
 	vminfo := VMInfo{
-		CPU:     o.Config.Hardware.NumCPU,
-		Memory:  o.Config.Hardware.MemoryMB,
-		State:   o.Runtime.PowerState,
-		Mac:     mac,
-		IPs:     ips,
-		UUID:    o.Config.Uuid,
-		Host:    o.Runtime.Host.Reference().Value,
-		Name:    o.Name,
-		VMDisks: vmdisks,
-		UEFI:    uefi,
-		OSType:  ostype,
+		CPU:               o.Config.Hardware.NumCPU,
+		Memory:            o.Config.Hardware.MemoryMB,
+		State:             o.Runtime.PowerState,
+		Mac:               mac,
+		IPs:               ips,
+		UUID:              o.Config.Uuid,
+		Host:              o.Runtime.Host.Reference().Value,
+		Name:              o.Name,
+		VMDisks:           vmdisks,
+		UEFI:              uefi,
+		OSType:            ostype,
+		NetworkInterfaces: vmwareMachine.Spec.VMInfo.NetworkInterfaces,
+		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
 	}
 	return vminfo, nil
 }

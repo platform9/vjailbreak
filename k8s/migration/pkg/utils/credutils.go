@@ -731,11 +731,13 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		err = k3sclient.Get(ctx, vmwvmKey, vmwvm)
 
 		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+		var osFamily string
 
 		switch {
 		case apierrors.IsNotFound(err):
 			// First time creation – use whatever vCenter gave us (could be nil)
 			guestNetworks = guestNetworksFromVmware
+			osFamily = vmProps.Guest.GuestFamily
 
 		case err != nil:
 			// Unexpected error
@@ -750,6 +752,11 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				// Use existing data because VM is switched off and we can't get the info from vCenter
 				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
 			}
+			if vmProps.Guest.GuestFamily != "" {
+				osFamily = vmProps.Guest.GuestFamily
+			} else {
+				osFamily = vmwvm.Spec.VMInfo.OSFamily
+			}
 		}
 
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
@@ -759,7 +766,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			Networks:          networks,
 			IPAddress:         vmProps.Guest.IpAddress,
 			VMState:           vmProps.Guest.GuestState,
-			OSFamily:          vmProps.Guest.GuestFamily,
+			OSFamily:          osFamily,
 			CPU:               int(vmProps.Config.Hardware.NumCPU),
 			Memory:            int(vmProps.Config.Hardware.MemoryMB),
 			ESXiName:          host.Name,

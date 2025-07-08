@@ -568,9 +568,21 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				// Since netplan is not supported need to get the ip,mac and network interface mapping
 				// To inject udev rules so that after migration the network interfaces names are consistent
 				// and they get the correct ip address.
+				// Get the network interface mapping from /etc/network/interfaces
 
-				// Get the network interface mapping
-				// Get the ip,mac mapping
+				interfaces, err := virtv2v.GetNetworkInterfaceNames(vminfo.VMDisks[bootVolumeIndex].Path)
+				if err != nil {
+					return fmt.Errorf("failed to get network interface names: %s", err)
+				}
+				macs := []string{}
+				// mac addresses sort by device order vminfo.NetworkInterfaces[0].Index
+				for _, nic := range vminfo.NetworkInterfaces {
+					macs = append(macs, nic.MAC)
+				}
+				err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
+				if err != nil {
+					return fmt.Errorf("failed to add udev rules: %s", err)
+				}
 
 			}
 		}
