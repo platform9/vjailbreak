@@ -414,14 +414,13 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, fmt.Errorf("authentication failed: %v. Please verify your OpenStack credentials", err)
 		}
 	}
-	matches, err := VerifyCredentialsMatchCurrentEnvironment(providerClient)
+	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to verify credentials against current environment")
+		if strings.Contains(err.Error(), "credentials are valid but for a different OpenStack environment") {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
 	}
-	if !matches {
-		return nil, fmt.Errorf("credentials are valid but for a different OpenStack environment. Please use credentials for this environment")
-	}
-
 	return providerClient, nil
 }
 

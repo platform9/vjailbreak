@@ -218,6 +218,7 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Reconciling deletion for OpenstackCreds")
 
+	// --- Step 1: Perform all cleanup tasks first ---
 	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Failed to delete PCD cluster entry")
 		return fmt.Errorf("failed to delete PCD cluster: %w", err)
@@ -240,13 +241,16 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 		ctxlog.Info("Successfully deleted associated secret or it was already gone", "secretName", secretName)
 	}
 
+	// --- Step 2: Remove the finalizer and save the change ---
 	ctxlog.Info("All cleanup successful. Removing finalizer.")
 	if controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer) {
+		// This Update call is crucial to persist the change.
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+			// If the resource is already gone, it's a success.
 			if apierrors.IsNotFound(err) {
 				return nil
 			}
-			ctxlog.Error(err, "Failed to remove finalizer")
+			ctxlog.Error(err, "Failed to update resource to remove finalizer")
 			return err
 		}
 	}
