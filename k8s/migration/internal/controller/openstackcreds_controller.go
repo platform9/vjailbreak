@@ -46,10 +46,6 @@ type OpenstackCredsReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the OpenstackCreds object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
@@ -65,7 +61,6 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
 func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.OpenstackCredsControllerName)
-	// Get the OpenstackCreds object
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 	if err := r.Get(ctx, req.NamespacedName, openstackcreds); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -75,7 +70,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		ctxlog.Error(err, "Failed to get OpenstackCreds resource", "openstackcreds", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
-	ctxlog.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", req.NamespacedName, "resourceVersion", openstackcreds.ResourceVersion)
+
 	scope, err := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
 		Logger:         ctxlog,
 		Client:         r.Client,
@@ -86,7 +81,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	// Always close the scope when exiting this function such that we can persist any OpenstackCreds changes.
+	// Defer the scope close to persist changes
 	defer func() {
 		if err := scope.Close(); err != nil && reterr == nil {
 			ctxlog.Error(err, "Failed to close OpenstackCredsScope")
@@ -94,6 +89,7 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}()
 
+	// Handle deletion
 	if !openstackcreds.DeletionTimestamp.IsZero() {
 		ctxlog.Info("Resource is being deleted, reconciling deletion", "openstackcreds", req.NamespacedName)
 		if err := r.reconcileDelete(ctx, scope); err != nil {
@@ -101,7 +97,8 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{}, nil
 	}
-	ctxlog.Info("Reconciling normal state", "openstackcreds", req.NamespacedName)
+
+	// Handle reconciliation
 	return r.reconcileNormal(ctx, scope)
 }
 
@@ -216,18 +213,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) error {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("Reconciling deletion for OpenstackCreds")
-
-	// --- Step 1: Perform all cleanup tasks first ---
-	if err := utils.DeleteEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds); err != nil {
-		ctxlog.Error(err, "Failed to delete PCD cluster entry")
-		return fmt.Errorf("failed to delete PCD cluster: %w", err)
-	}
-	ctxlog.Info("Successfully deleted PCD cluster entry")
+	ctxlog.Info("Starting reconciliation of deletion for OpenstackCreds")
 
 	secretName := scope.OpenstackCreds.Spec.SecretRef.Name
 	if secretName != "" {
-		ctxlog.Info("Deleting associated secret", "secretName", secretName)
+		ctxlog.Info("Attempting to delete associated secret...", "secretName", secretName)
 		err := r.Delete(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
@@ -235,27 +225,45 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 			},
 		})
 		if err != nil && !apierrors.IsNotFound(err) {
-			ctxlog.Error(err, "Failed to delete associated secret", "secretName", secretName)
+			ctxlog.Error(err, "Failed to delete associated secret, retrying...", "secretName", secretName)
 			return fmt.Errorf("failed to delete associated secret: %w", err)
 		}
-		ctxlog.Info("Successfully deleted associated secret or it was already gone", "secretName", secretName)
+		ctxlog.Info("Successfully deleted associated secret or it was already gone.")
 	}
 
-	// --- Step 2: Remove the finalizer and save the change ---
+	ctxlog.Info("Cleaning up associated PCDCluster resources")
+	pcdClusterList := &vjailbreakv1alpha1.PCDClusterList{}
+	labelSelector := client.MatchingLabels{"vjailbreak.k8s.pf9.io/openstackcreds": scope.OpenstackCreds.Name}
+
+	if err := r.List(ctx, pcdClusterList, client.InNamespace(scope.OpenstackCreds.Namespace), labelSelector); err != nil {
+		ctxlog.Error(err, "Failed to list PCDClusters for cleanup")
+		return err
+	}
+
+	for i := range pcdClusterList.Items {
+		pcdCluster := pcdClusterList.Items[i]
+		ctxlog.Info("Deleting dependent PCDCluster", "name", pcdCluster.Name)
+		if err := r.Delete(ctx, &pcdCluster); err != nil && !apierrors.IsNotFound(err) {
+			ctxlog.Error(err, "Failed to delete dependent PCDCluster", "name", pcdCluster.Name)
+			return err
+		}
+	}
+	ctxlog.Info("Successfully cleaned up dependent PCDClusters.")
+
 	ctxlog.Info("All cleanup successful. Removing finalizer.")
 	if controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer) {
-		// This Update call is crucial to persist the change.
+		ctxlog.Info("Attempting to save resource after removing finalizer...")
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
-			// If the resource is already gone, it's a success.
 			if apierrors.IsNotFound(err) {
 				return nil
 			}
 			ctxlog.Error(err, "Failed to update resource to remove finalizer")
 			return err
 		}
+		ctxlog.Info("Successfully saved resource after removing finalizer.")
 	}
 
-	ctxlog.Info("Successfully reconciled deletion of OpenstackCreds")
+	ctxlog.Info("Successfully reconciled deletion of OpenstackCreds.")
 	return nil
 }
 
