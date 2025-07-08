@@ -20,7 +20,7 @@ OpenStack/PCD credentials are required to create VMs inside the OpenStack/PCD en
 
 To copy the content of the `openstack.rc` file, you should navigate to Settings > API Access > pcdctl RC section.
 
-If using PCD we recommend togglng the "Is PCD credentials" option. This will automatically indicate the vJailbreak that the credentials are for PCD and would use PCD Cluster as a destination for different migrations.
+If using PCD we recommend toggling the "Is PCD credentials" option. This will automatically indicate to vJailbreak that the credentials are for PCD and would use PCD Cluster as a destination for different migrations.
 
 For non PCD environment the `openstack.rc` file  will be available as part of various distribution and documentation. The `openstack.rc` file is typically used for any automation with the OpenStack CLI.
 
