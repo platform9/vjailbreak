@@ -795,7 +795,9 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			*types.VirtualVmxnet2,
 			*types.VirtualVmxnet3,
 			*types.VirtualPCNet32:
-			nic = d.(types.BaseVirtualEthernetCard).GetVirtualEthernetCard()
+if ethCard, ok := d.(types.BaseVirtualEthernetCard); ok {
+	nic = ethCard.GetVirtualEthernetCard()
+}
 		}
 
 		if nic != nil && nic.Backing != nil {
