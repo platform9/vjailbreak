@@ -1,4 +1,5 @@
 import { Box, Drawer, styled } from "@mui/material"
+import MigrationIcon from "@mui/icons-material/SwapHoriz"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
 import { useEffect, useMemo, useState, useCallback } from "react"
@@ -669,7 +670,7 @@ export default function MigrationFormDrawer({
       onClose={handleClose}
       ModalProps={{ keepMounted: false }}
     >
-      <Header title="Migration Form" />
+      <Header title="Migration Form" icon={<MigrationIcon />} />
       <DrawerContent>
         <Box sx={{ display: "grid", gap: 4 }}>
           {/* Step 1 */}

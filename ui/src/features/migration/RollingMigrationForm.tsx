@@ -1,4 +1,5 @@
 import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel } from "@mui/material"
+import ClusterIcon from "@mui/icons-material/Hub"
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
@@ -1821,7 +1822,7 @@ export default function RollingMigrationFormDrawer({
                 onClose={handleClose}
                 ModalProps={{ keepMounted: false }}
             >
-                <Header title="Cluster Conversion " />
+                <Header title="Cluster Conversion" icon={<ClusterIcon />} />
 
 
                 <DrawerContent>

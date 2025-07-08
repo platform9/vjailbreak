@@ -15,6 +15,7 @@ import {
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import WarningIcon from '@mui/icons-material/Warning';
 import AddIcon from '@mui/icons-material/Add';
+import CredentialsIcon from '@mui/icons-material/VpnKey';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { useState, useCallback, useEffect } from "react";
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery";
@@ -118,11 +119,12 @@ const CustomToolbar = ({
                 alignItems: 'center'
             }}
         >
-            <div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CredentialsIcon />
                 <Typography variant="h6" component="h2">
                     Credentials
                 </Typography>
-            </div>
+            </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
                 <Button
                     variant="outlined"

@@ -17,6 +17,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import WarningIcon from '@mui/icons-material/Warning';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import AgentsIcon from '@mui/icons-material/Computer';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { useState } from "react";
 import ScaleUpDrawer from "./ScaleUpDrawer";
@@ -197,11 +198,12 @@ const NodesToolbar = ({
                 alignItems: 'center'
             }}
         >
-            <div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AgentsIcon />
                 <Typography variant="h6" component="h2">
                     Agents
                 </Typography>
-            </div>
+            </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
                 <Tooltip title={loading ? "Operation in progress" : ""}>
                     <span> {/* Wrapper needed for disabled button tooltip */}
