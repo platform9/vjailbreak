@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -50,29 +51,35 @@ func (r *MigrationTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	r.ctxlog.Info("Reconciling MigrationTemplate")
 
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
-
 	if err := r.Get(ctx, req.NamespacedName, migrationtemplate); err != nil {
 		if apierrors.IsNotFound(err) {
-			r.ctxlog.Info("Received ignorable event for a recently deleted MigrationTemplate.")
 			return ctrl.Result{}, nil
 		}
-		r.ctxlog.Error(err, fmt.Sprintf("Unexpected error reading MigrationTemplate '%s' object", migrationtemplate.Name))
+		r.ctxlog.Error(err, "failed to get MigrationTemplate")
 		return ctrl.Result{}, err
 	}
 
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{
-			RequeueAfter: time.Minute,
-		}, err
-	}
-	// Fetch OpenStackCreds CR
-	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
-		false, openstackcreds); !ok {
+		if err != nil && strings.Contains(err.Error(), "CR is not validated") {
+			r.ctxlog.Info("Dependent VMwareCreds is not yet validated, will check again later.", "credentialName", migrationtemplate.Spec.Source.VMwareRef)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		r.ctxlog.Error(err, "failed to check status of VMwareCreds dependency")
 		return ctrl.Result{}, err
 	}
 
+	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef, false, openstackcreds); !ok {
+		if err != nil && strings.Contains(err.Error(), "CR is not validated") {
+			r.ctxlog.Info("Dependent OpenstackCreds is not yet validated, will check again later.", "credentialName", migrationtemplate.Spec.Destination.OpenstackRef)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		r.ctxlog.Error(err, "failed to check status of OpenstackCreds dependency")
+		return ctrl.Result{}, err
+	}
+
+	r.ctxlog.Info("All dependencies are validated. Proceeding with reconciliation.")
 	return ctrl.Result{}, nil
 }
 

@@ -43,18 +43,6 @@ export default function OpenstackCredentialsDrawer({
 
     // Reset state and clean up when the drawer is closed
     const closeDrawer = useCallback(() => {
-        if (createdCredentialName) {
-            console.log(`Cleaning up OpenStack credential on drawer close: ${createdCredentialName}`);
-            try {
-                deleteOpenStackCredsWithSecretFlow(createdCredentialName)
-                    .then(() => console.log(`Cancelled credential ${createdCredentialName} deleted successfully`))
-                    .catch(err => console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err));
-            } catch (err) {
-                console.error(`Error initiating deletion of cancelled credential: ${createdCredentialName}`, err);
-            }
-        }
-
-        // Reset state
         setCredentialName("");
         setRcFileValues(null);
         setCreatedCredentialName(null);
@@ -64,11 +52,10 @@ export default function OpenstackCredentialsDrawer({
         setCredNameError(null);
         setSubmitting(false);
         setIsPcd(false);
-
+        refetchOpenstackCreds();
         onClose();
-    }, [createdCredentialName, onClose]);
+    }, [onClose, refetchOpenstackCreds]);
 
-    // Track form values
     const [credentialName, setCredentialName] = useState("");
     const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null);
 
