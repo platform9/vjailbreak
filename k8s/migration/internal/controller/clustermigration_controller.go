@@ -135,7 +135,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	// count successful esxiMigrations, we want to trigger vm migrations
-	// only if more than one esxi migration is successful
+	// only if one or more esxi migrations are successful
 	successfulESXiMigrations, err := countSuccessfulESXIMigrations(ctx, scope)
 	if err != nil {
 		log.Error(err, "Failed to count successful ESXi migrations")
