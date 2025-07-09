@@ -1,11 +1,11 @@
 ---
-title: How to perform Cluster Conversion
+title: Cluster Conversion
 description: Configuration and steps to perform cluster conversion
 ---
 
 The following outlines the steps to use the vJailbreak RollingConversion feature, which is exclusively available and compatible with Platform9 Private Cloud Director (PCD).
 
-## Pre-Migration Checks
+## Pre-migration checks
 
 Before starting the RollingConversion process, ensure the following checks are completed:
 
@@ -48,7 +48,7 @@ Before starting the RollingConversion process, ensure the following checks are c
 
 Create VMware and OpenStack/PCD credential with "PCD" configuration only PCD is supported for rolling upgrade
 
-### MAAS Configuration
+### MAAS configuration
 
 * **MAAS URL** - the MAAS system should be reachable
 * **API Key** additionally the MAAS system should be configured to allow the vJailbreak VM to access it with the key
@@ -58,7 +58,7 @@ Create VMware and OpenStack/PCD credential with "PCD" configuration only PCD is 
 
 If you have ESXi already deployed through MAAS, you can skip this step, else you will need to import ESXis into MAAS so that MAAS can recognize them.
 
-## How Cluster Conversion works
+## How cluster conversion works
 After you submit the rolling conversion form, vJailbreak will take the following actions in sequence.
 
 1. Verify your creds, especially **openstack-creds** for checking if they are **PCD creds** or not  
