@@ -135,7 +135,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	// count successful esxiMigrations, we want to trigger vm migrations
-	// only if more than one esxi migration is successful
+	// only if one or more esxi migrations are successful
 	successfulESXiMigrations, err := countSuccessfulESXIMigrations(ctx, scope)
 	if err != nil {
 		log.Error(err, "Failed to count successful ESXi migrations")
@@ -214,7 +214,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 			log.Info("Requeuing ClusterMigration for further processing", "requeueAfter", "1m")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
-		
+
 		log.Info("ESXIMigration is in another state, updating ClusterMigration status to pending", "esxiName", esxi, "esxiPhase", esxiMigration.Status.Phase)
 		err = r.UpdateClusterMigrationStatus(ctx, scope, vjailbreakv1alpha1.ClusterMigrationPhasePending, esxiMigration.Status.Message, esxi)
 		if err != nil {
