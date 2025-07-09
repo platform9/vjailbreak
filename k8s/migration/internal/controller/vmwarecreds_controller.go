@@ -152,17 +152,26 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	}
 
 	// Delete the associated secret
-	client := r.Client
-	err = client.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scope.VMwareCreds.Spec.SecretRef.Name,
-			Namespace: constants.NamespaceMigrationSystem,
-		},
-	})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete associated secret")
+	if scope.VMwareCreds.Spec.SecretRef.Name != "" {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      scope.VMwareCreds.Spec.SecretRef.Name,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+		}
+		err = r.Client.Delete(ctx, secret)
+		if err != nil && !apierrors.IsNotFound(err) {
+			// Log the error but continue with deletion
+			ctxlog.Error(err, "failed to delete associated secret, continuing with deletion",
+				"secret", scope.VMwareCreds.Spec.SecretRef.Name)
+		}
 	}
-	controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+
+	// Always remove the finalizer to ensure the resource can be deleted for cred with unknown status
+	if controllerutil.ContainsFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer) {
+		controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	}
+
 	return ctrl.Result{}, nil
 }
 
