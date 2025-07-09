@@ -126,8 +126,6 @@ From the YAML, note down the following:
 * Get the networks under `spec.vms.networks`. This will be used for network mapping.
 * (Optional) Get the Operating System type under `spec.vms.osFamily`. The reason for keeping it optional is that vJailbreak can auto-detect the OS most of the time, if the VM is turned on in VMware. For cold migration or migration of a VM that is in powered off state, this field will be required.
 
-**Note**: Make sure that the `spec.vms.vmState` is set to `running`, otherwise the migration will not take place.
-
 For example, if following is the output of the above command: 
 
 ```
@@ -168,7 +166,6 @@ Then:
 * The name of the datastores would be: `datastore-1` and `datastore-2`
 * The name of the networks would be: `network-1` and `network-2`
 * The OS family would be: `linuxGuest`
-* The VM state would be: `running`
 
 After gathering the information about the source VM’s datastores and networks, we will need to gather the information about the networks and volume types present on the OpenStack, so that we can create proper StorageMapping and NetworkMapping configurations.
 
