@@ -1,4 +1,5 @@
 import { Box } from "@mui/material";
+import axios from 'axios';
 import { useState, useRef, useCallback } from "react";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
@@ -89,6 +90,17 @@ export default function OpenstackCredentialsDrawer({
         setError(null);
     };
 
+    const getApiErrorMessage = (error: unknown): string => {
+        if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
+            return error.response.data.message;
+        }
+        if (error instanceof Error) {
+            return error.message;
+        }
+        return "An unknown error occurred. Please try again.";
+    };
+
+
     const handleSubmit = useCallback(async () => {
         if (!credentialName || !rcFileValues) {
             setError("Please provide a credential name and upload an RC file");
@@ -102,6 +114,7 @@ export default function OpenstackCredentialsDrawer({
 
         setSubmitting(true);
         setValidatingOpenstackCreds(true);
+        setError(null);
 
         try {
             // Use the new helper function that encapsulates the entire flow
@@ -126,14 +139,8 @@ export default function OpenstackCredentialsDrawer({
             setOpenstackCredsValidated(false);
             setValidatingOpenstackCreds(false);
 
-            // Handle different error types
-            const errorMessage = error instanceof Error
-                ? error.message
-                : (typeof error === 'object' && error !== null && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'message' in error.response.data)
-                    ? String(error.response.data.message)
-                    : String(error);
-
-            setError("Error creating OpenStack credentials: " + errorMessage);
+            const errorMessage = getApiErrorMessage(error);
+            setError(errorMessage);
             setSubmitting(false);
         }
     }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);

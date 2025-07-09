@@ -120,10 +120,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
 		// Update the status of the OpenstackCreds object
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
+			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
+		}
 		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Error validating OpenStack credentials"
-		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name)
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
+		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
