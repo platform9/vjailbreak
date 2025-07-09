@@ -24,15 +24,15 @@ import (
 
 // HostConfig defines the configuration for a Platform9 Distributed Cloud host
 type HostConfig struct {
-	ID                   string            `json:"id,omitempty"`
-	Name                 string            `json:"name,omitempty"`
-	MgmtInterface        string            `json:"mgmtInterface,omitempty"`
-	VMConsoleInterface   string            `json:"vmConsoleInterface,omitempty"`
+	ID                    string            `json:"id,omitempty"`
+	Name                  string            `json:"name,omitempty"`
+	MgmtInterface         string            `json:"mgmtInterface,omitempty"`
+	VMConsoleInterface    string            `json:"vmConsoleInterface,omitempty"`
 	HostLivenessInterface string            `json:"hostLivenessInterface,omitempty"`
-	TunnelingInterface   string            `json:"tunnelingInterface,omitempty"`
-	ImagelibInterface    string            `json:"imagelibInterface,omitempty"`
-	NetworkLabels        map[string]string `json:"networkLabels,omitempty"`
-	ClusterName          string            `json:"clusterName,omitempty"`
+	TunnelingInterface    string            `json:"tunnelingInterface,omitempty"`
+	ImagelibInterface     string            `json:"imagelibInterface,omitempty"`
+	NetworkLabels         map[string]string `json:"networkLabels,omitempty"`
+	ClusterName           string            `json:"clusterName,omitempty"`
 }
 
 // OpenStackCredsInfo holds the actual credentials after decoding
@@ -55,8 +55,9 @@ type OpenStackCredsInfo struct {
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
-	VolumeTypes []string `json:"volumeTypes,omitempty"`
-	Networks    []string `json:"networks,omitempty"`
+	VolumeTypes    []string `json:"volumeTypes,omitempty"`
+	VolumeBackends []string `json:"volumeBackends,omitempty"`
+	Networks       []string `json:"networks,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
