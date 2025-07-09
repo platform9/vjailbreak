@@ -584,7 +584,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
 				err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 				if err != nil {
-					return fmt.Errorf("failed to add udev rules: %s", err)
+					log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
+					 network might not come up post migration, please check the network configuration post migration`, err)
+					log.Println("Continuing with migration")
 				}
 
 			}

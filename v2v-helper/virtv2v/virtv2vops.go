@@ -438,6 +438,7 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(ans))
 		}
+		log.Printf("Output of ls /sys/class/net: %v", ans)
 
 		// Parse the output
 		lines = strings.Split(ans, "\n")
