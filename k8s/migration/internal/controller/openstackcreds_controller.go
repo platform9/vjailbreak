@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
@@ -105,9 +104,16 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
 	ctxlog := scope.Logger
-	ctxlog.Info("Starting normal reconciliation", "openstackcreds", scope.OpenstackCreds.Name, "namespace", scope.OpenstackCreds.Namespace)
-
-	controllerutil.AddFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
+	ctxlog.Info("Reconciling OpenstackCreds")
+	openstackcreds := scope.OpenstackCreds
+	if !controllerutil.ContainsFinalizer(openstackcreds, constants.OpenstackCredsFinalizer) {
+		controllerutil.AddFinalizer(openstackcreds, constants.OpenstackCredsFinalizer)
+		if err := r.Update(ctx, openstackcreds); err != nil {
+			ctxlog.Error(err, "failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
@@ -245,7 +251,17 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 	}
 	ctxlog.Info("Successfully deleted associated secret or it was already gone", "secretName", secretName)
 	ctxlog.Info("Removing finalizer", "finalizer", constants.OpenstackCredsFinalizer)
-	controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer)
+	ctxlog.Info("All cleanup successful. Removing finalizer.")
+	if controllerutil.RemoveFinalizer(scope.OpenstackCreds, constants.OpenstackCredsFinalizer) {
+		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			ctxlog.Error(err, "failed to update resource to remove finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -253,6 +269,5 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context,
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
