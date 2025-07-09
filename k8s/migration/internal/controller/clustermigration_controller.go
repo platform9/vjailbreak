@@ -143,7 +143,7 @@ func (r *ClusterMigrationReconciler) reconcileNormal(ctx context.Context, scope 
 	}
 
 	log.Info("Counted successful ESXi migrations", "count", successfulESXiMigrations)
-	if successfulESXiMigrations > 1 {
+	if successfulESXiMigrations >= 1 {
 		err = handleVMMigrations(ctx, scope)
 		if err != nil {
 			log.Error(err, "Failed to handle VM migrations")
