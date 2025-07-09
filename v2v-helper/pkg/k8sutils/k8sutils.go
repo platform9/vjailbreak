@@ -3,14 +3,16 @@ package k8sutils
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +38,21 @@ func GetInclusterClient() (client.Client, error) {
 }
 
 func ConvertToK8sName(name string) (string, error) {
-	nameerrors := validation.IsDNS1123Label(name)
+	// Convert to lowercase
+	name = strings.ToLower(name)
+	// Replace separators with hyphens
+	re := regexp.MustCompile(`[_\s]`)
+	name = re.ReplaceAllString(name, "-")
+	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
+	re = regexp.MustCompile(`[^a-z0-9\-.]`)
+	name = re.ReplaceAllString(name, "")
+	// Remove leading and trailing hyphens
+	name = strings.Trim(name, "-")
+	// Truncate to 242 characters, as we prepend v2v-helper- to the name
+	if len(name) > 242 {
+		name = name[:242]
+	}
+	nameerrors := validation.IsQualifiedName(name)
 	if len(nameerrors) == 0 {
 		return name, nil
 	}
