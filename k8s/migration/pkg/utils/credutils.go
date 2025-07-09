@@ -577,7 +577,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			continue
 		}
 		// exclude vCLS VMs
-		if strings.Contains(vmProps.Config.Name, "vCLS-") {
+		if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
 			continue
 		}
 		var datastores []string
