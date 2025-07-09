@@ -812,7 +812,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 				continue
 			}
 		}
-    
+
 		// Get the cluster name from the host's parent
 		if host.Parent != nil {
 			// Determine parent type based on the object reference type
@@ -906,6 +906,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			Networks:          networks,
 			IPAddress:         vmProps.Guest.IpAddress,
 			VMState:           vmProps.Guest.GuestState,
+			MacAddresses:      macAddresses,
 			OSFamily:          osFamily,
 			CPU:               int(vmProps.Config.Hardware.NumCPU),
 			Memory:            int(vmProps.Config.Hardware.MemoryMB),
@@ -935,9 +936,9 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			*types.VirtualVmxnet2,
 			*types.VirtualVmxnet3,
 			*types.VirtualPCNet32:
-if ethCard, ok := d.(types.BaseVirtualEthernetCard); ok {
-	nic = ethCard.GetVirtualEthernetCard()
-}
+			if ethCard, ok := d.(types.BaseVirtualEthernetCard); ok {
+				nic = ethCard.GetVirtualEthernetCard()
+			}
 		}
 
 		if nic != nil && nic.Backing != nil {
