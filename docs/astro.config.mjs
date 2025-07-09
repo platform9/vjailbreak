@@ -47,13 +47,23 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Concepts',
+					items: [
+						{ label: 'Credential Management', slug: 'concepts/credential-management' },
+						{ label: 'Network & Storage Mapping', slug: 'concepts/network-storage-mapping' },
+						{ label: 'Migration Options', slug: 'concepts/migration-options' },
+						{ label: 'Cluster Conversion', slug: 'concepts/cluster-conversion' },
+					],
+				},
+				{
 					label: 'Architecture',
 					items: [
-						{ label: 'Overview', slug: 'architecture/architecture-overview' },
+						{ label: 'Architecture', slug: 'architecture/architecture-overview' },
 						{ label: 'vJailbreak VM', slug: 'architecture/vjailbreak-vm' },
 						{ label: 'Components', slug: 'architecture/components' },
 					],
 				},
+				
 				{
 					label: 'Guide',
 					autogenerate: { directory: 'guides' },
