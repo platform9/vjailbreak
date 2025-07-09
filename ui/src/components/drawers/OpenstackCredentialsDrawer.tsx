@@ -143,7 +143,7 @@ export default function OpenstackCredentialsDrawer({
             setError(errorMessage);
             setSubmitting(false);
         }
-    }, [credentialName, rcFileValues, isValidCredentialName, isPcd]);
+    }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
 
     // Use the custom hook for keyboard events
     useKeyboardSubmit({

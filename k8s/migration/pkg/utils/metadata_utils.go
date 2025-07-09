@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -14,14 +15,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// InstanceMetadata contains metadata about the current instance.
 type InstanceMetadata struct {
 	UUID string `json:"uuid"`
 }
 
 // GetCurrentInstanceMetadata retrieves metadata about the current instance from the OpenStack metadata service
 func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
-
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create metadata request")
