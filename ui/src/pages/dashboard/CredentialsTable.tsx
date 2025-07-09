@@ -28,6 +28,7 @@ import { VMWARE_CREDS_QUERY_KEY } from "src/hooks/api/useVmwareCredentialsQuery"
 import { OPENSTACK_CREDS_QUERY_KEY } from "src/hooks/api/useOpenstackCredentialsQuery";
 import { deleteVMwareCredsWithSecretFlow, deleteOpenStackCredsWithSecretFlow } from "src/api/helpers";
 import VMwareCredentialsDrawer from "src/components/drawers/VMwareCredentialsDrawer";
+import { useErrorHandler } from "src/hooks/useErrorHandler";
 import OpenstackCredentialsDrawer from "src/components/drawers/OpenstackCredentialsDrawer";
 
 interface CredentialItem {
@@ -166,6 +167,7 @@ const CustomToolbar = ({
 };
 
 export default function CredentialsTable() {
+    const { reportError } = useErrorHandler({ component: "CredentialsTable" });
     const queryClient = useQueryClient();
 
     // Fetch credentials with options to always get fresh data
@@ -273,6 +275,14 @@ export default function CredentialsTable() {
             handleDeleteClose();
         } catch (error) {
             console.error("Error deleting credentials:", error);
+            reportError(error as Error, {
+                context: 'credentials-deletion',
+                metadata: {
+                    selectedIds: selectedIds,
+                    credentialsCount: selectedIds.length,
+                    action: 'delete-credentials'
+                }
+            });
             setDeleteError(error instanceof Error ? error.message : "Unknown error occurred");
         } finally {
             setDeleting(false);

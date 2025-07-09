@@ -27,6 +27,7 @@ import { deleteNode } from "src/api/nodes/nodeMappings";
 import { useQueryClient } from "@tanstack/react-query";
 import { NODES_QUERY_KEY } from "src/hooks/api/useNodesQuery";
 import { NodeItem } from "src/api/nodes/model";
+import { useErrorHandler } from "src/hooks/useErrorHandler";
 import { intervalToDuration } from 'date-fns';
 
 // Update helper for formatting duration
@@ -243,6 +244,7 @@ const NodesToolbar = ({
 };
 
 export default function NodesTable() {
+    const { reportError } = useErrorHandler({ component: "NodesTable" });
     const { data: nodes, isLoading: fetchingNodes, refetch: refreshNodes } = useNodesQuery();
     const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
     const [scaleUpOpen, setScaleUpOpen] = useState(false);
@@ -306,6 +308,14 @@ export default function NodesTable() {
 
         } catch (error) {
             console.error('Error scaling down nodes:', error);
+            reportError(error as Error, {
+                context: 'nodes-scale-down',
+                metadata: {
+                    selectedNodes: selectedNodes,
+                    nodesCount: selectedNodes.length,
+                    action: 'scale-down-nodes'
+                }
+            });
             setScaleDownError('Failed to scale down nodes. Please try again.');
         } finally {
             setLoading(false);

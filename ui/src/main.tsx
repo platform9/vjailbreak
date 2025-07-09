@@ -4,32 +4,37 @@ import "@fontsource/roboto/500.css"
 import "@fontsource/roboto/700.css"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
-import { StrictMode } from "react"
+import React, { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 import Bugsnag from '@bugsnag/js'
 import BugsnagPluginReact from '@bugsnag/plugin-react'
+import BugsnagPerformance from '@bugsnag/browser-performance'
 import App from "./App.tsx"
 import { ThemeProvider } from "./theme/ThemeContext.tsx"
-import { getBugsnagConfig } from "./config/bugsnag"
+import { getBugsnagConfig, getBugsnagPerformanceConfig } from "./config/bugsnag"
 import { errorReportingService } from "./services/errorReporting"
-import ErrorBoundary from "./components/ErrorBoundary"
 
 const queryClient = new QueryClient()
 
 const bugsnagConfig = getBugsnagConfig()
+const bugsnagPerformanceConfig = getBugsnagPerformanceConfig()
 
-if (bugsnagConfig.apiKey && bugsnagConfig.apiKey !== 'your-api-key-here') {
+if (bugsnagConfig.apiKey) {
   Bugsnag.start({
     ...bugsnagConfig,
     plugins: [new BugsnagPluginReact()],
   })
-  
+
+  BugsnagPerformance.start(bugsnagPerformanceConfig)
+
   errorReportingService.initialize(Bugsnag)
-  
+
   errorReportingService.addMetadata('app', 'name', 'vjailbreak')
   errorReportingService.addMetadata('app', 'component', 'ui')
 }
+
+const ErrorBoundary = Bugsnag.getPlugin('react')?.createErrorBoundary(React) || React.Fragment
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
