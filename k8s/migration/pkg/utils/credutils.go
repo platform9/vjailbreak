@@ -576,6 +576,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			fmt.Printf("VM properties not available for vm (%s), skipping this VM\n", vm.Name())
 			continue
 		}
+		// exclude vCLS VMs
+		if strings.Contains(vmProps.Config.Name, "vCLS-") {
+			continue
+		}
 		var datastores []string
 		var networks []string
 		var disks []string
