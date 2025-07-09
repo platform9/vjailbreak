@@ -430,6 +430,24 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 		}
 	}
 
+	if len(interfaces) == 0 {
+		// Mostly for ubuntu desktop < 17.1 because it doesn't use /etc/network/interfaces
+		// Get the network interface names
+		command = "ls /sys/class/net"
+		ans, err = RunCommandInGuest(path, command, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(ans))
+		}
+
+		// Parse the output
+		lines = strings.Split(ans, "\n")
+		for _, line := range lines {
+			if !strings.Contains(line, "lo") {
+				interfaces = append(interfaces, line)
+			}
+		}
+	}
+
 	return interfaces, nil
 
 }
