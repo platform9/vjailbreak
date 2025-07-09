@@ -159,7 +159,9 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 				Namespace: constants.NamespaceMigrationSystem,
 			},
 		}
-		err = r.Client.Delete(ctx, secret)
+		// Try to delete the secret, but don't fail the entire reconciliation if it fails
+		// this will not prevent creds with unknown state from deletion
+		err = r.Delete(ctx, secret)
 		if err != nil && !apierrors.IsNotFound(err) {
 			// Log the error but continue with deletion
 			ctxlog.Error(err, "failed to delete associated secret, continuing with deletion",
