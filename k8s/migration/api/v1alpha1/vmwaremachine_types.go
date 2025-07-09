@@ -58,13 +58,14 @@ type VMInfo struct {
 	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
 }
 
-// Virtual ethernet card.
+// NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
 	Network string `json:"network"`
 	MAC     string `json:"mac"`
 	Index   int    `json:"order"`
 }
 
+// GuestNetwork represents a network interface as reported by the guest.
 type GuestNetwork struct {
 	MAC          string   `json:"mac"`
 	IP           string   `json:"ip"`

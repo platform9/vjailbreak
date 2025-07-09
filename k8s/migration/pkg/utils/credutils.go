@@ -40,7 +40,6 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
-	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -178,9 +177,9 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 
 	// --- This block is extracted from GetAllVMs ---
 	hostStorageMap := sync.Map{}
-	controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
+	controllers := make(map[int32]types.BaseVirtualSCSIController)
 	for _, device := range vmProps.Config.Hardware.Device {
-		if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
+		if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
 			controllers[device.GetVirtualDevice().Key] = scsiController
 		}
 	}
@@ -193,7 +192,7 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 	}
 
 	for _, device := range vmProps.Config.Hardware.Device {
-		disk, ok := device.(*govmitypes.VirtualDisk)
+		disk, ok := device.(*types.VirtualDisk)
 		if !ok {
 			continue
 		}
@@ -691,15 +690,15 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 
 	var datastores []string
 	var ds mo.Datastore
-	var dsref govmitypes.ManagedObjectReference
+	var dsref types.ManagedObjectReference
 	for _, device := range vmProps.Config.Hardware.Device {
-		if _, ok := device.(*govmitypes.VirtualDisk); ok {
+		if _, ok := device.(*types.VirtualDisk); ok {
 			switch backing := device.GetVirtualDevice().Backing.(type) {
-			case *govmitypes.VirtualDiskFlatVer2BackingInfo:
+			case *types.VirtualDiskFlatVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *govmitypes.VirtualDiskSparseVer2BackingInfo:
+			case *types.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 				dsref = backing.Datastore.Reference()
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
@@ -715,7 +714,7 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
-// GetAllVMs gets all the VMs in a datacenter
+// //nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
 func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
@@ -752,7 +751,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		// --- Discover MAC Addresses ---
 		allMacs := make(map[string]struct{})
 		for _, device := range vmProps.Config.Hardware.Device {
-			if nic, ok := device.(govmitypes.BaseVirtualEthernetCard); ok {
+			if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
 				if nic.GetVirtualEthernetCard().MacAddress != "" {
 					allMacs[nic.GetVirtualEthernetCard().MacAddress] = struct{}{}
 				}
@@ -999,12 +998,12 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 // it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
 func processVMDisk(ctx context.Context,
-	disk *govmitypes.VirtualDisk,
-	controllers map[int32]govmitypes.BaseVirtualSCSIController,
-	hostStorageInfo *govmitypes.HostStorageDeviceInfo,
-	vmName string) (dsref *govmitypes.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
+	disk *types.VirtualDisk,
+	controllers map[int32]types.BaseVirtualSCSIController,
+	hostStorageInfo *types.HostStorageDeviceInfo,
+	vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
 	if controller, ok := controllers[disk.ControllerKey]; ok {
-		if controller.GetVirtualSCSIController().SharedBus == govmitypes.VirtualSCSISharingPhysicalSharing {
+		if controller.GetVirtualSCSIController().SharedBus == types.VirtualSCSISharingPhysicalSharing {
 			ctrllog.FromContext(ctx).Info("SKipping VM: VM has SCSI controller with shared bus, migration not supported",
 				"vm", vmName)
 			return nil, vjailbreakv1alpha1.RDMDiskInfo{}, true, nil
@@ -1012,13 +1011,13 @@ func processVMDisk(ctx context.Context,
 	}
 
 	switch backing := disk.Backing.(type) {
-	case *govmitypes.VirtualDiskFlatVer2BackingInfo:
+	case *types.VirtualDiskFlatVer2BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
-	case *govmitypes.VirtualDiskSparseVer2BackingInfo:
+	case *types.VirtualDiskSparseVer2BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
-	case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
+	case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
 		if hostStorageInfo != nil {
@@ -1458,15 +1457,15 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 }
 
 // getHostStorageDeviceInfo retrieves the storage device information for the host of a given VM
-func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
+func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*types.HostStorageDeviceInfo, error) {
 	hostSystem, err := vm.HostSystem(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system: %v", err)
 	}
-	var hostStorageDevice *govmitypes.HostStorageDeviceInfo
+	var hostStorageDevice *types.HostStorageDeviceInfo
 	hostStorageDevicefromMap, ok := hostStorageMap.Load(hostSystem.String())
 	if ok {
-		hostStorageDevice, ok = hostStorageDevicefromMap.(*govmitypes.HostStorageDeviceInfo)
+		hostStorageDevice, ok = hostStorageDevicefromMap.(*types.HostStorageDeviceInfo)
 		if !ok {
 			return nil, fmt.Errorf("invalid type assertion for host system from map")
 		}
