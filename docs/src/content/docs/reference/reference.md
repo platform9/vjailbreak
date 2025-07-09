@@ -66,9 +66,9 @@ metadata:
 spec:
   networks:
   - source: VM Network
-  target: vlan3002
+    target: vlan3002
   - source: VM Network 2
-  target: vlan3003
+    target: vlan3003
 ```
 ## Datastore mapping
 ```yaml
@@ -80,9 +80,9 @@ metadata:
 spec:
   storages:
   - source: vcenter-datastore-1
-  target: lvm
+    target: lvm
   - source: vcenter-datastore-2
-  target: ceph
+    target: ceph
 ```
 ## MigrationTemplate
 ```yaml
@@ -94,7 +94,7 @@ metadata:
 spec:
   networkMapping: name_of_networkMapping
   storageMapping: name_of_storageMapping
-  osType: windows/linux <optional>
+  osFamily: windowsGuest/linuxGuest <optional>
   source:
     datacenter: name_of_datacenter
     vmwareRef: name_of_VMwareCreds
@@ -102,7 +102,7 @@ spec:
     openstackRef: name_of_OpenstackCreds
 
 ```
-- `osType` is optional. If not provided, the `osType` is retrieved from vCenter. If it can't be automatically determined, migration will not proceed.
+- `osFamily` is optional. If not provided, the `osFamily` is retrieved from vCenter. If it can't be automatically determined, migration will not proceed.
 ## MigrationPlan
 ```yaml
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
@@ -130,14 +130,14 @@ spec:
     adminInitiatedCutOver: true/false
     performHealthChecks: true/false
     healthCheckPort: string
-  virtualmachines:
+  virtualMachines:
     - - winserver2k12
       - winserver2k16
     - - winserver2k19
       - winserver2k22
 ```
 - `retry`: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
-- `advancedOptions`: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualmachines list.
+- `advancedOptions`: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualMachines list.
   - `granularVolumeTypes`: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can specify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM
   - `granularNetworks`: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use in for each NIC on the VM, in order.
   - `granularPorts`: In case you wish to pre-create ports for a VM with certain configs and directly provide them to the target VM, you can define a list of port IDS to be used for each network on the VM. It will override options set in `granularNetworks`.
@@ -162,12 +162,12 @@ metadata:
   name: example-vjailbreak-node
   namespace: migration-system
 spec:
-  imageid: "your-openstack-image-id" # This ID is for the first vjailbreak VMimage. It auto-populates in the UI—do not delete it. 
-  noderole: "migration-worker"
-  openstackcreds:
+  imageId: "your-openstack-image-id" # This ID is for the first vjailbreak VMimage. It auto-populates in the UI—do not delete it. 
+  nodeRole: "worker"
+  openstackCreds:
     name: "name" # Reference to your OpenstackCreds
     namespace: "migration-system"
-  openstackflavorid: "your-openstack-flavor-id"
+  openstackFlavorId: "your-openstack-flavor-id"
  ```
 This `VjailbreakNode` CRD defines a Kubernetes resource that provisions a VM in OpenStack to act as a migration agent. Below is a breakdown of each field:  
 - `metadata:` Metadata contains identifying details about the `VjailbreakNode`.  
@@ -176,12 +176,12 @@ This `VjailbreakNode` CRD defines a Kubernetes resource that provisions a VM in 
 
 The `spec` section defines the desired state of the `VjailbreakNode`.  
 
-- `imageid: "your-openstack-image-id"`: This is the ID of the OpenStack image used to create the VM.  
+- `imageId: "your-openstack-image-id"`: This is the ID of the OpenStack image used to create the VM.  
   - **It must match the image ID used to create the initial vJailbreak VM**, ensuring compatibility across all migration agents.  
-- `noderole: "worker"`: Defines the role of the node.  
+- `nodeRole: "worker"`: Defines the role of the node.  
   - It should be set to `"worker"` as this node functions as a migration agent within the vJailbreak cluster.  
-- `openstackcreds:`: OpenstackCreds use the variables from the openstack.rc file.
+- `openstackCreds:`: OpenstackCreds use the variables from the openstack.rc file.
   - `name: "name"` → Refers to a `Secret` or `CustomResource` storing OpenStack authentication details.  
   - `namespace: "migration-system"` → The namespace where OpenStack credentials are stored.  
-- `openstackflavorid: "your-openstack-flavor-id"`: Specifies the OpenStack flavor ID, which determines the VM's compute resources (CPU, RAM, disk size, etc.).  
+- `openstackFlavorId: "your-openstack-flavor-id"`: Specifies the OpenStack flavor ID, which determines the VM's compute resources (CPU, RAM, disk size, etc.).  
   - The chosen flavor should align with the resource requirements for migration workloads.
