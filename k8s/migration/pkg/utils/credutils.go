@@ -714,7 +714,9 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
-// //nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
+// GetAllVMs gets all the VMs in a datacenter.
+//
+//nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
 func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
