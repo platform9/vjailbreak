@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -85,6 +86,8 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 		// Normalize the port's MAC address in the same way before comparing.
 		portMAC := strings.ToLower(reg.ReplaceAllString(port.MACAddress, ""))
 		if portMAC == normalizedMAC {
+			// Check if the port is active before returning true
+			log.Printf("Port %s with MAC %s is in status %s", port.ID, port.MACAddress, port.Status)
 			if port.Status == "ACTIVE" {
 				return true, nil
 			}
