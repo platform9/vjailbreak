@@ -79,6 +79,8 @@ spec:
                     description: GuestNetworks is the list of network interfaces for
                       the virtual machine as reported by the guest
                     items:
+                      description: GuestNetwork represents a network interface as
+                        reported by the guest.
                       properties:
                         device:
                           type: string
@@ -95,9 +97,6 @@ spec:
                         prefixLength:
                           format: int32
                           type: integer
-                      required:
-                      - ip
-                      - mac
                       type: object
                     type: array
                   ipAddress:
@@ -119,7 +118,8 @@ spec:
                     description: NetworkInterfaces is the list of network interfaces
                       for the virtual machine expect the lo device
                     items:
-                      description: Virtual ethernet card.
+                      description: NIC represents a Virtual ethernet card in the virtual
+                        machine.
                       properties:
                         mac:
                           type: string
@@ -127,10 +127,6 @@ spec:
                           type: string
                         order:
                           type: integer
-                      required:
-                      - mac
-                      - network
-                      - order
                       type: object
                     type: array
                   networks:

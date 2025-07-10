@@ -60,15 +60,15 @@ type VMInfo struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network string `json:"network"`
-	MAC     string `json:"mac"`
-	Index   int    `json:"order"`
+	Network string `json:"network,omitempty" `
+	MAC     string `json:"mac,omitempty"`
+	Index   int    `json:"order,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.
 type GuestNetwork struct {
-	MAC          string   `json:"mac"`
-	IP           string   `json:"ip"`
+	MAC          string   `json:"mac,omitempty"`
+	IP           string   `json:"ip,omitempty"`
 	Origin       string   `json:"origin,omitempty"`       // DHCP or static
 	PrefixLength int32    `json:"prefixLength,omitempty"` // Subnet mask length
 	DNS          []string `json:"dns,omitempty"`          // DNS servers
