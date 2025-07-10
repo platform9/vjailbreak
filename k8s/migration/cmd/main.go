@@ -130,11 +130,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BMConfig")
 		os.Exit(1)
 	}
-	if err = (&controller.RdmDiskReconciler{
+	if err = (&controller.RDMDiskReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RdmDisk")
+		setupLog.Error(err, "unable to create controller", "controller", "RDMDisk")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

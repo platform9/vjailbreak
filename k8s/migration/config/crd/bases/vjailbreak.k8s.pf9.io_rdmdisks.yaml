@@ -8,8 +8,8 @@ metadata:
 spec:
   group: vjailbreak.k8s.pf9.io
   names:
-    kind: RdmDisk
-    listKind: RdmDiskList
+    kind: RDMDisk
+    listKind: RDMDiskList
     plural: rdmdisks
     singular: rdmdisk
   scope: Namespaced
@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: RdmDisk is the Schema for the rdmdisks API.
+        description: RDMDisk is the Schema for the rdmdisks API.
         properties:
           apiVersion:
             description: |-
@@ -37,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of RdmDisk
+            description: Spec defines the desired state of RDMDisk
             properties:
               diskName:
                 description: |-
@@ -80,7 +80,7 @@ spec:
             - uuid
             type: object
           status:
-            description: RdmDiskStatus defines the observed state of RdmDisk.
+            description: RDMDiskStatus defines the observed state of RDMDisk.
             properties:
               cinderVolumeID:
                 type: string
