@@ -85,7 +85,11 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 		// Normalize the port's MAC address in the same way before comparing.
 		portMAC := strings.ToLower(reg.ReplaceAllString(port.MACAddress, ""))
 		if portMAC == normalizedMAC {
-			return true, nil
+			if port.Status == "ACTIVE" {
+				return true, nil
+			} else {
+				return false, nil
+			}
 		}
 	}
 
