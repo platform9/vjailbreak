@@ -103,7 +103,6 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	case "Managing":
 		if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
-
 			// Create the RDM disk object with required fields
 			rdmDiskObj := vm.RDMDisk{
 				VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.Source,
@@ -162,7 +161,7 @@ func (r *RDMDiskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// validateRDMDiskFields validates all required fields for migration
+// ValidateRDMDiskFields validates all required fields for migration
 func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 	if len(rdmDisk.Spec.OpenstackVolumeRef.Source) == 0 {
 		return fmt.Errorf("OpenstackVolumeRef.source is required")
