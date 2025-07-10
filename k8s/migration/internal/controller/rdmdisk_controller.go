@@ -32,8 +32,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
-// RdmDiskReconciler reconciles a RdmDisk object
-type RdmDiskReconciler struct {
+// RDMDiskReconciler reconciles a RDMDisk object
+type RDMDiskReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -45,20 +45,20 @@ type RdmDiskReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the RdmDisk object against the actual cluster state, and then
+// the RDMDisk object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
-func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	// Get the RdmDisk resource
-	rdmDisk := &vjailbreakv1alpha1.RdmDisk{}
+	// Get the RDMDisk resource
+	rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
 	if err := r.Get(ctx, req.NamespacedName, rdmDisk); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			log.Error(err, "unable to fetch RdmDisk")
+			log.Error(err, "unable to fetch RDMDisk")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -68,7 +68,7 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	switch rdmDisk.Status.Phase {
 	case "Created":
 		// Validate the RDM disk specifications
-		if err := ValidateRdmDiskFields(rdmDisk); err != nil {
+		if err := ValidateRDMDiskFields(rdmDisk); err != nil {
 			log.Error(err, "validation failed")
 			rdmDisk.Status.Phase = "Error"
 			startCondition := metav1.Condition{
@@ -79,7 +79,7 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
-				log.Error(err, "unable to update RdmDisk status")
+				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -95,7 +95,7 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
-				log.Error(err, "unable to update RdmDisk status")
+				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
 		}
@@ -103,7 +103,6 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	case "Managing":
 		if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
-
 			// Create the RDM disk object with required fields
 			rdmDiskObj := vm.RDMDisk{
 				VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.Source,
@@ -124,7 +123,7 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				}
 				meta.SetStatusCondition(&rdmDisk.Status.Conditions, failureCondition)
 				if updateErr := r.Status().Update(ctx, rdmDisk); updateErr != nil {
-					log.Error(updateErr, "unable to update RdmDisk status")
+					log.Error(updateErr, "unable to update RDMDisk status")
 					return ctrl.Result{}, updateErr
 				}
 				return ctrl.Result{}, err
@@ -141,7 +140,7 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 			meta.SetStatusCondition(&rdmDisk.Status.Conditions, successCondition)
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
-				log.Error(err, "unable to update RdmDisk status with volume ID")
+				log.Error(err, "unable to update RDMDisk status with volume ID")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -155,15 +154,15 @@ func (r *RdmDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RdmDiskReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *RDMDiskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.RdmDisk{}).
+		For(&vjailbreakv1alpha1.RDMDisk{}).
 		Named("rdmdisk").
 		Complete(r)
 }
 
-// validateRdmDiskFields validates all required fields for migration
-func ValidateRdmDiskFields(rdmDisk *vjailbreakv1alpha1.RdmDisk) error {
+// ValidateRDMDiskFields validates all required fields for migration
+func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 	if len(rdmDisk.Spec.OpenstackVolumeRef.Source) == 0 {
 		return fmt.Errorf("OpenstackVolumeRef.source is required")
 	}

@@ -30,7 +30,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
-var _ = Describe("RdmDisk Controller", func() {
+var _ = Describe("RDMDisk Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("RdmDisk Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		rdmdisk := &vjailbreakv1alpha1.RdmDisk{}
+		rdmdisk := &vjailbreakv1alpha1.RDMDisk{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind RdmDisk")
+			By("creating the custom resource for the Kind RDMDisk")
 			err := k8sClient.Get(ctx, typeNamespacedName, rdmdisk)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &vjailbreakv1alpha1.RdmDisk{
+				resource := &vjailbreakv1alpha1.RDMDisk{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("RdmDisk Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &vjailbreakv1alpha1.RdmDisk{}
+			resource := &vjailbreakv1alpha1.RDMDisk{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance RdmDisk")
+			By("Cleanup the specific resource instance RDMDisk")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &RdmDiskReconciler{
+			controllerReconciler := &RDMDiskReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

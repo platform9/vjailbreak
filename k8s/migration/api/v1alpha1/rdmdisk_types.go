@@ -20,8 +20,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// RdmDiskSpec defines the desired state of RdmDisk.
-type RdmDiskSpec struct {
+// RDMDiskSpec defines the desired state of RDMDisk.
+type RDMDiskSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	DiskName           string        `json:"diskName"`
@@ -33,8 +33,8 @@ type RdmDiskSpec struct {
 	ImportToCinder     bool          `json:"importToCinder,omitempty"` // Indicates if the RDM disk is being imported
 }
 
-// RdmDiskStatus defines the observed state of RdmDisk.
-type RdmDiskStatus struct {
+// RDMDiskStatus defines the observed state of RDMDisk.
+type RDMDiskStatus struct {
 	// +kubebuilder:validation:Enum=Created;Migrate;Managing;Managed;Error
 	Phase          string             `json:"phase,omitempty"` // Created | Migrate | Managing | Managed | Error
 	CinderVolumeID string             `json:"cinderVolumeID,omitempty"`
@@ -44,26 +44,27 @@ type RdmDiskStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// RdmDisk is the Schema for the rdmdisks API.
+// RDMDisk is the Schema for the rdmdisks API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-type RdmDisk struct {
+type RDMDisk struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// Spec defines the desired state of RdmDisk
-	Spec   RdmDiskSpec   `json:"spec,omitempty"`
-	Status RdmDiskStatus `json:"status,omitempty"`
+	// Spec defines the desired state of RDMDisk
+	Spec   RDMDiskSpec   `json:"spec,omitempty"`
+	Status RDMDiskStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// RdmDiskList contains a list of RdmDisk.
-type RdmDiskList struct {
+// RDMDiskList contains a list of RDMDisk.
+type RDMDiskList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []RdmDisk `json:"items"`
+	Items           []RDMDisk `json:"items"`
 }
 
+// VolumeRefInfo contains information about the OpenStack volume reference.
 type VolumeRefInfo struct {
 	Source            map[string]string `json:"source"`
 	CinderBackendPool string            `json:"cinderBackendPool"`
@@ -71,5 +72,5 @@ type VolumeRefInfo struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&RdmDisk{}, &RdmDiskList{})
+	SchemeBuilder.Register(&RDMDisk{}, &RDMDiskList{})
 }

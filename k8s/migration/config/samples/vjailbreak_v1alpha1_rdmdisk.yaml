@@ -1,5 +1,5 @@
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: RdmDisk
+kind: RDMDisk
 metadata:
   labels:
     app.kubernetes.io/name: migration

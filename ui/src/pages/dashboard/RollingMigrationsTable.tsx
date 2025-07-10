@@ -7,8 +7,7 @@ import {
     styled,
     Button,
     LinearProgress,
-    IconButton,
-    Tooltip
+    IconButton
 } from "@mui/material";
 import {
     DataGrid,
@@ -19,6 +18,7 @@ import {
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ClusterIcon from '@mui/icons-material/Hub';
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
@@ -380,22 +380,10 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
         >
             <div>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ClusterIcon />
                     <Typography variant="h6" component="h2">
                         Cluster Conversions
                     </Typography>
-                    <Tooltip title="Early preview - report any issues" arrow>
-                        <Chip
-                            label="BETA"
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                            sx={{
-                                fontSize: '0.65rem',
-                                height: '18px',
-                                fontWeight: 600
-                            }}
-                        />
-                    </Tooltip>
                 </Box>
                 {selectedCount > 0 && (
                     <Typography variant="body2" color="text.secondary">
