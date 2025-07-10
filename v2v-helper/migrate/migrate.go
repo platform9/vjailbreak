@@ -574,21 +574,26 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				if err != nil {
 					return fmt.Errorf("failed to get network interface names: %s", err)
 				}
-				utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
-				macs := []string{}
+				if len(interfaces) == 0 {
+					log.Printf("Failed to get network interface names, cannot add udev rules, network might not come up post migration, please check the network configuration post migration")
+				} else {
+					utils.PrintLog("Adding udev rules")
+					utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
+					macs := []string{}
 
-				// By default the network interfaces macs are in the same order as the interfaces
-				for _, nic := range vminfo.NetworkInterfaces {
-					macs = append(macs, nic.MAC)
-				}
-				utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
-				err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
-				if err != nil {
-					log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
+					// By default the network interfaces macs are in the same order as the interfaces
+					for _, nic := range vminfo.NetworkInterfaces {
+						macs = append(macs, nic.MAC)
+					}
+					utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
+					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
+					if err != nil {
+						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
 					 network might not come up post migration, please check the network configuration post migration`, err)
-					log.Println("Continuing with migration")
+						log.Println("Continuing with migration")
+						err = nil
+					}
 				}
-
 			}
 		}
 	}
