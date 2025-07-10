@@ -38,7 +38,7 @@ Turn on Debug Mode
 ```bash
 kubectl patch configmap -n migration-system migration-config-<vm-name> --type merge -p '{"data":{"DEBUG":"true"}}'
 ```
-### A migration is stuck in Pending
+### A migration is stuck in pending
 If the migration was set to Retry on Failure, then delete the v2v-helper pod for that VM and collect the logs of the pod that comes up.
 
 ```bash
