@@ -214,6 +214,7 @@ func SetupControllers(mgr ctrl.Manager, local bool) error {
 	if err := (&controller.OpenstackCredsReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
 		return err
@@ -243,10 +244,10 @@ func SetupControllers(mgr ctrl.Manager, local bool) error {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkMapping")
 		return err
 	}
-	if err := (&controller.MigrationPlanReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err := controller.NewMigrationPlanReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
 		return err
 	}
@@ -268,6 +269,7 @@ func SetupControllers(mgr ctrl.Manager, local bool) error {
 	if err := (&controller.RollingMigrationPlanReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RollingMigrationPlan")
 		return err
