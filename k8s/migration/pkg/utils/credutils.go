@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -40,7 +41,7 @@ import (
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	govmitypes "github.com/vmware/govmomi/vim25/types"
+	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -86,7 +87,12 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 		// Normalize the port's MAC address in the same way before comparing.
 		portMAC := strings.ToLower(reg.ReplaceAllString(port.MACAddress, ""))
 		if portMAC == normalizedMAC {
-			return true, nil
+			// Check if the port is active before returning true
+			log.Printf("Port %s with MAC %s is in status %s", port.ID, port.MACAddress, port.Status)
+			if port.Status == "ACTIVE" {
+				return true, nil
+			}
+			break
 		}
 	}
 
@@ -178,9 +184,9 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 
 	// --- This block is extracted from GetAllVMs ---
 	hostStorageMap := sync.Map{}
-	controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
+	controllers := make(map[int32]types.BaseVirtualSCSIController)
 	for _, device := range vmProps.Config.Hardware.Device {
-		if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
+		if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
 			controllers[device.GetVirtualDevice().Key] = scsiController
 		}
 	}
@@ -193,7 +199,7 @@ func discoverVMStorage(ctx context.Context, c *vim25.Client, vm *object.VirtualM
 	}
 
 	for _, device := range vmProps.Config.Hardware.Device {
-		disk, ok := device.(*govmitypes.VirtualDisk)
+		disk, ok := device.(*types.VirtualDisk)
 		if !ok {
 			continue
 		}
@@ -707,15 +713,15 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 
 	var datastores []string
 	var ds mo.Datastore
-	var dsref govmitypes.ManagedObjectReference
+	var dsref types.ManagedObjectReference
 	for _, device := range vmProps.Config.Hardware.Device {
-		if _, ok := device.(*govmitypes.VirtualDisk); ok {
+		if _, ok := device.(*types.VirtualDisk); ok {
 			switch backing := device.GetVirtualDevice().Backing.(type) {
-			case *govmitypes.VirtualDiskFlatVer2BackingInfo:
+			case *types.VirtualDiskFlatVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *govmitypes.VirtualDiskSparseVer2BackingInfo:
+			case *types.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
-			case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 				dsref = backing.Datastore.Reference()
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
@@ -731,7 +737,9 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
-// GetAllVMs gets all the VMs in a datacenter
+// GetAllVMs gets all the VMs in a datacenter.
+//
+//nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
 func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
@@ -768,7 +776,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		// --- Discover MAC Addresses ---
 		allMacs := make(map[string]struct{})
 		for _, device := range vmProps.Config.Hardware.Device {
-			if nic, ok := device.(govmitypes.BaseVirtualEthernetCard); ok {
+			if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
 				if nic.GetVirtualEthernetCard().MacAddress != "" {
 					allMacs[nic.GetVirtualEthernetCard().MacAddress] = struct{}{}
 				}
@@ -829,35 +837,198 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 		}
 
+		// Get the cluster name from the host's parent
+		if host.Parent != nil {
+			// Determine parent type based on the object reference type
+			parentType := host.Parent.Type
+			// Get the parent name
+			var parentEntity mo.ManagedEntity
+			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
+			if err != nil {
+				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
+			} else {
+				// Handle based on the parent's type
+				switch parentType {
+				case "ClusterComputeResource":
+					var cluster mo.ClusterComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
+					if err != nil {
+						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = cluster.Name
+					}
+				case "ComputeResource":
+					var compute mo.ComputeResource
+					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
+					if err != nil {
+						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+					} else {
+						clusterName = compute.Name
+					}
+				default:
+					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+				}
+			}
+		} else {
+			clusterName = ""
+		}
+
+		// Get the virtual NICs
+		nicList, err := ExtractVirtualNICs(&vmProps)
+		if err != nil {
+			return nil, err
+		}
+		// Get the guest network info
+		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert VM name to Kubernetes-safe name
+		vmName, err := ConvertToK8sName(vmProps.Config.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert vm name: %w", err)
+		}
+
+		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: vmwcreds.Namespace}
+		err = k3sclient.Get(ctx, vmwvmKey, vmwvm)
+
+		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+		var osFamily string
+
+		switch {
+		case apierrors.IsNotFound(err):
+			// First time creation – use whatever vCenter gave us (could be nil)
+			guestNetworks = guestNetworksFromVmware
+			osFamily = vmProps.Guest.GuestFamily
+
+		case err != nil:
+			// Unexpected error
+			return nil, fmt.Errorf("failed to get VMwareMachine: %w", err)
+
+		default:
+			// Object exists
+			if len(guestNetworksFromVmware) > 0 {
+				// Only update if we got fresh data from vCenter
+				guestNetworks = guestNetworksFromVmware
+			} else {
+				// Use existing data because VM is switched off and we can't get the info from vCenter
+				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
+			}
+			if vmProps.Guest.GuestFamily != "" {
+				osFamily = vmProps.Guest.GuestFamily
+			} else {
+				osFamily = vmwvm.Spec.VMInfo.OSFamily
+			}
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
-			Name:         vmProps.Config.Name,
-			Datastores:   datastores,
-			Disks:        disks,
-			Networks:     networks,
-			IPAddress:    vmProps.Guest.IpAddress,
-			MacAddresses: macAddresses,
-			VMState:      vmProps.Guest.GuestState,
-			OSFamily:     vmProps.Guest.GuestFamily,
-			CPU:          int(vmProps.Config.Hardware.NumCPU),
-			Memory:       int(vmProps.Config.Hardware.MemoryMB),
-			ESXiName:     host.Name,
-			ClusterName:  clusterName,
-			RDMDisks:     rdmDiskInfos,
+			Name:              vmProps.Config.Name,
+			Datastores:        datastores,
+			Disks:             disks,
+			Networks:          networks,
+			IPAddress:         vmProps.Guest.IpAddress,
+			VMState:           vmProps.Guest.GuestState,
+			MacAddresses:      macAddresses,
+			OSFamily:          osFamily,
+			CPU:               int(vmProps.Config.Hardware.NumCPU),
+			Memory:            int(vmProps.Config.Hardware.MemoryMB),
+			ESXiName:          host.Name,
+			ClusterName:       clusterName,
+			RDMDisks:          rdmDiskInfos,
+			NetworkInterfaces: nicList,
+			GuestNetworks:     guestNetworks,
 		})
 	}
 	return vminfo, nil
+}
+
+// ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
+// It returns a list of NICs with MAC addresses, backing network identifiers, and index order.
+func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, error) {
+	nicList := []vjailbreakv1alpha1.NIC{}
+	nicsIndex := 0
+
+	for _, device := range vmProps.Config.Hardware.Device {
+		var nic *types.VirtualEthernetCard
+
+		switch d := device.(type) {
+		case *types.VirtualE1000,
+			*types.VirtualE1000e,
+			*types.VirtualVmxnet,
+			*types.VirtualVmxnet2,
+			*types.VirtualVmxnet3,
+			*types.VirtualPCNet32:
+			if ethCard, ok := d.(types.BaseVirtualEthernetCard); ok {
+				nic = ethCard.GetVirtualEthernetCard()
+			}
+		}
+
+		if nic != nil && nic.Backing != nil {
+			var network string
+			switch backing := device.GetVirtualDevice().Backing.(type) {
+			case *types.VirtualEthernetCardNetworkBackingInfo:
+				if backing.Network != nil {
+					network = backing.Network.Value
+				}
+			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+				network = backing.Port.PortgroupKey
+			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
+				network = backing.OpaqueNetworkId
+			}
+
+			nicList = append(nicList, vjailbreakv1alpha1.NIC{
+				MAC:     strings.ToLower(nic.MacAddress),
+				Index:   nicsIndex,
+				Network: network,
+			})
+			nicsIndex++
+		}
+	}
+	return nicList, nil
+}
+
+// ExtractGuestNetworkInfo retrieves the runtime guest network configuration (guest.net)
+// reported by VMware Tools. Returns MAC, IP, DNS, and origin for each NIC in the guest.
+func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.GuestNetwork, error) {
+	guestNetworks := []vjailbreakv1alpha1.GuestNetwork{}
+
+	for i, guestNet := range vmProps.Guest.Net {
+		if guestNet.IpConfig == nil {
+			continue
+		}
+
+		for _, ip := range guestNet.IpConfig.IpAddress {
+			dnsConfigList := []string{}
+			if guestNet.DnsConfig != nil {
+				dnsConfigList = guestNet.DnsConfig.IpAddress
+			}
+
+			guestNetworks = append(guestNetworks, vjailbreakv1alpha1.GuestNetwork{
+				MAC:          strings.ToLower(guestNet.MacAddress),
+				IP:           ip.IpAddress,
+				Origin:       ip.Origin,
+				PrefixLength: ip.PrefixLength,
+				DNS:          dnsConfigList,
+				Device:       fmt.Sprintf("%d", i),
+			})
+		}
+	}
+
+	return guestNetworks, nil
 }
 
 // processVMDisk processes a single virtual disk device and updates the disk information
 // it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
 func processVMDisk(ctx context.Context,
-	disk *govmitypes.VirtualDisk,
-	controllers map[int32]govmitypes.BaseVirtualSCSIController,
-	hostStorageInfo *govmitypes.HostStorageDeviceInfo,
-	vmName string) (dsref *govmitypes.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
+	disk *types.VirtualDisk,
+	controllers map[int32]types.BaseVirtualSCSIController,
+	hostStorageInfo *types.HostStorageDeviceInfo,
+	vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
 	if controller, ok := controllers[disk.ControllerKey]; ok {
-		if controller.GetVirtualSCSIController().SharedBus == govmitypes.VirtualSCSISharingPhysicalSharing {
+		if controller.GetVirtualSCSIController().SharedBus == types.VirtualSCSISharingPhysicalSharing {
 			ctrllog.FromContext(ctx).Info("SKipping VM: VM has SCSI controller with shared bus, migration not supported",
 				"vm", vmName)
 			return nil, vjailbreakv1alpha1.RDMDiskInfo{}, true, nil
@@ -865,13 +1036,13 @@ func processVMDisk(ctx context.Context,
 	}
 
 	switch backing := disk.Backing.(type) {
-	case *govmitypes.VirtualDiskFlatVer2BackingInfo:
+	case *types.VirtualDiskFlatVer2BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
-	case *govmitypes.VirtualDiskSparseVer2BackingInfo:
+	case *types.VirtualDiskSparseVer2BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
-	case *govmitypes.VirtualDiskRawDiskMappingVer1BackingInfo:
+	case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 		ref := backing.Datastore.Reference()
 		dsref = &ref
 		if hostStorageInfo != nil {
@@ -1311,15 +1482,15 @@ func syncRDMDisks(vminfo *vjailbreakv1alpha1.VMInfo, vmwvm *vjailbreakv1alpha1.V
 }
 
 // getHostStorageDeviceInfo retrieves the storage device information for the host of a given VM
-func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*govmitypes.HostStorageDeviceInfo, error) {
+func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, hostStorageMap *sync.Map) (*types.HostStorageDeviceInfo, error) {
 	hostSystem, err := vm.HostSystem(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host system: %v", err)
 	}
-	var hostStorageDevice *govmitypes.HostStorageDeviceInfo
+	var hostStorageDevice *types.HostStorageDeviceInfo
 	hostStorageDevicefromMap, ok := hostStorageMap.Load(hostSystem.String())
 	if ok {
-		hostStorageDevice, ok = hostStorageDevicefromMap.(*govmitypes.HostStorageDeviceInfo)
+		hostStorageDevice, ok = hostStorageDevicefromMap.(*types.HostStorageDeviceInfo)
 		if !ok {
 			return nil, fmt.Errorf("invalid type assertion for host system from map")
 		}
