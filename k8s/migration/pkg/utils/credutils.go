@@ -87,9 +87,8 @@ func IsMacAllocatedInOpenStack(_ context.Context, networkingClient *gophercloud.
 		if portMAC == normalizedMAC {
 			if port.Status == "ACTIVE" {
 				return true, nil
-			} else {
-				return false, nil
 			}
+			break
 		}
 	}
 
