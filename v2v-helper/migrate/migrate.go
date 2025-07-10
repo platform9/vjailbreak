@@ -480,6 +480,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			"oracle linux",
 			"fedora",
 			"sles",
+			"sled",
 			"opensuse",
 			"alt linux",
 			"debian",
