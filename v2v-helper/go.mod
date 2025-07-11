@@ -7,7 +7,7 @@ require (
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250627080728-6eaa83d68f44
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250710144336-cfaa4da44da7
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0
@@ -29,10 +29,8 @@ require (
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect

@@ -130,6 +130,13 @@ else
     log "ERROR: Missing MASTER_IP or K3S_TOKEN for worker. Exiting."
     exit 1
   fi
+  
+  # Load images
+  log "Loading all the images in /etc/pf9/images..."
+  for img in /etc/pf9/images/*.tar; do
+    sudo ctr --address /run/k3s/containerd/containerd.sock -n k8s.io images import "$img"
+    check_command "Loading image: $img"
+  done
 
   # Echo K3S_URL and K3S_TOKEN for debugging
   export K3S_URL="https://$MASTER_IP:6443"
