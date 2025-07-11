@@ -2,7 +2,7 @@
 title: "Migrate VMs using CLI and kubectl"
 description: "Learn how to automate the migration of Virtual Machines from VMware to PCD using vJailbreak"
 ---
-vJailbreak comprises multiple Kubernetes Controllers which work on Custom Resources (CRs). When we perform the migrations through the UI, the UI itself takes care of creating these CRs for us, hence paving the way for migration to happen. In this tutorial, we will understand how we can migrate a VM using vJailbreak via CLI. These steps might be helpful if you are looking to automate the migration.
+vJailbreak comprises multiple Kubernetes Controllers which work on Custom Resources (CRs). When we perform the migrations through the UI, the UI itself takes care of creating these CRs for us, hence paving the way for migration to happen. In this tutorial, we will understand how we can migrate a VM using vJailbreak via CLI.
 
 
 ## Flow of information and resource creation
