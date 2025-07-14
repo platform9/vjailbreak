@@ -132,6 +132,17 @@ jobs:
 
       - name: Build UI image
         run: make ui
+        
+      - name: Save UI image as tar file
+        run: |
+          docker save ${{ env.UI_IMG }} -o ui-image.tar
+          
+      - name: Upload UI image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-docker-image
+          path: ui-image.tar
+          retention-days: 1
 
   build-v2v-helper:
     runs-on: ubuntu-latest
@@ -162,6 +173,17 @@ jobs:
           sudo apt-get install -y libguestfs-dev libnbd-dev pkg-config
       - name: Build v2v-helper image
         run: make v2v-helper
+        
+      - name: Save v2v-helper image as tar file
+        run: |
+          docker save ${{ env.V2V_IMG }} -o v2v-image.tar
+          
+      - name: Upload v2v-helper image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2v-docker-image
+          path: v2v-image.tar
+          retention-days: 1
 
   build-controller:
     runs-on: ubuntu-latest
@@ -172,6 +194,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -189,7 +216,18 @@ jobs:
           echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
 
       - name: Build controller image
-        run: make -o v2v-helper vjail-controller
+        run: make vjail-controller-only
+        
+      - name: Save controller image as tar file
+        run: |
+          docker save ${{ env.CONTROLLER_IMG }} -o controller-image.tar
+          
+      - name: Upload controller image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-docker-image
+          path: controller-image.tar
+          retention-days: 1
 
   build-vpwned:
     runs-on: ubuntu-latest
@@ -217,6 +255,17 @@ jobs:
 
       - name: Build vpwned image
         run: make build-vpwned
+        
+      - name: Save vpwned image as tar file
+        run: |
+          docker save ${{ env.VPWNED_IMG }} -o vpwned-image.tar
+          
+      - name: Upload vpwned image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpwned-docker-image
+          path: vpwned-image.tar
+          retention-days: 1
 
   post-build:
     runs-on: ubuntu-latest
@@ -387,6 +436,37 @@ jobs:
             echo "release_found=false" >> $GITHUB_ENV
           fi
           
+      - name: Download UI image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-docker-image
+          path: ./docker-images
+
+      - name: Download V2V Helper image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v2v-docker-image
+          path: ./docker-images
+          
+      - name: Download Controller image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-docker-image
+          path: ./docker-images
+          
+      - name: Download VPWNED image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vpwned-docker-image
+          path: ./docker-images
+          
+      - name: Load Docker images
+        run: |
+          docker load -i ./docker-images/ui-image.tar
+          docker load -i ./docker-images/v2v-image.tar
+          docker load -i ./docker-images/controller-image.tar
+          docker load -i ./docker-images/vpwned-image.tar
+        
       - name: Push UI Image
         run: docker push ${{ env.UI_IMG }}
         
