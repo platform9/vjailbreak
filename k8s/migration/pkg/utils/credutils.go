@@ -923,6 +923,11 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			}
 		}
 
+		// exclude vCLS VMs
+		if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
+			continue
+		}
+
 		vminfo = append(vminfo, vjailbreakv1alpha1.VMInfo{
 			Name:              vmProps.Config.Name,
 			Datastores:        datastores,
