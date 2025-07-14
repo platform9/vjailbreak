@@ -36,8 +36,8 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'release' && github.event.release.published) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.process_all_releases == 'true')
+      (github.event_name == 'release' && github.event.release.published == 'true') ||
+      (github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout code
