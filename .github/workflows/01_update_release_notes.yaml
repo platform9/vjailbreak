@@ -27,6 +27,10 @@ on:
         description: 'Branch to use'
         required: true
         default: 'gh-pages'
+      release_tag:
+        description: 'Input release tag'
+        required: true
+        type: text
 
 jobs:
   update-release-notes:
@@ -42,7 +46,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        with:
+          ref: gh-pages
+        
       - name: Install GitHub CLI and jq
         run: |
           sudo apt-get update
@@ -53,10 +59,18 @@ jobs:
         id: set_release_tag
         run: |
           # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
-          RELEASE_TAG="${GITHUB_HEAD_REF#release-}"
+          RELEASE_TAG="${GITHUB_HEAD_REF}"
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
         env:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
+
+      - name: Set release tag for Wrokflow Event
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+        id: set_workflow_release_tag
+        run: |
+          # Extract version from branch name (e.g., release-v1.2.3 -> v1.2.3)
+          RELEASE_TAG="${{github.event.inputs.release_tag}}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
 
       - name: Get latest release info
         id: latest_release
