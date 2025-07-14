@@ -46,10 +46,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh jq
 
+      - name: Set Tag for Release Event
+        if: github.event_name == 'release'
+        id: set_release_tag
+        run: echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for Manual Trigger
+        if: github.event_name == 'workflow_dispatch'
+        id: set_manual_tag
+        run: echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+
       - name: Generate Notes for New Release
         id: process_release
         run: |
-          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          RELEASE_TAG="${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag }}"
+          
           echo ">>> Processing new release: $RELEASE_TAG"
 
           RELEASE_NOTES=$(gh release view "$RELEASE_TAG" --json body --template '{{.body}}' || echo "")
@@ -83,6 +94,7 @@ jobs:
           } > "$FILE_NAME"
           
           echo "PROCESSED_ANYTHING=true" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -121,14 +133,15 @@ jobs:
           
           TIMESTAMP=$(date +%s)
           NEW_BRANCH="update-release-docs-$TIMESTAMP"
+          RELEASE_TAG="${{ steps.process_release.outputs.release_tag }}"
           
           git checkout -b "$NEW_BRANCH"
           git add docs/
           
           if ! git diff --cached --quiet; then
-            git commit -m "docs: Update for release ${{ github.event.release.tag_name }}"
+            git commit -m "docs: Update for release $RELEASE_TAG"
             git push origin "$NEW_BRANCH"
-            gh pr create --base gh-pages --head "$NEW_BRANCH" --title "docs: Update for release ${{ github.event.release.tag_name }}" --body "This PR was automatically generated."
+            gh pr create --base gh-pages --head "$NEW_BRANCH" --title "docs: Update for release $RELEASE_TAG" --body "This PR was automatically generated."
           else
             echo "No changes were detected to create a pull request."
           fi
