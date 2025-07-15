@@ -13,5 +13,21 @@ Following is a list of systems vJailbreak has been validated with. Please reach 
 
 ## Operating System
 
+| Operating System | Platform | Verified |
+| :--- | :--- | :--- |
+| CentOS 9 | linux/amd64 | Yes |
+| Debian 12 | linux/amd64 | Yes |
+| FreeBSD 14 | bsd/amd64 | Yes |
+| Microsoft Windows 11 | windows/amd64 | Yes |
+| Microsoft Windows 11 Enterprise | windows/amd64 | Yes |
+| Microsoft Windows Server 2019 | windows/amd64 | Yes |
+| Microsoft Windows Server 2022 | windows/amd64 | Yes |
+| Microsoft Windows Server 2025 | windows/amd64 | Yes |
+| Oracle Linux 8 | linux/amd64 | Yes |
+| Red Hat Enterprise Linux 10 | linux/amd64 | Yes |
+| Red Hat Enterprise Linux 8 | linux/amd64 | Yes |
+| Red Hat Enterprise Linux 9 | linux/amd64 | Yes |
+| Rocky 8 | linux/amd64 | Yes |
+| SUSE Linux Enterprise 15 | linux/amd64 | Yes |
 
 ## OpenStack
