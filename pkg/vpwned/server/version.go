@@ -11,7 +11,6 @@ import (
 	"github.com/platform9/vjailbreak/pkg/vpwned/upgrade"
 	version "github.com/platform9/vjailbreak/pkg/vpwned/version"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,7 +118,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	}
 
 	upgradeProgress.CurrentStep = "Backing up resources"
-	if err := upgrade.BackupResources(ctx, kubeClient); err != nil {
+	if err := upgrade.BackupResources(ctx, kubeClient, config); err != nil {
 		upgradeProgress.Status = "failed"
 		upgradeProgress.Error = fmt.Sprintf("Backup failed: %v", err)
 		return nil, fmt.Errorf("backup failed: %w", err)
@@ -127,7 +126,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	upgradeProgress.CompletedSteps++
 
 	upgradeProgress.CurrentStep = "Running pre-upgrade checks"
-	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, in.TargetVersion)
+	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
 	if err != nil {
 		upgradeProgress.Status = "failed"
 		upgradeProgress.Error = fmt.Sprintf("Pre-upgrade checks failed: %v", err)
@@ -144,7 +143,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				Version:  crInfo.Version,
 				Resource: crInfo.Plural,
 			}
-			dynamicClient, err := dynamic.NewForConfig(kubeClient.RESTMapper().RESTConfig())
+			dynamicClient, err := dynamic.NewForConfig(config)
 			if err != nil {
 				continue
 			}
@@ -168,8 +167,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				PassedAll:               false,
 			},
 			UpgradeStarted: false,
-			CleanupRequired: true,
-			CustomResourceList: crList,
 		}, nil
 	}
 
@@ -313,7 +310,6 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 				PassedAll:               false,
 			},
 			UpgradeStarted: false,
-			CleanupRequired: false,
 		}, fmt.Errorf("checks failed after cleanup")
 	}
 
