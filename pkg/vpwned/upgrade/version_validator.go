@@ -18,7 +18,7 @@ import (
 	"golang.org/x/mod/semver"
 	"encoding/base64"
 	"gopkg.in/yaml.v2"
-
+    "k8s.io/client-go/rest"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 )
@@ -528,7 +528,7 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 	return nil
 }
 
-func CleanupResources(ctx context.Context, kubeClient client.Client) error {
+func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	log.Println("Starting automatic resource cleanup...")
 
 	dep := &appsv1.Deployment{}
@@ -584,7 +584,7 @@ func CleanupResources(ctx context.Context, kubeClient client.Client) error {
 		}
 	}
 
-	if err := deleteAllCustomResources(ctx, kubeClient); err != nil {
+	if err := deleteAllCustomResources(ctx, kubeClient, restConfig); err != nil {
 		log.Printf("Failed to delete all custom resources: %v", err)
 		return err
 	}
@@ -593,7 +593,7 @@ func CleanupResources(ctx context.Context, kubeClient client.Client) error {
 	return nil
 }
 
-func deleteAllCustomResources(ctx context.Context, kubeClient client.Client) error {
+func deleteAllCustomResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	currentCRs, err := DiscoverCurrentCRs(ctx, kubeClient)
 	if err != nil {
 		return fmt.Errorf("failed to discover current CRs: %w", err)
