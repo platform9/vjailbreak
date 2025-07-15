@@ -66,7 +66,7 @@ jobs:
           RELEASE_NOTES=$(gh release view "$RELEASE_TAG" --json body --template '{{.body}}' || echo "")
           if [ -z "$RELEASE_NOTES" ]; then
             echo "No release notes found for $RELEASE_TAG, skipping."
-            echo "PROCESSED_ANYTHING=false" >> $GITHUB_OUTPUT
+            echo "processed_release=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -93,13 +93,13 @@ jobs:
             echo "$RELEASE_NOTES"
           } > "$FILE_NAME"
           
-          echo "PROCESSED_ANYTHING=true" >> $GITHUB_OUTPUT
+          echo "processed_release=true" >> $GITHUB_OUTPUT
           echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Archive and Delete Old Release Notes
-        if: steps.process_release.outputs.PROCESSED_ANYTHING == 'true'
+        if: steps.process_release.outputs.processed_release == 'true'
         run: |
           echo "Archiving and cleaning old release notes..."
           mapfile -t ALL_VERSIONS < <(find docs/src/content/docs/release_docs -name "v*.md" -printf "%f\n" | sed -e 's/^v//' -e 's/\.md$//' | sort -V)
@@ -126,7 +126,7 @@ jobs:
           done
 
       - name: Create PR with changes
-        if: steps.process_release.outputs.PROCESSED_ANYTHING == 'true'
+        if: steps.process_release.outputs.processed_release == 'true'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions Bot"
