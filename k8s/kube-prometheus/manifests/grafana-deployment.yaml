@@ -149,6 +149,9 @@ spec:
         - mountPath: /grafana-dashboard-definitions/0/workload-total
           name: grafana-dashboard-workload-total
           readOnly: false
+        - mountPath: /grafana-dashboard-definitions/0/k8s-overview
+          name: grafana-dashboard-k8s-overview
+          readOnly: false
         - mountPath: /etc/grafana
           name: grafana-config
           readOnly: false
@@ -253,6 +256,9 @@ spec:
       - configMap:
           name: grafana-dashboard-workload-total
         name: grafana-dashboard-workload-total
+      - configMap:
+          name: grafana-dashboard-k8s-overview
+        name: grafana-dashboard-k8s-overview
       - name: grafana-config
         secret:
           secretName: grafana-config
