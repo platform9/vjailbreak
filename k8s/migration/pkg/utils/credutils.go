@@ -37,6 +37,7 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
+	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -780,7 +781,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			Networks:          networks,
 			IPAddress:         vmProps.Guest.IpAddress,
 			VMState:           vmProps.Guest.GuestState,
-			MacAddresses:      macAddresses,
 			OSFamily:          osFamily,
 			CPU:               int(vmProps.Config.Hardware.NumCPU),
 			Memory:            int(vmProps.Config.Hardware.MemoryMB),
