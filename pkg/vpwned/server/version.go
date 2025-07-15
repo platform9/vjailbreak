@@ -167,6 +167,8 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				PassedAll:               false,
 			},
 			UpgradeStarted: false,
+			CleanupRequired: true,
+			CustomResourceList: crList,
 		}, nil
 	}
 
@@ -310,6 +312,7 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 				PassedAll:               false,
 			},
 			UpgradeStarted: false,
+			CleanupRequired: false,
 		}, fmt.Errorf("checks failed after cleanup")
 	}
 

@@ -117,6 +117,8 @@ message UpgradeRequest {
 message UpgradeResponse {
   ValidationResult checks = 1;
   bool upgrade_started = 2;
+  bool cleanup_required = 3;
+  repeated string custom_resource_list = 4;
 }
 
 message UpgradeProgressResponse {
