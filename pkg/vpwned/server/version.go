@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"sigs.k8s.io/yaml"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
 
 type DeploymentConfig struct {
@@ -174,12 +175,12 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 	if in.AutoCleanup {
 		upgradeProgress.CurrentStep = "Performing automatic cleanup"
-		if err := upgrade.CleanupResources(ctx, kubeClient); err != nil {
+		if err := upgrade.CleanupResources(ctx, kubeClient, config); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("Automatic cleanup failed: %v", err)
 			return nil, fmt.Errorf("automatic cleanup failed: %w", err)
 		}
-		checks, err = upgrade.RunPreUpgradeChecks(ctx, kubeClient, in.TargetVersion)
+		checks, err = upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
 		if err != nil || !checks.PassedAll {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = "Checks failed even after cleanup"
@@ -254,13 +255,14 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		upgradeProgress.Status = "completed"
 		upgradeProgress.CurrentStep = "Upgrade completed successfully"
 		upgradeProgress.EndTime = &now
-		
+
 		log.Printf("Upgrade to version %s completed successfully", in.TargetVersion)
 	} else {
 		upgradeProgress.CurrentStep = "Rollback due to upgrade failure"
 		upgradeProgress.Status = "rolled_back"
 		upgradeProgress.Error = "Upgrade failed. Rolling back to previous state."
-		upgradeProgress.EndTime = &time.Now()
+		now := time.Now()
+		upgradeProgress.EndTime = &now
 		log.Printf("Upgrade failed. Rolling back to previous state.")
 		if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
 			log.Printf("Rollback failed: %v", err)
@@ -295,9 +297,9 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
-	_ = upgrade.CleanupResources(ctx, kubeClient)
+	_ = upgrade.CleanupResources(ctx, kubeClient, config)
 
-	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, in.TargetVersion)
+	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
 	if err != nil || !checks.PassedAll {
 		return &api.UpgradeResponse{
 			Checks: &api.ValidationResult{
