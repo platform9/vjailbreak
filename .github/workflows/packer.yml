@@ -395,10 +395,6 @@ jobs:
           sudo mkdir -p image_builder/images
           sudo chmod +x image_builder/scripts/download_images.sh
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
-          
-      - name: Copy opensource.txt to image_builder
-        if: env.release_found == 'true'
-        run: cp ./opensource.txt ./image_builder/opensource.txt
 
       - name: Enable KVM group perms
         if: env.release_found == 'true'
