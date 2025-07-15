@@ -69,11 +69,6 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/scripts/download_images.sh"
-    destination = "/tmp/download_images.sh"
-  }
-
-  provisioner "file" {
     source      = "${path.root}/images"
     destination = "/home/ubuntu"
   }
@@ -88,8 +83,8 @@ build {
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
     "sudo mkdir -p image_builder/images",
-    "sudo mv /tmp/download_images.sh /etc/pf9/download_images.sh",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
+    "sudo mv /etc/pf9/images/virtio-win.iso /home/ubuntu/virtio-win/virtio-win.iso",
     "sudo mv /tmp/yamls /etc/pf9/yamls",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",

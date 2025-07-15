@@ -48,7 +48,6 @@ images=(
   "$grafana"
   "$alpine"
   "$vpwned"
-  "$virtiowin"
 )
 
 for img in "${images[@]}"; do
@@ -69,3 +68,7 @@ ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube
 
 echo "[✔] All images downloaded and exported as tar files."
 
+
+# Download virtio-win.iso
+echo "[*] Downloading virtio-win.iso"
+wget -O image_builder/images/virtio-win.iso "$virtiowin"
