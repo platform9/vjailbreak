@@ -37,7 +37,6 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
-	govmitypes "github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -605,10 +604,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 		// Fetch details required for RDM disks
 		hostStorageMap := sync.Map{}
-		controllers := make(map[int32]govmitypes.BaseVirtualSCSIController)
+		controllers := make(map[int32]types.BaseVirtualSCSIController)
 		// Collect all SCSI controller to find shared RDM disks
 		for _, device := range vmProps.Config.Hardware.Device {
-			if scsiController, ok := device.(govmitypes.BaseVirtualSCSIController); ok {
+			if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
 				controllers[device.GetVirtualDevice().Key] = scsiController
 			}
 		}
@@ -631,7 +630,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 		var skipVM bool
 		for _, device := range vmProps.Config.Hardware.Device {
-			disk, ok := device.(*govmitypes.VirtualDisk)
+			disk, ok := device.(*types.VirtualDisk)
 			if !ok {
 				continue
 			}
