@@ -238,6 +238,103 @@ jobs:
           name: vpwned-docker-image
           path: vpwned-image.tar
           retention-days: 1
+          
+  push-images:
+    runs-on: ubuntu-latest
+    needs: [determine-release, post-build]
+    if: |
+      always() &&
+      needs.post-build.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+          
+      - name: Set environment variables
+        run: |
+          echo "TAG=${{ needs.determine-release.outputs.tag }}" >> $GITHUB_ENV
+          echo "UI_IMG=${{ needs.determine-release.outputs.ui_img }}" >> $GITHUB_ENV
+          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
+          echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
+          echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+
+          if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
+            echo "release_found=true" >> $GITHUB_ENV
+          else
+            echo "release_found=false" >> $GITHUB_ENV
+          fi
+          
+      - name: Download UI image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-docker-image
+          path: ./docker-images
+
+      - name: Download V2V Helper image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v2v-docker-image
+          path: ./docker-images
+          
+      - name: Download Controller image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-docker-image
+          path: ./docker-images
+          
+      - name: Download VPWNED image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vpwned-docker-image
+          path: ./docker-images
+          
+      - name: Load Docker images
+        run: |
+          docker load -i ./docker-images/ui-image.tar
+          docker load -i ./docker-images/v2v-image.tar
+          docker load -i ./docker-images/controller-image.tar
+          docker load -i ./docker-images/vpwned-image.tar
+        
+      - name: Push UI Image
+        run: docker push ${{ env.UI_IMG }}
+        
+      - name: Push V2V Helper Image
+        run: docker push ${{ env.V2V_IMG }}
+        
+      - name: Push Controller Image
+        run: docker push ${{ env.CONTROLLER_IMG }}
+        
+      - name: Push VPWNED Image
+        run: docker push ${{ env.VPWNED_IMG }}
+        
+      - name: Setup ORAS
+        if: env.release_found == 'true'
+        uses: oras-project/setup-oras@v1.2.1
+          
+      - name: Download artifacts
+        if: env.release_found == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: vjailbreak-qcow2
+          path: ./vjailbreak_qcow2
+          
+      - name: Push QCOW2 Image
+        if: env.release_found == 'true'
+        run: |
+          oras push ${{ env.QCOW2_IMG }} \
+          --artifact-type="application/qcow2" \
+          ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
   post-build:
     runs-on: ubuntu-latest
@@ -366,99 +463,3 @@ jobs:
             image_builder/deploy/01ui.yaml
             image_builder/deploy/version-config.yaml
             
-  push-images:
-    runs-on: ubuntu-latest
-    needs: [determine-release, post-build]
-    if: |
-      always() &&
-      needs.post-build.result == 'success' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
-          
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
-          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
-          
-      - name: Set environment variables
-        run: |
-          echo "TAG=${{ needs.determine-release.outputs.tag }}" >> $GITHUB_ENV
-          echo "UI_IMG=${{ needs.determine-release.outputs.ui_img }}" >> $GITHUB_ENV
-          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
-          echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
-          echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
-          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
-
-          if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
-            echo "release_found=true" >> $GITHUB_ENV
-          else
-            echo "release_found=false" >> $GITHUB_ENV
-          fi
-          
-      - name: Download UI image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-docker-image
-          path: ./docker-images
-
-      - name: Download V2V Helper image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: v2v-docker-image
-          path: ./docker-images
-          
-      - name: Download Controller image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: controller-docker-image
-          path: ./docker-images
-          
-      - name: Download VPWNED image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: vpwned-docker-image
-          path: ./docker-images
-          
-      - name: Load Docker images
-        run: |
-          docker load -i ./docker-images/ui-image.tar
-          docker load -i ./docker-images/v2v-image.tar
-          docker load -i ./docker-images/controller-image.tar
-          docker load -i ./docker-images/vpwned-image.tar
-        
-      - name: Push UI Image
-        run: docker push ${{ env.UI_IMG }}
-        
-      - name: Push V2V Helper Image
-        run: docker push ${{ env.V2V_IMG }}
-        
-      - name: Push Controller Image
-        run: docker push ${{ env.CONTROLLER_IMG }}
-        
-      - name: Push VPWNED Image
-        run: docker push ${{ env.VPWNED_IMG }}
-        
-      - name: Setup ORAS
-        if: env.release_found == 'true'
-        uses: oras-project/setup-oras@v1.2.1
-          
-      - name: Download artifacts
-        if: env.release_found == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: vjailbreak-qcow2
-          path: ./vjailbreak_qcow2
-          
-      - name: Push QCOW2 Image
-        if: env.release_found == 'true'
-        run: |
-          oras push ${{ env.QCOW2_IMG }} \
-          --artifact-type="application/qcow2" \
-          ./vjailbreak_qcow2/vjailbreak-image.qcow2
