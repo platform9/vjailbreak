@@ -336,6 +336,14 @@ jobs:
       (needs.push-images.result == 'success' || needs.push-images.result == 'skipped')
 
     steps:
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+          
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
