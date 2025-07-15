@@ -1,0 +1,291 @@
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { getAvailableUpdates, initiateUpgrade, getUpgradeProgress, confirmCleanupAndUpgrade } from '../api/version';
+import { UpgradeResponse, ValidationResult, UpgradeProgressResponse } from '../api/version/model';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import LinearProgress from '@mui/material/LinearProgress';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
+import React from 'react';
+
+export const UpgradeModal = ({ show, onClose }) => {
+  const [selectedVersion, setSelectedVersion] = useState('');
+  const [checkResults, setCheckResults] = useState<ValidationResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [upgradeInProgress, setUpgradeInProgress] = useState(false);
+  const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
+  const [crList, setCrList] = useState<string[]>([]);
+  const [showCRWarning, setShowCRWarning] = useState(false);
+
+  // Fetch available updates
+  const { data: updates, isLoading: areVersionsLoading } = useQuery({
+    queryKey: ['availableUpdates'],
+    queryFn: getAvailableUpdates,
+    enabled: show,
+  });
+
+  // Mutation for triggering the upgrade
+  const upgradeMutation = useMutation<UpgradeResponse, Error, void>({
+    mutationFn: () => initiateUpgrade(selectedVersion, false),
+    onSuccess: (data) => {
+      if (data.upgradeStarted) {
+        setUpgradeInProgress(true);
+        setErrorMsg('');
+        setCheckResults(null);
+        setSuccessMsg('Upgrade process has been initiated!');
+      } else if (data.cleanupRequired && data.customResourceList && data.customResourceList.length > 0) {
+        setCrList(data.customResourceList);
+        setShowCRWarning(true);
+        setErrorMsg('');
+        setSuccessMsg('');
+      } else {
+        setCheckResults(data.checks);
+        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
+        setSuccessMsg('');
+      }
+    },
+    onError: (error) => {
+      setErrorMsg(`An error occurred: ${error.message}`);
+      setSuccessMsg('');
+    }
+  });
+
+  // Poll for upgrade progress when upgrade is in progress
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (upgradeInProgress) {
+      const pollProgress = async () => {
+        try {
+          const progress = await getUpgradeProgress();
+          setProgressData(progress);
+          
+          if (progress.status === 'completed' || progress.status === 'failed') {
+            setUpgradeInProgress(false);
+            if (progress.status === 'completed') {
+              setSuccessMsg('Upgrade completed successfully!');
+              setTimeout(() => {
+                setSuccessMsg('');
+                onClose();
+              }, 3000);
+            } else {
+              setErrorMsg(`Upgrade failed: ${progress.error}`);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch upgrade progress:', error);
+        }
+      };
+      
+      // Poll immediately, then every 5 seconds
+      pollProgress();
+      interval = setInterval(pollProgress, 5000);
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [upgradeInProgress, onClose]);
+
+  const handleUpgradeClick = () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setCheckResults(null);
+    if (!selectedVersion) {
+      setErrorMsg('Please select a version to upgrade to.');
+      return;
+    }
+    upgradeMutation.mutate();
+  };
+
+  // Handler for confirming CR cleanup
+  const handleConfirmCleanup = async () => {
+    setShowCRWarning(false);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      const data = await confirmCleanupAndUpgrade(selectedVersion, true);
+      if (data.upgradeStarted) {
+        setUpgradeInProgress(true);
+        setErrorMsg('');
+        setCheckResults(null);
+        setSuccessMsg('Upgrade process has been initiated!');
+      } else {
+        setCheckResults(data.checks);
+        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
+        setSuccessMsg('');
+      }
+    } catch (error: any) {
+      setErrorMsg(`An error occurred: ${error.message}`);
+      setSuccessMsg('');
+    }
+  };
+
+  // Handler for canceling CR cleanup
+  const handleCancelCleanup = () => {
+    setShowCRWarning(false);
+    setCrList([]);
+    onClose();
+  };
+
+  if (!show) return null;
+
+  const checkList = checkResults ? [
+    { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
+    { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
+    { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
+    { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
+    { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
+    { label: 'No Custom Resources', value: checkResults.noCustomResources },
+    { label: 'CRDs compatible for upgrade', value: checkResults.crdsCompatible },
+  ] : [];
+
+  return (
+    <React.Fragment>
+      <Dialog open={show} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Upgrade vJailbreak</DialogTitle>
+        <DialogContent>
+          <Box mb={2}>
+            <Select
+              fullWidth
+              value={selectedVersion}
+              onChange={e => setSelectedVersion(e.target.value)}
+              disabled={areVersionsLoading || upgradeMutation.isPending}
+              displayEmpty
+              size="small"
+            >
+              <MenuItem value="">
+                {areVersionsLoading ? 'Loading versions...' : 'Select a version...'}
+              </MenuItem>
+              {updates?.map(update => (
+                <MenuItem key={update.version} value={update.version}>
+                  {update.version}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <Box mb={2} p={2} sx={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 1 }}>
+            <Typography variant="subtitle1" color="warning.main" fontWeight={600} gutterBottom>
+              Pre-Upgrade Checklist
+            </Typography>
+            <Typography variant="body2" mb={1}>
+              The following resources must be cleaned up before upgrading:
+            </Typography>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Agent scaled down</li>
+              <li>VMware credentials deleted</li>
+              <li>OpenStack credentials deleted</li>
+              <li>No MigrationPlans</li>
+              <li>No RollingMigrationPlans</li>
+              <li>No Custom Resources (CRs)</li>
+              <li>CRDs compatible for upgrade</li>
+            </ul>
+          </Box>
+          {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
+          {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
+          
+          {/* Upgrade Progress Display */}
+          {upgradeInProgress && progressData && (
+            <Box mb={2} p={2} sx={{ background: '#f8f9fa', borderRadius: 1, border: '1px solid #e9ecef' }}>
+              <Box display="flex" alignItems="center" mb={1}>
+                {progressData.status === 'in_progress' ? (
+                  <PlayArrowIcon color="primary" sx={{ mr: 1 }} />
+                ) : (
+                  <PauseIcon color="action" sx={{ mr: 1 }} />
+                )}
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Upgrade Progress
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                {progressData.currentStep}
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={progressData.progress} 
+                sx={{ mb: 1 }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {Math.round(progressData.progress)}% complete
+              </Typography>
+              {progressData.error && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {progressData.error}
+                </Alert>
+              )}
+            </Box>
+          )}
+          
+          {upgradeMutation.isPending && !upgradeInProgress && (
+            <Box display="flex" justifyContent="center" mb={2}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+          {checkResults && (
+            <Box mb={2} p={2} sx={{ background: '#f5f7fa', borderRadius: 1 }}>
+              <Typography variant="subtitle2" color="primary" fontWeight={600} gutterBottom>
+                Pre-flight Check Results
+              </Typography>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {checkList.map((item) => (
+                  <li key={item.label} style={{ display: 'flex', alignItems: 'center', color: item.value ? '#388e3c' : '#d32f2f', marginBottom: 2 }}>
+                    {item.value ? <CheckCircleIcon fontSize="small" color="success" sx={{ mr: 1 }} /> : <CancelIcon fontSize="small" color="error" sx={{ mr: 1 }} />} {item.label}
+                  </li>
+                ))}
+              </ul>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleUpgradeClick}
+            disabled={upgradeMutation.isPending || areVersionsLoading || upgradeInProgress}
+            variant="contained"
+            color="primary"
+          >
+            {upgradeMutation.isPending ? 'Initiating...' : upgradeInProgress ? 'Upgrade in Progress...' : 'Upgrade Now'}
+          </Button>
+          <Button onClick={onClose} variant="outlined">Cancel</Button>
+        </DialogActions>
+      </Dialog>
+      {/* CR Cleanup Warning Dialog */}
+      <Dialog open={showCRWarning} onClose={handleCancelCleanup} maxWidth="sm" fullWidth>
+        <DialogTitle>Custom Resources Detected</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              The following Custom Resources (CRs) must be deleted to proceed with the upgrade. This is a destructive operation and cannot be undone.
+            </Typography>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {crList.map(cr => (
+                <li key={cr}>{cr}</li>
+              ))}
+            </ul>
+            <Typography variant="body2" color="error" mt={2}>
+              Are you sure you want to delete all these CRs and continue?
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleConfirmCleanup} color="error" variant="contained">OK, Delete and Continue</Button>
+          <Button onClick={handleCancelCleanup} variant="outlined">Cancel</Button>
+        </DialogActions>
+      </Dialog>
+    </React.Fragment>
+  );
+};

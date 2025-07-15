@@ -1,5 +1,5 @@
-import { get } from "../axios"
-import { VersionConfigMap, VersionInfo } from "./model"
+import { get, post } from "../axios"
+import { VersionConfigMap, VersionInfo, AvailableUpdates, UpgradeResponse, UpgradeProgressResponse } from "./model"
 
 const VERSION_CONFIG_MAP_NAME = "version-config"
 const VERSION_NAMESPACE = "migration-system"
@@ -29,3 +29,29 @@ export const getVersionInfo = async (
     throw error
   }
 }
+
+export const getAvailableUpdates = async (): Promise<AvailableUpdates> => {
+  const endpoint = `/api/v1/updates` 
+  return get<AvailableUpdates>({ endpoint })
+}
+
+export const initiateUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
+    const endpoint = `/api/v1/upgrade`
+    return post<UpgradeResponse>({
+        endpoint,
+        data: { targetVersion, autoCleanup },
+    })
+}
+
+export const getUpgradeProgress = async (): Promise<UpgradeProgressResponse> => {
+    const endpoint = `/api/v1/upgrade/progress`
+    return get<UpgradeProgressResponse>({ endpoint })
+}
+
+export const confirmCleanupAndUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
+    const endpoint = `/api/v1/upgrade/confirm_cleanup`;
+    return post<UpgradeResponse>({
+        endpoint,
+        data: { targetVersion, autoCleanup },
+    });
+};

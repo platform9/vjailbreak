@@ -19,7 +19,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from '../../types/navigation'
 import { useVersionQuery } from '../../hooks/api/useVersionQuery'
 import Platform9Logo from '../Platform9Logo'
-
+import { UpgradeModal } from '../UpgradeModal';
+import UpgradeIcon from '@mui/icons-material/Upgrade';
+import Button from '@mui/material/Button';
 
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
@@ -374,6 +376,9 @@ export default function Sidenav({
   const isCollapsed = controlledCollapsed ?? internalCollapsed
   const activeItem = controlledActiveItem ?? location.pathname
 
+  const { data: versionInfo } = useVersionQuery();
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
   useEffect(() => {
     if (controlledCollapsed === undefined) {
       localStorage.setItem('sidenav-collapsed', JSON.stringify(internalCollapsed))
@@ -445,7 +450,35 @@ export default function Sidenav({
           ))}
       </List>
 
-      <VersionDisplay collapsed={isCollapsed} />
+      <Box sx={{ mt: 'auto', mb: 1.5, px: 2, position: 'relative' }}>
+        <VersionDisplay collapsed={isCollapsed} />
+        {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
+          isCollapsed ? (
+            <Tooltip title={`Upgrade Available: ${versionInfo.upgradeVersion}`} placement="right" arrow>
+              <Button
+                color="primary"
+                variant="contained"
+                sx={{ mt: 1, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
+                onClick={() => setIsUpgradeModalOpen(true)}
+              >
+                <UpgradeIcon />
+              </Button>
+            </Tooltip>
+          ) : (
+            <Button
+              color="primary"
+              variant="contained"
+              fullWidth
+              sx={{ mt: 1, fontWeight: 600 }}
+              startIcon={<UpgradeIcon />}
+              onClick={() => setIsUpgradeModalOpen(true)}
+            >
+              Upgrade Available: {versionInfo.upgradeVersion}
+            </Button>
+          )
+        )}
+        <UpgradeModal show={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} />
+      </Box>
     </Box>
   )
 
