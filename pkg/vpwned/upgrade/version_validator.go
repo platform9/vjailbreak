@@ -261,7 +261,7 @@ func CompareVersions(ctx context.Context, kubeClient client.Client, targetVersio
 	return result, nil
 }
 
-func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, targetVersion string) (*ValidationResult, error) {
+func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, targetVersion string) (*ValidationResult, error) {
 	result := &ValidationResult{}
 
 	dep := &appsv1.Deployment{}
@@ -314,7 +314,7 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, targetVe
 	}
 	result.NoRollingMigrationPlans = len(rollingPlans.Items) == 0
 
-	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient)
+	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient, restConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, targetVe
 	return result, nil
 }
 
-func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client) (bool, error) {
+func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, error) {
 	currentCRs, err := DiscoverCurrentCRs(ctx, kubeClient)
 	if err != nil {
 		return false, fmt.Errorf("failed to discover current CRs: %w", err)
@@ -357,7 +357,7 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client) (
 			Resource: crInfo.Plural,
 		}
 		
-		dynamicClient, err := dynamic.NewForConfig(kubeClient.RESTMapper().RESTConfig())
+		dynamicClient, err := dynamic.NewForConfig(restConfig)
 		if err != nil {
 			log.Printf("Warning: Could not create dynamic client for %s: %v", crInfo.Kind, err)
 			continue
@@ -415,7 +415,7 @@ func checkCRDHasInstances(ctx context.Context, kubeClient client.Client, group, 
 	return false, nil
 }
 
-func BackupResources(ctx context.Context, kubeClient client.Client) error {
+func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	log.Println("Starting backup of CRDs, ConfigMaps, Deployments, and CRs...")
 
 	backup := make(map[string]string)
@@ -460,7 +460,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client) error {
 				Version:  crInfo.Version,
 				Resource: crInfo.Plural,
 			}
-			dynamicClient, err := dynamic.NewForConfig(kubeClient.RESTMapper().RESTConfig())
+			dynamicClient, err := dynamic.NewForConfig(restConfig)
 			if err != nil {
 				continue
 			}
@@ -600,7 +600,7 @@ func deleteAllCustomResources(ctx context.Context, kubeClient client.Client) err
 	}
 	
 	for _, crInfo := range currentCRs {
-		if err := deleteCRInstances(ctx, kubeClient, crInfo); err != nil {
+		if err := deleteCRInstances(ctx, kubeClient, restConfig, crInfo); err != nil {
 			log.Printf("Warning: Failed to delete %s CRs: %v", crInfo.Kind, err)	
 		}
 	}
@@ -608,14 +608,14 @@ func deleteAllCustomResources(ctx context.Context, kubeClient client.Client) err
 	return nil
 }
 
-func deleteCRInstances(ctx context.Context, kubeClient client.Client, crInfo CRInfo) error {
+func deleteCRInstances(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, crInfo CRInfo) error {
 	gvr := schema.GroupVersionResource{
 		Group:    crInfo.Group,
 		Version:  crInfo.Version,
 		Resource: crInfo.Plural,
 	}
 	
-	dynamicClient, err := dynamic.NewForConfig(kubeClient.RESTMapper().RESTConfig())
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create dynamic client for %s: %w", crInfo.Kind, err)
 	}
