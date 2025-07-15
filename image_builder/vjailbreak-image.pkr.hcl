@@ -78,6 +78,11 @@ build {
     destination = "/home/ubuntu"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/opensource.txt"
+    destination = "/tmp/opensource.txt"
+  }
+
   provisioner "shell" {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
@@ -89,6 +94,7 @@ build {
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/env /etc/pf9/env",
+    "sudo mv /tmp/opensource.txt /etc/pf9/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
