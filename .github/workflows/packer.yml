@@ -459,6 +459,31 @@ jobs:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
+      - name: Rename QCOW2 image
+        if: env.release_found == 'true'
+        run: |
+          cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 ./vjailbreak-img-${{ env.TAG }}.qcow
+
+      # Handle GitHub Release case
+      - name: Upload QCOW2 to GitHub Release
+        if: env.release_found == 'true' && github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./vjailbreak-img-${{ env.TAG }}.qcow
+          asset_name: vjailbreak-img-${{ env.TAG }}.qcow
+          asset_content_type: application/octet-stream
+          
+      # Handle workflow_dispatch or other non-release events
+      - name: Upload QCOW2 as Workflow Artifact
+        if: env.release_found == 'true' && github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vjailbreak-img-${{ env.TAG }}
+          path: ./vjailbreak-img-${{ env.TAG }}.qcow
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
