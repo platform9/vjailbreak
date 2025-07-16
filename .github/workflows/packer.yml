@@ -337,6 +337,14 @@ jobs:
       (needs.push-images.result == 'success' || needs.push-images.result == 'skipped')
 
     steps:
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+          
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -437,6 +445,13 @@ jobs:
         if: env.release_found == 'true'
         id: build-1
         run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+
+      - name: Upload vjailbreak qcow2 to quay
+        if: env.release_found == 'true'
+        run: |
+          oras push ${{ env.QCOW2_IMG }} \
+          --artifact-type="application/qcow2" \
+          ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
       - name: Upload QCOW2 image artifact
         if: env.release_found == 'true'
