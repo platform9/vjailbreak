@@ -23,9 +23,8 @@ import (
 	"io/ioutil"
 	"sigs.k8s.io/yaml"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
-
+ 
 type DeploymentConfig struct {
 	Namespace     string
 	Name          string
@@ -111,7 +110,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
@@ -290,7 +289,7 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
@@ -326,7 +325,7 @@ func (s *VpwnedVersion) RollbackUpgrade(ctx context.Context, in *api.VersionRequ
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
