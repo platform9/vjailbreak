@@ -1,4 +1,8 @@
 name: Manual Docs Backfill
+
+env:
+  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
+
 on:
   workflow_dispatch:
     inputs:
@@ -28,14 +32,40 @@ jobs:
       - name: Install GitHub CLI and jq
         run: sudo apt-get update && sudo apt-get install -y gh jq
 
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y skopeo
+
       - name: Process and Generate Release Notes
         id: process_releases
         run: |
+          # Check if image exists on Quay.io for a specific tag
+          check_qcow_image() {
+            local RELEASE_TAG=$1
+            local IMAGE="${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+            echo "Checking if vJailbreak image exists on registry for tag: $RELEASE_TAG"
+            
+            # Use skopeo to check if the image exists
+            if skopeo inspect docker://$IMAGE &>/dev/null; then
+              echo "vJailbreak image is available on Quay.io for tag: $RELEASE_TAG"
+              return 0
+            else
+              echo "vJailbreak image is NOT available on Quay.io for tag: $RELEASE_TAG"
+              return 1
+            fi
+          }
+          export -f check_qcow_image
+
           # This function processes a single release tag
           process_release() {
             local RELEASE_TAG=$1
             if [ -f "docs/src/content/docs/release_docs/$RELEASE_TAG.md" ]; then
               echo "Documentation for $RELEASE_TAG already exists, skipping."
+              return 0
+            fi
+
+            # Verify QCOW image exists before proceeding
+            if ! check_qcow_image "$RELEASE_TAG"; then
+              echo "Skipping $RELEASE_TAG due to missing QCOW image."
               return 0
             fi
 
