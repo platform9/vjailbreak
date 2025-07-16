@@ -475,14 +475,6 @@ jobs:
           asset_path: ./vjailbreak-img-${{ env.TAG }}.qcow
           asset_name: vjailbreak-img-${{ env.TAG }}.qcow
           asset_content_type: application/octet-stream
-          
-      # Handle workflow_dispatch or other non-release events
-      - name: Upload QCOW2 as Workflow Artifact
-        if: env.release_found == 'true' && github.event_name != 'release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: vjailbreak-img-${{ env.TAG }}
-          path: ./vjailbreak-img-${{ env.TAG }}.qcow
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
