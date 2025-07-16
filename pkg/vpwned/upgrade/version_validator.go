@@ -19,10 +19,8 @@ import (
 	"encoding/base64"
 	"gopkg.in/yaml.v2"
     "k8s.io/client-go/rest"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 )
-
+ 
 type ValidationResult struct {
 	AgentsScaledDown        bool
 	VMwareCredsDeleted      bool
@@ -277,7 +275,7 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 	}
 
 	vmwareSecret := &corev1.Secret{}
-	err = kubeClient.Get(ctx, client.ObjectKey{Name: "vmware-credentials", Namespace: constants.NamespaceMigrationSystem}, vmwareSecret)
+	err = kubeClient.Get(ctx, client.ObjectKey{Name: "vmware-credentials", Namespace: "migration-system"}, vmwareSecret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			result.VMwareCredsDeleted = true
@@ -289,7 +287,7 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 	}
 
 	openstackSecret := &corev1.Secret{}
-	err = kubeClient.Get(ctx, client.ObjectKey{Name: "openstack-credentials", Namespace: constants.NamespaceMigrationSystem}, openstackSecret)
+	err = kubeClient.Get(ctx, client.ObjectKey{Name: "openstack-credentials", Namespace: "migration-system"}, openstackSecret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			result.OpenStackCredsDeleted = true
@@ -300,19 +298,23 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 		result.OpenStackCredsDeleted = false
 	}
 
-	migrationPlans := &vjailbreakv1alpha1.MigrationPlanList{}
-	err = kubeClient.List(ctx, migrationPlans, client.InNamespace(constants.NamespaceMigrationSystem))
-	if err != nil {
-		return nil, err
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) == 0 {
+			result.NoMigrationPlans = true
+		}
 	}
-	result.NoMigrationPlans = len(migrationPlans.Items) == 0
 
-	rollingPlans := &vjailbreakv1alpha1.RollingMigrationPlanList{}
-	err = kubeClient.List(ctx, rollingPlans, client.InNamespace(constants.NamespaceMigrationSystem))
-	if err != nil {
-		return nil, err
+	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
+	dynamicClient, err = dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) == 0 {
+			result.NoRollingMigrationPlans = true
+		}
 	}
-	result.NoRollingMigrationPlans = len(rollingPlans.Items) == 0
 
 	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient, restConfig)
 	if err != nil {
@@ -363,7 +365,7 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 			continue
 		}
 		
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace(constants.NamespaceMigrationSystem).List(ctx, metav1.ListOptions{})
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 		if err != nil {
 			log.Printf("Warning: Could not list %s CRs: %v", crInfo.Kind, err)
 			continue
@@ -433,7 +435,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	}
 
 	cmList := &corev1.ConfigMapList{}
-	if err := kubeClient.List(ctx, cmList, client.InNamespace(constants.NamespaceMigrationSystem)); err == nil {
+	if err := kubeClient.List(ctx, cmList, client.InNamespace("migration-system")); err == nil {
 		for _, cm := range cmList.Items {
 			cmYaml, err := yaml.Marshal(cm)
 			if err == nil {
@@ -443,7 +445,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	}
 
 	depList := &appsv1.DeploymentList{}
-	if err := kubeClient.List(ctx, depList, client.InNamespace(constants.NamespaceMigrationSystem)); err == nil {
+	if err := kubeClient.List(ctx, depList, client.InNamespace("migration-system")); err == nil {
 		for _, dep := range depList.Items {
 			depYaml, err := yaml.Marshal(dep)
 			if err == nil {
@@ -464,7 +466,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 			if err != nil {
 				continue
 			}
-			unstructuredList, err := dynamicClient.Resource(gvr).Namespace(constants.NamespaceMigrationSystem).List(ctx, metav1.ListOptions{})
+			unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 			if err != nil {
 				continue
 			}
@@ -480,7 +482,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	backupCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "vjailbreak-upgrade-backup",
-			Namespace: constants.NamespaceMigrationSystem,
+			Namespace: "migration-system",
 		},
 		Data: backup,
 	}
@@ -495,7 +497,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 	log.Println("Restoring resources from backup ConfigMap...")
 	backupCM := &corev1.ConfigMap{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: "vjailbreak-upgrade-backup", Namespace: constants.NamespaceMigrationSystem}, backupCM); err != nil {
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: "vjailbreak-upgrade-backup", Namespace: "migration-system"}, backupCM); err != nil {
 		return fmt.Errorf("failed to get backup ConfigMap: %w", err)
 	}
 	for key, b64 := range backupCM.Data {
@@ -546,40 +548,48 @@ func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig 
 		return err
 	}
 
-	vmwareSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vmware-credentials", Namespace: constants.NamespaceMigrationSystem}}
+	vmwareSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vmware-credentials", Namespace: "migration-system"}}
 	if err := kubeClient.Delete(ctx, vmwareSecret); err != nil && !kerrors.IsNotFound(err) {
 		log.Printf("Failed to delete vmware-credentials secret: %v", err)
 	} else {
 		log.Println("Secret vmware-credentials deleted.")
 	}
 
-	openstackSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "openstack-credentials", Namespace: constants.NamespaceMigrationSystem}}
+	openstackSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "openstack-credentials", Namespace: "migration-system"}}
 	if err := kubeClient.Delete(ctx, openstackSecret); err != nil && !kerrors.IsNotFound(err) {
 		log.Printf("Failed to delete openstack-credentials secret: %v", err)
 	} else {
 		log.Println("Secret openstack-credentials deleted.")
 	}
 
-	migrationPlans := &vjailbreakv1alpha1.MigrationPlanList{}
-	if err := kubeClient.List(ctx, migrationPlans, client.InNamespace(constants.NamespaceMigrationSystem)); err == nil {
-		for _, mp := range migrationPlans.Items {
-			planToDelete := mp
-			if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
-				log.Printf("Failed to delete MigrationPlan %s: %v", planToDelete.Name, err)
-			} else {
-				log.Printf("Deleted MigrationPlan: %s", planToDelete.Name)
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) > 0 {
+			for _, mp := range unstructuredList.Items {
+				planToDelete := mp
+				if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
+					log.Printf("Failed to delete MigrationPlan %s: %v", planToDelete.GetName(), err)
+				} else {
+					log.Printf("Deleted MigrationPlan: %s", planToDelete.GetName())
+				}
 			}
 		}
 	}
 
-	rollingPlans := &vjailbreakv1alpha1.RollingMigrationPlanList{}
-	if err := kubeClient.List(ctx, rollingPlans, client.InNamespace(constants.NamespaceMigrationSystem)); err == nil {
-		for _, rmp := range rollingPlans.Items {
-			planToDelete := rmp
-			if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
-				log.Printf("Failed to delete RollingMigrationPlan %s: %v", planToDelete.Name, err)
-			} else {
-				log.Printf("Deleted RollingMigrationPlan: %s", planToDelete.Name)
+	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
+	dynamicClient, err = dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) > 0 {
+			for _, rmp := range unstructuredList.Items {
+				planToDelete := rmp
+				if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
+					log.Printf("Failed to delete RollingMigrationPlan %s: %v", planToDelete.GetName(), err)
+				} else {
+					log.Printf("Deleted RollingMigrationPlan: %s", planToDelete.GetName())
+				}
 			}
 		}
 	}
@@ -620,13 +630,13 @@ func deleteCRInstances(ctx context.Context, kubeClient client.Client, restConfig
 		return fmt.Errorf("failed to create dynamic client for %s: %w", crInfo.Kind, err)
 	}
 	
-	unstructuredList, err := dynamicClient.Resource(gvr).Namespace(constants.NamespaceMigrationSystem).List(ctx, metav1.ListOptions{})
+	unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to list %s CRs: %w", crInfo.Kind, err)
 	}
 	
 	for _, item := range unstructuredList.Items {
-		err := dynamicClient.Resource(gvr).Namespace(constants.NamespaceMigrationSystem).Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
 		if err != nil {
 			log.Printf("Failed to delete %s %s: %v", crInfo.Kind, item.GetName(), err)
 		} else {
