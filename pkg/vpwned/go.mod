@@ -25,14 +25,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require (
-	github.com/fatih/color v1.18.0 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/olekukonko/errors v1.1.0 // indirect
-	github.com/olekukonko/ll v0.0.9 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
-)
+require github.com/rivo/uniseg v0.4.7 // indirect
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -100,3 +93,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.4.0
 )
+
+replace github.com/bougou/go-ipmi => github.com/bougou/go-ipmi v0.7.4
+
+replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
