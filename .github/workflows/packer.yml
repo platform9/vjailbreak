@@ -21,11 +21,12 @@ on:
 
 env:
   PACKER_VERSION: "latest"
-  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
-  UI_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-ui
-  V2V_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-v2v-helper
-  CONTROLLER_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-controller
-  VPWNED_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-vpwned
+  QCOW2_IMG: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'quay.io' }}/${{ vars.REPO != '' && vars.REPO || 'platform9' }}/vjailbreak
+  UI_IMG: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'quay.io' }}/${{ vars.REPO != '' && vars.REPO || 'platform9' }}/vjailbreak-ui
+  V2V_IMG: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'quay.io' }}/${{ vars.REPO != '' && vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
+  CONTROLLER_IMG: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'quay.io' }}/${{ vars.REPO != '' && vars.REPO || 'platform9' }}/vjailbreak-controller
+  VPWNED_IMG: ${{ vars.REGISTRY != '' && vars.REGISTRY || 'quay.io' }}/${{ vars.REPO != '' && vars.REPO || 'platform9' }}/vjailbreak-vpwned
+
 
 jobs:
   determine-release:
