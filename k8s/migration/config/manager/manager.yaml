@@ -54,6 +54,7 @@ spec:
         # seccompProfile:
         #   type: RuntimeDefault
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - command:
         - /manager
