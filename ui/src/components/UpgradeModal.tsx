@@ -20,6 +20,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import React from 'react';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import { useTheme } from '@mui/material/styles';
 
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('');
@@ -30,6 +31,7 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
+  const theme = useTheme();
 
   const stepKeys = [
     'no_migrationplans',
@@ -182,6 +184,10 @@ export const UpgradeModal = ({ show, onClose }) => {
     }
   };
 
+  const allChecksPassed = checkResults
+    ? Object.values(checkResults).every(Boolean)
+    : false;
+
   if (!show) return null;
 
   const checkList = checkResults ? [
@@ -210,21 +216,26 @@ export const UpgradeModal = ({ show, onClose }) => {
               <MenuItem value="">
                 {areVersionsLoading ? 'Loading versions...' : 'Select a version...'}
               </MenuItem>
-              {updates?.map(update => (
+              {Array.isArray(updates) && updates.map(update => (
                 <MenuItem key={update.version} value={update.version}>
                   {update.version}
                 </MenuItem>
               ))}
             </Select>
           </Box>
-          <Box mb={2} p={2} sx={{ background: '#23272f', border: '1px solid #444', borderRadius: 1, color: '#fff' }}>
+          <Box mb={2} p={2} sx={{
+            background: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1,
+            color: theme.palette.text.primary,
+          }}>
             <Typography variant="subtitle1" color="warning.main" fontWeight={600} gutterBottom>
               Pre-Upgrade Checklist
             </Typography>
-            <Typography variant="body2" mb={1} sx={{ color: '#e0e0e0' }}>
+            <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
               The following resources must be cleaned up before upgrading:
             </Typography>
-            <ul style={{ margin: 0, paddingLeft: 20, color: '#fff', fontWeight: 500, fontSize: '1rem' }}>
+            <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.primary, fontWeight: 500, fontSize: '1rem' }}>
               {stepStates.map((item) => (
                 <li key={item.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                   {item.state === 'in_progress' && <CircularProgress size={16} sx={{ mr: 1 }} />}
@@ -238,10 +249,8 @@ export const UpgradeModal = ({ show, onClose }) => {
           </Box>
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
           {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
-          
-          {/* Upgrade Progress Display */}
           {upgradeInProgress && progressData && (
-            <Box mb={2} p={2} sx={{ background: '#f8f9fa', borderRadius: 1, border: '1px solid #e9ecef' }}>
+            <Box mb={2} p={2} sx={{ background: theme.palette.background.default, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
               <Box display="flex" alignItems="center" mb={1}>
                 {progressData.status === 'in_progress' ? (
                   <PlayArrowIcon color="primary" sx={{ mr: 1 }} />
@@ -270,20 +279,19 @@ export const UpgradeModal = ({ show, onClose }) => {
               )}
             </Box>
           )}
-          
           {upgradeMutation.isPending && !upgradeInProgress && (
             <Box display="flex" justifyContent="center" mb={2}>
               <CircularProgress size={24} />
             </Box>
           )}
           {checkResults && (
-            <Box mb={2} p={2} sx={{ background: '#f5f7fa', borderRadius: 1 }}>
+            <Box mb={2} p={2} sx={{ background: theme.palette.background.default, borderRadius: 1 }}>
               <Typography variant="subtitle2" color="primary" fontWeight={600} gutterBottom>
                 Pre-flight Check Results
               </Typography>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {checkList.map((item) => (
-                  <li key={item.label} style={{ display: 'flex', alignItems: 'center', color: item.value ? '#388e3c' : '#d32f2f', marginBottom: 2 }}>
+                  <li key={item.label} style={{ display: 'flex', alignItems: 'center', color: item.value ? theme.palette.success.main : theme.palette.error.main, marginBottom: 2 }}>
                     {item.value ? <CheckCircleIcon fontSize="small" color="success" sx={{ mr: 1 }} /> : <CancelIcon fontSize="small" color="error" sx={{ mr: 1 }} />} {item.label}
                   </li>
                 ))}
@@ -294,7 +302,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         <DialogActions>
           <Button
             onClick={handleUpgradeClick}
-            disabled={upgradeMutation.isPending || areVersionsLoading || upgradeInProgress}
+            disabled={upgradeMutation.isPending || areVersionsLoading || upgradeInProgress || !allChecksPassed}
             variant="contained"
             color="primary"
           >
