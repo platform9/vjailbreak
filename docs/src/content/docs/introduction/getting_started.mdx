@@ -24,7 +24,7 @@ Download and install [ORAS](https://oras.land/docs/installation), a toolkit to d
   ```
 This will download the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
 
-### Upload image and create vJailbreak VM 
+### Upload image to OpenStack
 :::note
 These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9 hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
 :::
@@ -33,16 +33,62 @@ These example instructions are for any version of [Private Cloud Director](https
   ```shell
   openstack image create --os-interface admin --insecure --container-format bare --disk-format qcow2 --file vjailbreak-image.qcow2 vjailbreak-image.qcow2
   ```
-- Deploy a new VM from image, choosing the _m1.xlarge_ flavor (use larger flavor for larger VM migration).
+
+### Create vJailbreak VM
+- Deploy a new VM from the uploaded image, choosing the _m1.xlarge_ flavor (use larger flavor for larger VM migration).
 - Choose a network that can reach your VMware vCenter environment.
-- Give the VM a name, assign an SSH key, and set a password using cloud-init.
 - Assign a network security group that allows inbound and outbound traffic.
+
+### Configure VM with cloud-init
+:::note
+Cloud-init can be used during VM creation to automate initial configuration including setting passwords and configuring /etc/hosts entries for DNS resolution.
+:::
+- When creating the VM, use a cloud-init configuration script to:
+  - Set a password for the ubuntu user
+  - Add static DNS entries to /etc/hosts
+
+  ```yaml
+  #cloud-config
+  password: your-secure-password
+  chpasswd: { expire: False }
+  ssh_pwauth: True
+  
+  write_files:
+  - path: /etc/hosts.append
+    append: true
+    content: |
+      # VMware and OpenStack endpoints
+      192.168.1.100 vcenter.example.com
+      192.168.2.100 openstack.example.com
+  
+  runcmd:
+    - cat /etc/hosts.append >> /etc/hosts
+  ```
+- You can provide this cloud-init configuration when creating the VM through the OpenStack dashboard or CLI.
 
 ### Copy VDDK Libraries
 :::note
 VMware VDDK library is required for vJailbreak to interact with the VMware environment and it must be configured in the vJailbreak VM.
 :::
 - Copy the latest version of the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vJailbreak VM. Untar it to a folder named `vmware-vix-disklib-distrib` in the `/home/ubuntu` directory.
+
+### Configure DNS Resolution
+:::note
+Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly. You can either configure this during VM creation with cloud-init (as shown above) or modify the configuration after VM deployment.
+:::
+
+- **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually. Changes to `/etc/hosts` apply immediately.
+  ```shell
+  # Example manual addition to /etc/hosts
+  sudo sh -c 'echo "192.168.1.100 vcenter.example.com" >> /etc/hosts'
+  sudo sh -c 'echo "192.168.2.100 openstack.example.com" >> /etc/hosts'
+  ```
+
+- **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, you must restart the controller pod for changes to take effect
+  ```shell
+  # After modifying resolv.conf
+  kubectl -n vjailbreak rollout restart deployment migration-controller-manager
+  ```
 
 ### Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
