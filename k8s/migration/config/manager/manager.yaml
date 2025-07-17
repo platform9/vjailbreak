@@ -92,6 +92,7 @@ spec:
           name: vddk
         - mountPath: /etc/hosts
           name: hosts-file
+          readOnly: true
       serviceAccountName: controller-manager
       volumes:
       - name: master-token

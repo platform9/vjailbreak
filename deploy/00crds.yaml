@@ -3401,6 +3401,7 @@ spec:
           name: vddk
         - mountPath: /etc/hosts
           name: hosts-file
+          readOnly: true
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
@@ -3460,7 +3461,8 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
