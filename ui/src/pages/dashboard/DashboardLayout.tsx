@@ -6,6 +6,7 @@ import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import { useNodesQuery } from "src/hooks/api/useNodesQuery"
 import Sidenav from "src/components/Sidenav"
 import { navigationItems } from "src/config/navigation"
+import { useVersionQuery } from "src/hooks/api/useVersionQuery";
 
 const DashboardContainer = styled("div")({
   display: "flex",
@@ -47,12 +48,19 @@ export default function DashboardLayout() {
   const location = useLocation()
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()
+  const { data: versionInfo } = useVersionQuery();
+  const upgradeAvailable = versionInfo?.upgradeAvailable;
 
   useEffect(() => {
-    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
+    // Only redirect if the user is truly new, not after cleanup
+    if (
+      !!migrations && migrations.length === 0 &&
+      (!nodes || nodes.length === 0) &&
+      !upgradeAvailable
+    ) {
       navigate("/onboarding")
     }
-  }, [migrations, nodes, navigate])
+  }, [migrations, nodes, upgradeAvailable, navigate])
 
   // Handle redirect from old /dashboard route to default page  
   if (location.pathname === '/dashboard') {

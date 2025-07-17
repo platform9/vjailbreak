@@ -39,7 +39,7 @@ type UpgradeProgress struct {
 	CurrentStep    string
 	TotalSteps     int
 	CompletedSteps int
-	Status         string // "in_progress", "completed", "failed", "rolled_back"
+	Status         string
 	Error          string
 	StartTime      time.Time
 	EndTime        *time.Time
@@ -606,30 +606,44 @@ func getCurrentDeploymentImage(ctx context.Context, kubeClient client.Client, de
 }
 
 func updateDeploymentImage(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig, newImage string) error {
-	dep := &appsv1.Deployment{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err != nil {
-		return fmt.Errorf("failed to get deployment %s: %w", depConfig.Name, err)
-	}
+    // Get the deployment
+    dep := &appsv1.Deployment{}
+    err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep)
+    if err != nil {
+        return fmt.Errorf("failed to get deployment: %w", err)
+    }
 
-	updated := false
-	for i, c := range dep.Spec.Template.Spec.Containers {
-		if c.Name == depConfig.ContainerName {
-			dep.Spec.Template.Spec.Containers[i].Image = newImage
-			updated = true 
-			break
-		}
-	}
+    // Scale down
+    var zero int32 = 0
+    dep.Spec.Replicas = &zero
+    if err := kubeClient.Update(ctx, dep); err != nil {
+        return fmt.Errorf("failed to scale down deployment: %w", err)
+    }
 
-	if updated {
-		if err := kubeClient.Update(ctx, dep); err != nil {
-			return fmt.Errorf("failed to update deployment %s: %w", depConfig.Name, err)
-		}
-		log.Printf("Updated deployment %s container %s to image %s", depConfig.Name, depConfig.ContainerName, newImage)
-	} else {
-		log.Printf("Container %s not found in deployment %s, skipping update", depConfig.ContainerName, depConfig.Name)
-	}
+    // Patch the image
+    found := false
+    for i, c := range dep.Spec.Template.Spec.Containers {
+        if c.Name == depConfig.ContainerName {
+            dep.Spec.Template.Spec.Containers[i].Image = newImage
+            found = true
+            break
+        }
+    }
+    if !found {
+        return fmt.Errorf("container %s not found in deployment %s", depConfig.ContainerName, depConfig.Name)
+    }
+    if err := kubeClient.Update(ctx, dep); err != nil {
+        return fmt.Errorf("failed to update deployment image: %w", err)
+    }
 
-	return nil
+    // Scale up
+    var one int32 = 1
+    dep.Spec.Replicas = &one
+    if err := kubeClient.Update(ctx, dep); err != nil {
+        return fmt.Errorf("failed to scale up deployment: %w", err)
+    }
+
+    return nil
 }
 
 func rollbackDeployment(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig, originalImage string) error {
@@ -697,10 +711,8 @@ func applyAllCRDs(ctx context.Context, kubeClient client.Client) error {
         }
         var crd apiextensionsv1.CustomResourceDefinition
         if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
-            // Try to create, if exists then update
             err := kubeClient.Create(ctx, &crd)
             if err != nil {
-                // If already exists, update
                 if kerrors.IsAlreadyExists(err) {
                     existing := &apiextensionsv1.CustomResourceDefinition{}
                     if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {

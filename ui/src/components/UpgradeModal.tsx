@@ -42,12 +42,12 @@ export const UpgradeModal = ({ show, onClose }) => {
     'no_custom_resources',
   ];
   const stepLabels = [
-    'No MigrationPlans',
-    'No RollingMigrationPlans',
-    'Agent scaled down',
-    'VMware credentials deleted',
-    'OpenStack credentials deleted',
-    'No Custom Resources (CRs) deleted',
+    'Delete MigrationPlans',
+    'Delete RollingMigrationPlans',
+    'Scale down Agents',
+    'Delete VMware credentials',
+    'Delete OpenStack credentials',
+    'Delete Custom Resources',
   ];
 
   const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
@@ -233,7 +233,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               Pre-Upgrade Checklist
             </Typography>
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
-              The following resources must be cleaned up before upgrading:
+              The following needs to be cleaned up before upgrading:
             </Typography>
             <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.primary, fontWeight: 500, fontSize: '1rem' }}>
               {stepStates.map((item) => (
@@ -305,13 +305,16 @@ export const UpgradeModal = ({ show, onClose }) => {
             disabled={upgradeMutation.isPending || areVersionsLoading || upgradeInProgress || !allChecksPassed}
             variant="contained"
             color="primary"
+            fullWidth
           >
             {upgradeMutation.isPending ? 'Initiating...' : upgradeInProgress ? 'Upgrade in Progress...' : 'Upgrade Now'}
           </Button>
-          <Button onClick={runStepwiseCleanup} variant="contained" color="primary">
+          <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth>
             Run Stepwise Cleanup
           </Button>
-          <Button onClick={onClose} variant="outlined">Cancel</Button>
+          <Button onClick={onClose} variant="outlined" fullWidth>
+            Cancel
+          </Button>
         </DialogActions>
       </Dialog>
       {/* CR Cleanup Warning Dialog */}
@@ -320,7 +323,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              The following Custom Resources (CRs) must be deleted to proceed with the upgrade. This is a destructive operation and cannot be undone.
+              The following Custom Resources must be deleted to proceed with the upgrade. This is a destructive operation and cannot be undone.
             </Typography>
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               {crList.map(cr => (
