@@ -23,9 +23,11 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VersionClient interface {
 	Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
-	GetAvailableUpdates(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*AvailableUpdatesResponse, error)
 	InitiateUpgrade(ctx context.Context, in *UpgradeRequest, opts ...grpc.CallOption) (*UpgradeResponse, error)
 	GetUpgradeProgress(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*UpgradeProgressResponse, error)
+	GetAvailableTags(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*AvailableUpdatesResponse, error)
+	ConfirmCleanupAndUpgrade(ctx context.Context, in *UpgradeRequest, opts ...grpc.CallOption) (*UpgradeResponse, error)
+	CleanupStep(ctx context.Context, in *CleanupStepRequest, opts ...grpc.CallOption) (*CleanupStepResponse, error)
 }
 
 type versionClient struct {
@@ -39,15 +41,6 @@ func NewVersionClient(cc grpc.ClientConnInterface) VersionClient {
 func (c *versionClient) Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error) {
 	out := new(VersionResponse)
 	err := c.cc.Invoke(ctx, "/api.Version/Version", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *versionClient) GetAvailableUpdates(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*AvailableUpdatesResponse, error) {
-	out := new(AvailableUpdatesResponse)
-	err := c.cc.Invoke(ctx, "/api.Version/GetAvailableUpdates", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +65,43 @@ func (c *versionClient) GetUpgradeProgress(ctx context.Context, in *VersionReque
 	return out, nil
 }
 
+func (c *versionClient) GetAvailableTags(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*AvailableUpdatesResponse, error) {
+	out := new(AvailableUpdatesResponse)
+	err := c.cc.Invoke(ctx, "/api.Version/GetAvailableTags", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *versionClient) ConfirmCleanupAndUpgrade(ctx context.Context, in *UpgradeRequest, opts ...grpc.CallOption) (*UpgradeResponse, error) {
+	out := new(UpgradeResponse)
+	err := c.cc.Invoke(ctx, "/api.Version/ConfirmCleanupAndUpgrade", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *versionClient) CleanupStep(ctx context.Context, in *CleanupStepRequest, opts ...grpc.CallOption) (*CleanupStepResponse, error) {
+	out := new(CleanupStepResponse)
+	err := c.cc.Invoke(ctx, "/api.Version/CleanupStep", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VersionServer is the server API for Version service.
 // All implementations must embed UnimplementedVersionServer
 // for forward compatibility
 type VersionServer interface {
 	Version(context.Context, *VersionRequest) (*VersionResponse, error)
-	GetAvailableUpdates(context.Context, *VersionRequest) (*AvailableUpdatesResponse, error)
 	InitiateUpgrade(context.Context, *UpgradeRequest) (*UpgradeResponse, error)
 	GetUpgradeProgress(context.Context, *VersionRequest) (*UpgradeProgressResponse, error)
+	GetAvailableTags(context.Context, *VersionRequest) (*AvailableUpdatesResponse, error)
+	ConfirmCleanupAndUpgrade(context.Context, *UpgradeRequest) (*UpgradeResponse, error)
+	CleanupStep(context.Context, *CleanupStepRequest) (*CleanupStepResponse, error)
 	mustEmbedUnimplementedVersionServer()
 }
 
@@ -90,14 +112,20 @@ type UnimplementedVersionServer struct {
 func (UnimplementedVersionServer) Version(context.Context, *VersionRequest) (*VersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
-func (UnimplementedVersionServer) GetAvailableUpdates(context.Context, *VersionRequest) (*AvailableUpdatesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableUpdates not implemented")
-}
 func (UnimplementedVersionServer) InitiateUpgrade(context.Context, *UpgradeRequest) (*UpgradeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InitiateUpgrade not implemented")
 }
 func (UnimplementedVersionServer) GetUpgradeProgress(context.Context, *VersionRequest) (*UpgradeProgressResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUpgradeProgress not implemented")
+}
+func (UnimplementedVersionServer) GetAvailableTags(context.Context, *VersionRequest) (*AvailableUpdatesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableTags not implemented")
+}
+func (UnimplementedVersionServer) ConfirmCleanupAndUpgrade(context.Context, *UpgradeRequest) (*UpgradeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfirmCleanupAndUpgrade not implemented")
+}
+func (UnimplementedVersionServer) CleanupStep(context.Context, *CleanupStepRequest) (*CleanupStepResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CleanupStep not implemented")
 }
 func (UnimplementedVersionServer) mustEmbedUnimplementedVersionServer() {}
 
@@ -126,24 +154,6 @@ func _Version_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VersionServer).Version(ctx, req.(*VersionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Version_GetAvailableUpdates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VersionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(VersionServer).GetAvailableUpdates(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/api.Version/GetAvailableUpdates",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VersionServer).GetAvailableUpdates(ctx, req.(*VersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -184,6 +194,60 @@ func _Version_GetUpgradeProgress_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Version_GetAvailableTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VersionServer).GetAvailableTags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Version/GetAvailableTags",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VersionServer).GetAvailableTags(ctx, req.(*VersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Version_ConfirmCleanupAndUpgrade_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpgradeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VersionServer).ConfirmCleanupAndUpgrade(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Version/ConfirmCleanupAndUpgrade",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VersionServer).ConfirmCleanupAndUpgrade(ctx, req.(*UpgradeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Version_CleanupStep_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CleanupStepRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VersionServer).CleanupStep(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Version/CleanupStep",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VersionServer).CleanupStep(ctx, req.(*CleanupStepRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Version_ServiceDesc is the grpc.ServiceDesc for Version service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -196,16 +260,24 @@ var Version_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Version_Version_Handler,
 		},
 		{
-			MethodName: "GetAvailableUpdates",
-			Handler:    _Version_GetAvailableUpdates_Handler,
-		},
-		{
 			MethodName: "InitiateUpgrade",
 			Handler:    _Version_InitiateUpgrade_Handler,
 		},
 		{
 			MethodName: "GetUpgradeProgress",
 			Handler:    _Version_GetUpgradeProgress_Handler,
+		},
+		{
+			MethodName: "GetAvailableTags",
+			Handler:    _Version_GetAvailableTags_Handler,
+		},
+		{
+			MethodName: "ConfirmCleanupAndUpgrade",
+			Handler:    _Version_ConfirmCleanupAndUpgrade_Handler,
+		},
+		{
+			MethodName: "CleanupStep",
+			Handler:    _Version_CleanupStep_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

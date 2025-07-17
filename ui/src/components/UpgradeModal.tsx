@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getAvailableUpdates, initiateUpgrade, getUpgradeProgress, confirmCleanupAndUpgrade } from '../api/version';
+import { getAvailableTags, initiateUpgrade, getUpgradeProgress, confirmCleanupAndUpgrade, cleanupStepApiCall } from '../api/version';
 import { UpgradeResponse, ValidationResult, UpgradeProgressResponse } from '../api/version/model';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -19,6 +19,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import React from 'react';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('');
@@ -30,10 +31,31 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
 
+  const stepKeys = [
+    'no_migrationplans',
+    'no_rollingmigrationplans',
+    'agent_scaled_down',
+    'vmware_creds_deleted',
+    'openstack_creds_deleted',
+    'no_custom_resources',
+    'crds_compatible'
+  ];
+  const stepLabels = [
+    'No MigrationPlans',
+    'No RollingMigrationPlans',
+    'Agent scaled down',
+    'VMware credentials deleted',
+    'OpenStack credentials deleted',
+    'No Custom Resources (CRs) deleted',
+    'CRDs compatible for upgrade'
+  ];
+
+  const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
+
   // Fetch available updates
   const { data: updates, isLoading: areVersionsLoading } = useQuery({
-    queryKey: ['availableUpdates'],
-    queryFn: getAvailableUpdates,
+    queryKey: ['availableTags'],
+    queryFn: getAvailableTags,
     enabled: show,
   });
 
@@ -143,15 +165,34 @@ export const UpgradeModal = ({ show, onClose }) => {
     onClose();
   };
 
+  const runStepwiseCleanup = async () => {
+    let newStates = stepLabels.map(label => ({ label, state: 'pending' }));
+    setStepStates(newStates);
+
+    for (let i = 0; i < stepKeys.length; i++) {
+      newStates[i].state = 'in_progress';
+      setStepStates([...newStates]);
+
+      try {
+        const res = await cleanupStepApiCall(stepKeys[i]); // Call your backend here
+        newStates[i].state = res.success ? 'success' : 'error';
+      } catch (e) {
+        newStates[i].state = 'error';
+      }
+      setStepStates([...newStates]);
+      if (newStates[i].state === 'error') break; // Optionally stop on error
+    }
+  };
+
   if (!show) return null;
 
   const checkList = checkResults ? [
+    { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
+    { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
     { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
     { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
     { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
-    { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
-    { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
-    { label: 'No Custom Resources', value: checkResults.noCustomResources },
+    { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources },
     { label: 'CRDs compatible for upgrade', value: checkResults.crdsCompatible },
   ] : [];
 
@@ -179,21 +220,23 @@ export const UpgradeModal = ({ show, onClose }) => {
               ))}
             </Select>
           </Box>
-          <Box mb={2} p={2} sx={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 1 }}>
+          <Box mb={2} p={2} sx={{ background: '#23272f', border: '1px solid #444', borderRadius: 1, color: '#fff' }}>
             <Typography variant="subtitle1" color="warning.main" fontWeight={600} gutterBottom>
               Pre-Upgrade Checklist
             </Typography>
-            <Typography variant="body2" mb={1}>
+            <Typography variant="body2" mb={1} sx={{ color: '#e0e0e0' }}>
               The following resources must be cleaned up before upgrading:
             </Typography>
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              <li>Agent scaled down</li>
-              <li>VMware credentials deleted</li>
-              <li>OpenStack credentials deleted</li>
-              <li>No MigrationPlans</li>
-              <li>No RollingMigrationPlans</li>
-              <li>No Custom Resources (CRs)</li>
-              <li>CRDs compatible for upgrade</li>
+            <ul style={{ margin: 0, paddingLeft: 20, color: '#fff', fontWeight: 500, fontSize: '1rem' }}>
+              {stepStates.map((item) => (
+                <li key={item.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+                  {item.state === 'in_progress' && <CircularProgress size={16} sx={{ mr: 1 }} />}
+                  {item.state === 'success' && <CheckCircleIcon color="success" sx={{ mr: 1 }} />}
+                  {item.state === 'error' && <CancelIcon color="error" sx={{ mr: 1 }} />}
+                  {item.state === 'pending' && <RadioButtonUncheckedIcon color="disabled" sx={{ mr: 1 }} />}
+                  {item.label}
+                </li>
+              ))}
             </ul>
           </Box>
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
@@ -259,6 +302,9 @@ export const UpgradeModal = ({ show, onClose }) => {
             color="primary"
           >
             {upgradeMutation.isPending ? 'Initiating...' : upgradeInProgress ? 'Upgrade in Progress...' : 'Upgrade Now'}
+          </Button>
+          <Button onClick={runStepwiseCleanup} variant="contained" color="primary">
+            Run Stepwise Cleanup
           </Button>
           <Button onClick={onClose} variant="outlined">Cancel</Button>
         </DialogActions>

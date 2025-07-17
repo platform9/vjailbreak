@@ -30,13 +30,8 @@ export const getVersionInfo = async (
   }
 }
 
-export const getAvailableUpdates = async (): Promise<AvailableUpdates> => {
-  const endpoint = `/api/v1/updates` 
-  return get<AvailableUpdates>({ endpoint })
-}
-
 export const initiateUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
-    const endpoint = `/api/v1/upgrade`
+    const endpoint = `/dev-api/sdk/vpw/v1/upgrade`
     return post<UpgradeResponse>({
         endpoint,
         data: { targetVersion, autoCleanup },
@@ -44,14 +39,26 @@ export const initiateUpgrade = async (targetVersion: string, autoCleanup: boolea
 }
 
 export const getUpgradeProgress = async (): Promise<UpgradeProgressResponse> => {
-    const endpoint = `/api/v1/upgrade/progress`
+    const endpoint = `/dev-api/sdk/vpw/v1/upgrade/progress`
     return get<UpgradeProgressResponse>({ endpoint })
 }
 
 export const confirmCleanupAndUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
-    const endpoint = `/api/v1/upgrade/confirm_cleanup`;
+    const endpoint = `/dev-api/sdk/vpw/v1/upgrade/confirm_cleanup`;
     return post<UpgradeResponse>({
         endpoint,
         data: { targetVersion, autoCleanup },
     });
 };
+
+export const getAvailableTags = async (): Promise<AvailableUpdates> => {
+  const endpoint = '/dev-api/sdk/vpw/v1/tags'
+  return get<AvailableUpdates>({ endpoint })
+}
+
+export async function cleanupStepApiCall(stepKey: string): Promise<{ success: boolean }> {
+  return await post<{ success: boolean }>({
+    endpoint: '/vpw/v1/upgrade/cleanup_step',
+    data: { step: stepKey }
+  });
+}

@@ -62,12 +62,7 @@ service Version {
             get: "/vpw/v1/version"
         };
     }
-
-    rpc GetAvailableUpdates(VersionRequest) returns (AvailableUpdatesResponse) {
-        option (google.api.http) = {
-            get: "/vpw/v1/updates"
-        };
-    }
+    
     rpc InitiateUpgrade(UpgradeRequest) returns (UpgradeResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/upgrade"
@@ -78,6 +73,25 @@ service Version {
     rpc GetUpgradeProgress(VersionRequest) returns (UpgradeProgressResponse) {
         option (google.api.http) = {
             get: "/vpw/v1/upgrade/progress"
+        };
+    }
+    rpc GetAvailableTags(VersionRequest) returns (AvailableUpdatesResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/tags"
+        };
+    }
+
+    rpc ConfirmCleanupAndUpgrade(UpgradeRequest) returns (UpgradeResponse) {
+     option (google.api.http) = {
+       post: "/vpw/v1/upgrade/confirm_cleanup"
+       body: "*"
+     };
+   }
+
+    rpc CleanupStep(CleanupStepRequest) returns (CleanupStepResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/upgrade/cleanup_step"
+            body: "*"
         };
     }
 }
@@ -503,4 +517,14 @@ service VailbreakProxy {
             body: "*"
         };
     }
+}
+
+message CleanupStepRequest {
+    string step = 1;
+}
+
+message CleanupStepResponse {
+    string step = 1;
+    bool success = 2;
+    string message = 3;
 }

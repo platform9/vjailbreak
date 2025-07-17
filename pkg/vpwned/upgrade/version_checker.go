@@ -15,7 +15,24 @@ type ReleaseInfo struct {
 	DownloadURL  string
 }
 
-// Fetch all releases newer than the current version.
+// Returns all tags for dropdown
+func GetAllTags(ctx context.Context, owner, repo string) ([]string, error) {
+	client := github.NewClient(nil)
+	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tags: %w", err)
+	}
+	var tagNames []string
+	for _, tag := range tags {
+		tagNames = append(tagNames, tag.GetName())
+	}
+	sort.Slice(tagNames, func(i, j int) bool {
+		return semver.Compare(tagNames[i], tagNames[j]) < 0
+	})
+	return tagNames, nil
+}
+
+// Fetch all releases newer than the current version if semver, else all tags.
 func CheckForUpdates(ctx context.Context, owner, repo, currentVersion string) ([]ReleaseInfo, error) {
 	client := github.NewClient(nil)
 	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, nil)
@@ -24,9 +41,21 @@ func CheckForUpdates(ctx context.Context, owner, repo, currentVersion string) ([
 	}
 
 	var availableUpgrades []ReleaseInfo
+	isSemver := semver.IsValid(currentVersion)
 	for _, release := range releases {
 		tagName := release.GetTagName()
-		if semver.Compare(tagName, currentVersion) > 0 {
+		if isSemver {
+			if semver.Compare(tagName, currentVersion) > 0 {
+				info := ReleaseInfo{
+					Version:      tagName,
+					ReleaseNotes: release.GetBody(),
+				}
+				if len(release.Assets) > 0 {
+					info.DownloadURL = release.Assets[0].GetBrowserDownloadURL()
+				}
+				availableUpgrades = append(availableUpgrades, info)
+			}
+		} else {
 			info := ReleaseInfo{
 				Version:      tagName,
 				ReleaseNotes: release.GetBody(),

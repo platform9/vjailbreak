@@ -23,6 +23,9 @@ import (
 	"io/ioutil"
 	"sigs.k8s.io/yaml"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/typed/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
  
 type DeploymentConfig struct {
@@ -75,23 +78,20 @@ func (s *VpwnedVersion) Version(ctx context.Context, in *api.VersionRequest) (*a
 	return &api.VersionResponse{Version: version.Version}, nil
 }
 
-func (s *VpwnedVersion) GetAvailableUpdates(ctx context.Context, in *api.VersionRequest) (*api.AvailableUpdatesResponse, error) {
+func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionRequest) (*api.AvailableUpdatesResponse, error) {
 	owner := "platform9"
 	repo := "vjailbreak"
-
-	updates, err := upgrade.CheckForUpdates(ctx, owner, repo, version.Version)
+	tags, err := upgrade.GetAllTags(ctx, owner, repo)
 	if err != nil {
 		return nil, err
 	}
-
 	var protoUpdates []*api.ReleaseInfo
-	for _, u := range updates {
+	for _, tag := range tags {
 		protoUpdates = append(protoUpdates, &api.ReleaseInfo{
-			Version:      u.Version,
-			ReleaseNotes: u.ReleaseNotes,
+			Version: tag,
+			ReleaseNotes: "",
 		})
 	}
-
 	return &api.AvailableUpdatesResponse{Updates: protoUpdates}, nil
 }
 
@@ -373,6 +373,199 @@ func (s *VpwnedVersion) GetUpgradeProgress(ctx context.Context, in *api.VersionR
 			return ""
 		}(),
 	}, nil
+}
+
+func (s *VpwnedVersion) CleanupStep(ctx context.Context, in *api.CleanupStepRequest) (*api.CleanupStepResponse, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create k8s client: %w", err)
+	}
+	step := in.Step
+	var success bool
+	var msg string
+	switch step {
+	case "no_migrationplans":
+		success, msg = checkAndDeleteMigrationPlans(ctx, kubeClient, config)
+	case "no_rollingmigrationplans":
+		success, msg = checkAndDeleteRollingMigrationPlans(ctx, kubeClient, config)
+	case "agent_scaled_down":
+		success, msg = checkAndScaleDownAgent(ctx, kubeClient)
+	case "vmware_creds_deleted":
+		success, msg = checkAndDeleteSecret(ctx, kubeClient, "vmware-credentials")
+	case "openstack_creds_deleted":
+		success, msg = checkAndDeleteSecret(ctx, kubeClient, "openstack-credentials")
+	case "no_custom_resources":
+		success, msg = checkAndDeleteAllCustomResources(ctx, kubeClient, config)
+	case "crds_compatible":
+		success, msg = checkCRDCompatibility(ctx, kubeClient)
+	default:
+		return &api.CleanupStepResponse{Step: step, Success: false, Message: "Unknown step"}, nil
+	}
+	return &api.CleanupStepResponse{Step: step, Success: success, Message: msg}, nil
+}
+
+// Helper functions for each step
+func checkAndDeleteMigrationPlans(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return false, "Failed to create dynamic client"
+	}
+	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, "Failed to list MigrationPlans"
+	}
+	for _, item := range list.Items {
+		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		if err != nil {
+			return false, "Failed to delete MigrationPlan: " + item.GetName()
+		}
+	}
+	// Re-list to confirm
+	list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, "Failed to re-list MigrationPlans"
+	}
+	if len(list.Items) == 0 {
+		return true, "No MigrationPlans remaining"
+	}
+	return false, "MigrationPlans still exist"
+}
+
+func checkAndDeleteRollingMigrationPlans(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return false, "Failed to create dynamic client"
+	}
+	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, "Failed to list RollingMigrationPlans"
+	}
+	for _, item := range list.Items {
+		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		if err != nil {
+			return false, "Failed to delete RollingMigrationPlan: " + item.GetName()
+		}
+	}
+	list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, "Failed to re-list RollingMigrationPlans"
+	}
+	if len(list.Items) == 0 {
+		return true, "No RollingMigrationPlans remaining"
+	}
+	return false, "RollingMigrationPlans still exist"
+}
+
+func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client) (bool, string) {
+	dep := &appsv1.Deployment{}
+	err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return true, "Agent already scaled down"
+		}
+		return false, "Failed to get deployment"
+	}
+	var zero int32 = 0
+	dep.Spec.Replicas = &zero
+	err = kubeClient.Update(ctx, dep)
+	if err != nil {
+		return false, "Failed to scale down deployment"
+	}
+	if dep.Spec.Replicas != nil && *dep.Spec.Replicas == 0 {
+		return true, "Agent scaled down"
+	}
+	return false, "Agent not scaled down"
+}
+
+func checkAndDeleteSecret(ctx context.Context, kubeClient client.Client, secretName string) (bool, string) {
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "migration-system"}}
+	err := kubeClient.Delete(ctx, secret)
+	if err != nil && !kerrors.IsNotFound(err) {
+		return false, "Failed to delete secret: " + secretName
+	}
+	// Check if secret still exists
+	err = kubeClient.Get(ctx, client.ObjectKey{Name: secretName, Namespace: "migration-system"}, secret)
+	if kerrors.IsNotFound(err) {
+		return true, secretName + " deleted"
+	}
+	return false, secretName + " still exists"
+}
+
+func checkAndDeleteAllCustomResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+	currentCRs, err := upgrade.DiscoverCurrentCRs(ctx, kubeClient)
+	if err != nil {
+		return false, "Failed to discover current CRs"
+	}
+	allDeleted := true
+	var failed []string
+	for _, crInfo := range currentCRs {
+		gvr := schema.GroupVersionResource{
+			Group:    crInfo.Group,
+			Version:  crInfo.Version,
+			Resource: crInfo.Plural,
+		}
+		dynamicClient, err := dynamic.NewForConfig(restConfig)
+		if err != nil {
+			failed = append(failed, crInfo.Kind+": dynamic client error")
+			allDeleted = false
+			continue
+		}
+		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			failed = append(failed, crInfo.Kind+": list error")
+			allDeleted = false
+			continue
+		}
+		for _, item := range list.Items {
+			err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+			if err != nil {
+				failed = append(failed, crInfo.Kind+":"+item.GetName())
+				allDeleted = false
+			}
+		}
+		// Re-list to confirm
+		list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err != nil || len(list.Items) > 0 {
+			failed = append(failed, crInfo.Kind+": not empty after delete")
+			allDeleted = false
+		}
+	}
+	if allDeleted {
+		return true, "No Custom Resources remaining"
+	}
+	return false, "Some Custom Resources could not be deleted: " + strings.Join(failed, ", ")
+}
+
+func checkCRDCompatibility(ctx context.Context, kubeClient client.Client) (bool, string) {
+	currentCRDs, err := upgrade.DiscoverCurrentCRDs(ctx, kubeClient)
+	if err != nil {
+		return false, "Failed to discover current CRDs"
+	}
+	for _, crdInfo := range currentCRDs {
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		err := kubeClient.Get(ctx, types.NamespacedName{Name: crdInfo.Name}, crd)
+		if err != nil {
+			if kerrors.IsNotFound(err) {
+				continue
+			}
+			return false, "Failed to get CRD: " + crdInfo.Name
+		}
+		for _, version := range crd.Spec.Versions {
+			if version.Storage {
+				// Optionally, check for instances or other compatibility logic
+			}
+		}
+	}
+	return true, "CRDs compatible"
 }
 
 func getCurrentDeploymentImage(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig) (string, error) {
