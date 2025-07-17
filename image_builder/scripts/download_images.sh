@@ -29,7 +29,7 @@ ui="$REGISTRY/$REPO/vjailbreak-ui:$TAG"
 vpwned="$REGISTRY/$REPO/vjailbreak-vpwned:$TAG"
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 # TODO(suhas): Create a seperate repository for alpine image in quay
-alpine="$REGISTRY/$REPO/vjailbreak:alpine"
+alpine="quay.io/platform9/vjailbreak:alpine"
 
 # Download and export images
 images=(
@@ -63,9 +63,9 @@ for img in "${images[@]}"; do
 done
 
 
-ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
+sudo ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
 sleep 10
-ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
+sudo ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
 
 echo "[✔] All images downloaded and exported as tar files."
 
