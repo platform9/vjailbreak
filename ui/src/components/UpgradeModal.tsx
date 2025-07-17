@@ -38,7 +38,6 @@ export const UpgradeModal = ({ show, onClose }) => {
     'vmware_creds_deleted',
     'openstack_creds_deleted',
     'no_custom_resources',
-    'crds_compatible'
   ];
   const stepLabels = [
     'No MigrationPlans',
@@ -47,7 +46,6 @@ export const UpgradeModal = ({ show, onClose }) => {
     'VMware credentials deleted',
     'OpenStack credentials deleted',
     'No Custom Resources (CRs) deleted',
-    'CRDs compatible for upgrade'
   ];
 
   const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
@@ -193,7 +191,6 @@ export const UpgradeModal = ({ show, onClose }) => {
     { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
     { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
     { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources },
-    { label: 'CRDs compatible for upgrade', value: checkResults.crdsCompatible },
   ] : [];
 
   return (

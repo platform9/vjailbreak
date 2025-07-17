@@ -20,7 +20,7 @@ func GetAllTags(ctx context.Context, owner, repo string) ([]string, error) {
 	client := github.NewClient(nil)
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch tags: %w", err)
+		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
 	var tagNames []string
 	for _, tag := range tags {

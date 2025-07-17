@@ -58,7 +58,7 @@ export const getAvailableTags = async (): Promise<AvailableUpdates> => {
 
 export async function cleanupStepApiCall(stepKey: string): Promise<{ success: boolean }> {
   return await post<{ success: boolean }>({
-    endpoint: '/vpw/v1/upgrade/cleanup_step',
+    endpoint: '/dev-api/sdk/vpw/v1/upgrade/cleanup_step',
     data: { step: stepKey }
   });
 }

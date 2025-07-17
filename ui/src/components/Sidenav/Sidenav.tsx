@@ -454,7 +454,7 @@ export default function Sidenav({
         <VersionDisplay collapsed={isCollapsed} />
         {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
           isCollapsed ? (
-            <Tooltip title={`Upgrade Available: ${versionInfo.upgradeVersion}`} placement="right" arrow>
+            <Tooltip title={`Upgrade Available`} placement="right" arrow>
               <Button
                 color="primary"
                 variant="contained"
@@ -473,7 +473,7 @@ export default function Sidenav({
               startIcon={<UpgradeIcon />}
               onClick={() => setIsUpgradeModalOpen(true)}
             >
-              Upgrade Available: {versionInfo.upgradeVersion}
+              Upgrade Available
             </Button>
           )
         )}

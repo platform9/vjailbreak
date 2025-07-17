@@ -11,26 +11,22 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"golang.org/x/mod/semver"
 	"encoding/base64"
 	"gopkg.in/yaml.v2"
     "k8s.io/client-go/rest"
 )
  
 type ValidationResult struct {
+	NoMigrationPlans        bool
+	NoRollingMigrationPlans bool
 	AgentsScaledDown        bool
 	VMwareCredsDeleted      bool
 	OpenStackCredsDeleted   bool
-	NoMigrationPlans        bool
-	NoRollingMigrationPlans bool
 	NoCustomResources       bool 
-	CRDsCompatible          bool 
 	PassedAll               bool
-	VersionComparison       *VersionComparisonResult
 }
 
 type CRDInfo struct {
@@ -45,14 +41,6 @@ type CRInfo struct {
 	Kind     string
 	Plural   string
 	Singular string
-}
-
-type VersionComparisonResult struct {
-	NewCRs     []CRInfo
-	NewCRDs    []CRDInfo
-	RemovedCRs []CRInfo
-	RemovedCRDs []CRDInfo
-	UpdatedCRDs []CRDInfo
 }
 
 func DiscoverCurrentCRs(ctx context.Context, kubeClient client.Client) ([]CRInfo, error) {
@@ -87,7 +75,7 @@ func DiscoverCurrentCRDs(ctx context.Context, kubeClient client.Client) ([]CRDIn
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 	if err := kubeClient.List(ctx, crdList); err != nil {
 		return nil, fmt.Errorf("failed to list CRDs: %w", err)
-	}
+	} 
 	
 	for _, crd := range crdList.Items {
 		if strings.Contains(crd.Spec.Group, "vjailbreak") {
@@ -105,174 +93,41 @@ func DiscoverCurrentCRDs(ctx context.Context, kubeClient client.Client) ([]CRDIn
 	return currentCRDs, nil
 }
 
-func GetTargetVersionCRs(targetVersion string) ([]CRInfo, error) {
-
-	baseCRs := []CRInfo{
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "Migration", Plural: "migrations", Singular: "migration"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "OpenstackCreds", Plural: "openstackcreds", Singular: "openstackcreds"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "VMwareCreds", Plural: "vmwarecreds", Singular: "vmwarecreds"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "NetworkMapping", Plural: "networkmappings", Singular: "networkmapping"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "StorageMapping", Plural: "storagemappings", Singular: "storagemapping"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "MigrationPlan", Plural: "migrationplans", Singular: "migrationplan"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "MigrationTemplate", Plural: "migrationtemplates", Singular: "migrationtemplate"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "VjailbreakNode", Plural: "vjailbreaknodes", Singular: "vjailbreaknode"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "VMwareMachine", Plural: "vmwaremachines", Singular: "vmwaremachine"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "VMwareCluster", Plural: "vmwareclusters", Singular: "vmwarecluster"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "VMwareHost", Plural: "vmwarehosts", Singular: "vmwarehost"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "RollingMigrationPlan", Plural: "rollingmigrationplans", Singular: "rollingmigrationplan"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "ESXIMigration", Plural: "esximigrations", Singular: "esximigration"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "ClusterMigration", Plural: "clustermigrations", Singular: "clustermigration"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "BMConfig", Plural: "bmconfigs", Singular: "bmconfig"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "PCDCluster", Plural: "pcdclusters", Singular: "pcdcluster"},
-		{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Kind: "PCDHost", Plural: "pcdhosts", Singular: "pcdhost"},
-	}
-	
-	if semver.Compare(targetVersion, "2.0.0") >= 0 {
-		baseCRs = append(baseCRs, CRInfo{
-			Group: "vjailbreak.k8s.pf9.io", 
-			Version: "v1alpha1", 
-			Kind: "NewResource", 
-			Plural: "newresources", 
-			Singular: "newresource",
-		})
-	}
-	
-	return baseCRs, nil
-}
-
-func GetTargetVersionCRDs(targetVersion string) ([]CRDInfo, error) {
-	baseCRDs := []CRDInfo{
-		{Name: "migrations.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "openstackcreds.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "vmwarecreds.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "networkmappings.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "storagemappings.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "migrationplans.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "migrationtemplates.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "vjailbreaknodes.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "vmwaremachines.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "vmwareclusters.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "vmwarehosts.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "rollingmigrationplans.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "esximigrations.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "clustermigrations.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "bmconfigs.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "pcdclusters.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-		{Name: "pcdhosts.vjailbreak.k8s.pf9.io", Version: "v1alpha1", Group: "vjailbreak.k8s.pf9.io"},
-	}
-	
-	if semver.Compare(targetVersion, "2.0.0") >= 0 {
-		baseCRDs = append(baseCRDs, CRDInfo{
-			Name: "newresources.vjailbreak.k8s.pf9.io", 
-			Version: "v1alpha1", 
-			Group: "vjailbreak.k8s.pf9.io",
-		})
-	}
-	
-	return baseCRDs, nil
-}
-
-func CompareVersions(ctx context.Context, kubeClient client.Client, targetVersion string) (*VersionComparisonResult, error) {
-	currentCRs, err := DiscoverCurrentCRs(ctx, kubeClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover current CRs: %w", err)
-	}
-	
-	currentCRDs, err := DiscoverCurrentCRDs(ctx, kubeClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover current CRDs: %w", err)
-	}
-	
-	targetCRs, err := GetTargetVersionCRs(targetVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get target version CRs: %w", err)
-	}
-	
-	targetCRDs, err := GetTargetVersionCRDs(targetVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get target version CRDs: %w", err)
-	}
-	
-	result := &VersionComparisonResult{}
-	
-	for _, targetCR := range targetCRs {
-		found := false
-		for _, currentCR := range currentCRs {
-			if targetCR.Group == currentCR.Group && targetCR.Kind == currentCR.Kind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.NewCRs = append(result.NewCRs, targetCR)
-		}
-	}
-	
-	for _, currentCR := range currentCRs {
-		found := false
-		for _, targetCR := range targetCRs {
-			if currentCR.Group == targetCR.Group && currentCR.Kind == targetCR.Kind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.RemovedCRs = append(result.RemovedCRs, currentCR)
-		}
-	}
-	
-	for _, targetCRD := range targetCRDs {
-		found := false
-		for _, currentCRD := range currentCRDs {
-			if targetCRD.Name == currentCRD.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.NewCRDs = append(result.NewCRDs, targetCRD)
-		}
-	}
-	
-	for _, currentCRD := range currentCRDs {
-		found := false
-		for _, targetCRD := range targetCRDs {
-			if currentCRD.Name == targetCRD.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.RemovedCRDs = append(result.RemovedCRDs, currentCRD)
-		}
-	}
-	
-	for _, targetCRD := range targetCRDs {
-		for _, currentCRD := range currentCRDs {
-			if targetCRD.Name == currentCRD.Name && targetCRD.Version != currentCRD.Version {
-				result.UpdatedCRDs = append(result.UpdatedCRDs, targetCRD)
-				break
-			}
-		}
-	}
-	
-	return result, nil
-}
-
 func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, targetVersion string) (*ValidationResult, error) {
 	result := &ValidationResult{}
 
-	dep := &appsv1.Deployment{}
-	err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			result.AgentsScaledDown = true
-		} else {
-			return nil, err
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) == 0 {
+			result.NoMigrationPlans = true
 		}
-	} else {
-		result.AgentsScaledDown = dep.Spec.Replicas != nil && *dep.Spec.Replicas == 0
 	}
+
+	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
+	dynamicClient, err = dynamic.NewForConfig(restConfig)
+	if err == nil {
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err == nil && len(unstructuredList.Items) == 0 {
+			result.NoRollingMigrationPlans = true
+		}
+	}
+
+	gvr = schema.GroupVersionResource{
+    Group:    "vjailbreak.k8s.pf9.io",
+    Version:  "v1alpha1",
+    Resource: "vjailbreaknodes",
+	}
+	dynamicClient, err = dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result.AgentsScaledDown = len(list.Items) == 0
 
 	vmwareSecret := &corev1.Secret{}
 	err = kubeClient.Get(ctx, client.ObjectKey{Name: "vmware-credentials", Namespace: "migration-system"}, vmwareSecret)
@@ -298,41 +153,9 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 		result.OpenStackCredsDeleted = false
 	}
 
-	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err == nil {
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-		if err == nil && len(unstructuredList.Items) == 0 {
-			result.NoMigrationPlans = true
-		}
-	}
-
-	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
-	dynamicClient, err = dynamic.NewForConfig(restConfig)
-	if err == nil {
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-		if err == nil && len(unstructuredList.Items) == 0 {
-			result.NoRollingMigrationPlans = true
-		}
-	}
-
 	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient, restConfig)
 	if err != nil {
 		return nil, err
-	}
-
-	result.CRDsCompatible, err = checkCRDCompatibility(ctx, kubeClient)
-	if err != nil {
-		return nil, err
-	}
-
-	if targetVersion != "" {
-		comparison, err := CompareVersions(ctx, kubeClient, targetVersion)
-		if err != nil {
-			log.Printf("Warning: Could not compare versions: %v", err)
-		} else {
-			result.VersionComparison = comparison
-		}
 	}
 
 	result.PassedAll = result.AgentsScaledDown && 
@@ -340,9 +163,7 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 		result.OpenStackCredsDeleted && 
 		result.NoMigrationPlans && 
 		result.NoRollingMigrationPlans &&
-		result.NoCustomResources &&
-		result.CRDsCompatible
-
+		result.NoCustomResources
 	return result, nil
 }
 
@@ -380,45 +201,8 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 	return true, nil
 }
 
-func checkCRDCompatibility(ctx context.Context, kubeClient client.Client) (bool, error) {
-	currentCRDs, err := DiscoverCurrentCRDs(ctx, kubeClient)
-	if err != nil {
-		return false, fmt.Errorf("failed to discover current CRDs: %w", err)
-	}
-	
-	for _, crdInfo := range currentCRDs {
-		crd := &apiextensionsv1.CustomResourceDefinition{}
-		err := kubeClient.Get(ctx, types.NamespacedName{Name: crdInfo.Name}, crd)
-		if err != nil {
-			if kerrors.IsNotFound(err) {
-				continue
-			}
-			return false, fmt.Errorf("failed to get CRD %s: %w", crdInfo.Name, err)
-		}
-
-		for _, version := range crd.Spec.Versions {
-			if version.Storage {
-				hasInstances, err := checkCRDHasInstances(ctx, kubeClient, crd.Spec.Group, version.Name, crd.Spec.Names.Plural)
-				if err != nil {
-					log.Printf("Warning: Could not check instances for CRD %s: %v", crdInfo.Name, err)
-					continue
-				}
-				if hasInstances {
-					log.Printf("CRD %s has existing instances, upgrade may require CR migration", crdInfo.Name)
-				}
-			}
-		}
-	}
-
-	return true, nil
-}
-
-func checkCRDHasInstances(ctx context.Context, kubeClient client.Client, group, version, plural string) (bool, error) {
-	return false, nil
-}
-
 func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
-	log.Println("Starting backup of CRDs, ConfigMaps, Deployments, and CRs...")
+	log.Println("Starting backup of CRDs, ConfigMaps, Deployments, and CRs")
 
 	backup := make(map[string]string)
 
@@ -649,63 +433,4 @@ func deleteCRInstances(ctx context.Context, kubeClient client.Client, restConfig
 	}
 	
 	return nil
-}
-
-func GetVersionUpgradeSummary(ctx context.Context, kubeClient client.Client, targetVersion string) (string, error) {
-	comparison, err := CompareVersions(ctx, kubeClient, targetVersion)
-	if err != nil {
-		return "", fmt.Errorf("failed to compare versions: %w", err)
-	}
-	
-	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("Upgrade Summary for version %s:\n", targetVersion))
-	summary.WriteString("=" + strings.Repeat("=", 50) + "\n\n")
-	
-	if len(comparison.NewCRs) > 0 {
-		summary.WriteString("🆕 New Custom Resources:\n")
-		for _, cr := range comparison.NewCRs {
-			summary.WriteString(fmt.Sprintf("  • %s (%s/%s)\n", cr.Kind, cr.Group, cr.Version))
-		}
-		summary.WriteString("\n")
-	}
-	
-	if len(comparison.NewCRDs) > 0 {
-		summary.WriteString("🆕 New Custom Resource Definitions:\n")
-		for _, crd := range comparison.NewCRDs {
-			summary.WriteString(fmt.Sprintf("  • %s (version: %s)\n", crd.Name, crd.Version))
-		}
-		summary.WriteString("\n")
-	}
-	
-	if len(comparison.UpdatedCRDs) > 0 {
-		summary.WriteString("🔄 Updated Custom Resource Definitions:\n")
-		for _, crd := range comparison.UpdatedCRDs {
-			summary.WriteString(fmt.Sprintf("  • %s (version: %s)\n", crd.Name, crd.Version))
-		}
-		summary.WriteString("\n")
-	}
-	
-	if len(comparison.RemovedCRs) > 0 {
-		summary.WriteString("⚠️  Removed Custom Resources (deprecated):\n")
-		for _, cr := range comparison.RemovedCRs {
-			summary.WriteString(fmt.Sprintf("  • %s (%s/%s)\n", cr.Kind, cr.Group, cr.Version))
-		}
-		summary.WriteString("\n")
-	}
-	
-	if len(comparison.RemovedCRDs) > 0 {
-		summary.WriteString("⚠️  Removed Custom Resource Definitions (deprecated):\n")
-		for _, crd := range comparison.RemovedCRDs {
-			summary.WriteString(fmt.Sprintf("  • %s (version: %s)\n", crd.Name, crd.Version))
-		}
-		summary.WriteString("\n")
-	}
-	
-	if len(comparison.NewCRs) == 0 && len(comparison.NewCRDs) == 0 && 
-	   len(comparison.UpdatedCRDs) == 0 && len(comparison.RemovedCRs) == 0 && 
-	   len(comparison.RemovedCRDs) == 0 {
-		summary.WriteString("✅ No CR/CRD changes detected in this upgrade.\n")
-	}
-	
-	return summary.String(), nil
 }
