@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"os/exec"
 
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/upgrade"
@@ -23,7 +24,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	"os/exec"
 )
  
 type DeploymentConfig struct {
@@ -96,7 +96,7 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
 	upgradeProgress = &UpgradeProgress{
 		CurrentStep:    "Starting upgrade",
-		TotalSteps:     len(deploymentConfigs) + 4, // +4 for backup, pre-checks, CRD and deployment update, and final validation
+		TotalSteps:     len(deploymentConfigs) + 5, // +5 for backup, pre-checks, CRD, deployment update, pod restart, and final validation
 		CompletedSteps: 0,
 		Status:         "in_progress",
 		StartTime:      time.Now(),
@@ -252,50 +252,34 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			upgradeProgress.Error = fmt.Sprintf("Upgrade validation failed: %v", err)
 			return nil, fmt.Errorf("upgrade validation failed: %w", err)
 		}
-
+		upgradeProgress.CompletedSteps++
+		
+		upgradeProgress.CurrentStep = "Restarting components"
+		log.Println("Restarting all pods in migration-system to apply changes...")
 		cmd := exec.CommandContext(ctx, "kubectl", "delete", "--all", "pods", "-n", "migration-system")
 		if err := cmd.Run(); err != nil {
 			log.Printf("Warning: failed to delete all pods after upgrade: %v", err)
 		}
-		expectedPods := []string{"migration-controller-manager", "migration-vpwned-sdk", "vjailbreak-ui"}
+
+		upgradeProgress.CurrentStep = "Waiting for components to be ready"
+		log.Println("Waiting for all components to be ready after restart...")
+		expectedApps := []string{"migration-controller-manager", "migration-vpwned-sdk", "vjailbreak-ui"}
 		timeout := 5 * time.Minute
-		interval := 5 * time.Second
-		start := time.Now()
-		for {
-			allReady := true
-			for _, name := range expectedPods {
-				pods := &corev1.PodList{}
-				if err := kubeClient.List(ctx, pods, client.InNamespace("migration-system"), client.MatchingLabels{"app": name}); err != nil {
-					allReady = false
-					break
-				}
-				foundReady := false
-				for _, pod := range pods.Items {
-					if pod.Status.Phase == corev1.PodRunning {
-						for _, cond := range pod.Status.Conditions {
-							if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-								foundReady = true
-								break
-							}
-						}
-					}
-				}
-				if !foundReady {
-					allReady = false
-					break
-				}
+		interval := 10 * time.Second
+		waitCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		for _, appName := range expectedApps {
+			if err := waitForAppReady(waitCtx, kubeClient, "migration-system", appName, interval); err != nil {
+				failureMsg := fmt.Sprintf("failed waiting for app '%s' to become ready: %v", appName, err)
+				upgradeProgress.Status = "failed"
+				upgradeProgress.Error = failureMsg
+				return nil, fmt.Errorf(failureMsg)
 			}
-			if allReady {
-				break
-			}
-			if time.Since(start) > timeout {
-				return nil, fmt.Errorf("timeout waiting for all pods to be running and ready after upgrade")
-			}
-			time.Sleep(interval)
 		}
 
-		upgradeProgress.CompletedSteps++
-		
+		log.Println("All components are ready after restart.")
+
 		now := time.Now()
 		upgradeProgress.Status = "completed"
 		upgradeProgress.CurrentStep = "Upgrade completed successfully"
@@ -728,3 +712,48 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	return fmt.Errorf("deployment %s not ready within timeout", depConfig.Name)
 }
 
+func waitForAppReady(ctx context.Context, kubeClient client.Client, namespace, appName string, interval time.Duration) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout exceeded")
+		default:
+			pods := &corev1.PodList{}
+			err := kubeClient.List(ctx, pods, client.InNamespace(namespace), client.MatchingLabels{"app": appName})
+			if err != nil {
+				log.Printf("Error listing pods for app %s, retrying: %v", appName, err)
+				time.Sleep(interval)
+				continue
+			}
+
+			if len(pods.Items) == 0 {
+				log.Printf("No pods found for app %s yet, retrying...", appName)
+				time.Sleep(interval)
+				continue
+			}
+
+			isReady := false
+			for _, pod := range pods.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					for _, cond := range pod.Status.Conditions {
+						if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+							isReady = true
+							break
+						}
+					}
+				}
+				if isReady {
+					break
+				}
+			}
+
+			if isReady {
+				log.Printf("App %s is ready.", appName)
+				return nil 
+			}
+
+			log.Printf("App %s is not ready yet, retrying...", appName)
+			time.Sleep(interval)
+		}
+	}
+}

@@ -1,27 +1,15 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { getAvailableTags, initiateUpgrade, getUpgradeProgress, confirmCleanupAndUpgrade, cleanupStepApiCall } from '../api/version';
-import { UpgradeResponse, ValidationResult, UpgradeProgressResponse } from '../api/version/model';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
-import LinearProgress from '@mui/material/LinearProgress';
+import { ValidationResult, UpgradeProgressResponse } from '../api/version/model';
+import {
+    Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography, Button, Select, MenuItem,
+    Alert, CircularProgress, useTheme
+} from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import PauseIcon from '@mui/icons-material/Pause';
-import React from 'react';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import { useTheme } from '@mui/material/styles';
-import { useNavigate } from 'react-router-dom';
 
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('');
@@ -35,14 +23,6 @@ export const UpgradeModal = ({ show, onClose }) => {
   const theme = useTheme();
   const navigate = useNavigate();
 
-  const stepKeys = [
-    'no_migrationplans',
-    'no_rollingmigrationplans',
-    'agent_scaled_down',
-    'vmware_creds_deleted',
-    'openstack_creds_deleted',
-    'no_custom_resources',
-  ];
   const stepLabels = [
     'Delete MigrationPlans',
     'Delete RollingMigrationPlans',
@@ -51,7 +31,14 @@ export const UpgradeModal = ({ show, onClose }) => {
     'Delete OpenStack credentials',
     'Delete Custom Resources',
   ];
-
+  const stepKeys = [
+    'no_migrationplans',
+    'no_rollingmigrationplans',
+    'agent_scaled_down',
+    'vmware_creds_deleted',
+    'openstack_creds_deleted',
+    'no_custom_resources',
+  ];
   const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
 
   // Fetch available updates
@@ -61,105 +48,61 @@ export const UpgradeModal = ({ show, onClose }) => {
     enabled: show,
   });
 
-  // Mutation for triggering the upgrade
-  const upgradeMutation = useMutation<UpgradeResponse, Error, void>({
-    mutationFn: () => initiateUpgrade(selectedVersion, false),
-    onSuccess: (data) => {
-      if (data.upgradeStarted) {
-        setUpgradeInProgress(true);
-        setErrorMsg('');
-        setCheckResults(null);
-        setSuccessMsg('Upgrade process has been initiated!');
-      } else if (data.cleanupRequired && data.customResourceList && data.customResourceList.length > 0) {
-        setCrList(data.customResourceList);
-        setShowCRWarning(true);
-        setErrorMsg('');
-        setSuccessMsg('');
-      } else {
-        setCheckResults(data.checks);
-        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
-        setSuccessMsg('');
-      }
-    },
-    onError: (error) => {
-      setErrorMsg(`An error occurred: ${error.message}`);
-      setSuccessMsg('');
-    }
-  });
-
-  // Poll for upgrade progress when upgrade is in progress
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
     if (upgradeInProgress) {
       const pollProgress = async () => {
         try {
           const progress = await getUpgradeProgress();
           setProgressData(progress);
-          
-          if (progress.status === 'completed' || progress.status === 'failed') {
+
+          if (progress.status === 'completed') {
+            clearInterval(interval);
+            setSuccessMsg('Upgrade completed successfully!');
+            setTimeout(() => {
+              onClose();
+              navigate('/dashboard/migrations');
+              window.location.reload();
+            }, 2000);
+          } else if (['failed', 'rolled_back', 'rollback_failed'].includes(progress.status)) {
+            clearInterval(interval);
             setUpgradeInProgress(false);
-            if (progress.status === 'completed') {
-              setSuccessMsg('Upgrade completed successfully!');
-              setTimeout(() => {
-                setSuccessMsg('');
-                onClose();
-              }, 3000);
-            } else {
-              setErrorMsg(`Upgrade failed: ${progress.error}`);
-            }
+            setErrorMsg(`Upgrade failed: ${progress.error || 'An unknown error occurred.'}`);
           }
         } catch (error) {
+          clearInterval(interval);
+          setUpgradeInProgress(false);
+          setErrorMsg('Failed to get upgrade progress.');
           console.error('Failed to fetch upgrade progress:', error);
         }
       };
-      
-      pollProgress();
       interval = setInterval(pollProgress, 5000);
     }
-    
     return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
+      if (interval) clearInterval(interval);
     };
-  }, [upgradeInProgress, onClose]);
+  }, [upgradeInProgress, onClose, navigate]);
 
-  const pollUpgradeProgress = () => {
-    const interval = setInterval(async () => {
-      try {
-        const status = await getUpgradeProgress();
-        if (status.status === 'completed') {
-          clearInterval(interval);
-          setSuccessMsg('Upgrade completed successfully!');
-          setTimeout(() => {
-            onClose();
-            navigate('/dashboard/migrations');
-            window.location.reload();
-          }, 2000);
-        } else if (status.status === 'failed') {
-          clearInterval(interval);
-          setErrorMsg('Upgrade failed. Please try again.');
-          setUpgradeInProgress(false);
-        }
-      } catch {
-        clearInterval(interval);
-        setErrorMsg('Failed to get upgrade progress.');
-        setUpgradeInProgress(false);
-      }
-    }, 3000);
-  };
-
-  const handleUpgradeClick = () => {
-    setUpgradeInProgress(true);
+  const handleUpgradeClick = async () => {
     setErrorMsg('');
     setSuccessMsg('');
-    initiateUpgrade(selectedVersion, false).then(() => {
-      pollUpgradeProgress();
-    }).catch(() => {
-      setErrorMsg('Upgrade failed to start.');
+
+    try {
+      const data = await initiateUpgrade(selectedVersion, false);
+      if (data.upgradeStarted) {
+        setUpgradeInProgress(true);
+        setCheckResults(null);
+      } else if (data.cleanupRequired && data.customResourceList) {
+        setCrList(data.customResourceList || []); 
+        setShowCRWarning(true);
+      } else {
+        setCheckResults(data.checks);
+        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
+      }
+    } catch (error: any) {
+      setErrorMsg(`An error occurred: ${error.message}`);
       setUpgradeInProgress(false);
-    });
+    }
   };
 
   const handleConfirmCleanup = async () => {
@@ -167,24 +110,19 @@ export const UpgradeModal = ({ show, onClose }) => {
     setErrorMsg('');
     setSuccessMsg('');
     try {
-      const data = await confirmCleanupAndUpgrade(selectedVersion, true);
-      if (data.upgradeStarted) {
-        setUpgradeInProgress(true);
-        setErrorMsg('');
-        setCheckResults(null);
-        setSuccessMsg('Upgrade process has been initiated!');
-      } else {
-        setCheckResults(data.checks);
-        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
-        setSuccessMsg('');
-      }
+        const data = await confirmCleanupAndUpgrade(selectedVersion, true);
+        if (data.upgradeStarted) {
+            setUpgradeInProgress(true);
+            setCheckResults(null);
+        } else {
+            setCheckResults(data.checks);
+            setErrorMsg('Checks failed even after cleanup.');
+        }
     } catch (error: any) {
-      setErrorMsg(`An error occurred: ${error.message}`);
-      setSuccessMsg('');
+        setErrorMsg(`An error occurred: ${error.message}`);
     }
   };
 
-  // Handler for canceling CR cleanup
   const handleCancelCleanup = () => {
     setShowCRWarning(false);
     setCrList([]);
@@ -200,21 +138,17 @@ export const UpgradeModal = ({ show, onClose }) => {
       setStepStates([...newStates]);
 
       try {
-        const res = await cleanupStepApiCall(stepKeys[i]); // Call your backend here
+        const res = await cleanupStepApiCall(stepKeys[i]);
         newStates[i].state = res.success ? 'success' : 'error';
       } catch (e) {
         newStates[i].state = 'error';
       }
       setStepStates([...newStates]);
-      if (newStates[i].state === 'error') break; // Optionally stop on error
+      if (newStates[i].state === 'error') break;
     }
   };
 
-  const allChecksPassed = checkResults
-    ? Object.values(checkResults).every(Boolean)
-    : stepStates.every(step => step.state === 'success');
-
-  if (!show) return null;
+  const allChecksPassed = stepStates.every(step => step.state === 'success');
 
   const checkList = checkResults ? [
     { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
@@ -224,6 +158,9 @@ export const UpgradeModal = ({ show, onClose }) => {
     { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
     { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources },
   ] : [];
+
+
+  if (!show) return null;
 
   return (
     <React.Fragment>
@@ -235,7 +172,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               fullWidth
               value={selectedVersion}
               onChange={e => setSelectedVersion(e.target.value)}
-              disabled={areVersionsLoading || upgradeMutation.isPending}
+              disabled={areVersionsLoading || upgradeInProgress}
               displayEmpty
               size="small"
             >
@@ -253,7 +190,6 @@ export const UpgradeModal = ({ show, onClose }) => {
             background: theme.palette.background.paper,
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 1,
-            color: theme.palette.text.primary,
           }}>
             <Typography variant="subtitle1" color="warning.main" fontWeight={600} gutterBottom>
               Pre-Upgrade Checklist
@@ -261,7 +197,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
               The following needs to be cleaned up before upgrading:
             </Typography>
-            <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.primary, fontWeight: 500, fontSize: '1rem' }}>
+            <ul style={{ margin: 0, paddingLeft: 20, fontSize: '1rem' }}>
               {stepStates.map((item) => (
                 <li key={item.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                   {item.state === 'in_progress' && <CircularProgress size={16} sx={{ mr: 1 }} />}
@@ -273,58 +209,27 @@ export const UpgradeModal = ({ show, onClose }) => {
               ))}
             </ul>
           </Box>
+
           {upgradeInProgress && !successMsg && (
-            <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
-              <CircularProgress size={32} />
-              <Typography variant="body2" mt={2}>
-                Upgrading
+            <Box display="flex" alignItems="center" justifyContent="center" my={2} p={2}>
+              <CircularProgress size={24} sx={{ mr: 2 }} />
+              <Typography variant="body1">
+                Upgrading... {progressData?.currentStep && `(${progressData.currentStep})`}
               </Typography>
             </Box>
           )}
+
           {successMsg && (
-            <Box display="flex" alignItems="center" justifyContent="center" mb={2}>
-              <CheckCircleIcon color="success" sx={{ mr: 1 }} />
-              <Typography variant="body2" color="success.main">
+            <Box display="flex" alignItems="center" justifyContent="center" my={2} p={2}>
+              <CheckCircleIcon color="success" sx={{ mr: 1, fontSize: 30 }} />
+              <Typography variant="h6" color="success.main">
                 {successMsg}
               </Typography>
             </Box>
           )}
+
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
-          {upgradeInProgress && progressData && (
-            <Box mb={2} p={2} sx={{ background: theme.palette.background.default, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
-              <Box display="flex" alignItems="center" mb={1}>
-                {progressData.status === 'in_progress' ? (
-                  <PlayArrowIcon color="primary" sx={{ mr: 1 }} />
-                ) : (
-                  <PauseIcon color="action" sx={{ mr: 1 }} />
-                )}
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Upgrade Progress
-                </Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" mb={1}>
-                {progressData.currentStep}
-              </Typography>
-              <LinearProgress 
-                variant="determinate" 
-                value={progressData.progress} 
-                sx={{ mb: 1 }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {Math.round(progressData.progress)}% complete
-              </Typography>
-              {progressData.error && (
-                <Alert severity="error" sx={{ mt: 1 }}>
-                  {progressData.error}
-                </Alert>
-              )}
-            </Box>
-          )}
-          {upgradeMutation.isPending && !upgradeInProgress && (
-            <Box display="flex" justifyContent="center" mb={2}>
-              <CircularProgress size={24} />
-            </Box>
-          )}
+          
           {checkResults && (
             <Box mb={2} p={2} sx={{ background: theme.palette.background.default, borderRadius: 1 }}>
               <Typography variant="subtitle2" color="primary" fontWeight={600} gutterBottom>
@@ -340,44 +245,42 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        <DialogActions sx={{ p: '16px 24px', display: 'flex', gap: 1 }}>
           <Button
             onClick={handleUpgradeClick}
-            disabled={upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
+            disabled={upgradeInProgress || areVersionsLoading || !allChecksPassed || !selectedVersion}
             variant="contained"
             color="primary"
-            sx={{ flex: 1, mr: 1 }}
+            sx={{ flex: 1 }}
           >
             {upgradeInProgress ? 'Upgrading...' : 'Upgrade Now'}
           </Button>
           <Button
             onClick={runStepwiseCleanup}
             variant="contained"
-            color="primary"
-            fullWidth
+            color="secondary"
             disabled={upgradeInProgress}
-            sx={{ flex: 1, mx: 1 }}
+            sx={{ flex: 1 }}
           >
             Run Stepwise Cleanup
           </Button>
           <Button
             onClick={onClose}
             variant="outlined"
-            fullWidth
             disabled={upgradeInProgress}
-            sx={{ flex: 1, ml: 1 }}
+            sx={{ flex: 1 }}
           >
             Cancel
           </Button>
         </DialogActions>
       </Dialog>
-      {/* CR Cleanup Warning Dialog */}
+      
       <Dialog open={showCRWarning} onClose={handleCancelCleanup} maxWidth="sm" fullWidth>
         <DialogTitle>Custom Resources Detected</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              The following Custom Resources must be deleted to proceed with the upgrade. This is a destructive operation and cannot be undone.
+              The following Custom Resources must be deleted to proceed. This is a destructive operation.
             </Typography>
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               {crList.map(cr => (
