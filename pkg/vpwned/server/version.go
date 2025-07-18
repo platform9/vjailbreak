@@ -23,6 +23,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"os/exec"
 )
  
 type DeploymentConfig struct {
@@ -251,6 +252,48 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			upgradeProgress.Error = fmt.Sprintf("Upgrade validation failed: %v", err)
 			return nil, fmt.Errorf("upgrade validation failed: %w", err)
 		}
+
+		cmd := exec.CommandContext(ctx, "kubectl", "delete", "--all", "pods", "-n", "migration-system")
+		if err := cmd.Run(); err != nil {
+			log.Printf("Warning: failed to delete all pods after upgrade: %v", err)
+		}
+		expectedPods := []string{"migration-controller-manager", "migration-vpwned-sdk", "vjailbreak-ui"}
+		timeout := 5 * time.Minute
+		interval := 5 * time.Second
+		start := time.Now()
+		for {
+			allReady := true
+			for _, name := range expectedPods {
+				pods := &corev1.PodList{}
+				if err := kubeClient.List(ctx, pods, client.InNamespace("migration-system"), client.MatchingLabels{"app": name}); err != nil {
+					allReady = false
+					break
+				}
+				foundReady := false
+				for _, pod := range pods.Items {
+					if pod.Status.Phase == corev1.PodRunning {
+						for _, cond := range pod.Status.Conditions {
+							if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+								foundReady = true
+								break
+							}
+						}
+					}
+				}
+				if !foundReady {
+					allReady = false
+					break
+				}
+			}
+			if allReady {
+				break
+			}
+			if time.Since(start) > timeout {
+				return nil, fmt.Errorf("timeout waiting for all pods to be running and ready after upgrade")
+			}
+			time.Sleep(interval)
+		}
+
 		upgradeProgress.CompletedSteps++
 		
 		now := time.Now()

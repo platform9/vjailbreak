@@ -21,6 +21,7 @@ import PauseIcon from '@mui/icons-material/Pause';
 import React from 'react';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { useTheme } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
 
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('');
@@ -28,11 +29,11 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [upgradeInProgress, setUpgradeInProgress] = useState(false);
-  const [upgradeStatus, setUpgradeStatus] = useState<string | null>(null);
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
   const theme = useTheme();
+  const navigate = useNavigate();
 
   const stepKeys = [
     'no_migrationplans',
@@ -128,12 +129,12 @@ export const UpgradeModal = ({ show, onClose }) => {
     const interval = setInterval(async () => {
       try {
         const status = await getUpgradeProgress();
-        setUpgradeStatus(status.status);
         if (status.status === 'completed') {
           clearInterval(interval);
-          setSuccessMsg('Upgrade Complete!');
+          setSuccessMsg('Upgrade completed successfully!');
           setTimeout(() => {
             onClose();
+            navigate('/dashboard/migrations');
             window.location.reload();
           }, 2000);
         } else if (status.status === 'failed') {
@@ -141,7 +142,7 @@ export const UpgradeModal = ({ show, onClose }) => {
           setErrorMsg('Upgrade failed. Please try again.');
           setUpgradeInProgress(false);
         }
-      } catch (e) {
+      } catch {
         clearInterval(interval);
         setErrorMsg('Failed to get upgrade progress.');
         setUpgradeInProgress(false);
@@ -272,16 +273,23 @@ export const UpgradeModal = ({ show, onClose }) => {
               ))}
             </ul>
           </Box>
-          {upgradeInProgress && (
+          {upgradeInProgress && !successMsg && (
             <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
               <CircularProgress size={32} />
               <Typography variant="body2" mt={2}>
-                {upgradeStatus === 'completed' ? 'Upgraded!' : 'Upgrading'}
+                Upgrading
+              </Typography>
+            </Box>
+          )}
+          {successMsg && (
+            <Box display="flex" alignItems="center" justifyContent="center" mb={2}>
+              <CheckCircleIcon color="success" sx={{ mr: 1 }} />
+              <Typography variant="body2" color="success.main">
+                {successMsg}
               </Typography>
             </Box>
           )}
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
-          {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
           {upgradeInProgress && progressData && (
             <Box mb={2} p={2} sx={{ background: theme.palette.background.default, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
               <Box display="flex" alignItems="center" mb={1}>
@@ -332,20 +340,33 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <Button
             onClick={handleUpgradeClick}
             disabled={upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
             variant="contained"
             color="primary"
-            fullWidth
+            sx={{ flex: 1, mr: 1 }}
           >
             {upgradeInProgress ? 'Upgrading...' : 'Upgrade Now'}
           </Button>
-          <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
+          <Button
+            onClick={runStepwiseCleanup}
+            variant="contained"
+            color="primary"
+            fullWidth
+            disabled={upgradeInProgress}
+            sx={{ flex: 1, mx: 1 }}
+          >
             Run Stepwise Cleanup
           </Button>
-          <Button onClick={onClose} variant="outlined" fullWidth disabled={upgradeInProgress}>
+          <Button
+            onClick={onClose}
+            variant="outlined"
+            fullWidth
+            disabled={upgradeInProgress}
+            sx={{ flex: 1, ml: 1 }}
+          >
             Cancel
           </Button>
         </DialogActions>
