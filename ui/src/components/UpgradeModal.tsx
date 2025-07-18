@@ -186,7 +186,7 @@ export const UpgradeModal = ({ show, onClose }) => {
 
   const allChecksPassed = checkResults
     ? Object.values(checkResults).every(Boolean)
-    : false;
+    : stepStates.every(step => step.state === 'success');
 
   if (!show) return null;
 
@@ -216,7 +216,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               <MenuItem value="">
                 {areVersionsLoading ? 'Loading versions...' : 'Select a version...'}
               </MenuItem>
-              {Array.isArray(updates) && updates.map(update => (
+              {Array.isArray(updates?.updates) && updates.updates.map(update => (
                 <MenuItem key={update.version} value={update.version}>
                   {update.version}
                 </MenuItem>

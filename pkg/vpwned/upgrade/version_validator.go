@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"gopkg.in/yaml.v2"
     "k8s.io/client-go/rest"
+    "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
  
 type ValidationResult struct {
@@ -205,6 +206,8 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	log.Println("Starting backup of CRDs, ConfigMaps, Deployments, and CRs")
 
 	backup := make(map[string]string)
+	totalSize := 0
+	const maxConfigMapSize = 1000000
 
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 	if err := kubeClient.List(ctx, crdList); err == nil {
@@ -212,7 +215,15 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 			if strings.Contains(crd.Spec.Group, "vjailbreak") {
 				crdYaml, err := yaml.Marshal(crd)
 				if err == nil {
-					backup["crd:"+crd.Name] = base64.StdEncoding.EncodeToString(crdYaml)
+					key := "crd-" + strings.ReplaceAll(crd.Name, ":", "-")
+					value := base64.StdEncoding.EncodeToString(crdYaml)
+					if totalSize+len(key)+len(value) > maxConfigMapSize {
+						log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRDs")
+						break
+					}
+					
+					backup[key] = value
+					totalSize += len(key) + len(value)
 				}
 			}
 		}
@@ -223,7 +234,15 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 		for _, cm := range cmList.Items {
 			cmYaml, err := yaml.Marshal(cm)
 			if err == nil {
-				backup["configmap:"+cm.Name] = base64.StdEncoding.EncodeToString(cmYaml)
+				key := "configmap-" + strings.ReplaceAll(cm.Name, ":", "-")
+				value := base64.StdEncoding.EncodeToString(cmYaml)
+				if totalSize+len(key)+len(value) > maxConfigMapSize {
+					log.Printf("Warning: ConfigMap size limit reached, skipping remaining ConfigMaps")
+					break
+				}
+				
+				backup[key] = value
+				totalSize += len(key) + len(value)
 			}
 		}
 	}
@@ -233,7 +252,15 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 		for _, dep := range depList.Items {
 			depYaml, err := yaml.Marshal(dep)
 			if err == nil {
-				backup["deployment:"+dep.Name] = base64.StdEncoding.EncodeToString(depYaml)
+				key := "deployment-" + strings.ReplaceAll(dep.Name, ":", "-")
+				value := base64.StdEncoding.EncodeToString(depYaml)
+				if totalSize+len(key)+len(value) > maxConfigMapSize {
+					log.Printf("Warning: ConfigMap size limit reached, skipping remaining Deployments")
+					break
+				}
+				
+				backup[key] = value
+				totalSize += len(key) + len(value)
 			}
 		}
 	}
@@ -257,7 +284,15 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 			for _, item := range unstructuredList.Items {
 				crYaml, err := yaml.Marshal(item.Object)
 				if err == nil {
-					backup["cr:"+crInfo.Kind+":"+item.GetName()] = base64.StdEncoding.EncodeToString(crYaml)
+					key := "cr-" + strings.ReplaceAll(crInfo.Kind, ":", "-") + "-" + strings.ReplaceAll(item.GetName(), ":", "-")
+					value := base64.StdEncoding.EncodeToString(crYaml)
+					if totalSize+len(key)+len(value) > maxConfigMapSize {
+						log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRs")
+						break
+					}
+					
+					backup[key] = value
+					totalSize += len(key) + len(value)
 				}
 			}
 		}
@@ -274,7 +309,7 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	if err := kubeClient.Create(ctx, backupCM); err != nil {
 		return fmt.Errorf("failed to create backup ConfigMap: %w", err)
 	}
-	log.Println("Backup completed and stored in ConfigMap vjailbreak-upgrade-backup.")
+	log.Printf("Backup completed and stored in ConfigMap vjailbreak-upgrade-backup. Total size: %d bytes", totalSize)
 	return nil
 }
 
@@ -290,23 +325,33 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 			log.Printf("Failed to decode backup for %s: %v", key, err)
 			continue
 		}
-		if strings.HasPrefix(key, "crd:") {
+		if strings.HasPrefix(key, "crd-") {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
 			if err := yaml.Unmarshal(data, crd); err == nil {
 				_ = kubeClient.Delete(ctx, crd) 
 				_ = kubeClient.Create(ctx, crd)
 			}
-		} else if strings.HasPrefix(key, "configmap:") {
+		} else if strings.HasPrefix(key, "configmap-") {
 			cm := &corev1.ConfigMap{}
 			if err := yaml.Unmarshal(data, cm); err == nil {
 				_ = kubeClient.Delete(ctx, cm)
 				_ = kubeClient.Create(ctx, cm)
 			}
-		} else if strings.HasPrefix(key, "deployment:") {
+		} else if strings.HasPrefix(key, "deployment-") {
 			dep := &appsv1.Deployment{}
 			if err := yaml.Unmarshal(data, dep); err == nil {
 				_ = kubeClient.Delete(ctx, dep)
 				_ = kubeClient.Create(ctx, dep)
+			}
+		} else if strings.HasPrefix(key, "cr-") {
+			var obj map[string]interface{}
+			if err := yaml.Unmarshal(data, &obj); err == nil {
+				// Try to restore as unstructured object
+				unstructured := &unstructured.Unstructured{}
+				if err := yaml.Unmarshal(data, unstructured); err == nil {
+					_ = kubeClient.Delete(ctx, unstructured)
+					_ = kubeClient.Create(ctx, unstructured)
+				}
 			}
 		}
 	}

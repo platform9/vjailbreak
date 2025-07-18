@@ -24,7 +24,9 @@ export interface ReleaseInfo {
   releaseNotes: string;
 }
 
-export type AvailableUpdates = ReleaseInfo[];
+export interface AvailableUpdates {
+  updates: ReleaseInfo[];
+}
 
 export interface ValidationResult {
     agentsScaledDown: boolean;
