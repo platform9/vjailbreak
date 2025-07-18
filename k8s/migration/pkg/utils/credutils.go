@@ -407,13 +407,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, fmt.Errorf("authentication failed: %w. Please verify your OpenStack credentials", err)
 		}
 	}
-	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient)
-	if err != nil {
-		if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
-	}
 	return providerClient, nil
 }
 
@@ -928,6 +921,17 @@ func AppendUnique(slice []string, values ...string) []string {
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
 	var wg sync.WaitGroup
+
+	// Create a thread-safe error collection
+	type vmError struct {
+		vmName string
+		err    error
+	}
+	errMu := sync.Mutex{}
+	vmErrors := []vmError{}
+	panicMu := sync.Mutex{}
+	panicErrors := []interface{}{}
+
 	for i := range vminfo {
 		wg.Add(1)
 		go func(i int) {
@@ -935,18 +939,43 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 			// Don't panic on error
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("Panic: %v\n", r)
+					panicMu.Lock()
+					panicErrors = append(panicErrors, r)
+					panicMu.Unlock()
 				}
 			}()
 			vm := &vminfo[i] // Use a pointer
 			err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
 			if err != nil {
-				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name, err: err})
+				errMu.Unlock()
 			}
 		}(i)
 	}
+
 	// Wait for all vms to be created or updated
 	wg.Wait()
+
+	// Print all errors at the end
+	if len(panicErrors) > 0 {
+		fmt.Printf("\nEncountered %d panic(s):\n", len(panicErrors))
+		for _, p := range panicErrors {
+			fmt.Printf("Panic: %v\n", p)
+		}
+	}
+
+	if len(vmErrors) > 0 {
+		fmt.Printf("\nEncountered %d error(s):\n", len(vmErrors))
+		for _, e := range vmErrors {
+			fmt.Printf("Error creating or updating VM '%s': %v\n", e.vmName, e.err)
+		}
+	}
+
+	if len(vmErrors) > 0 || len(panicErrors) > 0 {
+		return fmt.Errorf("encountered %d error(s) and %d panic(s) while processing %d VMs",
+			len(vmErrors), len(panicErrors), len(vminfo))
+	}
 	return nil
 }
 
@@ -998,6 +1027,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				VMInfo: *vminfo,
 			},
 		}
+		// Create the new object
+		if err := client.Create(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to create VMwareMachine: %w", err)
+		}
 		init = true
 	} else {
 		// Initialize labels map if needed
@@ -1048,12 +1081,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				return fmt.Errorf("failed to update VMwareMachine: %w", err)
 			}
 		}
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
 	}
 
 	// Assumption is if init is true, the object is new and it is not migrated hence mark migrated to false.
