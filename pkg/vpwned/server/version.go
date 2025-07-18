@@ -201,11 +201,21 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 	if checks.PassedAll {
 		log.Printf("All checks passed. Starting upgrade to version: %s", in.TargetVersion)
-		
+
+		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
+		if err := applyAllCRDs(ctx, kubeClient); err != nil {
+			upgradeProgress.Status = "failed"
+			upgradeProgress.Error = fmt.Sprintf("CRD update failed: %v", err)
+			return nil, fmt.Errorf("CRD update failed: %w", err)
+		}
+		upgradeProgress.CompletedSteps++
+
+		if err := updateVersionConfigMap(ctx, kubeClient, in.TargetVersion); err != nil {
+			log.Printf("Warning: Failed to update version-config ConfigMap: %v", err)
+		}
+
 		upgradeProgress.CurrentStep = "Updating deployment images"
-		
 		originalImages := make(map[string]string)
-		
 		for _, depConfig := range deploymentConfigs {
 			upgradeProgress.CurrentStep = fmt.Sprintf("Updating %s deployment", depConfig.Name)
 			
@@ -230,19 +240,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			
 			upgradeProgress.CompletedSteps++
 		}
-		
-		if err := updateVersionConfigMap(ctx, kubeClient, in.TargetVersion); err != nil {
-			log.Printf("Warning: Failed to update version-config ConfigMap: %v", err)
-		}
 
-		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
-		if err := applyAllCRDs(ctx, kubeClient); err != nil {
-			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = fmt.Sprintf("CRD update failed: %v", err)
-			return nil, fmt.Errorf("CRD update failed: %w", err)
-		}
-		upgradeProgress.CompletedSteps++
-		
 		upgradeProgress.CurrentStep = "Validating upgrade"
 		if err := validateUpgrade(ctx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
