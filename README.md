@@ -154,7 +154,23 @@ For information about alternative licensing arrangements, contact info@platform9
    - Copy to `/home/ubuntu` on the vJailbreak VM
    - Untar to create `vmware-vix-disklib-distrib` in `/home/ubuntu`
 
-4. **Launch vJailbreak**:
+4. **Configure DNS Resolution**:
+   - Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly
+   
+   - **Static Entries**: Adding entries to `/etc/hosts` will apply changes immediately
+     ```bash
+     # Example /etc/hosts entry
+     192.168.1.100 vcenter.example.com
+     192.168.2.100 openstack.example.com
+     ```
+
+   - **DNS Configuration**: If modifying `/etc/resolv.conf`, you must restart the controller pod for changes to take effect
+     ```bash
+     # After modifying resolv.conf
+     kubectl -n vjailbreak rollout restart deployment migration-controller-manager
+     ```
+
+5. **Launch vJailbreak**:
    - Connect to the vJailbreak UI using the VM's IP address
    - Provide VMware vCenter and OpenStack credentials
    - Begin migrating VMs

@@ -543,6 +543,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						ServiceAccountName:            "migration-controller-manager",
 						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 						HostNetwork:                   true,
+						DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 						Containers: []corev1.Container{
 							{
 								Name:            "fedora",
