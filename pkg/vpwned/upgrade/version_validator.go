@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v2"
     "k8s.io/client-go/rest"
     "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+    "io/ioutil"
+    "net/http"
 )
  
 type ValidationResult struct {
@@ -477,5 +479,87 @@ func deleteCRInstances(ctx context.Context, kubeClient client.Client, restConfig
 		log.Printf("Deleted %d %s CRs", len(unstructuredList.Items), crInfo.Kind)
 	}
 	
+	return nil
+}
+
+func fetchCRDsFromGitHub(tag string) ([]byte, error) {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/00crds.yaml", tag)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch CRDs: %s", resp.Status)
+	}
+	return ioutil.ReadAll(resp.Body)
+}
+
+func applyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
+    data, err := fetchCRDsFromGitHub(tag)
+    if err != nil {
+        return err
+    }
+    docs := strings.Split(string(data), "---")
+    for _, doc := range docs {
+        doc = strings.TrimSpace(doc)
+        if doc == "" {
+            continue
+        }
+        var crd apiextensionsv1.CustomResourceDefinition
+        if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
+            err := kubeClient.Create(ctx, &crd)
+            if err != nil {
+                if kerrors.IsAlreadyExists(err) {
+                    existing := &apiextensionsv1.CustomResourceDefinition{}
+                    if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {
+                        return err
+                    }
+                    existing.Spec = crd.Spec
+                    if err := kubeClient.Update(ctx, existing); err != nil {
+                        return err
+                    }
+                    log.Printf("Updated CRD: %s", crd.Name)
+                } else {
+                    return err
+                }
+            } else {
+                log.Printf("Created CRD: %s", crd.Name)
+            }
+        }
+    }
+    return nil
+}
+
+func fetchVersionConfigFromGitHub(tag string) ([]byte, error) {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/image_builder/configs/version-config.yaml", tag)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch version-config: %s", resp.Status)
+	}
+	return ioutil.ReadAll(resp.Body)
+}
+
+func updateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Client, tag string) error {
+	data, err := fetchVersionConfigFromGitHub(tag)
+	if err != nil {
+		return err
+	}
+	cm := &corev1.ConfigMap{}
+	if err := yaml.Unmarshal(data, cm); err != nil {
+		return err
+	}
+	cm.Namespace = "migration-system"
+	cm.Name = "version-config"
+	if err := kubeClient.Update(ctx, cm); err != nil {
+		if kerrors.IsNotFound(err) {
+			return kubeClient.Create(ctx, cm)
+		}
+		return err
+	}
 	return nil
 }

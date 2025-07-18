@@ -210,8 +210,8 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		}
 		upgradeProgress.CompletedSteps++
 
-		if err := updateVersionConfigMap(ctx, kubeClient, in.TargetVersion); err != nil {
-			log.Printf("Warning: Failed to update version-config ConfigMap: %v", err)
+		if err := upgrade.UpdateVersionConfigMapFromGitHub(ctx, kubeClient, in.TargetVersion); err != nil {
+			log.Printf("Warning: Failed to update version-config ConfigMap from GitHub: %v", err)
 		}
 
 		upgradeProgress.CurrentStep = "Updating deployment images"
@@ -730,17 +730,4 @@ func applyAllCRDs(ctx context.Context, kubeClient client.Client) error {
         }
     }
     return nil
-}
-
-func updateVersionConfigMap(ctx context.Context, kubeClient client.Client, version string) error {
-	cm := &corev1.ConfigMap{}
-	err := kubeClient.Get(ctx, types.NamespacedName{Name: "version-config", Namespace: "migration-system"}, cm)
-	if err != nil {
-		return err
-	}
-	if cm.Data == nil {
-		cm.Data = make(map[string]string)
-	}
-	cm.Data["version"] = version
-	return kubeClient.Update(ctx, cm)
 }
