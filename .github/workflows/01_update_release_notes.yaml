@@ -1,5 +1,8 @@
 name: Update Release Notes on Release Event
 
+env:
+  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
+
 on:
   release:
     types: [published]
@@ -28,7 +31,38 @@ on:
         type: text
 
 jobs:
+  check-quay-image:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      - name: Set Tag for Release Event
+        if: github.event_name == 'release'
+        id: set_release_tag
+        run: echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for Manual Trigger
+        if: github.event_name == 'workflow_dispatch'
+        id: set_manual_tag
+        run: echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Get Tag
+        id: get_tag
+        run: echo "tag=${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y skopeo
+
+      - name: Check if vJailbreak QCOW image exists
+        run: |
+          RELEASE_TAG="${{ steps.get_tag.outputs.tag }}"
+          IMAGE="${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+          echo "Checking if vJailbreak image exists on registry for tag: $RELEASE_TAG"
+          skopeo inspect docker://$IMAGE || (echo "::error::vJailbreak image not found on registry for tag: $RELEASE_TAG" && exit 1)
+          echo "vJailbreak image is available on registry for tag: $RELEASE_TAG"
+
   update-release-notes:
+    needs: check-quay-image
     permissions:
       contents: write
       pull-requests: write
@@ -46,20 +80,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh jq
 
-      - name: Set Tag for Release Event
-        if: github.event_name == 'release'
-        id: set_release_tag
-        run: echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-
-      - name: Set Tag for Manual Trigger
-        if: github.event_name == 'workflow_dispatch'
-        id: set_manual_tag
-        run: echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+      - name: Set Tag from Previous Job
+        id: set_tag
+        run: echo "tag=${{ needs.check-quay-image.outputs.tag }}" >> $GITHUB_OUTPUT
 
       - name: Generate Notes for New Release
         id: process_release
         run: |
-          RELEASE_TAG="${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag }}"
+          RELEASE_TAG="${{ steps.set_tag.outputs.tag }}"
           
           echo ">>> Processing new release: $RELEASE_TAG"
 
