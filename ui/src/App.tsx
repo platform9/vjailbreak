@@ -15,6 +15,8 @@ import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
 import { useNodesQuery } from "./hooks/api/useNodesQuery"
+import { useVersionQuery } from "./hooks/api/useVersionQuery";
+import { shouldShowOnboarding } from "./utils/onboarding";
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -44,16 +46,16 @@ function App() {
 
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()
+  const { data: versionInfo } = useVersionQuery();
+  const upgradeAvailable = versionInfo?.upgradeAvailable;
 
   useEffect(() => {
-    if (!migrations || !nodes) {
-      return
-    } else if (migrations.length === 0 && nodes.length === 0) {
-      navigate("/onboarding")
+    if (shouldShowOnboarding(migrations, nodes, upgradeAvailable)) {
+      navigate("/onboarding");
     } else if (location.pathname === "/") {
-      navigate("/dashboard/migrations")
+      navigate("/dashboard/migrations");
     }
-  }, [migrations, nodes, navigate, location.pathname])
+  }, [migrations, nodes, upgradeAvailable, navigate, location.pathname]);
 
   const hideAppbar =
     location.pathname === "/onboarding" || location.pathname === "/"

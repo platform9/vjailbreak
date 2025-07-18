@@ -23,6 +23,8 @@ import RollingMigrationsTable from "./RollingMigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNodesQuery } from "../../hooks/api/useNodesQuery"
 import { useClusterMigrationsQuery } from "../../hooks/api/useClusterMigrationsQuery"
+import { useVersionQuery } from "src/hooks/api/useVersionQuery";
+import { shouldShowOnboarding } from "src/utils/onboarding";
 
 
 const DashboardContainer = styled("div")({
@@ -79,6 +81,10 @@ export default function Dashboard() {
     staleTime: 0,
     refetchOnMount: true
   })
+
+  const { data: versionInfo } = useVersionQuery();
+  const upgradeAvailable = versionInfo?.upgradeAvailable;
+  const { data: nodes } = useNodesQuery();
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -235,13 +241,11 @@ export default function Dashboard() {
     return baseMessage
   }
 
-  const { data: nodes } = useNodesQuery()
-
   useEffect(() => {
-    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
-      navigate("/onboarding")
+    if (shouldShowOnboarding(migrations, nodes, upgradeAvailable)) {
+      navigate("/onboarding");
     }
-  }, [migrations, navigate])
+  }, [migrations, nodes, upgradeAvailable, navigate]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
