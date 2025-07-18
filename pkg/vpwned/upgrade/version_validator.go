@@ -495,7 +495,7 @@ func fetchCRDsFromGitHub(tag string) ([]byte, error) {
 	return ioutil.ReadAll(resp.Body)
 }
 
-func applyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
+func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
     data, err := fetchCRDsFromGitHub(tag)
     if err != nil {
         return err
@@ -544,7 +544,7 @@ func fetchVersionConfigFromGitHub(tag string) ([]byte, error) {
 	return ioutil.ReadAll(resp.Body)
 }
 
-func updateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Client, tag string) error {
+func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Client, tag string) error {
 	data, err := fetchVersionConfigFromGitHub(tag)
 	if err != nil {
 		return err
