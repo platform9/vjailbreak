@@ -118,6 +118,7 @@ For information about alternative licensing arrangements, contact info@platform9
   - Access to vCenter, ESXi, and OpenStack API endpoints
   - Access to download virtio drivers and other components
   - ICMP (ping) access for connectivity verification
+  - **DNS Resolution**: Ensure that DNS resolution for vCenter, all ESXi hosts and OpenStack endpoints is properly configured. DNS for ESXi hosts is specifically required during the VM copy phase and migration may fail without it.
 
 - **Supported OS**:
   - All operating systems supported by virt-v2v
@@ -162,6 +163,10 @@ For information about alternative licensing arrangements, contact info@platform9
      # Example /etc/hosts entry
      192.168.1.100 vcenter.example.com
      192.168.2.100 openstack.example.com
+     
+     # ESXi hosts entries (required for VM copy phase)
+     192.168.1.101 esxi01.example.com esxi01
+     192.168.1.102 esxi02.example.com esxi02
      ```
 
    - **DNS Configuration**: If modifying `/etc/resolv.conf`, you must restart the controller pod for changes to take effect
