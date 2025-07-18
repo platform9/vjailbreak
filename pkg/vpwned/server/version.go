@@ -255,14 +255,14 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		upgradeProgress.CompletedSteps++
 		
 		log.Println("Deleting all pods post-upgrade to force fresh start")
-		if err := deleteAllPodsInMigrationSystem(); err != nil {
+		if err := deleteAllPodsInMigrationSystem(ctx, kubeClient); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("Post-upgrade pod cleanup failed: %v", err)
 			return nil, err
 		}
 
 		log.Println("Waiting for all pods to restart and reach Running state")
-		if err := waitForAllPodsRunning(ctx, kubeClient, 3); err != nil {
+		if err := waitForAllPodsReady(ctx, kubeClient, 3); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("Pods failed to recover: %v", err)
 			return nil, err
@@ -700,18 +700,25 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	return fmt.Errorf("deployment %s not ready within timeout", depConfig.Name)
 }
 
-func deleteAllPodsInMigrationSystem() error {
-    cmd := exec.Command("kubectl", "delete", "--all", "pods", "-n", "migration-system", "--grace-period=0", "--force")
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        log.Printf("Error deleting all pods: %v, output: %s", err, string(output))
-        return fmt.Errorf("failed to delete pods: %w", err)
+func deleteAllPodsInMigrationSystem(ctx context.Context, kubeClient client.Client) error {
+    pods := &corev1.PodList{}
+    if err := kubeClient.List(ctx, pods, client.InNamespace("migration-system")); err != nil {
+        return fmt.Errorf("failed to list pods: %w", err)
     }
-    log.Println("All pods in migration-system namespace deleted successfully.")
+
+    for _, pod := range pods.Items {
+        err := kubeClient.Delete(ctx, &pod, client.PropagationPolicy(metav1.DeletePropagationForeground))
+        if err != nil {
+            log.Printf("Warning: failed to delete pod %s: %v", pod.Name, err)
+        } else {
+            log.Printf("Deleted pod %s", pod.Name)
+        }
+    }
+
     return nil
 }
 
-func waitForAllPodsRunning(ctx context.Context, kubeClient client.Client, expectedCount int) error {
+func waitForAllPodsReady(ctx context.Context, kubeClient client.Client, expectedCount int) error {
     timeout := 5 * time.Minute
     interval := 10 * time.Second
 
@@ -724,21 +731,26 @@ func waitForAllPodsRunning(ctx context.Context, kubeClient client.Client, expect
             continue
         }
 
-        running := 0
+        ready := 0
         for _, pod := range podList.Items {
             if pod.Status.Phase == corev1.PodRunning {
-                running++
+                for _, cond := range pod.Status.Conditions {
+                    if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+                        ready++
+                        break
+                    }
+                }
             }
         }
 
-        if running >= expectedCount {
-            log.Printf("All %d pods are in Running state.", running)
+        if ready >= expectedCount {
+            log.Printf("All %d pods are running and ready.", ready)
             return nil
         }
 
-        log.Printf("Waiting for pods to become running. Currently running: %d", running)
+        log.Printf("Waiting for pods to become running and ready. Currently ready: %d", ready)
         time.Sleep(interval)
     }
 
-    return fmt.Errorf("timed out waiting for pods to be running")
+    return fmt.Errorf("timed out waiting for pods to be running and ready")
 }

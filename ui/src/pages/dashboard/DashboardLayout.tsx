@@ -1,13 +1,7 @@
 import { Paper, styled } from "@mui/material"
 import { Outlet, Navigate, useLocation } from "react-router-dom"
-import { useEffect } from "react"
-import { useNavigate } from "react-router-dom"
-import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
-import { useNodesQuery } from "src/hooks/api/useNodesQuery"
 import Sidenav from "src/components/Sidenav"
 import { navigationItems } from "src/config/navigation"
-import { useVersionQuery } from "src/hooks/api/useVersionQuery";
-import { shouldShowOnboarding } from "src/utils/onboarding";
 
 const DashboardContainer = styled("div")({
   display: "flex",
@@ -45,19 +39,7 @@ const StyledPaper = styled(Paper)({
 })
 
 export default function DashboardLayout() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const { data: migrations } = useMigrationsQuery()
-  const { data: nodes } = useNodesQuery()
-  const { data: versionInfo } = useVersionQuery();
-  const upgradeAvailable = versionInfo?.upgradeAvailable;
-
-  useEffect(() => {
-    if (shouldShowOnboarding(migrations, nodes, upgradeAvailable)) {
-      navigate("/onboarding");
-    }
-  }, [migrations, nodes, upgradeAvailable, navigate]);
-
   // Handle redirect from old /dashboard route to default page  
   if (location.pathname === '/dashboard') {
     return <Navigate to="/dashboard/migrations" replace />
