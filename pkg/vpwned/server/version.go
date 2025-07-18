@@ -203,7 +203,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		log.Printf("All checks passed. Starting upgrade to version: %s", in.TargetVersion)
 
 		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
-		if err := applyAllCRDs(ctx, kubeClient); err != nil {
+		if err := upgrade.ApplyAllCRDs(ctx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("CRD update failed: %v", err)
 			return nil, fmt.Errorf("CRD update failed: %w", err)
@@ -696,38 +696,3 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	return fmt.Errorf("deployment %s not ready within timeout", depConfig.Name)
 }
 
-func applyAllCRDs(ctx context.Context, kubeClient client.Client) error {
-    data, err := ioutil.ReadFile("deploy/00crds.yaml")
-    if err != nil {
-        return err
-    }
-    docs := strings.Split(string(data), "---")
-    for _, doc := range docs {
-        doc = strings.TrimSpace(doc)
-        if doc == "" {
-            continue
-        }
-        var crd apiextensionsv1.CustomResourceDefinition
-        if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
-            err := kubeClient.Create(ctx, &crd)
-            if err != nil {
-                if kerrors.IsAlreadyExists(err) {
-                    existing := &apiextensionsv1.CustomResourceDefinition{}
-                    if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {
-                        return err
-                    }
-                    existing.Spec = crd.Spec
-                    if err := kubeClient.Update(ctx, existing); err != nil {
-                        return err
-                    }
-                    log.Printf("Updated CRD: %s", crd.Name)
-                } else {
-                    return err
-                }
-            } else {
-                log.Printf("Created CRD: %s", crd.Name)
-            }
-        }
-    }
-    return nil
-}
