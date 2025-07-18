@@ -549,8 +549,9 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 	if err != nil {
 		return err
 	}
+	rendered := strings.ReplaceAll(string(data), "${TAG}", tag)
 	cm := &corev1.ConfigMap{}
-	if err := yaml.Unmarshal(data, cm); err != nil {
+	if err := yaml.Unmarshal([]byte(rendered), cm); err != nil {
 		return err
 	}
 	cm.Namespace = "migration-system"

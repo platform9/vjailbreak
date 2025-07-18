@@ -28,6 +28,7 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [upgradeInProgress, setUpgradeInProgress] = useState(false);
+  const [upgradeStatus, setUpgradeStatus] = useState<string | null>(null);
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
@@ -112,7 +113,6 @@ export const UpgradeModal = ({ show, onClose }) => {
         }
       };
       
-      // Poll immediately, then every 5 seconds
       pollProgress();
       interval = setInterval(pollProgress, 5000);
     }
@@ -124,18 +124,43 @@ export const UpgradeModal = ({ show, onClose }) => {
     };
   }, [upgradeInProgress, onClose]);
 
-  const handleUpgradeClick = () => {
-    setErrorMsg('');
-    setSuccessMsg('');
-    setCheckResults(null);
-    if (!selectedVersion) {
-      setErrorMsg('Please select a version to upgrade to.');
-      return;
-    }
-    upgradeMutation.mutate();
+  const pollUpgradeProgress = () => {
+    const interval = setInterval(async () => {
+      try {
+        const status = await getUpgradeProgress();
+        setUpgradeStatus(status.status);
+        if (status.status === 'completed') {
+          clearInterval(interval);
+          setSuccessMsg('Upgrade Complete!');
+          setTimeout(() => {
+            onClose();
+            window.location.reload();
+          }, 2000);
+        } else if (status.status === 'failed') {
+          clearInterval(interval);
+          setErrorMsg('Upgrade failed. Please try again.');
+          setUpgradeInProgress(false);
+        }
+      } catch (e) {
+        clearInterval(interval);
+        setErrorMsg('Failed to get upgrade progress.');
+        setUpgradeInProgress(false);
+      }
+    }, 3000);
   };
 
-  // Handler for confirming CR cleanup
+  const handleUpgradeClick = () => {
+    setUpgradeInProgress(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    initiateUpgrade(selectedVersion, false).then(() => {
+      pollUpgradeProgress();
+    }).catch(() => {
+      setErrorMsg('Upgrade failed to start.');
+      setUpgradeInProgress(false);
+    });
+  };
+
   const handleConfirmCleanup = async () => {
     setShowCRWarning(false);
     setErrorMsg('');
@@ -201,7 +226,7 @@ export const UpgradeModal = ({ show, onClose }) => {
 
   return (
     <React.Fragment>
-      <Dialog open={show} onClose={onClose} maxWidth="xs" fullWidth>
+      <Dialog open={show} onClose={upgradeInProgress ? undefined : onClose} maxWidth="xs" fullWidth>
         <DialogTitle>Upgrade vJailbreak</DialogTitle>
         <DialogContent>
           <Box mb={2}>
@@ -247,6 +272,14 @@ export const UpgradeModal = ({ show, onClose }) => {
               ))}
             </ul>
           </Box>
+          {upgradeInProgress && (
+            <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
+              <CircularProgress size={32} />
+              <Typography variant="body2" mt={2}>
+                {upgradeStatus === 'completed' ? 'Upgraded!' : 'Upgrading'}
+              </Typography>
+            </Box>
+          )}
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
           {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
           {upgradeInProgress && progressData && (
@@ -302,17 +335,17 @@ export const UpgradeModal = ({ show, onClose }) => {
         <DialogActions>
           <Button
             onClick={handleUpgradeClick}
-            disabled={upgradeMutation.isPending || areVersionsLoading || upgradeInProgress || !allChecksPassed}
+            disabled={upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
             variant="contained"
             color="primary"
             fullWidth
           >
-            {upgradeMutation.isPending ? 'Initiating...' : upgradeInProgress ? 'Upgrade in Progress...' : 'Upgrade Now'}
+            {upgradeInProgress ? 'Upgrading...' : 'Upgrade Now'}
           </Button>
-          <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth>
+          <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
             Run Stepwise Cleanup
           </Button>
-          <Button onClick={onClose} variant="outlined" fullWidth>
+          <Button onClick={onClose} variant="outlined" fullWidth disabled={upgradeInProgress}>
             Cancel
           </Button>
         </DialogActions>

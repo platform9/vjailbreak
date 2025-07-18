@@ -235,6 +235,13 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				return nil, fmt.Errorf("failed to update %s: %w", depConfig.Name, err)
 			}
 			
+			if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
+				log.Printf("Failed to wait for %s readiness after update: %v", depConfig.Name, err)
+				upgradeProgress.Status = "failed"
+				upgradeProgress.Error = fmt.Sprintf("Failed to wait for %s readiness after update: %v", depConfig.Name, err)
+				return nil, fmt.Errorf("failed to wait for %s readiness after update: %w", depConfig.Name, err)
+			}
+
 			upgradeProgress.CompletedSteps++
 		}
 
@@ -601,25 +608,17 @@ func getCurrentDeploymentImage(ctx context.Context, kubeClient client.Client, de
 }
 
 func updateDeploymentImage(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig, newImage string) error {
-    // Get the deployment
     dep := &appsv1.Deployment{}
     err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep)
     if err != nil {
         return fmt.Errorf("failed to get deployment: %w", err)
     }
 
-    // Scale down
-    var zero int32 = 0
-    dep.Spec.Replicas = &zero
-    if err := kubeClient.Update(ctx, dep); err != nil {
-        return fmt.Errorf("failed to scale down deployment: %w", err)
-    }
-
-    // Patch the image
     found := false
     for i, c := range dep.Spec.Template.Spec.Containers {
         if c.Name == depConfig.ContainerName {
             dep.Spec.Template.Spec.Containers[i].Image = newImage
+            dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways
             found = true
             break
         }
@@ -629,13 +628,6 @@ func updateDeploymentImage(ctx context.Context, kubeClient client.Client, depCon
     }
     if err := kubeClient.Update(ctx, dep); err != nil {
         return fmt.Errorf("failed to update deployment image: %w", err)
-    }
-
-    // Scale up
-    var one int32 = 1
-    dep.Spec.Replicas = &one
-    if err := kubeClient.Update(ctx, dep); err != nil {
-        return fmt.Errorf("failed to scale up deployment: %w", err)
     }
 
     return nil
