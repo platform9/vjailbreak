@@ -69,12 +69,18 @@ VMware VDDK library is required for vJailbreak to interact with the VMware envir
 ### Configure DNS Resolution
 Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly. You can either configure this during VM creation with cloud-init (as shown above) or modify the configuration after VM deployment.
 
+**Important:** DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
+
 
 - **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually. Changes to `/etc/hosts` apply immediately.
   ```shell
   # Example manual addition to /etc/hosts
   sudo sh -c 'echo "192.168.1.100 vcenter.example.com" >> /etc/hosts'
   sudo sh -c 'echo "192.168.2.100 openstack.example.com" >> /etc/hosts'
+  
+  # ESXi hosts entries (required for VM copy phase)
+  sudo sh -c 'echo "192.168.1.101 esxi01.example.com esxi01" >> /etc/hosts'
+  sudo sh -c 'echo "192.168.1.102 esxi02.example.com esxi02" >> /etc/hosts'
   ```
 
 - **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, you must restart the controller pod for changes to take effect
