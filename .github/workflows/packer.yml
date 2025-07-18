@@ -21,11 +21,12 @@ on:
 
 env:
   PACKER_VERSION: "latest"
-  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
-  UI_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-ui
-  V2V_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-v2v-helper
-  CONTROLLER_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-controller
-  VPWNED_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak-vpwned
+  QCOW2_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak
+  UI_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-ui
+  V2V_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
+  CONTROLLER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-controller
+  VPWNED_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-vpwned
+
 
 jobs:
   determine-release:
@@ -247,7 +248,8 @@ jobs:
       (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
       (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
-      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped')
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     
     steps:
       - name: Checkout repository
@@ -333,7 +335,7 @@ jobs:
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
       (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
       (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') && 
-      (needs.push-images.result == 'success' || needs.push-images.result == 'skipped')
+      (needs.push-images.result == 'success')
 
     steps:
 
