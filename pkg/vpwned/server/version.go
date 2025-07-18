@@ -6,7 +6,6 @@ import (
 	"log"
 	"strings"
 	"time"
-	"os/exec"
 
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/upgrade"
