@@ -23,6 +23,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/util/retry"
+
 )
  
 type DeploymentConfig struct {
@@ -222,147 +224,60 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 		log.Printf("Upgrade to version %s completed successfully", in.TargetVersion)
 		
-		// Phase 3: Start deployment updates in background
 		go func() {
-			// Wait a bit for UI to show completion
+			ctx := context.Background() 
+
 			time.Sleep(2 * time.Second)
-			
-			// Update progress to show deployment phase
+
 			upgradeProgress.Status = "deploying"
 			upgradeProgress.CurrentStep = "Loading new deployments"
-			// Keep the completed steps from Phase 1, add deployment steps
 			upgradeProgress.TotalSteps = upgradeProgress.CompletedSteps + len(deploymentConfigs)
-			
-			// Patch all deployment images first
-			originalImages := make(map[string]string)
+
 			for _, depConfig := range deploymentConfigs {
-				currentImage, err := getCurrentDeploymentImage(ctx, kubeClient, depConfig)
+				upgradeProgress.CurrentStep = fmt.Sprintf("Updating deployment: %s", depConfig.Name)
+
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}
+					if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); getErr != nil {
+						return fmt.Errorf("failed to get deployment %s: %w", depConfig.Name, getErr)
+					}
+
+					dep.Spec.Replicas = &[]int32{1}[0]
+
+					found := false
+					newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion)
+					for i, c := range dep.Spec.Template.Spec.Containers {
+						if c.Name == depConfig.ContainerName {
+							dep.Spec.Template.Spec.Containers[i].Image = newImage
+							dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways
+							found = true
+							break
+						}
+					}
+					if !found {
+						return fmt.Errorf("container %s not found in deployment %s", depConfig.ContainerName, depConfig.Name)
+					}
+
+					return kubeClient.Update(ctx, dep)
+				})
+
 				if err != nil {
-					log.Printf("Warning: Could not get current image for %s: %v", depConfig.Name, err)
-				} else {
-					originalImages[depConfig.Name] = currentImage
-				}
-				
-				newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion)
-				if err := updateDeploymentImage(ctx, kubeClient, depConfig, newImage); err != nil {
-					log.Printf("Failed to update %s: %v", depConfig.Name, err)
+					log.Printf("Failed to update deployment %s: %v", depConfig.Name, err)
 					upgradeProgress.Status = "failed"
 					upgradeProgress.Error = fmt.Sprintf("Failed to update %s: %v", depConfig.Name, err)
-					return
+					return // Stop the entire upgrade
 				}
-				
-				// Add delay between operations to respect rate limits
-				time.Sleep(2 * time.Second)
-			}
-			
-			// Scale down all deployments one by one
-			for _, depConfig := range deploymentConfigs {
-				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling down %s", depConfig.Name)
-				
-				// Add retry logic with exponential backoff
-				var deployment *appsv1.Deployment
-				var err error
-				for retry := 0; retry < 3; retry++ {
-					deployment = &appsv1.Deployment{}
-					err = kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
-					if err == nil {
-						break
-					}
-					log.Printf("Retry %d: Failed to get deployment %s: %v", retry+1, depConfig.Name, err)
-					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
+
+				upgradeProgress.CurrentStep = fmt.Sprintf("Waiting for %s to be ready", depConfig.Name)
+				if waitErr := waitForDeploymentReady(ctx, kubeClient, depConfig); waitErr != nil {
+					log.Printf("Deployment %s failed to become ready: %v", depConfig.Name, waitErr)
+					upgradeProgress.Status = "failed"
+					upgradeProgress.Error = fmt.Sprintf("Deployment %s failed readiness check: %v", depConfig.Name, waitErr)
 				}
-				if err != nil {
-					log.Printf("Failed to get deployment %s after retries: %v", depConfig.Name, err)
-					continue
-				}
-				
-				// Scale down to 0
-				deployment.Spec.Replicas = &[]int32{0}[0]
-				for retry := 0; retry < 3; retry++ {
-					err = kubeClient.Update(ctx, deployment)
-					if err == nil {
-						break
-					}
-					log.Printf("Retry %d: Failed to scale down %s: %v", retry+1, depConfig.Name, err)
-					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
-				}
-				if err != nil {
-					log.Printf("Failed to scale down %s after retries: %v", depConfig.Name, err)
-					continue
-				}
-				
-				// Wait for pods to terminate
-				time.Sleep(5 * time.Second) // Increased wait time
-				
-				// Add delay between deployments to respect rate limits
-				time.Sleep(3 * time.Second)
-			}
-			
-			// Scale up all deployments one by one
-			for _, depConfig := range deploymentConfigs {
-				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling up %s", depConfig.Name)
-				
-				// Add retry logic with exponential backoff
-				var deployment *appsv1.Deployment
-				var err error
-				for retry := 0; retry < 3; retry++ {
-					deployment = &appsv1.Deployment{}
-					err = kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
-					if err == nil {
-						break
-					}
-					log.Printf("Retry %d: Failed to get deployment %s: %v", retry+1, depConfig.Name, err)
-					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
-				}
-				if err != nil {
-					log.Printf("Failed to get deployment %s after retries: %v", depConfig.Name, err)
-					continue
-				}
-				
-				// Scale up to 1
-				deployment.Spec.Replicas = &[]int32{1}[0]
-				for retry := 0; retry < 3; retry++ {
-					err = kubeClient.Update(ctx, deployment)
-					if err == nil {
-						break
-					}
-					log.Printf("Retry %d: Failed to scale up %s: %v", retry+1, depConfig.Name, err)
-					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
-				}
-				if err != nil {
-					log.Printf("Failed to scale up %s after retries: %v", depConfig.Name, err)
-					continue
-				}
-				
-				// Wait for deployment to be ready
-				if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
-					log.Printf("Failed to wait for %s readiness: %v", depConfig.Name, err)
-					continue
-				}
-				
+
 				upgradeProgress.CompletedSteps++
-				
-				// Add delay between deployments to respect rate limits
-				time.Sleep(3 * time.Second)
 			}
-			
-			// Scale up the controller to restore normal operation
-			upgradeProgress.CurrentStep = "Restarting controller"
-			controllerDeployment := &appsv1.Deployment{}
-			err := kubeClient.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: "migration-controller-manager"}, controllerDeployment)
-			if err != nil {
-				log.Printf("Failed to get controller deployment: %v", err)
-			} else {
-				controllerDeployment.Spec.Replicas = &[]int32{1}[0]
-				err = kubeClient.Update(ctx, controllerDeployment)
-				if err != nil {
-					log.Printf("Failed to scale up controller: %v", err)
-				} else {
-					log.Printf("Controller scaled up successfully")
-				}
-			}
-			
-			// Final success
+
 			upgradeProgress.Status = "deployments_ready"
 			upgradeProgress.CurrentStep = "Deployments ready"
 			log.Printf("All deployments updated and ready")
@@ -752,41 +667,6 @@ func getCurrentDeploymentImage(ctx context.Context, kubeClient client.Client, de
 	return "", fmt.Errorf("container %s not found in deployment %s", depConfig.ContainerName, depConfig.Name)
 }
 
-func updateDeploymentImage(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig, newImage string) error {
-    dep := &appsv1.Deployment{}
-    err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep)
-    if err != nil {
-        return fmt.Errorf("failed to get deployment: %w", err)
-    }
-
-    found := false
-    for i, c := range dep.Spec.Template.Spec.Containers {
-        if c.Name == depConfig.ContainerName {
-            dep.Spec.Template.Spec.Containers[i].Image = newImage
-            dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways
-            found = true
-            break
-        }
-    }
-    if !found {
-        return fmt.Errorf("container %s not found in deployment %s", depConfig.ContainerName, depConfig.Name)
-    }
-    if err := kubeClient.Update(ctx, dep); err != nil {
-        return fmt.Errorf("failed to update deployment image: %w", err)
-    }
-
-    return nil
-}
-
-func rollbackDeployment(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig, originalImage string) error {
-	if originalImage == "" {
-		return fmt.Errorf("no original image available for rollback")
-	}
-	
-	log.Printf("Rolling back %s to image: %s", depConfig.Name, originalImage)
-	return updateDeploymentImage(ctx, kubeClient, depConfig, originalImage)
-}
-
 func validateUpgrade(ctx context.Context, kubeClient client.Client, targetVersion string) error {
 	for _, depConfig := range deploymentConfigs {
 		if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
@@ -830,57 +710,4 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	return fmt.Errorf("deployment %s not ready within timeout", depConfig.Name)
 }
 
-func deleteAllPodsInMigrationSystem(ctx context.Context, kubeClient client.Client) error {
-    pods := &corev1.PodList{}
-    if err := kubeClient.List(ctx, pods, client.InNamespace("migration-system")); err != nil {
-        return fmt.Errorf("failed to list pods: %w", err)
-    }
 
-    for _, pod := range pods.Items {
-        err := kubeClient.Delete(ctx, &pod, client.PropagationPolicy(metav1.DeletePropagationForeground))
-        if err != nil {
-            log.Printf("Warning: failed to delete pod %s: %v", pod.Name, err)
-        } else {
-            log.Printf("Deleted pod %s", pod.Name)
-        }
-    }
-
-    return nil
-}
-
-func waitForAllPodsReady(ctx context.Context, kubeClient client.Client, expectedCount int) error {
-    timeout := 5 * time.Minute
-    interval := 10 * time.Second
-
-    for start := time.Now(); time.Since(start) < timeout; {
-        podList := &corev1.PodList{}
-        err := kubeClient.List(ctx, podList, client.InNamespace("migration-system"))
-        if err != nil {
-            log.Printf("Error listing pods: %v", err)
-            time.Sleep(interval)
-            continue
-        }
-
-        ready := 0
-        for _, pod := range podList.Items {
-            if pod.Status.Phase == corev1.PodRunning {
-                for _, cond := range pod.Status.Conditions {
-                    if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-                        ready++
-                        break
-                    }
-                }
-            }
-        }
-
-        if ready >= expectedCount {
-            log.Printf("All %d pods are running and ready.", ready)
-            return nil
-        }
-
-        log.Printf("Waiting for pods to become running and ready. Currently ready: %d", ready)
-        time.Sleep(interval)
-    }
-
-    return fmt.Errorf("timed out waiting for pods to be running and ready")
-}
