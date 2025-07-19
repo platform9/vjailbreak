@@ -25,7 +25,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require github.com/rivo/uniseg v0.4.7 // indirect
+require (
+	github.com/rivo/uniseg v0.4.7 // indirect
+	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
