@@ -73,7 +73,6 @@ export const UpgradeModal = ({ show, onClose }) => {
         setUpgradeInProgress(true);
         setErrorMsg('');
         setCheckResults(null);
-        setSuccessMsg('Upgrade process has been initiated!');
       } else if (data.cleanupRequired && Array.isArray(data.customResourceList) && data.customResourceList.length > 0) {
         setCrList(data.customResourceList);
         setShowCRWarning(true);
