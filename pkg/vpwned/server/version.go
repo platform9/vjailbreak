@@ -250,28 +250,51 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					upgradeProgress.Error = fmt.Sprintf("Failed to update %s: %v", depConfig.Name, err)
 					return
 				}
+				
+				// Add delay between operations to respect rate limits
+				time.Sleep(2 * time.Second)
 			}
 			
 			// Scale down all deployments one by one
 			for _, depConfig := range deploymentConfigs {
 				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling down %s", depConfig.Name)
 				
-				deployment := &appsv1.Deployment{}
-				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+				// Add retry logic with exponential backoff
+				var deployment *appsv1.Deployment
+				var err error
+				for retry := 0; retry < 3; retry++ {
+					deployment = &appsv1.Deployment{}
+					err = kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+					if err == nil {
+						break
+					}
+					log.Printf("Retry %d: Failed to get deployment %s: %v", retry+1, depConfig.Name, err)
+					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
+				}
 				if err != nil {
-					log.Printf("Failed to get deployment %s: %v", depConfig.Name, err)
+					log.Printf("Failed to get deployment %s after retries: %v", depConfig.Name, err)
 					continue
 				}
 				
 				// Scale down to 0
 				deployment.Spec.Replicas = &[]int32{0}[0]
-				err = kubeClient.Update(ctx, deployment)
+				for retry := 0; retry < 3; retry++ {
+					err = kubeClient.Update(ctx, deployment)
+					if err == nil {
+						break
+					}
+					log.Printf("Retry %d: Failed to scale down %s: %v", retry+1, depConfig.Name, err)
+					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
+				}
 				if err != nil {
-					log.Printf("Failed to scale down %s: %v", depConfig.Name, err)
+					log.Printf("Failed to scale down %s after retries: %v", depConfig.Name, err)
 					continue
 				}
 				
 				// Wait for pods to terminate
+				time.Sleep(5 * time.Second) // Increased wait time
+				
+				// Add delay between deployments to respect rate limits
 				time.Sleep(3 * time.Second)
 			}
 			
@@ -279,18 +302,35 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			for _, depConfig := range deploymentConfigs {
 				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling up %s", depConfig.Name)
 				
-				deployment := &appsv1.Deployment{}
-				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+				// Add retry logic with exponential backoff
+				var deployment *appsv1.Deployment
+				var err error
+				for retry := 0; retry < 3; retry++ {
+					deployment = &appsv1.Deployment{}
+					err = kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+					if err == nil {
+						break
+					}
+					log.Printf("Retry %d: Failed to get deployment %s: %v", retry+1, depConfig.Name, err)
+					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
+				}
 				if err != nil {
-					log.Printf("Failed to get deployment %s: %v", depConfig.Name, err)
+					log.Printf("Failed to get deployment %s after retries: %v", depConfig.Name, err)
 					continue
 				}
 				
 				// Scale up to 1
 				deployment.Spec.Replicas = &[]int32{1}[0]
-				err = kubeClient.Update(ctx, deployment)
+				for retry := 0; retry < 3; retry++ {
+					err = kubeClient.Update(ctx, deployment)
+					if err == nil {
+						break
+					}
+					log.Printf("Retry %d: Failed to scale up %s: %v", retry+1, depConfig.Name, err)
+					time.Sleep(time.Duration(retry+1) * 2 * time.Second) // Exponential backoff
+				}
 				if err != nil {
-					log.Printf("Failed to scale up %s: %v", depConfig.Name, err)
+					log.Printf("Failed to scale up %s after retries: %v", depConfig.Name, err)
 					continue
 				}
 				
@@ -301,6 +341,9 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				}
 				
 				upgradeProgress.CompletedSteps++
+				
+				// Add delay between deployments to respect rate limits
+				time.Sleep(3 * time.Second)
 			}
 			
 			// Scale up the controller to restore normal operation
