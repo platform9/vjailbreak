@@ -386,7 +386,7 @@ func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig 
 	}
 
 	dep := &appsv1.Deployment{}
-	err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
+	err = kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
 	if err == nil {
 		var zero int32 = 0
 		dep.Spec.Replicas = &zero
