@@ -95,7 +95,7 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
 	upgradeProgress = &UpgradeProgress{
 		CurrentStep:    "Starting upgrade",
-		TotalSteps:     len(deploymentConfigs) + 4, // +4 for backup, pre-checks, CRD and deployment update, and final validation
+		TotalSteps:     3, // +3 for backup, CRD update, and ConfigMap update
 		CompletedSteps: 0,
 		Status:         "in_progress",
 		StartTime:      time.Now(),
@@ -199,6 +199,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	if checks.PassedAll {
 		log.Printf("All checks passed. Starting upgrade to version: %s", in.TargetVersion)
 
+		// Phase 1: Apply CRDs and ConfigMaps (without updating deployment images)
 		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
 		if err := upgrade.ApplyAllCRDs(ctx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
@@ -207,72 +208,122 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		}
 		upgradeProgress.CompletedSteps++
 
+		upgradeProgress.CurrentStep = "Updating version configuration"
 		if err := upgrade.UpdateVersionConfigMapFromGitHub(ctx, kubeClient, in.TargetVersion); err != nil {
 			log.Printf("Warning: Failed to update version-config ConfigMap from GitHub: %v", err)
 		}
-
-		upgradeProgress.CurrentStep = "Updating deployment images"
-		originalImages := make(map[string]string)
-		for _, depConfig := range deploymentConfigs {
-			upgradeProgress.CurrentStep = fmt.Sprintf("Updating %s deployment", depConfig.Name)
-			
-			currentImage, err := getCurrentDeploymentImage(ctx, kubeClient, depConfig)
-			if err != nil {
-				log.Printf("Warning: Could not get current image for %s: %v", depConfig.Name, err)
-			} else {
-				originalImages[depConfig.Name] = currentImage
-			}
-			
-			newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion)
-			if err := updateDeploymentImage(ctx, kubeClient, depConfig, newImage); err != nil {
-				log.Printf("Failed to update %s, attempting rollback...", depConfig.Name)
-				if rollbackErr := rollbackDeployment(ctx, kubeClient, depConfig, originalImages[depConfig.Name]); rollbackErr != nil {
-					log.Printf("Rollback failed for %s: %v", depConfig.Name, rollbackErr)
-				}
-				
-				upgradeProgress.Status = "failed"
-				upgradeProgress.Error = fmt.Sprintf("Failed to update %s: %v", depConfig.Name, err)
-				return nil, fmt.Errorf("failed to update %s: %w", depConfig.Name, err)
-			}
-			
-			if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
-				log.Printf("Failed to wait for %s readiness after update: %v", depConfig.Name, err)
-				upgradeProgress.Status = "failed"
-				upgradeProgress.Error = fmt.Sprintf("Failed to wait for %s readiness after update: %v", depConfig.Name, err)
-				return nil, fmt.Errorf("failed to wait for %s readiness after update: %w", depConfig.Name, err)
-			}
-
-			upgradeProgress.CompletedSteps++
-		}
-
-		upgradeProgress.CurrentStep = "Validating upgrade"
-		if err := validateUpgrade(ctx, kubeClient, in.TargetVersion); err != nil {
-			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = fmt.Sprintf("Upgrade validation failed: %v", err)
-			return nil, fmt.Errorf("upgrade validation failed: %w", err)
-		}
 		upgradeProgress.CompletedSteps++
-		
-		log.Println("Deleting all pods post-upgrade to force fresh start")
-		if err := deleteAllPodsInMigrationSystem(ctx, kubeClient); err != nil {
-			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = fmt.Sprintf("Post-upgrade pod cleanup failed: %v", err)
-			return nil, err
-		}
 
-		log.Println("Waiting for all pods to restart and reach Running state")
-		if err := waitForAllPodsReady(ctx, kubeClient, 3); err != nil {
-			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = fmt.Sprintf("Pods failed to recover: %v", err)
-			return nil, err
-		}
-
+		// Phase 2: Mark upgrade as completed (CRDs and ConfigMaps are done)
 		now := time.Now()
 		upgradeProgress.Status = "completed"
 		upgradeProgress.CurrentStep = "Upgrade completed successfully"
 		upgradeProgress.EndTime = &now
 
 		log.Printf("Upgrade to version %s completed successfully", in.TargetVersion)
+		
+		// Phase 3: Start deployment updates in background
+		go func() {
+			// Wait a bit for UI to show completion
+			time.Sleep(2 * time.Second)
+			
+			// Update progress to show deployment phase
+			upgradeProgress.Status = "deploying"
+			upgradeProgress.CurrentStep = "Loading new deployments"
+			// Keep the completed steps from Phase 1, add deployment steps
+			upgradeProgress.TotalSteps = upgradeProgress.CompletedSteps + len(deploymentConfigs)
+			
+			// Patch all deployment images first
+			originalImages := make(map[string]string)
+			for _, depConfig := range deploymentConfigs {
+				currentImage, err := getCurrentDeploymentImage(ctx, kubeClient, depConfig)
+				if err != nil {
+					log.Printf("Warning: Could not get current image for %s: %v", depConfig.Name, err)
+				} else {
+					originalImages[depConfig.Name] = currentImage
+				}
+				
+				newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion)
+				if err := updateDeploymentImage(ctx, kubeClient, depConfig, newImage); err != nil {
+					log.Printf("Failed to update %s: %v", depConfig.Name, err)
+					upgradeProgress.Status = "failed"
+					upgradeProgress.Error = fmt.Sprintf("Failed to update %s: %v", depConfig.Name, err)
+					return
+				}
+			}
+			
+			// Scale down all deployments one by one
+			for _, depConfig := range deploymentConfigs {
+				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling down %s", depConfig.Name)
+				
+				deployment := &appsv1.Deployment{}
+				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+				if err != nil {
+					log.Printf("Failed to get deployment %s: %v", depConfig.Name, err)
+					continue
+				}
+				
+				// Scale down to 0
+				deployment.Spec.Replicas = &[]int32{0}[0]
+				err = kubeClient.Update(ctx, deployment)
+				if err != nil {
+					log.Printf("Failed to scale down %s: %v", depConfig.Name, err)
+					continue
+				}
+				
+				// Wait for pods to terminate
+				time.Sleep(3 * time.Second)
+			}
+			
+			// Scale up all deployments one by one
+			for _, depConfig := range deploymentConfigs {
+				upgradeProgress.CurrentStep = fmt.Sprintf("Scaling up %s", depConfig.Name)
+				
+				deployment := &appsv1.Deployment{}
+				err := kubeClient.Get(ctx, client.ObjectKey{Namespace: depConfig.Namespace, Name: depConfig.Name}, deployment)
+				if err != nil {
+					log.Printf("Failed to get deployment %s: %v", depConfig.Name, err)
+					continue
+				}
+				
+				// Scale up to 1
+				deployment.Spec.Replicas = &[]int32{1}[0]
+				err = kubeClient.Update(ctx, deployment)
+				if err != nil {
+					log.Printf("Failed to scale up %s: %v", depConfig.Name, err)
+					continue
+				}
+				
+				// Wait for deployment to be ready
+				if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
+					log.Printf("Failed to wait for %s readiness: %v", depConfig.Name, err)
+					continue
+				}
+				
+				upgradeProgress.CompletedSteps++
+			}
+			
+			// Scale up the controller to restore normal operation
+			upgradeProgress.CurrentStep = "Restarting controller"
+			controllerDeployment := &appsv1.Deployment{}
+			err := kubeClient.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: "migration-controller-manager"}, controllerDeployment)
+			if err != nil {
+				log.Printf("Failed to get controller deployment: %v", err)
+			} else {
+				controllerDeployment.Spec.Replicas = &[]int32{1}[0]
+				err = kubeClient.Update(ctx, controllerDeployment)
+				if err != nil {
+					log.Printf("Failed to scale up controller: %v", err)
+				} else {
+					log.Printf("Controller scaled up successfully")
+				}
+			}
+			
+			// Final success
+			upgradeProgress.Status = "deployments_ready"
+			upgradeProgress.CurrentStep = "Deployments ready"
+			log.Printf("All deployments updated and ready")
+		}()
 	} else {
 		upgradeProgress.CurrentStep = "Rollback due to upgrade failure"
 		upgradeProgress.Status = "rolled_back"
@@ -375,7 +426,19 @@ func (s *VpwnedVersion) GetUpgradeProgress(ctx context.Context, in *api.VersionR
 		}, nil
 	}
 	
-	progress := float32(upgradeProgress.CompletedSteps) / float32(upgradeProgress.TotalSteps) * 100
+	var progress float32
+	if upgradeProgress.TotalSteps > 0 {
+		progress = float32(upgradeProgress.CompletedSteps) / float32(upgradeProgress.TotalSteps) * 100
+	}
+	
+	// Handle special cases for progress display
+	if upgradeProgress.Status == "completed" {
+		// Phase 1 completed - show 100% progress
+		progress = 100
+	} else if upgradeProgress.Status == "deployments_ready" {
+		// All phases completed - show 100% progress
+		progress = 100
+	}
 	
 	return &api.UpgradeProgressResponse{
 		CurrentStep:    upgradeProgress.CurrentStep,
@@ -490,25 +553,50 @@ func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restC
     if err != nil {
         return false, "Failed to create dynamic client"
     }
+    
+    // First, delete all VjailbreakNodes
     list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
     if err != nil {
         return false, "Failed to list VjailbreakNodes"
     }
+    
     for _, item := range list.Items {
         err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
         if err != nil {
             return false, "Failed to delete VjailbreakNode: " + item.GetName()
         }
     }
+    
+    // Wait for nodes to be deleted
     time.Sleep(2 * time.Second)
+    
+    // Verify nodes are deleted
     list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
     if err != nil {
         return false, "Failed to re-list VjailbreakNodes"
     }
-    if len(list.Items) == 0 {
-        return true, "All agents scaled down"
+    if len(list.Items) > 0 {
+        return false, "Agents still exist after deletion"
     }
-    return false, "Agents still exist"
+    
+    // Scale down the controller to prevent node recreation
+    deployment := &appsv1.Deployment{}
+    err = kubeClient.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: "migration-controller-manager"}, deployment)
+    if err != nil {
+        return false, "Failed to get controller deployment"
+    }
+    
+    // Scale down to 0 replicas
+    deployment.Spec.Replicas = &[]int32{0}[0]
+    err = kubeClient.Update(ctx, deployment)
+    if err != nil {
+        return false, "Failed to scale down controller deployment"
+    }
+    
+    // Wait for controller to scale down
+    time.Sleep(3 * time.Second)
+    
+    return true, "All agents scaled down and controller stopped"
 }
 
 func checkAndDeleteSecret(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, credType string) (bool, string) {

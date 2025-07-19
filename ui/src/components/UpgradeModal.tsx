@@ -97,8 +97,17 @@ export const UpgradeModal = ({ show, onClose }) => {
         setProgressData(progress);
 
         if (progress.status === 'completed') {
-          setUpgradeInProgress(false);
+          // Phase 1 completed - CRDs and ConfigMaps are done
           setSuccessMsg('Upgrade completed successfully!');
+          // Don't close modal yet, wait for deployment phase
+        } else if (progress.status === 'deploying') {
+          // Phase 2 - Deployment updates in progress
+          setSuccessMsg('');
+          setErrorMsg('');
+        } else if (progress.status === 'deployments_ready') {
+          // Phase 3 - All deployments are ready
+          setUpgradeInProgress(false);
+          setSuccessMsg('Deployments ready!');
           clearInterval(interval);
           setTimeout(() => {
             onClose();
@@ -240,7 +249,9 @@ export const UpgradeModal = ({ show, onClose }) => {
             <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
               <CircularProgress size={32} />
               <Typography variant="body2" mt={2}>
-              {progressData?.status === 'completed' ? 'Upgraded!' : 'Upgrading'}
+                {progressData?.status === 'completed' ? 'Upgrade completed successfully!' : 
+                 progressData?.status === 'deploying' ? progressData?.currentStep || 'Loading new deployments' :
+                 progressData?.status === 'deployments_ready' ? 'Deployments ready!' : 'Upgrading'}
               </Typography>
             </Box>
           )}
