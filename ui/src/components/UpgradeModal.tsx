@@ -43,17 +43,17 @@ export const UpgradeModal = ({ show, onClose }) => {
   const stepKeys = [
     'no_migrationplans',
     'no_rollingmigrationplans',
-    'agent_scaled_down',
     'vmware_creds_deleted',
     'openstack_creds_deleted',
+    'agent_scaled_down',
     'no_custom_resources',
   ];
   const stepLabels = [
     'Delete MigrationPlans',
     'Delete RollingMigrationPlans',
-    'Scale down Agents',
     'Delete VMware credentials',
     'Delete OpenStack credentials',
+    'Scale down Agents',
     'Delete Custom Resources',
   ];
   const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
@@ -91,28 +91,22 @@ export const UpgradeModal = ({ show, onClose }) => {
 
   useEffect(() => {
     if (!upgradeInProgress) return;
-    let interval = setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
         const progress = await getUpgradeProgress();
         setProgressData(progress);
 
-        if (progress.status === 'completed') {
-          // Phase 1 completed - CRDs and ConfigMaps are done
-          setSuccessMsg('Upgrade completed successfully!');
-          // Don't close modal yet, wait for deployment phase
-        } else if (progress.status === 'deploying') {
-          // Phase 2 - Deployment updates in progress
+        if (progress.status === 'completed' || progress.status === 'deploying') {
           setSuccessMsg('');
           setErrorMsg('');
         } else if (progress.status === 'deployments_ready') {
-          // Phase 3 - All deployments are ready
           setUpgradeInProgress(false);
-          setSuccessMsg('Deployments ready!');
+          setSuccessMsg(progress.currentStep || 'Upgrade completed successfully');
           clearInterval(interval);
           setTimeout(() => {
             onClose();
             window.location.href = '/dashboard/migrations';
-          }, 2000);
+          }, 3000);
         } else if (progress.status === 'failed') {
           setUpgradeInProgress(false);
           setErrorMsg(`Upgrade failed: ${progress.error}`);
@@ -125,14 +119,14 @@ export const UpgradeModal = ({ show, onClose }) => {
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [upgradeInProgress]);
+  }, [upgradeInProgress, onClose]);
 
   const handleUpgradeClick = () => {
     setUpgradeInProgress(true);
     setErrorMsg('');
     setSuccessMsg('');
     initiateUpgrade(selectedVersion, false).catch(() => {
-      setErrorMsg('Upgrade failed to start.');
+      setErrorMsg('Select a version to start upgrade');
       setUpgradeInProgress(false);
     });
   };
@@ -156,7 +150,6 @@ export const UpgradeModal = ({ show, onClose }) => {
     }
   };
 
-  // Handler for canceling CR cleanup
   const handleCancelCleanup = () => {
     setShowCRWarning(false);
     setCrList([]);
@@ -172,13 +165,13 @@ export const UpgradeModal = ({ show, onClose }) => {
       setStepStates([...newStates]);
 
       try {
-        const res = await cleanupStepApiCall(stepKeys[i]); // Call your backend here
+        const res = await cleanupStepApiCall(stepKeys[i]); 
         newStates[i].state = res.success ? 'success' : 'error';
       } catch (e) {
         newStates[i].state = 'error';
       }
       setStepStates([...newStates]);
-      if (newStates[i].state === 'error') break; // Optionally stop on error
+      if (newStates[i].state === 'error') break; 
     }
   };
 
@@ -191,9 +184,9 @@ export const UpgradeModal = ({ show, onClose }) => {
   const checkList = checkResults ? [
     { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
     { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
-    { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
     { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
     { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
+    { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
     { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources },
   ] : [];
 
@@ -249,14 +242,36 @@ export const UpgradeModal = ({ show, onClose }) => {
             <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
               <CircularProgress size={32} />
               <Typography variant="body2" mt={2}>
-                {progressData?.status === 'completed' ? 'Upgrade completed successfully!' : 
-                 progressData?.status === 'deploying' ? progressData?.currentStep || 'Loading new deployments' :
-                 progressData?.status === 'deployments_ready' ? 'Deployments ready!' : 'Upgrading'}
+              {progressData?.currentStep.startsWith('Waiting') 
+                ? 'Waiting for deployments to be ready' 
+                : progressData?.currentStep || 'Upgrading'}
               </Typography>
             </Box>
           )}
-          {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
-          {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
+
+          {errorMsg && (
+            <Box display="flex" justifyContent="center" mb={2}>
+              <Alert severity="error" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                {errorMsg}
+                </Alert>
+            </Box>
+          )}
+
+          {successMsg && (
+            <Box display="flex" justifyContent="center" alignItems="center" mb={2}>
+              <Alert severity="success" sx={{ 
+                mb: 2, 
+                display: 'flex', 
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                width: '100%'
+              }}>    
+                {successMsg}
+              </Alert>
+            </Box>
+          )}
+
           {upgradeMutation.isPending && !upgradeInProgress && (
             <Box display="flex" justifyContent="center" mb={2}>
               <CircularProgress size={24} />
@@ -280,12 +295,12 @@ export const UpgradeModal = ({ show, onClose }) => {
         <DialogActions>
           <Button
             onClick={handleUpgradeClick}
-            disabled={upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
+            disabled={!selectedVersion ||upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
             variant="contained"
             color="primary"
             fullWidth
           >
-            {upgradeInProgress ? 'Upgrading...' : 'Upgrade Now'}
+            {upgradeInProgress ? 'Upgrading...' : 'Upgrade'}
           </Button>
           <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
             Run Stepwise Cleanup
@@ -295,7 +310,6 @@ export const UpgradeModal = ({ show, onClose }) => {
           </Button>
         </DialogActions>
       </Dialog>
-      {/* CR Cleanup Warning Dialog */}
       <Dialog open={showCRWarning} onClose={handleCancelCleanup} maxWidth="sm" fullWidth>
         <DialogTitle>Custom Resources Detected</DialogTitle>
         <DialogContent>

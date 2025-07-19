@@ -1,6 +1,6 @@
 import { styled } from "@mui/material"
 import { useState } from "react"
-import { Route, Routes, useLocation} from "react-router-dom"
+import { Route, Routes, useLocation, Navigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import RouteCompatibility from "./components/RouteCompatibility"
@@ -64,7 +64,7 @@ function App() {
           />
         )}
         <Routes>
-          <Route path="/" element={<div></div>} />
+          <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />

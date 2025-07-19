@@ -103,10 +103,6 @@ const BrandContainer = styled(Box, {
 const VersionBadge = styled(Box, {
   shouldForwardProp: (prop) => prop !== 'collapsed'
 })<{ collapsed?: boolean }>(({ theme, collapsed }) => ({
-  position: 'absolute',
-  bottom: theme.spacing(1.5),
-  left: '50%',
-  transform: 'translateX(-50%)',
   fontSize: '0.8rem',
   color: alpha(theme.palette.text.secondary, 0.6),
   fontWeight: 400,
@@ -158,11 +154,6 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
   const content = (
     <VersionBadge collapsed={collapsed}>
       {collapsed ? `${versionInfo?.version || '?'}` : `Version: ${versionInfo?.version}`}
-      {!collapsed && versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
-        <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', mt: 0.5 }}>
-          Update available: {versionInfo.upgradeVersion}
-        </Box>
-      )}
     </VersionBadge>
   )
 
@@ -458,7 +449,7 @@ export default function Sidenav({
               <Button
                 color="primary"
                 variant="contained"
-                sx={{ mt: 1, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
+                sx={{ mt: 2, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
                 onClick={() => setIsUpgradeModalOpen(true)}
               >
                 <UpgradeIcon />

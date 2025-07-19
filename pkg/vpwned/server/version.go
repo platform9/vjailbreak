@@ -97,7 +97,7 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
 	upgradeProgress = &UpgradeProgress{
 		CurrentStep:    "Starting upgrade",
-		TotalSteps:     3, // +3 for backup, CRD update, and ConfigMap update
+		TotalSteps:     3,
 		CompletedSteps: 0,
 		Status:         "in_progress",
 		StartTime:      time.Now(),
@@ -157,9 +157,9 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			Checks: &api.ValidationResult{
 				NoMigrationPlans:        checks.NoMigrationPlans,
 				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-				AgentsScaledDown:        checks.AgentsScaledDown,
 				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
 				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+				AgentsScaledDown:        checks.AgentsScaledDown,
 				NoCustomResources:       checks.NoCustomResources,
 				PassedAll:               false,
 			},
@@ -190,9 +190,9 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		protoChecks = &api.ValidationResult{
 			NoMigrationPlans:        checks.NoMigrationPlans,
 			NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-			AgentsScaledDown:        checks.AgentsScaledDown,
 			VmwareCredsDeleted:      checks.VMwareCredsDeleted,
 			OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+			AgentsScaledDown:        checks.AgentsScaledDown,
 			NoCustomResources:       checks.NoCustomResources,
 			PassedAll:               checks.PassedAll,
 		}
@@ -201,7 +201,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	if checks.PassedAll {
 		log.Printf("All checks passed. Starting upgrade to version: %s", in.TargetVersion)
 
-		// Phase 1: Apply CRDs and ConfigMaps (without updating deployment images)
 		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
 		if err := upgrade.ApplyAllCRDs(ctx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
@@ -216,7 +215,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		}
 		upgradeProgress.CompletedSteps++
 
-		// Phase 2: Mark upgrade as completed (CRDs and ConfigMaps are done)
 		now := time.Now()
 		upgradeProgress.Status = "completed"
 		upgradeProgress.CurrentStep = "Upgrade completed successfully"
@@ -265,10 +263,10 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					log.Printf("Failed to update deployment %s: %v", depConfig.Name, err)
 					upgradeProgress.Status = "failed"
 					upgradeProgress.Error = fmt.Sprintf("Failed to update %s: %v", depConfig.Name, err)
-					return // Stop the entire upgrade
+					return 
 				}
 
-				upgradeProgress.CurrentStep = fmt.Sprintf("Waiting for %s to be ready", depConfig.Name)
+				upgradeProgress.CurrentStep = fmt.Sprintf("Waiting for deployments to be ready")
 				if waitErr := waitForDeploymentReady(ctx, kubeClient, depConfig); waitErr != nil {
 					log.Printf("Deployment %s failed to become ready: %v", depConfig.Name, waitErr)
 					upgradeProgress.Status = "failed"
@@ -278,9 +276,24 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				upgradeProgress.CompletedSteps++
 			}
 
+			upgradeProgress.CurrentStep = "Finalizing upgrade"
+			podList := &corev1.PodList{}
+			if err := kubeClient.List(ctx, podList, client.InNamespace("migration-system")); err == nil {
+				for _, pod := range podList.Items {
+					podToDelete := pod 
+					_ = kubeClient.Delete(ctx, &podToDelete)
+				}
+			}
+			
+			for _, depConfig := range deploymentConfigs {
+				if waitErr := waitForDeploymentReady(ctx, kubeClient, depConfig); waitErr != nil {
+					log.Printf("Deployment %s failed to become ready after finalization: %v", depConfig.Name, waitErr)
+				}
+			}
+
 			upgradeProgress.Status = "deployments_ready"
-			upgradeProgress.CurrentStep = "Deployments ready"
-			log.Printf("All deployments updated and ready")
+			upgradeProgress.CurrentStep = "Upgrade completed successfully"
+			log.Printf("Upgrade Sucessfull: All deployments updated and ready")
 		}()
 	} else {
 		upgradeProgress.CurrentStep = "Rollback due to upgrade failure"
@@ -328,11 +341,11 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 	if err != nil || !checks.PassedAll {
 		return &api.UpgradeResponse{
 			Checks: &api.ValidationResult{
-				AgentsScaledDown:        checks.AgentsScaledDown,
-				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
-				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
 				NoMigrationPlans:        checks.NoMigrationPlans,
 				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
+				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
+				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+				AgentsScaledDown:        checks.AgentsScaledDown,
 				NoCustomResources:       checks.NoCustomResources,
 				PassedAll:               false,
 			},
@@ -389,12 +402,9 @@ func (s *VpwnedVersion) GetUpgradeProgress(ctx context.Context, in *api.VersionR
 		progress = float32(upgradeProgress.CompletedSteps) / float32(upgradeProgress.TotalSteps) * 100
 	}
 	
-	// Handle special cases for progress display
 	if upgradeProgress.Status == "completed" {
-		// Phase 1 completed - show 100% progress
 		progress = 100
 	} else if upgradeProgress.Status == "deployments_ready" {
-		// All phases completed - show 100% progress
 		progress = 100
 	}
 	
@@ -512,7 +522,6 @@ func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restC
         return false, "Failed to create dynamic client"
     }
     
-    // First, delete all VjailbreakNodes
     list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
     if err != nil {
         return false, "Failed to list VjailbreakNodes"
@@ -525,10 +534,7 @@ func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restC
         }
     }
     
-    // Wait for nodes to be deleted
     time.Sleep(2 * time.Second)
-    
-    // Verify nodes are deleted
     list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
     if err != nil {
         return false, "Failed to re-list VjailbreakNodes"
@@ -537,21 +543,18 @@ func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restC
         return false, "Agents still exist after deletion"
     }
     
-    // Scale down the controller to prevent node recreation
     deployment := &appsv1.Deployment{}
     err = kubeClient.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: "migration-controller-manager"}, deployment)
     if err != nil {
         return false, "Failed to get controller deployment"
     }
     
-    // Scale down to 0 replicas
     deployment.Spec.Replicas = &[]int32{0}[0]
     err = kubeClient.Update(ctx, deployment)
     if err != nil {
         return false, "Failed to scale down controller deployment"
     }
     
-    // Wait for controller to scale down
     time.Sleep(3 * time.Second)
     
     return true, "All agents scaled down and controller stopped"
@@ -651,42 +654,6 @@ func checkAndDeleteAllCustomResources(ctx context.Context, kubeClient client.Cli
 	return false, "Some Custom Resources could not be deleted: " + strings.Join(failed, ", ")
 }
 
-func getCurrentDeploymentImage(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig) (string, error) {
-	dep := &appsv1.Deployment{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err != nil {
-		log.Printf("Failed to get deployment %s in namespace %s: %v", depConfig.Name, depConfig.Namespace, err)
-		return "", fmt.Errorf("failed to get deployment %s in namespace %s: %w", depConfig.Name, depConfig.Namespace, err)
-	}
-	
-	for _, container := range dep.Spec.Template.Spec.Containers {
-		if container.Name == depConfig.ContainerName {
-			return container.Image, nil
-		}
-	}
-	
-	return "", fmt.Errorf("container %s not found in deployment %s", depConfig.ContainerName, depConfig.Name)
-}
-
-func validateUpgrade(ctx context.Context, kubeClient client.Client, targetVersion string) error {
-	for _, depConfig := range deploymentConfigs {
-		if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
-			return fmt.Errorf("deployment %s not ready after upgrade: %w", depConfig.Name, err)
-		}
-		
-		currentImage, err := getCurrentDeploymentImage(ctx, kubeClient, depConfig)
-		if err != nil {
-			return fmt.Errorf("failed to verify image for %s: %w", depConfig.Name, err)
-		}
-		
-		if !strings.Contains(currentImage, targetVersion) {
-			return fmt.Errorf("deployment %s image not updated to version %s, current: %s", 
-				depConfig.Name, targetVersion, currentImage)
-		}
-	}
-	
-	return nil
-}
-
 func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depConfig DeploymentConfig) error {
 	timeout := 5 * time.Minute
 	interval := 10 * time.Second
@@ -709,5 +676,3 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	
 	return fmt.Errorf("deployment %s not ready within timeout", depConfig.Name)
 }
-
-

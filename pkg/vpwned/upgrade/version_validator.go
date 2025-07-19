@@ -25,9 +25,9 @@ import (
 type ValidationResult struct {
 	NoMigrationPlans        bool
 	NoRollingMigrationPlans bool
-	AgentsScaledDown        bool
 	VMwareCredsDeleted      bool
 	OpenStackCredsDeleted   bool
+	AgentsScaledDown        bool
 	NoCustomResources       bool 
 	PassedAll               bool
 }
@@ -72,29 +72,6 @@ func DiscoverCurrentCRs(ctx context.Context, kubeClient client.Client) ([]CRInfo
 	return currentCRs, nil
 }
 
-func DiscoverCurrentCRDs(ctx context.Context, kubeClient client.Client) ([]CRDInfo, error) {
-	var currentCRDs []CRDInfo
-	
-	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
-	if err := kubeClient.List(ctx, crdList); err != nil {
-		return nil, fmt.Errorf("failed to list CRDs: %w", err)
-	} 
-	
-	for _, crd := range crdList.Items {
-		if strings.Contains(crd.Spec.Group, "vjailbreak") {
-			for _, version := range crd.Spec.Versions {
-				crdInfo := CRDInfo{
-					Name:    crd.Name,
-					Version: version.Name,
-					Group:   crd.Spec.Group,
-				}
-				currentCRDs = append(currentCRDs, crdInfo)
-			}
-		}
-	}
-	
-	return currentCRDs, nil
-}
 
 func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, targetVersion string) (*ValidationResult, error) {
 	result := &ValidationResult{}
@@ -116,21 +93,6 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 			result.NoRollingMigrationPlans = true
 		}
 	}
-
-	gvr = schema.GroupVersionResource{
-    Group:    "vjailbreak.k8s.pf9.io",
-    Version:  "v1alpha1",
-    Resource: "vjailbreaknodes",
-	}
-	dynamicClient, err = dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, err
-	}
-	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	result.AgentsScaledDown = len(list.Items) == 0
 
 	vmwareSecret := &corev1.Secret{}
 	err = kubeClient.Get(ctx, client.ObjectKey{Name: "vmware-credentials", Namespace: "migration-system"}, vmwareSecret)
@@ -155,17 +117,31 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 	} else {
 		result.OpenStackCredsDeleted = false
 	}
+	gvr = schema.GroupVersionResource{
+		Group:    "vjailbreak.k8s.pf9.io",
+		Version:  "v1alpha1",
+		Resource: "vjailbreaknodes",
+		}
+		dynamicClient, err = dynamic.NewForConfig(restConfig)
+		if err != nil {
+			return nil, err
+		}
+		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		result.AgentsScaledDown = len(list.Items) == 0
 
 	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient, restConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	result.PassedAll = result.AgentsScaledDown && 
+	result.PassedAll = result.NoMigrationPlans && 
+		result.NoRollingMigrationPlans && 
 		result.VMwareCredsDeleted && 
 		result.OpenStackCredsDeleted && 
-		result.NoMigrationPlans && 
-		result.NoRollingMigrationPlans &&
+		result.AgentsScaledDown && 
 		result.NoCustomResources
 	return result, nil
 }
@@ -348,7 +324,6 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 		} else if strings.HasPrefix(key, "cr-") {
 			var obj map[string]interface{}
 			if err := yaml.Unmarshal(data, &obj); err == nil {
-				// Try to restore as unstructured object
 				unstructured := &unstructured.Unstructured{}
 				if err := yaml.Unmarshal(data, unstructured); err == nil {
 					_ = kubeClient.Delete(ctx, unstructured)
@@ -363,35 +338,6 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 
 func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	log.Println("Starting automatic resource cleanup...")
-
-	dep := &appsv1.Deployment{}
-	err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
-	if err == nil {
-		var zero int32 = 0
-		dep.Spec.Replicas = &zero
-		if err := kubeClient.Update(ctx, dep); err != nil {
-			log.Printf("Failed to scale down deployment: %v", err)
-			return err
-		}
-		log.Println("Deployment migration-controller-manager scaled down.")
-	} else if !kerrors.IsNotFound(err) {
-		log.Printf("Failed to get deployment for cleanup: %v", err)
-		return err
-	}
-
-	vmwareSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vmware-credentials", Namespace: "migration-system"}}
-	if err := kubeClient.Delete(ctx, vmwareSecret); err != nil && !kerrors.IsNotFound(err) {
-		log.Printf("Failed to delete vmware-credentials secret: %v", err)
-	} else {
-		log.Println("Secret vmware-credentials deleted.")
-	}
-
-	openstackSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "openstack-credentials", Namespace: "migration-system"}}
-	if err := kubeClient.Delete(ctx, openstackSecret); err != nil && !kerrors.IsNotFound(err) {
-		log.Printf("Failed to delete openstack-credentials secret: %v", err)
-	} else {
-		log.Println("Secret openstack-credentials deleted.")
-	}
 
 	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
@@ -423,6 +369,35 @@ func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig 
 				}
 			}
 		}
+	}
+
+	vmwareSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vmware-credentials", Namespace: "migration-system"}}
+	if err := kubeClient.Delete(ctx, vmwareSecret); err != nil && !kerrors.IsNotFound(err) {
+		log.Printf("Failed to delete vmware-credentials secret: %v", err)
+	} else {
+		log.Println("Secret vmware-credentials deleted.")
+	}
+
+	openstackSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "openstack-credentials", Namespace: "migration-system"}}
+	if err := kubeClient.Delete(ctx, openstackSecret); err != nil && !kerrors.IsNotFound(err) {
+		log.Printf("Failed to delete openstack-credentials secret: %v", err)
+	} else {
+		log.Println("Secret openstack-credentials deleted.")
+	}
+
+	dep := &appsv1.Deployment{}
+	err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
+	if err == nil {
+		var zero int32 = 0
+		dep.Spec.Replicas = &zero
+		if err := kubeClient.Update(ctx, dep); err != nil {
+			log.Printf("Failed to scale down deployment: %v", err)
+			return err
+		}
+		log.Println("Deployment migration-controller-manager scaled down.")
+	} else if !kerrors.IsNotFound(err) {
+		log.Printf("Failed to get deployment for cleanup: %v", err)
+		return err
 	}
 
 	if err := deleteAllCustomResources(ctx, kubeClient, restConfig); err != nil {
