@@ -7,6 +7,7 @@ import {
   confirmCleanupAndUpgrade,
   cleanupStepApiCall,
 } from '../api/version';
+import { useNavigate } from 'react-router-dom';
 import {
   UpgradeResponse,
   ValidationResult,
@@ -39,6 +40,7 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
   const theme = useTheme();
+  const navigate = useNavigate();
 
   const stepKeys = [
     'no_migrationplans',
@@ -105,7 +107,12 @@ export const UpgradeModal = ({ show, onClose }) => {
           clearInterval(interval);
           setTimeout(() => {
             onClose();
-            window.location.href = '/dashboard/migrations';
+            navigate('/dashboard/migrations', {
+              state: {
+                showUpgradeSuccess: true,
+                version: selectedVersion
+              }
+            });
           }, 3000);
         } else if (progress.status === 'failed') {
           setUpgradeInProgress(false);
@@ -119,17 +126,7 @@ export const UpgradeModal = ({ show, onClose }) => {
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [upgradeInProgress, onClose]);
-
-  const handleUpgradeClick = () => {
-    setUpgradeInProgress(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-    initiateUpgrade(selectedVersion, false).catch(() => {
-      setErrorMsg('Select a version to start upgrade');
-      setUpgradeInProgress(false);
-    });
-  };
+  }, [upgradeInProgress, onClose, selectedVersion, navigate]);
 
   const handleConfirmCleanup = async () => {
     setShowCRWarning(false);
@@ -293,15 +290,15 @@ export const UpgradeModal = ({ show, onClose }) => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={handleUpgradeClick}
-            disabled={!selectedVersion ||upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
-            variant="contained"
-            color="primary"
-            fullWidth
-          >
-            {upgradeInProgress ? 'Upgrading...' : 'Upgrade'}
-          </Button>
+        <Button
+          onClick={() => upgradeMutation.mutate()}
+          disabled={!selectedVersion || upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
+          variant="contained"
+          color="primary"
+          fullWidth
+        >
+          {upgradeInProgress || upgradeMutation.isPending ? 'Upgrading...' : 'Upgrade'}
+        </Button>
           <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
             Run Stepwise Cleanup
           </Button>
@@ -311,27 +308,42 @@ export const UpgradeModal = ({ show, onClose }) => {
         </DialogActions>
       </Dialog>
       <Dialog open={showCRWarning} onClose={handleCancelCleanup} maxWidth="sm" fullWidth>
-        <DialogTitle>Custom Resources Detected</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600 }}>
+            Custom Resources Detected
+        </DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              The following Custom Resources must be deleted to proceed with the upgrade. This is a destructive operation and cannot be undone.
-            </Typography>
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {crList.map(cr => (
-                <li key={cr}>{cr}</li>
-              ))}
-            </ul>
-            <Typography variant="body2" color="error" mt={2}>
-              Are you sure you want to delete all these CRs and continue?
-            </Typography>
-          </Alert>
+            <Alert
+                severity="warning"
+                variant="outlined" 
+                sx={{
+                    borderColor: 'warning.main',
+                    '& .MuiAlert-icon': {
+                        color: 'warning.main',
+                    },
+                }}
+            >
+                <Typography fontWeight={600} gutterBottom>
+                    The following resources must be deleted to proceed. This is a destructive operation and cannot be undone.
+                </Typography>
+                <Box component="ul" sx={{ my: 2, pl: 2.5 }}>
+                    {crList.map(cr => (
+                        <Typography component="li" key={cr} variant="body2">{cr}</Typography>
+                    ))}
+                </Box>
+                <Typography variant="body2" fontWeight={500}>
+                    Are you sure you want to delete these resources and continue?
+                </Typography>
+            </Alert>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleConfirmCleanup} color="error" variant="contained">OK, Delete and Continue</Button>
-          <Button onClick={handleCancelCleanup} variant="outlined">Cancel</Button>
+        <DialogActions sx={{ p: 2, gap: 1 }}> 
+            <Button onClick={handleCancelCleanup} variant="outlined">
+                Cancel
+            </Button>
+            <Button onClick={handleConfirmCleanup} color="error" variant="contained">
+                OK, Delete and Continue
+            </Button>
         </DialogActions>
-      </Dialog>
+    </Dialog>
     </React.Fragment>
   );
 };

@@ -80,10 +80,17 @@ func (s *VpwnedVersion) Version(ctx context.Context, in *api.VersionRequest) (*a
 func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionRequest) (*api.AvailableUpdatesResponse, error) {
 	owner := "platform9"
 	repo := "vjailbreak"
+	
+	log.Printf("Fetching available tags for %s/%s", owner, repo)
+	
 	tags, err := upgrade.GetAllTags(ctx, owner, repo)
 	if err != nil {
+		log.Printf("Error fetching tags: %v", err)
 		return nil, err
 	}
+	
+	log.Printf("Found %d available tags", len(tags))
+	
 	var protoUpdates []*api.ReleaseInfo
 	for _, tag := range tags {
 		protoUpdates = append(protoUpdates, &api.ReleaseInfo{

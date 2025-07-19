@@ -7,6 +7,10 @@ import (
 
 	"github.com/google/go-github/v63/github"
 	"golang.org/x/mod/semver"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type ReleaseInfo struct {
@@ -15,8 +19,49 @@ type ReleaseInfo struct {
 	DownloadURL  string
 }
 
-// Returns all tags for dropdown
+func getCurrentVersionFromConfigMap() (string, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return "", fmt.Errorf("failed to get in-cluster config: %w", err)
+	}
+	
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+	
+	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(context.Background(), "version-config", metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get version-config ConfigMap: %w", err)
+	}
+	
+	version, exists := configMap.Data["version"]
+	if !exists {
+		return "", fmt.Errorf("version field not found in configmap")
+	}
+	
+	return version, nil
+}
+
 func GetAllTags(ctx context.Context, owner, repo string) ([]string, error) {
+	currentVersion, err := getCurrentVersionFromConfigMap()
+	if err != nil {
+		fmt.Printf("Warning: Could not get current version from configmap: %v. Showing all tags.\n", err)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+	
+	isSemver := semver.IsValid(currentVersion)
+	
+	if isSemver {
+		fmt.Printf("Current version %s is semver format. Showing only newer versions.\n", currentVersion)
+		return getTagsGreaterThanVersion(ctx, owner, repo, currentVersion)
+	} else {
+		fmt.Printf("Current version %s is not semver format. Showing all tags.\n", currentVersion)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+}
+
+func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, error) {
 	client := github.NewClient(nil)
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
 	if err != nil {
@@ -32,44 +77,24 @@ func GetAllTags(ctx context.Context, owner, repo string) ([]string, error) {
 	return tagNames, nil
 }
 
-// Fetch all releases newer than the current version if semver, else all tags.
-func CheckForUpdates(ctx context.Context, owner, repo, currentVersion string) ([]ReleaseInfo, error) {
+func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion string) ([]string, error) {
 	client := github.NewClient(nil)
-	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, nil)
+	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases: %w", err)
+		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
-
-	var availableUpgrades []ReleaseInfo
-	isSemver := semver.IsValid(currentVersion)
-	for _, release := range releases {
-		tagName := release.GetTagName()
-		if isSemver {
-			if semver.Compare(tagName, currentVersion) > 0 {
-				info := ReleaseInfo{
-					Version:      tagName,
-					ReleaseNotes: release.GetBody(),
-				}
-				if len(release.Assets) > 0 {
-					info.DownloadURL = release.Assets[0].GetBrowserDownloadURL()
-				}
-				availableUpgrades = append(availableUpgrades, info)
-			}
-		} else {
-			info := ReleaseInfo{
-				Version:      tagName,
-				ReleaseNotes: release.GetBody(),
-			}
-			if len(release.Assets) > 0 {
-				info.DownloadURL = release.Assets[0].GetBrowserDownloadURL()
-			}
-			availableUpgrades = append(availableUpgrades, info)
+	
+	var newerTagNames []string
+	for _, tag := range tags {
+		tagName := tag.GetName()
+		if semver.Compare(tagName, currentVersion) > 0 {
+			newerTagNames = append(newerTagNames, tagName)
 		}
 	}
-
-	sort.Slice(availableUpgrades, func(i, j int) bool {
-		return semver.Compare(availableUpgrades[i].Version, availableUpgrades[j].Version) < 0
+	
+	sort.Slice(newerTagNames, func(i, j int) bool {
+		return semver.Compare(newerTagNames[i], newerTagNames[j]) < 0
 	})
-
-	return availableUpgrades, nil
+	
+	return newerTagNames, nil
 }

@@ -1,4 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useLocation } from "react-router-dom";
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import { useQueryClient } from "@tanstack/react-query"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery, MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
@@ -14,6 +17,8 @@ export default function MigrationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const location = useLocation();
+  const [openSnackbar, setOpenSnackbar] = useState(false);  
 
   const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -26,6 +31,12 @@ export default function MigrationsPage() {
     staleTime: 0,
     refetchOnMount: true
   })
+
+  useEffect(() => {
+    if (location.state?.showUpgradeSuccess) {
+        setOpenSnackbar(true);
+    }
+  }, [location.state]);
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -85,6 +96,13 @@ export default function MigrationsPage() {
     handleDeleteClose()
   }
 
+  const handleCloseSnackbar = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+        return;
+    }
+    setOpenSnackbar(false);
+  };
+
   const getCustomErrorMessage = (error: Error | string) => {
     const baseMessage = "Failed to delete migrations"
     if (error instanceof Error) {
@@ -124,6 +142,16 @@ export default function MigrationsPage() {
         errorMessage={deleteError}
         onErrorChange={setDeleteError}
       />
+      <Snackbar 
+            open={openSnackbar} 
+            autoHideDuration={6000} 
+            onClose={handleCloseSnackbar}
+            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+              Successfully upgraded to v{location.state?.version}!
+          </Alert>
+      </Snackbar>
     </>
   )
 }
