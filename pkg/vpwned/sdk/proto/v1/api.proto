@@ -119,8 +119,7 @@ message ValidationResult {
     bool no_migration_plans = 4;
     bool no_rolling_migration_plans = 5;
     bool no_custom_resources = 6;
-    bool crds_compatible = 7;
-    bool passed_all = 8;
+    bool passed_all = 7;
 }
 
 message UpgradeRequest {

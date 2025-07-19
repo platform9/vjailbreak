@@ -7,7 +7,6 @@ import {
   confirmCleanupAndUpgrade,
   cleanupStepApiCall,
 } from '../api/version';
-import { useNavigate } from 'react-router-dom';
 import {
   UpgradeResponse,
   ValidationResult,
@@ -40,7 +39,6 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [crList, setCrList] = useState<string[]>([]);
   const [showCRWarning, setShowCRWarning] = useState(false);
   const theme = useTheme();
-  const navigate = useNavigate();
 
   const stepKeys = [
     'no_migrationplans',
@@ -105,13 +103,10 @@ export const UpgradeModal = ({ show, onClose }) => {
           setSuccessMsg(progress.currentStep || 'Upgrade completed successfully');
           clearInterval(interval);
           setTimeout(() => {
+            sessionStorage.setItem('showUpgradeSuccess', 'true');
+            sessionStorage.setItem('upgradedVersion', selectedVersion);
             onClose();
-            navigate('/dashboard/migrations', {
-              state: {
-                showUpgradeSuccess: true,
-                version: selectedVersion
-              }
-            });
+            window.location.href = '/dashboard/migrations';
           }, 3000);
         } else if (progress.status === 'failed') {
           setUpgradeInProgress(false);
@@ -125,7 +120,7 @@ export const UpgradeModal = ({ show, onClose }) => {
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [upgradeInProgress, onClose, selectedVersion, navigate]);
+  }, [upgradeInProgress, onClose, selectedVersion]);
 
   const handleConfirmCleanup = async () => {
     setShowCRWarning(false);
@@ -296,7 +291,7 @@ export const UpgradeModal = ({ show, onClose }) => {
           color="primary"
           fullWidth
         >
-          {upgradeInProgress || upgradeMutation.isPending ? 'Upgrading...' : 'Upgrade'}
+          Upgrade
         </Button>
           <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
             Run Stepwise Cleanup

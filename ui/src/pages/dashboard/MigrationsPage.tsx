@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { useLocation } from "react-router-dom";
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import { useQueryClient } from "@tanstack/react-query"
@@ -17,7 +16,6 @@ export default function MigrationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const location = useLocation();
   const [openSnackbar, setOpenSnackbar] = useState(false);  
 
   const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery(undefined, {
@@ -33,10 +31,12 @@ export default function MigrationsPage() {
   })
 
   useEffect(() => {
-    if (location.state?.showUpgradeSuccess) {
+    const showSuccess = sessionStorage.getItem('showUpgradeSuccess');
+    if (showSuccess === 'true') {
         setOpenSnackbar(true);
+        sessionStorage.removeItem('showUpgradeSuccess');
     }
-  }, [location.state]);
+}, []);
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -149,7 +149,7 @@ export default function MigrationsPage() {
             anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
           <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
-              Successfully upgraded to v{location.state?.version}!
+          Successfully upgraded to {sessionStorage.getItem('upgradedVersion')}!
           </Alert>
       </Snackbar>
     </>

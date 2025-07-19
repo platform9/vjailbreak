@@ -108,7 +108,7 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
 	upgradeProgress = &UpgradeProgress{
 		CurrentStep:    "Starting upgrade",
-		TotalSteps:     3,
+		TotalSteps:     4,
 		CompletedSteps: 0,
 		Status:         "in_progress",
 		StartTime:      time.Now(),
