@@ -74,3 +74,9 @@ type RollingMigartionValidationConfig struct {
 	// CheckPCDHasClusterConfigured checks if the PCD has at-least one Cluster configured
 	CheckPCDHasClusterConfigured bool `json:"checkPCDHasClusterConfigured"` // Check if the PCD has at-least one Cluster configured
 }
+
+// vmError represents a thread-safe error collection
+type vmError struct {
+	vmName string
+	err    error
+}

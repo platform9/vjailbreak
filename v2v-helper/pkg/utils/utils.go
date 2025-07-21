@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"unicode"
+
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	migrationconstants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -64,10 +66,15 @@ func ConvertToK8sName(name string) (string, error) {
 	name = re.ReplaceAllString(name, "")
 	// Remove leading and trailing hyphens
 	name = strings.Trim(name, "-")
-	// Truncate to 242 characters, as we prepend v2v-helper- to the name
+	// Truncate to 63 characters, as we prepend v2v-helper- to the name
 	if len(name) > migrationconstants.NameMaxLength {
 		name = name[:migrationconstants.NameMaxLength]
 	}
+	// if last character is not alphanumeric, remove it
+	if len(name) > 0 && !unicode.IsLetter(rune(name[len(name)-1])) && !unicode.IsNumber(rune(name[len(name)-1])) {
+		name = name[:len(name)-1]
+	}
+
 	nameerrors := validation.IsQualifiedName(name)
 	if len(nameerrors) == 0 {
 		return name, nil
