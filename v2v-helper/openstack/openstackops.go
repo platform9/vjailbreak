@@ -3,6 +3,7 @@
 package openstack
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
@@ -145,4 +148,24 @@ func NewOpenStackClients(insecure bool) (*migrateutils.OpenStackClients, error) 
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
 	}
 	return ostackclients, nil
+}
+
+// CinderManage imports a LUN into OpenStack Cinder and returns the volume ID.
+func CinderManage(ctx context.Context, openstackops OpenstackOperations, rdmDisk vm.RDMDisk) (string, error) {
+	ctxlog := logf.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
+	volume, err := openstackops.CinderManage(rdmDisk, "volume 3.8")
+	if err != nil || volume == nil {
+		return "", fmt.Errorf("failed to import LUN: %s", err)
+	} else if volume.ID == "" {
+		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
+	}
+	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
+	// Wait for the volume to become available
+	err = openstackops.WaitForVolume(volume.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	ctxlog.Info(fmt.Sprintf("Volume %s is now available", volume.ID))
+	return volume.ID, nil
 }

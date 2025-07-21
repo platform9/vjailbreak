@@ -20,8 +20,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +30,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 )
 
 // RDMDiskReconciler reconciles a RDMDisk object
@@ -102,6 +105,8 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{Requeue: true}, nil
 
 	case "Managing":
+		ctxlog := log.WithName(constants.RDMDiskControllerName)
+
 		if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
 			// Create the RDM disk object with required fields
 			rdmDiskObj := vm.RDMDisk{
@@ -109,26 +114,33 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				CinderBackendPool: rdmDisk.Spec.OpenstackVolumeRef.CinderBackendPool,
 				VolumeType:        rdmDisk.Spec.OpenstackVolumeRef.VolumeType,
 			}
-
-			migrationObj := &migrate.Migrate{}
-			volumeID, err := migrationObj.CinderManage(rdmDiskObj)
-			if err != nil {
-				log.Error(err, "Failed to manage RDM disk in Cinder")
-				rdmDisk.Status.Phase = "Error"
-				failureCondition := metav1.Condition{
-					Type:    "MigrationFailed",
-					Status:  metav1.ConditionTrue,
-					Reason:  "CinderManageFailed",
-					Message: err.Error(),
+			openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+			openstackCredsName := client.ObjectKey{
+				Namespace: req.Namespace,
+				Name:      rdmDisk.Spec.OpenstackVolumeRef.OpenstackCreds,
+			}
+			if err := r.Get(ctx, openstackCredsName, openstackcreds); err != nil {
+				if apierrors.IsNotFound(err) {
+					ctxlog.Info("Resource not found, likely deleted", "openstackcreds", openstackCredsName)
+					return ctrl.Result{}, nil
 				}
-				meta.SetStatusCondition(&rdmDisk.Status.Conditions, failureCondition)
-				if updateErr := r.Status().Update(ctx, rdmDisk); updateErr != nil {
-					log.Error(updateErr, "unable to update RDMDisk status")
-					return ctrl.Result{}, updateErr
-				}
+				ctxlog.Error(err, "Failed to get OpenstackCreds resource", "openstackcreds", openstackCredsName)
 				return ctrl.Result{}, err
 			}
-
+			ctxlog.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
+			openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, openstackcreds.Spec.SecretRef.Name)
+			if err != nil {
+				ctxlog.Error(err, "Failed to get Openstack credentials from secret", "secretName", openstackcreds.Spec.SecretRef.Name)
+				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenstackCredentialsRetrievalFailed", "Failed to retrieve Openstack credentials from secret", err)
+			}
+			providerClient, err := utils.ValidateAndGetProviderClient(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
+			}
+			volumeID, err := openstack.CinderManage(ctx, providerClient, openstackCredential.RegionName, rdmDiskObj)
+			if err != nil {
+				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "CinderManageFailed", "Failed to manage RDM disk in Cinder", err)
+			}
 			// Update status with the volume ID in CinderReference
 			rdmDisk.Status.Phase = "Managed"
 			rdmDisk.Status.CinderVolumeID = volumeID
@@ -175,4 +187,23 @@ func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 		return fmt.Errorf("OpenstackVolumeRef.volumeType is required")
 	}
 	return nil
+}
+
+// handleError updates the RDMDisk status with the provided error details and logs the error.
+func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alpha1.RDMDisk, phase string, conditionType string, reason string, err error) error {
+	log := logf.FromContext(ctx)
+	log.Error(err, fmt.Sprintf("Failed during phase: %s", phase))
+	rdmDisk.Status.Phase = phase
+	failureCondition := metav1.Condition{
+		Type:    conditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: err.Error(),
+	}
+	meta.SetStatusCondition(&rdmDisk.Status.Conditions, failureCondition)
+	if updateErr := r.Status().Update(ctx, rdmDisk); updateErr != nil {
+		log.Error(updateErr, "unable to update RDMDisk status")
+		return updateErr
+	}
+	return err
 }
