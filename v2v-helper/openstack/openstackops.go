@@ -151,10 +151,20 @@ func NewOpenStackClients(insecure bool) (*migrateutils.OpenStackClients, error) 
 }
 
 // CinderManage imports a LUN into OpenStack Cinder and returns the volume ID.
-func CinderManage(ctx context.Context, openstackops OpenstackOperations, rdmDisk vm.RDMDisk) (string, error) {
+func CinderManage(ctx context.Context, providerClient *gophercloud.ProviderClient, regionName string, rdmDisk vm.RDMDisk) (string, error) {
 	ctxlog := logf.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
-	volume, err := openstackops.CinderManage(rdmDisk, "volume 3.8")
+	endpoint := gophercloud.EndpointOpts{
+		Region: regionName,
+	}
+	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to create block storage client: %s", err)
+	}
+	osclient := &migrateutils.OpenStackClients{
+		BlockStorageClient: blockStorageClient,
+	}
+	volume, err := osclient.CinderManage(rdmDisk, "volume 3.8")
 	if err != nil || volume == nil {
 		return "", fmt.Errorf("failed to import LUN: %s", err)
 	} else if volume.ID == "" {
@@ -162,7 +172,7 @@ func CinderManage(ctx context.Context, openstackops OpenstackOperations, rdmDisk
 	}
 	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
 	// Wait for the volume to become available
-	err = openstackops.WaitForVolume(volume.ID)
+	err = osclient.WaitForVolume(volume.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
 	}
