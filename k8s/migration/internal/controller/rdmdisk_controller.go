@@ -20,9 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,8 +30,9 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // RDMDiskReconciler reconciles a RDMDisk object
@@ -130,31 +128,11 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{}, err
 			}
 			ctxlog.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
-			scope, err := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
-				Logger:         ctxlog,
-				Client:         r.Client,
-				OpenstackCreds: openstackcreds,
-			})
-			if err != nil {
-				ctxlog.Error(err, "Failed to create OpenstackCredsScope")
-				return ctrl.Result{}, err
-			}
-			openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
-			if err != nil {
-				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackCredentialRetrievalFailed", "Failed to retrieve OpenStack credentials from secret", err)
-			}
-			opts := gophercloud.AuthOptions{
-				IdentityEndpoint: openstackCredential.AuthURL,
-				Username:         openstackCredential.Username,
-				Password:         openstackCredential.Password,
-				DomainName:       openstackCredential.DomainName,
-				TenantName:       openstackCredential.TenantName,
-			}
-			openstackClients, err := openstack.NewOpenStackClientFromOptions(ctx, opts, openstackCredential.Insecure)
+			providerClient, err := utils.ValidateAndGetProviderClient(ctx, r.Client, openstackcreds)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
 			}
-			volumeID, err := CinderManage(ctx, openstackClients, rdmDiskObj)
+			volumeID, err := openstack.CinderManage(ctx, providerClient, rdmDiskObj)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "CinderManageFailed", "Failed to manage RDM disk in Cinder", err)
 			}
@@ -204,26 +182,6 @@ func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 		return fmt.Errorf("OpenstackVolumeRef.volumeType is required")
 	}
 	return nil
-}
-
-// cinderManage imports a LUN into OpenStack Cinder and returns the volume ID.
-func CinderManage(ctx context.Context, openstackops openstack.OpenstackOperations, rdmDisk vm.RDMDisk) (string, error) {
-	ctxlog := logf.FromContext(ctx)
-	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
-	volume, err := openstackops.CinderManage(rdmDisk, "volume 3.8")
-	if err != nil || volume == nil {
-		return "", fmt.Errorf("failed to import LUN: %s", err)
-	} else if volume.ID == "" {
-		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
-	}
-	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
-	// Wait for the volume to become available
-	err = openstackops.WaitForVolume(volume.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
-	}
-	ctxlog.Info(fmt.Sprintf("Volume %s is now available", volume.ID))
-	return volume.ID, nil
 }
 
 // handleError updates the RDMDisk status with the provided error details and logs the error.
