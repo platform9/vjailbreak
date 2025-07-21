@@ -18,6 +18,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v1/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
@@ -69,10 +70,28 @@ func GetCurrentInstanceUUID() (string, error) {
 func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
+	metaData := map[string]string{}
+
+	// Check if the volume type supports thin provisioning
+	supportsThin, err := osclient.cinderSupportsThinProvisioning(volumetype)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if volume type supports thin provisioning: %s", err)
+	}
+	if !supportsThin {
+		utils.PrintLog(fmt.Sprintf(`Volume type %s does not support thin provisioning, using 
+		default provisioning`, volumetype))
+	}
+
+	if supportsThin {
+		utils.PrintLog(fmt.Sprintf(`Volume type %s supports thin provisioning, using thin provisioning`,
+			volumetype))
+		metaData["capabilities:thin_provisioning_support"] = "<is> True"
+	}
 	opts := volumes.CreateOpts{
 		VolumeType: volumetype,
 		Size:       int(math.Ceil(float64(size) / (1024 * 1024 * 1024))),
 		Name:       name,
+		Metadata:   metaData,
 	}
 
 	// Add 1GB to the size to account for the extra space
@@ -518,4 +537,37 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 		return false, fmt.Errorf("server is not active")
 	}
 	return true, nil
+}
+
+// cinderSupportsThinProvisioning checks if the given volume type supports thin provisioning.
+func (osclient *OpenStackClients) cinderSupportsThinProvisioning(volumeTypeName string) (bool, error) {
+
+	allPages, err := volumetypes.List(osclient.BlockStorageClient).AllPages()
+	if err != nil {
+		return false, fmt.Errorf("failed to list volume types: %s", err)
+	}
+	// Extract volume types from the allPages response
+	allTypes, err := volumetypes.ExtractVolumeTypes(allPages)
+	if err != nil {
+		return false, fmt.Errorf("failed to extract volume types: %s", err)
+	}
+
+	var targetType *volumetypes.VolumeType
+	for _, vt := range allTypes {
+		if vt.Name == volumeTypeName {
+			targetType = &vt
+			break
+		}
+	}
+
+	if targetType == nil {
+		return false, fmt.Errorf("volume type %s not found", volumeTypeName)
+	}
+
+	val, ok := targetType.ExtraSpecs["capabilities:thin_provisioning_support"]
+	if !ok {
+		return false, nil // No thin provisioning info = assume unsupported
+	}
+
+	return val == "<is> True", nil
 }

@@ -46,6 +46,7 @@ type OpenstackOperations interface {
 	FindDevice(volumeID string) (string, error)
 	WaitUntilVMActive(vmID string) (bool, error)
 	CinderManage(rdmDisk vm.RDMDisk, openstackAPIVersion string) (*volumes.Volume, error)
+	cinderSupportsThinProvisioning(volumeTypeName string) (bool, error)
 }
 
 func getCert(endpoint string) (*x509.Certificate, error) {

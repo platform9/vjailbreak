@@ -158,7 +158,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	defer progressRead.Close()
 	defer progressWrite.Close()
 
-	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
+	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", "--sparse", generateSockUrl(nbdserver.tmp_dir), dest)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmd.String()))
