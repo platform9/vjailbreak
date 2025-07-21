@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"log"
 
 	"github.com/google/go-github/v63/github"
 	"golang.org/x/mod/semver"
