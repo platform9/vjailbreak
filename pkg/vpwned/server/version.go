@@ -183,13 +183,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			log.Printf("Warning: Failed to update version-config ConfigMap from GitHub: %v", err)
 		}
 		upgradeProgress.CompletedSteps++
-
-		now := time.Now()
-		upgradeProgress.Status = "completed"
-		upgradeProgress.CurrentStep = "Upgrade completed successfully"
-		upgradeProgress.EndTime = &now
-
-		log.Printf("Upgrade to version %s completed successfully", in.TargetVersion)
 		
 		go func() {
 			ctx := context.Background()
@@ -210,6 +203,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 						for i, c := range dep.Spec.Template.Spec.Containers {
 							if c.Name == depConfig.ContainerName {
 								dep.Spec.Template.Spec.Containers[i].Image = newImage
+								dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways 
 								found = true
 								break
 							}
@@ -236,6 +230,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 						for i, c := range dep.Spec.Template.Spec.Containers {
 							if c.Name == depConfig.ContainerName {
 								dep.Spec.Template.Spec.Containers[i].Image = newImage
+								dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways
 								found = true
 								break
 							}
