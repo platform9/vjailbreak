@@ -73,7 +73,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	metaData := map[string]string{}
 
 	// Check if the volume type supports thin provisioning
-	supportsThin, err := osclient.cinderSupportsThinProvisioning(volumetype)
+	supportsThin, err := osclient.CinderSupportsThinProvisioning(volumetype)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if volume type supports thin provisioning: %s", err)
 	}
@@ -540,7 +540,7 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 }
 
 // cinderSupportsThinProvisioning checks if the given volume type supports thin provisioning.
-func (osclient *OpenStackClients) cinderSupportsThinProvisioning(volumeTypeName string) (bool, error) {
+func (osclient *OpenStackClients) CinderSupportsThinProvisioning(volumeTypeName string) (bool, error) {
 
 	allPages, err := volumetypes.List(osclient.BlockStorageClient).AllPages()
 	if err != nil {
