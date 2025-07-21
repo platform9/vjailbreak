@@ -4,7 +4,6 @@ import {
   getAvailableTags,
   initiateUpgrade,
   getUpgradeProgress,
-  confirmCleanupAndUpgrade,
   cleanupStepApiCall,
 } from '../api/version';
 import {
@@ -14,6 +13,7 @@ import {
 } from '../api/version/model';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
+import Tooltip from '@mui/material/Tooltip';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Box from '@mui/material/Box';
@@ -36,24 +36,22 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [upgradeInProgress, setUpgradeInProgress] = useState(false);
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
-  const [crList, setCrList] = useState<string[]>([]);
-  const [showCRWarning, setShowCRWarning] = useState(false);
   const theme = useTheme();
 
   const stepKeys = [
     'no_migrationplans',
     'no_rollingmigrationplans',
+    'agent_scaled_down',
     'vmware_creds_deleted',
     'openstack_creds_deleted',
-    'agent_scaled_down',
     'no_custom_resources',
   ];
   const stepLabels = [
     'Delete MigrationPlans',
     'Delete RollingMigrationPlans',
+    'Scale down Agents',
     'Delete VMware credentials',
     'Delete OpenStack credentials',
-    'Scale down Agents',
     'Delete Custom Resources',
   ];
   const [stepStates, setStepStates] = useState(stepLabels.map(label => ({ label, state: 'pending' })));
@@ -71,11 +69,6 @@ export const UpgradeModal = ({ show, onClose }) => {
         setUpgradeInProgress(true);
         setErrorMsg('');
         setCheckResults(null);
-      } else if (data.cleanupRequired && Array.isArray(data.customResourceList) && data.customResourceList.length > 0) {
-        setCrList(data.customResourceList);
-        setShowCRWarning(true);
-        setErrorMsg('');
-        setSuccessMsg('');
       } else {
         setCheckResults(data.checks);
         setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
@@ -121,31 +114,6 @@ export const UpgradeModal = ({ show, onClose }) => {
     }, 3000);
     return () => clearInterval(interval);
   }, [upgradeInProgress, onClose, selectedVersion]);
-
-  const handleConfirmCleanup = async () => {
-    setShowCRWarning(false);
-    setErrorMsg('');
-    setSuccessMsg('');
-    try {
-      const data = await confirmCleanupAndUpgrade(selectedVersion, true);
-      if (data.upgradeStarted) {
-        setUpgradeInProgress(true);
-        setCheckResults(null);
-        setSuccessMsg('Upgrade process has been initiated!');
-      } else {
-        setCheckResults(data.checks);
-        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.');
-      }
-    } catch (error: any) {
-      setErrorMsg(`An error occurred: ${error.message}`);
-    }
-  };
-
-  const handleCancelCleanup = () => {
-    setShowCRWarning(false);
-    setCrList([]);
-    onClose();
-  };
 
   const runStepwiseCleanup = async () => {
     let newStates = stepLabels.map(label => ({ label, state: 'pending' }));
@@ -293,51 +261,25 @@ export const UpgradeModal = ({ show, onClose }) => {
         >
           Upgrade
         </Button>
-          <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
-            Run Stepwise Cleanup
-          </Button>
+        <Tooltip
+          title={
+            <Typography sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+              This will delete the items listed above
+            </Typography>
+          }
+          arrow
+        >
+          <span>
+            <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
+              Cleanup
+            </Button>
+          </span>
+        </Tooltip>
           <Button onClick={onClose} variant="outlined" fullWidth disabled={upgradeInProgress}>
             Cancel
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={showCRWarning} onClose={handleCancelCleanup} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600 }}>
-            Custom Resources Detected
-        </DialogTitle>
-        <DialogContent>
-            <Alert
-                severity="warning"
-                variant="outlined" 
-                sx={{
-                    borderColor: 'warning.main',
-                    '& .MuiAlert-icon': {
-                        color: 'warning.main',
-                    },
-                }}
-            >
-                <Typography fontWeight={600} gutterBottom>
-                    The following resources must be deleted to proceed. This is a destructive operation and cannot be undone.
-                </Typography>
-                <Box component="ul" sx={{ my: 2, pl: 2.5 }}>
-                    {crList.map(cr => (
-                        <Typography component="li" key={cr} variant="body2">{cr}</Typography>
-                    ))}
-                </Box>
-                <Typography variant="body2" fontWeight={500}>
-                    Are you sure you want to delete these resources and continue?
-                </Typography>
-            </Alert>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, gap: 1 }}> 
-            <Button onClick={handleCancelCleanup} variant="outlined">
-                Cancel
-            </Button>
-            <Button onClick={handleConfirmCleanup} color="error" variant="contained">
-                OK, Delete and Continue
-            </Button>
-        </DialogActions>
-    </Dialog>
     </React.Fragment>
   );
 };

@@ -130,7 +130,13 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, restConf
 		if err != nil {
 			return nil, err
 		}
-		result.AgentsScaledDown = len(list.Items) == 0
+		if len(list.Items) == 0 {
+			result.AgentsScaledDown = true
+		} else if len(list.Items) == 1 && list.Items[0].GetName() == "vjailbreak-master" {
+			result.AgentsScaledDown = true
+		} else {
+			result.AgentsScaledDown = false
+		}
 
 	result.NoCustomResources, err = checkForAnyCustomResources(ctx, kubeClient, restConfig)
 	if err != nil {
@@ -171,8 +177,11 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 			continue
 		}
 		
-		if len(unstructuredList.Items) > 0 {
-			log.Printf("Found %d %s CRs", len(unstructuredList.Items), crInfo.Kind)
+		for _, item := range unstructuredList.Items {
+			if crInfo.Kind == "VjailbreakNode" && item.GetName() == "vjailbreak-master" {
+				continue
+			}
+			log.Printf("Found custom resource %s: %s", crInfo.Kind, item.GetName())
 			return false, nil
 		}
 	}
@@ -338,71 +347,52 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 
 func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	log.Println("Starting automatic resource cleanup...")
-
-	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err == nil {
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-		if err == nil && len(unstructuredList.Items) > 0 {
-			for _, mp := range unstructuredList.Items {
-				planToDelete := mp
-				if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
-					log.Printf("Failed to delete MigrationPlan %s: %v", planToDelete.GetName(), err)
-				} else {
-					log.Printf("Deleted MigrationPlan: %s", planToDelete.GetName())
-				}
-			}
-		}
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
-	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
-	dynamicClient, err = dynamic.NewForConfig(restConfig)
+	gvrMigrationPlans := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
+	mpList, err := dynamicClient.Resource(gvrMigrationPlans).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 	if err == nil {
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-		if err == nil && len(unstructuredList.Items) > 0 {
-			for _, rmp := range unstructuredList.Items {
-				planToDelete := rmp
-				if err := kubeClient.Delete(ctx, &planToDelete); err != nil {
-					log.Printf("Failed to delete RollingMigrationPlan %s: %v", planToDelete.GetName(), err)
-				} else {
-					log.Printf("Deleted RollingMigrationPlan: %s", planToDelete.GetName())
-				}
+		for _, item := range mpList.Items {
+			_ = dynamicClient.Resource(gvrMigrationPlans).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		}
+		log.Println("Deleted MigrationPlans.")
+	}
+
+	gvrRollingPlans := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
+	rmpList, err := dynamicClient.Resource(gvrRollingPlans).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, item := range rmpList.Items {
+			_ = dynamicClient.Resource(gvrRollingPlans).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		}
+		log.Println("Deleted RollingMigrationPlans.")
+	}
+
+	gvrNodes := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "vjailbreaknodes"}
+	nodeList, err := dynamicClient.Resource(gvrNodes).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, item := range nodeList.Items {
+			if item.GetName() != "vjailbreak-master" {
+				_ = dynamicClient.Resource(gvrNodes).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
 			}
 		}
+		log.Println("Scaled down agents by deleting non-master nodes.")
 	}
 
 	vmwareSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vmware-credentials", Namespace: "migration-system"}}
-	if err := kubeClient.Delete(ctx, vmwareSecret); err != nil && !kerrors.IsNotFound(err) {
-		log.Printf("Failed to delete vmware-credentials secret: %v", err)
-	} else {
+	if err := kubeClient.Delete(ctx, vmwareSecret); err == nil || kerrors.IsNotFound(err) {
 		log.Println("Secret vmware-credentials deleted.")
 	}
 
 	openstackSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "openstack-credentials", Namespace: "migration-system"}}
-	if err := kubeClient.Delete(ctx, openstackSecret); err != nil && !kerrors.IsNotFound(err) {
-		log.Printf("Failed to delete openstack-credentials secret: %v", err)
-	} else {
+	if err := kubeClient.Delete(ctx, openstackSecret); err == nil || kerrors.IsNotFound(err) {
 		log.Println("Secret openstack-credentials deleted.")
-	}
-
-	dep := &appsv1.Deployment{}
-	err = kubeClient.Get(ctx, client.ObjectKey{Name: "migration-controller-manager", Namespace: "migration-system"}, dep)
-	if err == nil {
-		var zero int32 = 0
-		dep.Spec.Replicas = &zero
-		if err := kubeClient.Update(ctx, dep); err != nil {
-			log.Printf("Failed to scale down deployment: %v", err)
-			return err
-		}
-		log.Println("Deployment migration-controller-manager scaled down.")
-	} else if !kerrors.IsNotFound(err) {
-		log.Printf("Failed to get deployment for cleanup: %v", err)
-		return err
 	}
 
 	if err := deleteAllCustomResources(ctx, kubeClient, restConfig); err != nil {
 		log.Printf("Failed to delete all custom resources: %v", err)
-		return err
 	}
 
 	log.Println("Resource cleanup completed.")

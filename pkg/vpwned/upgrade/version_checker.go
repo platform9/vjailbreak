@@ -42,7 +42,8 @@ func getCurrentVersionFromConfigMap() (string, error) {
 	return version, nil
 }
 
-func GetAllTags(ctx context.Context, owner, repo string) ([]string, error) {
+func GetAllTags(ctx context.Context) ([]string, error) {
+	owner, repo := loadGitHubConfig(ctx)
 	currentVersion, err := getCurrentVersionFromConfigMap()
 	if err != nil {
 		fmt.Printf("Warning: Could not get current version from configmap: %v. Showing all tags.\n", err)
@@ -96,4 +97,37 @@ func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion 
 	})
 	
 	return newerTagNames, nil
+}
+
+func loadGitHubConfig(ctx context.Context) (string, string) {
+	owner := "platform9"
+	repo := "vjailbreak"
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Printf("Warning: Could not get in-cluster config. Using default GitHub repo. Error: %v", err)
+		return owner, repo
+	}
+	
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Printf("Warning: Could not create kubernetes client. Using default GitHub repo. Error: %v", err)
+		return owner, repo
+	}
+	
+	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(ctx, "version-config", metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Warning: Could not get version-config ConfigMap. Using default GitHub repo. Error: %v", err)
+		return owner, repo
+	}
+	
+	if val, ok := configMap.Data["githubOwner"]; ok && val != "" {
+		owner = val
+	}
+	if val, ok := configMap.Data["githubRepo"]; ok && val != "" {
+		repo = val
+	}
+	
+	log.Printf("Using GitHub repository: %s/%s", owner, repo)
+	return owner, repo
 }

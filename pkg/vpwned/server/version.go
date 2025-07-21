@@ -81,13 +81,8 @@ func (s *VpwnedVersion) Version(ctx context.Context, in *api.VersionRequest) (*a
 	return &api.VersionResponse{Version: version.Version}, nil
 }
 
-func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionRequest) (*api.AvailableUpdatesResponse, error) {
-	owner := "platform9"
-	repo := "vjailbreak"
-	
-	log.Printf("Fetching available tags for %s/%s", owner, repo)
-	
-	tags, err := upgrade.GetAllTags(ctx, owner, repo)
+func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionRequest) (*api.AvailableUpdatesResponse, error) {	
+	tags, err := upgrade.GetAllTags(ctx)
 	if err != nil {
 		log.Printf("Error fetching tags: %v", err)
 		return nil, err
@@ -142,43 +137,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		return nil, err
 	}
 	upgradeProgress.CompletedSteps++
-
-	if !checks.NoCustomResources {
-		currentCRs, _ := upgrade.DiscoverCurrentCRs(ctx, kubeClient)
-		var crList []string
-		for _, crInfo := range currentCRs {
-			gvr := schema.GroupVersionResource{
-				Group:    crInfo.Group,
-				Version:  crInfo.Version,
-				Resource: crInfo.Plural,
-			}
-			dynamicClient, err := dynamic.NewForConfig(config)
-			if err != nil {
-				continue
-			}
-			unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for _, item := range unstructuredList.Items {
-				crList = append(crList, crInfo.Kind+":"+item.GetName())
-			}
-		}
-		return &api.UpgradeResponse{
-			Checks: &api.ValidationResult{
-				NoMigrationPlans:        checks.NoMigrationPlans,
-				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
-				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
-				AgentsScaledDown:        checks.AgentsScaledDown,
-				NoCustomResources:       checks.NoCustomResources,
-				PassedAll:               false,
-			},
-			UpgradeStarted: false,
-			CleanupRequired: true,
-			CustomResourceList: crList,
-		}, nil
-	}
 
 	if in.AutoCleanup {
 		upgradeProgress.CurrentStep = "Performing automatic cleanup"
@@ -558,25 +516,11 @@ func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restC
     if err != nil {
         return false, "Failed to re-list VjailbreakNodes"
     }
-    if len(list.Items) > 0 {
-        return false, "Agents still exist after deletion"
+    if len(list.Items) == 0 || (len(list.Items) == 1 && list.Items[0].GetName() == "vjailbreak-master") {
+        return true, "Agents scaled down"
     }
     
-    deployment := &appsv1.Deployment{}
-    err = kubeClient.Get(ctx, client.ObjectKey{Namespace: "migration-system", Name: "migration-controller-manager"}, deployment)
-    if err != nil {
-        return false, "Failed to get controller deployment"
-    }
-    
-    deployment.Spec.Replicas = &[]int32{0}[0]
-    err = kubeClient.Update(ctx, deployment)
-    if err != nil {
-        return false, "Failed to scale down controller deployment"
-    }
-    
-    time.Sleep(3 * time.Second)
-    
-    return true, "All agents scaled down and controller stopped"
+    return false, "Non-master agents still exist"
 }
 
 func checkAndDeleteSecret(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, credType string) (bool, string) {
