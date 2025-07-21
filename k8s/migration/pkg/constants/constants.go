@@ -13,7 +13,7 @@ const (
 	TerminationPeriod = int64(120)
 
 	// NameMaxLength defines the maximum length of a name
-	NameMaxLength = 242
+	NameMaxLength = 63
 
 	// HashSuffixLength defines the length of the hash suffix
 	HashSuffixLength = 5
