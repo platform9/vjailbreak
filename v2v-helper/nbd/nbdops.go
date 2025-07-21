@@ -115,6 +115,12 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		fmt.Sprintf("snapshot=%s", snapref),
 		file,
 	)
+	// Check if the socket path is sparse
+	if isSparseSupported(socket) {
+		cmd.Args = append(cmd.Args, "--sparse")
+	} else {
+		utils.PrintLog("Sparse support not available, using regular mode")
+	}
 
 	// Log the command
 	cmdstring := ""
@@ -138,6 +144,16 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	nbdserver.tmp_dir = tmp_dir
 	nbdserver.progresschan = progchan
 	return nil
+}
+
+func isSparseSupported(socketPath string) bool {
+	cmd := exec.Command("nbdinfo", "--exportname", "", fmt.Sprintf("nbd+unix:///?socket=%s", socketPath))
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	utils.PrintLog(fmt.Sprintf("nbdinfo output: %s", string(out)))
+	return strings.Contains(string(out), "Content is sparse: true")
 }
 
 func (nbdserver *NBDServer) StopNBDServer() error {
