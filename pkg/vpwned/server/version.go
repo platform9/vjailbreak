@@ -104,6 +104,18 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 }
 
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create k8s client: %w", err)
+	}
+
 	upgradeProgress = &UpgradeProgress{
 		CurrentStep:    "Starting upgrade",
 		TotalSteps:     5,
@@ -114,14 +126,14 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 	saveProgress(ctx, kubeClient)
 
-	config, err := rest.InClusterConfig()
+	config, err = rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
-	scheme := runtime.NewScheme()
+	scheme = runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
-	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
+	kubeClient, err = client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
 	}
