@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"os"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -54,7 +53,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		return nil, errors.Wrap(err, "Failed to get configmap")
 	}
 	return &MigrationParams{
-		SourceVMName:           os.Getenv("SOURCE_VM_NAME"),
+		SourceVMName:           string(configMap.Data["SOURCE_VM_NAME"]),
 		OpenstackNetworkNames:  string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
 		OpenstackNetworkPorts:  string(configMap.Data["NEUTRON_PORT_IDS"]),
 		OpenstackVolumeTypes:   string(configMap.Data["CINDER_VOLUME_TYPES"]),

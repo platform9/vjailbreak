@@ -507,11 +507,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string) error {
-	vmname, err := utils.ConvertToK8sName(vm)
+	vmk8sname, err := utils.ConvertToK8sName(vm)
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	jobName := fmt.Sprintf("v2v-helper-%s-%s", vmname[:min(len(vmname), constants.MaxJobNameLength)], generateSha256Hash(vmname)[:constants.HashSuffixLength])
+	jobName := fmt.Sprintf("v2v-helper-%s-%s", vmk8sname[:min(len(vmk8sname), constants.MaxJobNameLength)], generateSha256Hash(vmk8sname)[:constants.HashSuffixLength])
 	pointtrue := true
 	cutoverlabel := "yes"
 	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
@@ -520,7 +520,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
-		r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vmname))
+		r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vmk8sname))
 		job = &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jobName,
@@ -542,7 +542,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							constants.VMNameLabel: vmname,
+							constants.VMNameLabel: vmk8sname,
 							"startCutover":        cutoverlabel,
 						},
 					},
@@ -571,8 +571,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										},
 									},
 									{
-										Name:  "SOURCE_VM_NAME",
-										Value: vm,
+										Name:  "VMWARE_MACHINE_OBJECT_NAME",
+										Value: vmk8sname,
 									},
 								},
 								EnvFrom: []corev1.EnvFromSource{
@@ -781,17 +781,19 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"CONVERT":               "true", // Assume that the vm always has to be converted
-				"TYPE":                  migrationplan.Spec.MigrationStrategy.Type,
-				"DATACOPYSTART":         migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
-				"CUTOVERSTART":          migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
-				"CUTOVEREND":            migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
-				"NEUTRON_NETWORK_NAMES": strings.Join(openstacknws, ","),
-				"NEUTRON_PORT_IDS":      strings.Join(openstackports, ","),
-				"CINDER_VOLUME_TYPES":   strings.Join(openstackvolumetypes, ","),
-				"VIRTIO_WIN_DRIVER":     virtiodrivers,
-				"PERFORM_HEALTH_CHECKS": strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
-				"HEALTH_CHECK_PORT":     migrationplan.Spec.MigrationStrategy.HealthCheckPort,
+				"SOURCE_VM_NAME":             vm,
+				"CONVERT":                    "true", // Assume that the vm always has to be converted
+				"TYPE":                       migrationplan.Spec.MigrationStrategy.Type,
+				"DATACOPYSTART":              migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+				"CUTOVERSTART":               migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+				"CUTOVEREND":                 migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
+				"NEUTRON_NETWORK_NAMES":      strings.Join(openstacknws, ","),
+				"NEUTRON_PORT_IDS":           strings.Join(openstackports, ","),
+				"CINDER_VOLUME_TYPES":        strings.Join(openstackvolumetypes, ","),
+				"VIRTIO_WIN_DRIVER":          virtiodrivers,
+				"PERFORM_HEALTH_CHECKS":      strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
+				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
