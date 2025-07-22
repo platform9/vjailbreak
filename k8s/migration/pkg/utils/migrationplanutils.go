@@ -40,8 +40,8 @@ func ConvertToK8sName(name string) (string, error) {
 	// Replace separators with hyphens
 	re := regexp.MustCompile(`[_\s]`)
 	name = re.ReplaceAllString(name, "-")
-	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
-	re = regexp.MustCompile(`[^a-z0-9\-.]`)
+	// Remove all characters that are not lowercase alphanumeric or hyphens
+	re = regexp.MustCompile(`[^a-z0-9\-]`)
 	name = re.ReplaceAllString(name, "")
 
 	// Truncate to 63 characters, as we prepend v2v-helper- to the name
