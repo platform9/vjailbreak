@@ -141,7 +141,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // nolint:unparam // always returns ctrl.Result{}, but keep signature for controller-runtime conventions
-
 func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	vmName := migration.Spec.VMName
