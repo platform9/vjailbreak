@@ -29,7 +29,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	openstackutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
 )
 
 // CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
@@ -52,7 +52,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 		openstackuuid = "fake-openstackuuid"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
-		openstackuuid, err = openstackutils.GetCurrentInstanceUUID()
+		openstackuuid, err = migrateutils.GetCurrentInstanceUUID()
 		if err != nil {
 			return errors.Wrap(err, "failed to get current instance uuid")
 		}
@@ -579,9 +579,9 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 // GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
 // It returns the Migration resource associated with the VM or an error if not found.
 func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
-	vmk8sName, err := ConvertToK8sName(vmName)
+	vmk8sName, err := GetVMwareMachineNameForVMName(vmName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert vm name to k8s name")
+		return nil, errors.Wrap(err, "failed to get vm name")
 	}
 	migration := &vjailbreakv1alpha1.Migration{}
 	err = k3sclient.Get(ctx, client.ObjectKey{

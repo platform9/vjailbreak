@@ -7,12 +7,15 @@
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -43,8 +46,8 @@ func ConvertToK8sName(name string) (string, error) {
 	// Remove leading and trailing hyphens
 	name = strings.Trim(name, "-")
 	// Truncate to 63 characters, as we prepend v2v-helper- to the name
-	if len(name) > constants.NameMaxLength {
-		name = name[:constants.NameMaxLength]
+	if len(name) > constants.K8sNameMaxLength {
+		name = name[:constants.K8sNameMaxLength]
 	}
 	// if last character is not alphanumeric, remove it
 	if len(name) > 0 && !unicode.IsLetter(rune(name[len(name)-1])) && !unicode.IsNumber(rune(name[len(name)-1])) {
@@ -78,4 +81,40 @@ func ValidateMigrationPlan(migrationplan *vjailbreakv1alpha1.MigrationPlan) erro
 			Please remove advanced options or reduce the number of VMs in the migrationplan`)
 	}
 	return nil
+}
+
+func GetVMwareMachineNameForVMName(vmname string) (string, error) {
+	vmk8sname, err := ConvertToK8sName(vmname)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to convert vm name to k8s name")
+	}
+	return fmt.Sprintf("%s-%s", vmk8sname[:constants.VMNameMaxLength], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
+}
+
+func GetJobNameForVMName(vmname string) (string, error) {
+	vmk8sname, err := GetVMwareMachineNameForVMName(vmname)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("v2v-helper-%s-%s", vmk8sname[:min(len(vmk8sname), constants.MaxJobNameLength)], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
+}
+
+func GenerateSha256Hash(input string) string {
+	sha256Hash := sha256.New()
+	sha256Hash.Write([]byte(input))
+	hashStr := hex.EncodeToString(sha256Hash.Sum(nil))
+
+	// Check if the last character is already alphanumeric
+	lastChar := hashStr[len(hashStr)-1]
+	if (lastChar >= '0' && lastChar <= '9') || (lastChar >= 'a' && lastChar <= 'z') || (lastChar >= 'A' && lastChar <= 'Z') {
+		return hashStr
+	}
+
+	// Replace the last character with an alphanumeric one
+	// Use the first character of the hash as a seed to select a replacement
+	seed := int(hashStr[0])
+	alphanumeric := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	replacement := alphanumeric[seed%len(alphanumeric)]
+
+	return hashStr[:len(hashStr)-1] + string(replacement)
 }
