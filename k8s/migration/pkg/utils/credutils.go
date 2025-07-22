@@ -293,19 +293,17 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all networks")
 	}
-	allPagesv, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
+	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
 	}
-	pools, err := schedulerstats.ExtractStoragePools(allPagesv)
+	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
 	}
 	volBackednPools := make([]string, 0, len(pools))
 	for _, pool := range pools {
-		if pool.Name != "" {
-			volBackednPools = append(volBackednPools, pool.Name)
-		}
+		volBackednPools = append(volBackednPools, pool.Name)
 	}
 	for i := 0; i < len(allNetworks); i++ {
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
