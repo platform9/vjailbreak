@@ -307,8 +307,8 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 			volBackednPools = append(volBackednPools, pool.Name)
 		}
 	}
-	for i := 0; i < len(allNetworks); i++ {
-		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
+	for _, networks := range allNetworks {
+		openstacknetworks = append(openstacknetworks, networks.Name)
 	}
 
 	return &vjailbreakv1alpha1.OpenstackInfo{

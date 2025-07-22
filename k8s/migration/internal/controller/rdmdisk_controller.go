@@ -67,42 +67,57 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// Handle different phases
+	// Updated logic for handling phases and conditions
 	switch rdmDisk.Status.Phase {
-	case "Created":
-		// Validate the RDM disk specifications
+	case "":
+		// Initial phase, validate the RDM disk specifications
 		if err := ValidateRDMDiskFields(rdmDisk); err != nil {
 			log.Error(err, "validation failed")
 			rdmDisk.Status.Phase = "Error"
-			startCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "ValidationFailed",
 				Status:  metav1.ConditionTrue,
-				Reason:  "Required Fields Missing",
+				Reason:  "RequiredFieldsMissing",
 				Message: err.Error(),
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
+
+		// Validation passed, move to Pending phase
+		rdmDisk.Status.Phase = "Pending"
+		meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
+			Type:    "Validated",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ValidationPassed",
+			Message: "All required fields validated",
+		})
+		if err := r.Status().Update(ctx, rdmDisk); err != nil {
+			log.Error(err, "unable to update RDMDisk status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+
+	case "Pending":
+		// Check if ImportToCinder is true, move to Managing phase
 		if rdmDisk.Spec.ImportToCinder {
-			// All validations passed, move to Managing phase
 			rdmDisk.Status.Phase = "Managing"
-			startCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "MigrationStarted",
 				Status:  metav1.ConditionTrue,
-				Reason:  "ValidationPassed",
-				Message: "All required fields validated, starting migration",
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
+				Reason:  "ImportToCinderEnabled",
+				Message: "Starting migration to Cinder Importing LUN",
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
+			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{}, nil
 
 	case "Managing":
 		ctxlog := log.WithName(constants.RDMDiskControllerName)
@@ -144,13 +159,12 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			// Update status with the volume ID in CinderReference
 			rdmDisk.Status.Phase = "Managed"
 			rdmDisk.Status.CinderVolumeID = volumeID
-			successCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "MigrationSucceeded",
 				Status:  metav1.ConditionTrue,
 				Reason:  "CinderManageSucceeded",
 				Message: "Successfully imported RDM disk to Cinder",
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, successCondition)
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status with volume ID")
 				return ctrl.Result{}, err
