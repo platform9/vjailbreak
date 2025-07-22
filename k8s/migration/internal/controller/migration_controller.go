@@ -324,8 +324,8 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace),
-		client.MatchingLabels(map[string]string{"vm-name": vmname})); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
+		client.MatchingLabels(map[string]string{constants.VMNameLabel: vmname})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", constants.VMNameLabel, vmname))
 	}
 	if len(podList.Items) == 0 {
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))

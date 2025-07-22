@@ -407,13 +407,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, fmt.Errorf("authentication failed: %w. Please verify your OpenStack credentials", err)
 		}
 	}
-	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient)
-	if err != nil {
-		if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
-	}
 	return providerClient, nil
 }
 
@@ -557,8 +550,12 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 // GetAllVMs gets all the VMs in a datacenter.
 //
 //nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
-func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
-	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
+func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
+	log := scope.Logger
+	vmErrors := []vmError{}
+	errMu := sync.Mutex{}
+
+	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
@@ -586,7 +583,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			"summary.config.annotation",
 		}, &vmProps)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get VM properties: %w", err)
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get VM properties: %w", err)})
+			errMu.Unlock()
+			continue
 		}
 		if vmProps.Config == nil {
 			// VM is not powered on or is in creating state
@@ -624,7 +624,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			var netObj mo.Network
 			err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)})
+				errMu.Unlock()
+				continue
 			}
 			networks = append(networks, netObj.Name)
 		}
@@ -650,7 +653,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			var ds mo.Datastore
 			err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get datastore: %w", err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get datastore: %w", err)})
+				errMu.Unlock()
+				continue
 			}
 
 			datastores = AppendUnique(datastores, ds.Name)
@@ -661,7 +667,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		host := mo.HostSystem{}
 		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get host name: %w", err)
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get host name: %w", err)})
+			errMu.Unlock()
+			continue
 		}
 
 		clusterName = getClusterNameFromHost(ctx, c, host)
@@ -690,7 +699,9 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			var parentEntity mo.ManagedEntity
 			err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &parentEntity)
 			if err != nil {
-				fmt.Printf("failed to get parent info for host %s: %v\n", host.Name, err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get parent info for host %s: %w", host.Name, err)})
+				errMu.Unlock()
 			} else {
 				// Handle based on the parent's type
 				switch parentType {
@@ -698,7 +709,9 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 					var cluster mo.ClusterComputeResource
 					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &cluster)
 					if err != nil {
-						fmt.Printf("failed to get cluster name for host %s: %v\n", host.Name, err)
+						errMu.Lock()
+						vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get cluster name for host %s: %w", host.Name, err)})
+						errMu.Unlock()
 					} else {
 						clusterName = cluster.Name
 					}
@@ -706,12 +719,16 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 					var compute mo.ComputeResource
 					err = property.DefaultCollector(c).RetrieveOne(ctx, *host.Parent, []string{"name"}, &compute)
 					if err != nil {
-						fmt.Printf("failed to get compute resource name for host %s: %v\n", host.Name, err)
+						errMu.Lock()
+						vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get compute resource name for host %s: %w", host.Name, err)})
+						errMu.Unlock()
 					} else {
 						clusterName = compute.Name
 					}
 				default:
-					fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
+					errMu.Lock()
+					vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("unknown parent type for host %s: %s", host.Name, parentType)})
+					errMu.Unlock()
 				}
 			}
 		} else {
@@ -721,23 +738,29 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		// Get the virtual NICs
 		nicList, err := ExtractVirtualNICs(&vmProps)
 		if err != nil {
-			return nil, err
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err)})
+			errMu.Unlock()
 		}
 		// Get the guest network info
 		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 		if err != nil {
-			return nil, err
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err)})
+			errMu.Unlock()
 		}
 
 		// Convert VM name to Kubernetes-safe name
 		vmName, err := ConvertToK8sName(vmProps.Config.Name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert vm name: %w", err)
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to convert vm name: %w", err)})
+			errMu.Unlock()
 		}
 
 		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: vmwcreds.Namespace}
-		err = k3sclient.Get(ctx, vmwvmKey, vmwvm)
+		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
+		err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
 
 		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
 		var osFamily string
@@ -750,7 +773,10 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 
 		case err != nil:
 			// Unexpected error
-			return nil, fmt.Errorf("failed to get VMwareMachine: %w", err)
+			errMu.Lock()
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get VMwareMachine: %w", err)})
+			errMu.Unlock()
+			continue
 
 		default:
 			// Object exists
@@ -790,6 +816,15 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			GuestNetworks:     guestNetworks,
 		})
 	}
+
+	if len(vmErrors) > 0 {
+		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
+		// Print individual VM errors for better debugging
+		for _, e := range vmErrors {
+			log.Error(e.err, "VM error details", "vmName", e.vmName)
+		}
+	}
+
 	return vminfo, nil
 }
 
@@ -928,6 +963,12 @@ func AppendUnique(slice []string, values ...string) []string {
 func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo []vjailbreakv1alpha1.VMInfo) error {
 	var wg sync.WaitGroup
+
+	errMu := sync.Mutex{}
+	vmErrors := []vmError{}
+	panicMu := sync.Mutex{}
+	panicErrors := []interface{}{}
+
 	for i := range vminfo {
 		wg.Add(1)
 		go func(i int) {
@@ -935,18 +976,43 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 			// Don't panic on error
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("Panic: %v\n", r)
+					panicMu.Lock()
+					panicErrors = append(panicErrors, r)
+					panicMu.Unlock()
 				}
 			}()
 			vm := &vminfo[i] // Use a pointer
 			err := CreateOrUpdateVMwareMachine(ctx, client, vmwcreds, vm)
 			if err != nil {
-				fmt.Printf("Error creating or updating VM '%s': %v\n", vm.Name, err)
+				errMu.Lock()
+				vmErrors = append(vmErrors, vmError{vmName: vm.Name, err: err})
+				errMu.Unlock()
 			}
 		}(i)
 	}
+
 	// Wait for all vms to be created or updated
 	wg.Wait()
+
+	// Print all errors at the end
+	if len(panicErrors) > 0 {
+		fmt.Printf("\nEncountered %d panic(s):\n", len(panicErrors))
+		for _, p := range panicErrors {
+			fmt.Printf("Panic: %v\n", p)
+		}
+	}
+
+	if len(vmErrors) > 0 {
+		fmt.Printf("\nEncountered %d error(s):\n", len(vmErrors))
+		for _, e := range vmErrors {
+			fmt.Printf("Error creating or updating VM '%s': %v\n", e.vmName, e.err)
+		}
+	}
+
+	if len(vmErrors) > 0 || len(panicErrors) > 0 {
+		return fmt.Errorf("encountered %d error(s) and %d panic(s) while processing %d VMs",
+			len(vmErrors), len(panicErrors), len(vminfo))
+	}
 	return nil
 }
 
@@ -998,6 +1064,10 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				VMInfo: *vminfo,
 			},
 		}
+		// Create the new object
+		if err := client.Create(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to create VMwareMachine: %w", err)
+		}
 		init = true
 	} else {
 		// Initialize labels map if needed
@@ -1048,12 +1118,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 				return fmt.Errorf("failed to update VMwareMachine: %w", err)
 			}
 		}
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create or update VMwareMachine: %w", err)
 	}
 
 	// Assumption is if init is true, the object is new and it is not migrated hence mark migrated to false.

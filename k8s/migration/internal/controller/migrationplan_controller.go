@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/user"
@@ -491,6 +493,12 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+func generateSha256Hash(input string) string {
+	sha256Hash := sha256.New()
+	sha256Hash.Write([]byte(input))
+	return hex.EncodeToString(sha256Hash.Sum(nil))
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -503,7 +511,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("failed to convert VM name: %w", err)
 	}
-	jobName := fmt.Sprintf("v2v-helper-%s", vmname)
+	jobName := fmt.Sprintf("v2v-helper-%s-%s", vmname[:min(len(vmname), constants.MaxJobNameLength)], generateSha256Hash(vmname)[:constants.HashSuffixLength])
 	pointtrue := true
 	cutoverlabel := "yes"
 	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
@@ -534,8 +542,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"vm-name":      vmname,
-							"startCutover": cutoverlabel,
+							constants.VMNameLabel: vmname,
+							"startCutover":        cutoverlabel,
 						},
 					},
 					Spec: corev1.PodSpec{
@@ -548,7 +556,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 							{
 								Name:            "fedora",
 								Image:           v2vimage,
-								ImagePullPolicy: corev1.PullIfNotPresent,
+								ImagePullPolicy: corev1.PullAlways,
 								Command:         []string{"/home/fedora/manager"},
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
