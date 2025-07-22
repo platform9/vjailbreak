@@ -158,7 +158,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
 	// Get the vmware machine from k8s
-	vmk8sName, err := k8sutils.ConvertToK8sName(o.Name)
+	vmk8sName, err := utils.ConvertToK8sName(o.Name)
 	if err != nil {
 		return VMInfo{}, fmt.Errorf("failed to convert vm name to k8s name: %s", err)
 	}
