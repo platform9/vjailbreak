@@ -83,6 +83,7 @@ func ValidateMigrationPlan(migrationplan *vjailbreakv1alpha1.MigrationPlan) erro
 	return nil
 }
 
+// GetVMwareMachineNameForVMName generates a unique name for a VMwareMachine resource
 func GetVMwareMachineNameForVMName(vmname string) (string, error) {
 	vmk8sname, err := ConvertToK8sName(vmname)
 	if err != nil {
@@ -91,6 +92,7 @@ func GetVMwareMachineNameForVMName(vmname string) (string, error) {
 	return fmt.Sprintf("%s-%s", vmk8sname[:constants.VMNameMaxLength], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
 }
 
+// GetJobNameForVMName generates a unique name for a job resource
 func GetJobNameForVMName(vmname string) (string, error) {
 	vmk8sname, err := GetVMwareMachineNameForVMName(vmname)
 	if err != nil {
@@ -99,6 +101,7 @@ func GetJobNameForVMName(vmname string) (string, error) {
 	return fmt.Sprintf("v2v-helper-%s-%s", vmk8sname[:min(len(vmk8sname), constants.MaxJobNameLength)], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
 }
 
+// GenerateSha256Hash generates a SHA256 hash of the input string
 func GenerateSha256Hash(input string) string {
 	sha256Hash := sha256.New()
 	sha256Hash.Write([]byte(input))
