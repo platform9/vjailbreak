@@ -264,7 +264,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         <Tooltip
           title={
             <Typography sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-              This will delete the items listed above
+              This will clean up the items listed above
             </Typography>
           }
           arrow
