@@ -43,8 +43,7 @@ func ConvertToK8sName(name string) (string, error) {
 	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
 	re = regexp.MustCompile(`[^a-z0-9\-.]`)
 	name = re.ReplaceAllString(name, "")
-	// Remove leading and trailing hyphens
-	name = strings.Trim(name, "-")
+
 	// Truncate to 63 characters, as we prepend v2v-helper- to the name
 	if len(name) > constants.K8sNameMaxLength {
 		name = name[:constants.K8sNameMaxLength]
@@ -53,6 +52,9 @@ func ConvertToK8sName(name string) (string, error) {
 	if len(name) > 0 && !unicode.IsLetter(rune(name[len(name)-1])) && !unicode.IsNumber(rune(name[len(name)-1])) {
 		name = name[:len(name)-1]
 	}
+
+	// Remove leading and trailing hyphens
+	name = strings.Trim(name, "-")
 
 	nameerrors := validation.IsQualifiedName(name)
 	if len(nameerrors) == 0 {
@@ -89,7 +91,7 @@ func GetVMwareMachineNameForVMName(vmname string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert vm name to k8s name")
 	}
-	return fmt.Sprintf("%s-%s", vmk8sname[:constants.VMNameMaxLength], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
+	return fmt.Sprintf("%s-%s", vmk8sname[:min(len(vmk8sname), constants.VMNameMaxLength)], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
 }
 
 // GetJobNameForVMName generates a unique name for a job resource
