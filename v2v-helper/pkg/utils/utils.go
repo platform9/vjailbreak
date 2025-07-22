@@ -1,20 +1,16 @@
 package utils
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -48,24 +44,6 @@ func GetInclusterClient() (client.Client, error) {
 	}
 
 	return clientset, err
-}
-
-func IsDebug(ctx context.Context, client client.Client) (bool, error) {
-	// get the configmap
-	configMapName, err := GetMigrationConfigMapName()
-	if err != nil {
-		return false, err
-	}
-	configMap := &v1.ConfigMap{}
-	err = client.Get(ctx, types.NamespacedName{
-		Name:      configMapName,
-		Namespace: constants.MigrationSystemNamespace,
-	}, configMap)
-	if err != nil {
-		return false, errors.Wrap(err, "Failed to get configmap")
-	}
-	debug := strings.TrimSpace(string(configMap.Data["DEBUG"]))
-	return debug == constants.TrueString, nil
 }
 
 func PrintLog(logMessage string) error {
