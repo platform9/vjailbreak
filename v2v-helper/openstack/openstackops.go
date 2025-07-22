@@ -161,8 +161,18 @@ func CinderManage(ctx context.Context, providerClient *gophercloud.ProviderClien
 	if err != nil {
 		return "", fmt.Errorf("failed to create block storage client: %s", err)
 	}
+	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to create compute client: %s", err)
+	}
+	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to create networking client: %s", err)
+	}
 	osclient := &migrateutils.OpenStackClients{
 		BlockStorageClient: blockStorageClient,
+		ComputeClient:      computeClient,
+		NetworkingClient:   networkingClient,
 	}
 	volume, err := osclient.CinderManage(rdmDisk, "volume 3.8")
 	if err != nil || volume == nil {

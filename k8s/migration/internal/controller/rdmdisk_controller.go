@@ -125,6 +125,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
 			// Create the RDM disk object with required fields
 			rdmDiskObj := vm.RDMDisk{
+				DiskName:          rdmDisk.Name,
 				VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.Source,
 				CinderBackendPool: rdmDisk.Spec.OpenstackVolumeRef.CinderBackendPool,
 				VolumeType:        rdmDisk.Spec.OpenstackVolumeRef.VolumeType,

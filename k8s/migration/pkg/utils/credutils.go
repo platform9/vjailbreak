@@ -618,13 +618,6 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 		}
 		// Fetch details required for RDM disks
 		hostStorageMap := sync.Map{}
-		controllers := make(map[int32]types.BaseVirtualSCSIController)
-		// Collect all SCSI controller to find shared RDM disks
-		for _, device := range vmProps.Config.Hardware.Device {
-			if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
-				controllers[device.GetVirtualDevice().Key] = scsiController
-			}
-		}
 		// Get basic RDM disk info from VM properties
 		rdmDiskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
 		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
@@ -648,7 +641,7 @@ func GetAllVMs(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbrea
 			if !ok {
 				continue
 			}
-			dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, controllers, hostStorageInfo, vm.Name())
+			dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, hostStorageInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -887,16 +880,7 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
 func processVMDisk(ctx context.Context,
 	disk *types.VirtualDisk,
-	controllers map[int32]types.BaseVirtualSCSIController,
-	hostStorageInfo *types.HostStorageDeviceInfo,
-	vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
-	if controller, ok := controllers[disk.ControllerKey]; ok {
-		if controller.GetVirtualSCSIController().SharedBus == types.VirtualSCSISharingPhysicalSharing {
-			ctrllog.FromContext(ctx).Info("SKipping VM: VM has SCSI controller with shared bus, migration not supported",
-				"vm", vmName)
-			return nil, vjailbreakv1alpha1.RDMDiskInfo{}, true, nil
-		}
-	}
+	hostStorageInfo *types.HostStorageDeviceInfo) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
 
 	switch backing := disk.Backing.(type) {
 	case *types.VirtualDiskFlatVer2BackingInfo:
@@ -1434,7 +1418,7 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 					}
 					mp := make(map[string]string)
 					mp[splotVolRef[0]] = splotVolRef[1]
-					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to", mp, rdmInfo)
+					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
 					rdmInfo.OpenstackVolumeRef = vjailbreakv1alpha1.OpenStackVolumeRefInfo{
 						VolumeRef: mp,
 					}
