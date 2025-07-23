@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { CircularProgress, styled, Typography, Box } from "@mui/material"
+import { CircularProgress, styled, Typography, Box, Tooltip } from "@mui/material"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom"
@@ -52,9 +52,20 @@ export default function MigrationProgress({
     <>
       <ProgressContainer>
         {statusIcon}
-        <Typography variant="body2" sx={{ ml: 2 }}>
-          {progressText}
-        </Typography>
+        <Tooltip title={progressText} arrow>
+          <Typography
+            variant="body2"
+            sx={{
+              ml: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%'
+            }}
+          >
+            {progressText}
+          </Typography>
+        </Tooltip>
       </ProgressContainer>
     </>
   )

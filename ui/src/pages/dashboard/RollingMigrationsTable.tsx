@@ -25,15 +25,16 @@ import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { ReactElement } from "react";
 import WarningIcon from '@mui/icons-material/Warning';
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
-import { deleteClusterMigration } from "src/api/clustermigrations/clustermigrations";
+import { deleteRollingMigrationPlan } from "src/api/rolling-migration-plans/rollingMigrationPlans";
 import { useQueryClient } from "@tanstack/react-query";
-import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery";
+import { ROLLING_MIGRATION_PLANS_QUERY_KEY } from "src/hooks/api/useRollingMigrationPlansQuery";
 
 // Import CDS icons
 import "@cds/core/icon/register.js";
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon";
 import { ESXHost, ESXIMigration } from "src/api/esximigrations/model";
 import { Migration, Phase } from "src/api/migrations/model";
+import { RollingMigrationPlan } from "src/api/rolling-migration-plans/model";
 import { getESXHosts } from "src/api/esximigrations/helper";
 import MigrationsTable from "./MigrationsTable";
 
@@ -363,7 +364,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
 }
 
 interface CustomToolbarProps {
-    refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+    refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>;
     selectedCount: number;
     onDeleteSelected: () => void;
 }
@@ -413,56 +414,85 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
 };
 
 interface RollingMigrationsTableProps {
+    rollingMigrationPlans: RollingMigrationPlan[];
     clusterMigrations: ClusterMigration[];
     esxiMigrations: ESXIMigration[];
     migrations: Migration[];
-    refetchClusterMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ClusterMigration[], Error>>;
+    refetchRollingMigrationPlans?: (options?: RefetchOptions) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>;
     refetchMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 export default function RollingMigrationsTable({
+    rollingMigrationPlans,
     clusterMigrations,
     esxiMigrations,
     migrations,
-    refetchClusterMigrations,
+    refetchRollingMigrationPlans,
     refetchMigrations,
 }: RollingMigrationsTableProps) {
     const queryClient = useQueryClient();
-    const [selectedCluster, setSelectedCluster] = useState<ClusterMigration | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<RollingMigrationPlan | null>(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
-    const esxHostsByCluster = useMemo(() => {
-        const esxisByCluster: Record<string, ESXHost[]> = {};
+    // Map from RollingMigrationPlan to related ClusterMigrations
+    const clusterMigrationsByPlan = useMemo(() => {
+        const result: Record<string, ClusterMigration[]> = {};
 
-        clusterMigrations.forEach(cluster => {
-            if (cluster.metadata?.name) {
-                const clusterName = cluster.spec.clusterName || '';
-                esxisByCluster[clusterName] = getESXHosts(esxiMigrations
-                    .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.toLowerCase().includes(clusterName.toLowerCase()))
+        rollingMigrationPlans.forEach(plan => {
+            if (plan.metadata?.name) {
+                result[plan.metadata.name] = clusterMigrations.filter(cm =>
+                    cm.spec.rollingMigrationPlanRef?.name === plan.metadata?.name
                 );
-            }
-        });
-        return esxisByCluster;
-    }, [clusterMigrations, esxiMigrations]);
-
-    const migrationsByCluster = useMemo(() => {
-        const result: Record<string, Migration[]> = {};
-
-        clusterMigrations.forEach(cluster => {
-            if (cluster.metadata?.name) {
-                const rollingMigrationPlan = cluster.spec.rollingMigrationPlanRef?.name || '';
-                result[rollingMigrationPlan] = migrations.filter(migration => migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/rollingmigrationplan']?.includes(rollingMigrationPlan))
             }
         });
 
         return result;
-    }, [clusterMigrations, migrations]);
+    }, [rollingMigrationPlans, clusterMigrations]);
 
-    const handleOpenDetails = (cluster: ClusterMigration) => {
-        setSelectedCluster(cluster);
+    // Map from RollingMigrationPlan to ESX hosts via ClusterMigrations
+    const esxHostsByPlan = useMemo(() => {
+        const result: Record<string, ESXHost[]> = {};
+
+        rollingMigrationPlans.forEach(plan => {
+            if (plan.metadata?.name) {
+                const relatedClusterMigrations = clusterMigrationsByPlan[plan.metadata.name] || [];
+                const allEsxHosts: ESXHost[] = [];
+
+                relatedClusterMigrations.forEach(cluster => {
+                    const clusterName = cluster.spec.clusterName || '';
+                    const esxHosts = getESXHosts(esxiMigrations
+                        .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.toLowerCase().includes(clusterName.toLowerCase()))
+                    );
+                    allEsxHosts.push(...esxHosts);
+                });
+
+                result[plan.metadata.name] = allEsxHosts;
+            }
+        });
+
+        return result;
+    }, [rollingMigrationPlans, clusterMigrationsByPlan, esxiMigrations]);
+
+    // Map from RollingMigrationPlan to VM migrations
+    const migrationsByPlan = useMemo(() => {
+        const result: Record<string, Migration[]> = {};
+
+        rollingMigrationPlans.forEach(plan => {
+            if (plan.metadata?.name) {
+                result[plan.metadata.name] = migrations.filter(migration =>
+                    migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/rollingmigrationplan']?.includes(plan.metadata.name)
+                );
+            }
+        });
+
+        return result;
+    }, [rollingMigrationPlans, migrations]);
+
+    const handleOpenDetails = (plan: RollingMigrationPlan) => {
+        setSelectedPlan(plan);
         setDrawerOpen(true);
     };
     const handleCloseDrawer = () => {
@@ -481,25 +511,22 @@ export default function RollingMigrationsTable({
 
     const handleConfirmDelete = async () => {
         try {
-            const selectedClusterMigrations = clusterMigrations.filter(cm =>
-                selectedRows.includes(cm.metadata?.name || '')
+            const selectedRollingMigrationPlans = rollingMigrationPlans.filter(plan =>
+                selectedRows.includes(plan.metadata?.name || '')
             );
 
             await Promise.all(
-                selectedClusterMigrations.map(async (migration) => {
-                    // const rollingMigrationPlanName = migration.spec.rollingMigrationPlanRef?.name;
-
-                    await deleteClusterMigration(migration.metadata.name);
-
+                selectedRollingMigrationPlans.map(async (plan) => {
+                    await deleteRollingMigrationPlan(plan.metadata?.name || '');
                 })
             );
 
-            queryClient.invalidateQueries({ queryKey: CLUSTER_MIGRATIONS_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: ROLLING_MIGRATION_PLANS_QUERY_KEY });
 
             setSelectedRows([]);
         } catch (error) {
-            console.error("Failed to delete cluster conversions:", error);
-            setDeleteError(error instanceof Error ? error.message : "Failed to delete cluster conversions");
+            console.error("Failed to delete rolling migration plans:", error);
+            setDeleteError(error instanceof Error ? error.message : "Failed to delete rolling migration plans");
             throw error;
         }
     };
@@ -522,30 +549,38 @@ export default function RollingMigrationsTable({
         'Queued': 3
     };
 
-    // ClusterMigration columns for the main table
+    // RollingMigrationPlan columns for the main table
     const clusterColumns: GridColDef[] = [
         {
             field: 'clusterName',
             headerName: 'Cluster Name',
             display: 'flex',
             flex: 1,
-            renderCell: (params) => (
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <CdsIconWrapper>
-                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                        {/* @ts-ignore */}
-                        <cds-icon shape="cluster" size="md"></cds-icon>
-                    </CdsIconWrapper>
-                    <Typography variant="body2">{(params.row as ClusterMigration).spec.clusterName || 'Unknown'}</Typography>
-                </Box>
-            ),
+            renderCell: (params) => {
+                const plan = params.row as RollingMigrationPlan;
+                const relatedClusterMigrations = clusterMigrationsByPlan[plan.metadata?.name || ''] || [];
+                const clusterName = relatedClusterMigrations[0]?.spec?.clusterName || 'Unknown';
+
+                return (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <CdsIconWrapper>
+                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                            {/* @ts-ignore */}
+                            <cds-icon shape="cluster" size="md"></cds-icon>
+                        </CdsIconWrapper>
+                        <Typography variant="body2">{clusterName}</Typography>
+                    </Box>
+                );
+            },
         },
         {
             field: 'status',
             headerName: 'Migration Status',
             flex: 0.5,
             renderCell: (params) => {
-                return <StatusChip status={(params.row as ClusterMigration).status?.phase || 'Unknown'} />;
+                const plan = params.row as RollingMigrationPlan;
+                const status = plan.status?.phase || 'Unknown';
+                return <StatusChip status={status} />;
             },
             sortComparator: (v1, v2) => {
                 const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
@@ -558,8 +593,9 @@ export default function RollingMigrationsTable({
             headerName: 'ESX Hosts',
             flex: 0.5,
             renderCell: (params) => {
-                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
-                return esxHostsByCluster[clusterName]?.length || 0;
+                const plan = params.row as RollingMigrationPlan;
+                const planName = plan.metadata?.name || '';
+                return esxHostsByPlan[planName]?.length || 0;
             },
         },
         {
@@ -567,8 +603,9 @@ export default function RollingMigrationsTable({
             headerName: 'VMs',
             flex: 0.5,
             renderCell: (params) => {
-                const rollingMigrationPlan = (params.row as ClusterMigration).spec?.rollingMigrationPlanRef?.name || '';
-                return migrationsByCluster[rollingMigrationPlan]?.length || 0;
+                const plan = params.row as RollingMigrationPlan;
+                const planName = plan.metadata?.name || '';
+                return migrationsByPlan[planName]?.length || 0;
             },
         },
         {
@@ -576,17 +613,17 @@ export default function RollingMigrationsTable({
             headerName: 'Migration Progress',
             flex: 1,
             renderCell: (params) => {
-                const clusterName = (params.row as ClusterMigration).spec?.clusterName || '';
-                const rollingMigrationPlan = (params.row as ClusterMigration).spec?.rollingMigrationPlanRef?.name || '';
+                const plan = params.row as RollingMigrationPlan;
+                const planName = plan.metadata?.name || '';
 
                 // ESX Hosts progress
-                const esxHosts = esxHostsByCluster[clusterName] || [];
+                const esxHosts = esxHostsByPlan[planName] || [];
                 const totalEsx = esxHosts.length;
                 const migratedEsx = esxHosts.filter(host => host.state === Phase.Succeeded).length;
                 const esxProgress = totalEsx > 0 ? (migratedEsx / totalEsx) * 100 : 0;
 
                 // VMs progress
-                const migrations = migrationsByCluster[rollingMigrationPlan] || [];
+                const migrations = migrationsByPlan[planName] || [];
                 const totalVms = migrations.length;
                 const migratedVms = migrations.filter(migration => migration.status?.phase === Phase.Succeeded).length;
                 const vmProgress = totalVms > 0 ? (migratedVms / totalVms) * 100 : 0;
@@ -647,7 +684,7 @@ export default function RollingMigrationsTable({
                     variant="text"
                     size="small"
                     startIcon={<VisibilityIcon />}
-                    onClick={() => handleOpenDetails(params.row as ClusterMigration)}
+                    onClick={() => handleOpenDetails(params.row as RollingMigrationPlan)}
                 >
                     Details
                 </Button>
@@ -658,9 +695,9 @@ export default function RollingMigrationsTable({
     return (
         <Box sx={{ width: '100%', height: '100%' }}>
             <DataGrid
-                rows={clusterMigrations}
+                rows={rollingMigrationPlans}
                 columns={clusterColumns}
-                getRowId={(row: ClusterMigration) => row.metadata?.name || ''}
+                getRowId={(row: RollingMigrationPlan) => row.metadata?.name || ''}
                 initialState={{
                     pagination: { paginationModel: { pageSize: 25 } },
                     sorting: {
@@ -672,7 +709,7 @@ export default function RollingMigrationsTable({
                 slots={{
                     toolbar: () => (
                         <CustomToolbar
-                            refetchClusterMigrations={refetchClusterMigrations}
+                            refetchClusterMigrations={refetchRollingMigrationPlans}
                             selectedCount={selectedRows.length}
                             onDeleteSelected={handleDeleteSelected}
                         />
@@ -684,13 +721,13 @@ export default function RollingMigrationsTable({
                 disableRowSelectionOnClick
             />
 
-            {selectedCluster && (
+            {selectedPlan && (
                 <ClusterDetailsDrawer
                     open={drawerOpen}
                     onClose={handleCloseDrawer}
-                    clusterMigration={selectedCluster}
-                    esxHosts={esxHostsByCluster[selectedCluster.spec.clusterName || ''] || []}
-                    migrations={migrationsByCluster[selectedCluster.spec.rollingMigrationPlanRef?.name || ''] || []}
+                    clusterMigration={clusterMigrationsByPlan[selectedPlan.metadata?.name || '']?.[0] || null}
+                    esxHosts={esxHostsByPlan[selectedPlan.metadata?.name || ''] || []}
+                    migrations={migrationsByPlan[selectedPlan.metadata?.name || ''] || []}
                     refetchMigrations={refetchMigrations}
                 // refetchESXMigrations={refetchESXMigrations}
                 />
@@ -702,14 +739,14 @@ export default function RollingMigrationsTable({
                 title="Confirm Delete"
                 icon={<WarningIcon color="warning" />}
                 message={selectedRows.length > 1
-                    ? "Are you sure you want to delete these cluster conversions?"
-                    : `Are you sure you want to delete the selected cluster conversion?`
+                    ? "Are you sure you want to delete these rolling migration plans?"
+                    : `Are you sure you want to delete the selected rolling migration plan?`
                 }
-                items={clusterMigrations
-                    .filter(cm => selectedRows.includes(cm.metadata?.name || ''))
-                    .map(cm => ({
-                        id: cm.metadata?.name || '',
-                        name: cm.spec?.clusterName || cm.metadata?.name || ''
+                items={rollingMigrationPlans
+                    .filter(plan => selectedRows.includes(plan.metadata?.name || ''))
+                    .map(plan => ({
+                        id: plan.metadata?.name || '',
+                        name: plan.metadata?.name || ''
                     }))}
                 actionLabel="Delete"
                 actionColor="error"
