@@ -592,7 +592,7 @@ export default function MigrationFormDrawer({
       setSubmitting(false)
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
       onClose()
-      navigate("/dashboard?tab=migrations")
+      navigate("/dashboard/migrations")
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
@@ -694,7 +694,7 @@ export default function MigrationFormDrawer({
       anchor="right"
       open={open}
       onClose={handleClose}
-      ModalProps={{ 
+      ModalProps={{
         keepMounted: false,
         style: { zIndex: 1300 }
       }}

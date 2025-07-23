@@ -22,7 +22,7 @@ import { deleteESXIMigration } from "src/api/esximigrations/esximigrations"
 import RollingMigrationsTable from "./RollingMigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNodesQuery } from "../../hooks/api/useNodesQuery"
-import { useClusterMigrationsQuery } from "../../hooks/api/useClusterMigrationsQuery"
+import { useRollingMigrationPlansQuery } from "../../hooks/api/useRollingMigrationPlansQuery"
 
 
 const DashboardContainer = styled("div")({
@@ -66,15 +66,21 @@ export default function Dashboard() {
     refetchOnMount: true
   })
 
-  const { data: clusterMigrations, refetch: refetchClusterMigrations } = useClusterMigrationsQuery({
-    queryKey: CLUSTER_MIGRATIONS_QUERY_KEY,
+  // const { data: clusterMigrations, refetch: refetchClusterMigrations } = useClusterMigrationsQuery({
+  //   queryKey: CLUSTER_MIGRATIONS_QUERY_KEY,
+  //   refetchInterval: THIRTY_SECONDS,
+  //   staleTime: 0,
+  //   refetchOnMount: true
+  // })
+
+  const { data: esxiMigrations, refetch: refetchESXIMigrations } = useESXIMigrationsQuery({
+    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
     refetchInterval: THIRTY_SECONDS,
     staleTime: 0,
     refetchOnMount: true
   })
 
-  const { data: esxiMigrations } = useESXIMigrationsQuery({
-    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
+  const { data: rollingMigrationPlans, refetch: refetchRollingMigrationPlans } = useRollingMigrationPlansQuery({
     refetchInterval: THIRTY_SECONDS,
     staleTime: 0,
     refetchOnMount: true
@@ -331,10 +337,11 @@ export default function Dashboard() {
           <CredentialsTable />
         ) : activeTab === 3 ? (
           <RollingMigrationsTable
-            clusterMigrations={clusterMigrations || []}
+            rollingMigrationPlans={rollingMigrationPlans || []}
             esxiMigrations={esxiMigrations || []}
             migrations={migrations || []}
-            refetchClusterMigrations={refetchClusterMigrations}
+            refetchRollingMigrationPlans={refetchRollingMigrationPlans}
+            refetchESXIMigrations={refetchESXIMigrations}
             refetchMigrations={refetchMigrations}
           />
         ) : (

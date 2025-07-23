@@ -1076,7 +1076,7 @@ export default function RollingMigrationFormDrawer({
 
             console.log("Submitted rolling migration plan", migrationPlanJson);
             onClose();
-            navigate("/dashboard?tab=clusterconversions");
+            navigate("/dashboard/cluster-conversions");
         } catch (error) {
             console.error("Failed to submit rolling migration plan:", error);
             reportError(error as Error, {
@@ -1900,7 +1900,7 @@ export default function RollingMigrationFormDrawer({
                 anchor="right"
                 open={open}
                 onClose={handleClose}
-                ModalProps={{ 
+                ModalProps={{
                     keepMounted: false,
                     style: { zIndex: 1300 }
                 }}

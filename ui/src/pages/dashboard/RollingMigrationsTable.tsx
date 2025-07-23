@@ -7,7 +7,8 @@ import {
     styled,
     Button,
     LinearProgress,
-    IconButton
+    IconButton,
+    Tooltip
 } from "@mui/material";
 import {
     DataGrid,
@@ -19,6 +20,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ClusterIcon from '@mui/icons-material/Hub';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
@@ -41,32 +43,7 @@ import MigrationsTable from "./MigrationsTable";
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon);
 
-interface ClusterMigration {
-    apiVersion: string;
-    kind: string;
-    metadata: {
-        name: string;
-        namespace: string;
-        creationTimestamp: string;
-        finalizers: string[];
-        generation: number;
-        resourceVersion: string;
-        uid: string;
-        ownerReferences: { apiVersion: string; kind: string; name: string; uid: string }[];
-    };
-    spec: {
-        clusterName: string;
-        esxiMigrationSequence: string[];
-        openstackCredsRef: { name: string };
-        rollingMigrationPlanRef: { name: string };
-        vmwareCredsRef: { name: string };
-    };
-    status: {
-        currentESXi: string;
-        message: string;
-        phase: string;
-    };
-}
+
 
 const CdsIconWrapper = styled('div')({
     marginRight: 8,
@@ -207,7 +184,7 @@ const StatusSummary = ({
     );
 };
 
-function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migrations, refetchMigrations }) {
+function ClusterDetailsDrawer({ open, onClose, esxHosts, migrations, refetchMigrations, rollingMigrationPlan, refetchESXMigrations }) {
     // ESX Columns for the table
     const esxColumns: GridColDef[] = [
         {
@@ -244,6 +221,11 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
             valueGetter: (value: string) => value || "—"
         }
     ];
+
+    // Get display name from RollingMigrationPlan cluster sequence or fallback to plan name
+    const displayName = rollingMigrationPlan?.spec?.clusterSequence?.[0]?.clusterName ||
+        rollingMigrationPlan?.metadata?.name ||
+        'Migration Details';
 
     // // VM Columns for the table
     // const vmColumns: GridColDef[] = [
@@ -307,7 +289,7 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
         >
             <DrawerHeader>
                 <Typography variant="h6">
-                    {clusterMigration.spec.clusterName} Details
+                    {displayName} Details
                 </Typography>
                 <IconButton onClick={onClose}>
                     <CloseIcon />
@@ -316,10 +298,24 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
             <DrawerContent>
                 <Box sx={{ p: 2 }}>
                     <Box sx={{ mb: 4 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6" fontWeight="bold">
+                                ESX Migrations
+                            </Typography>
+                            <Tooltip title="Refresh ESX Migrations">
+                                <IconButton
+                                    onClick={() => refetchESXMigrations?.()}
+                                    size="small"
+                                    color="primary"
+                                >
+                                    <RefreshIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
                         <StatusSummary
                             items={esxHosts}
                             getStatus={(esxi) => (esxi as ESXHost).state}
-                            title="ESX Migrations"
+                            title=""
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
                             <DataGrid
@@ -340,10 +336,24 @@ function ClusterDetailsDrawer({ open, onClose, clusterMigration, esxHosts, migra
                     </Box>
 
                     <Box sx={{ mt: 4 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6" fontWeight="bold">
+                                VM Migrations
+                            </Typography>
+                            <Tooltip title="Refresh VM Migrations">
+                                <IconButton
+                                    onClick={() => refetchMigrations?.()}
+                                    size="small"
+                                    color="primary"
+                                >
+                                    <RefreshIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
                         <StatusSummary
                             items={migrations}
                             getStatus={(migration) => (migration as Migration).status?.phase}
-                            title="VM Migrations"
+                            title=""
                         />
                         <Box sx={{ height: 300, width: '100%' }}>
                             <MigrationsTable
@@ -415,19 +425,19 @@ const CustomToolbar = ({ refetchClusterMigrations, selectedCount, onDeleteSelect
 
 interface RollingMigrationsTableProps {
     rollingMigrationPlans: RollingMigrationPlan[];
-    clusterMigrations: ClusterMigration[];
     esxiMigrations: ESXIMigration[];
     migrations: Migration[];
     refetchRollingMigrationPlans?: (options?: RefetchOptions) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>;
+    refetchESXIMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<ESXIMigration[], Error>>;
     refetchMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 export default function RollingMigrationsTable({
-    rollingMigrationPlans,
-    clusterMigrations,
-    esxiMigrations,
-    migrations,
     refetchRollingMigrationPlans,
+    esxiMigrations,
+    rollingMigrationPlans,
+    migrations,
+    refetchESXIMigrations,
     refetchMigrations,
 }: RollingMigrationsTableProps) {
     const queryClient = useQueryClient();
@@ -437,44 +447,24 @@ export default function RollingMigrationsTable({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
-    // Map from RollingMigrationPlan to related ClusterMigrations
-    const clusterMigrationsByPlan = useMemo(() => {
-        const result: Record<string, ClusterMigration[]> = {};
 
-        rollingMigrationPlans.forEach(plan => {
-            if (plan.metadata?.name) {
-                result[plan.metadata.name] = clusterMigrations.filter(cm =>
-                    cm.spec.rollingMigrationPlanRef?.name === plan.metadata?.name
-                );
-            }
-        });
 
-        return result;
-    }, [rollingMigrationPlans, clusterMigrations]);
-
-    // Map from RollingMigrationPlan to ESX hosts via ClusterMigrations
     const esxHostsByPlan = useMemo(() => {
         const result: Record<string, ESXHost[]> = {};
 
         rollingMigrationPlans.forEach(plan => {
             if (plan.metadata?.name) {
-                const relatedClusterMigrations = clusterMigrationsByPlan[plan.metadata.name] || [];
-                const allEsxHosts: ESXHost[] = [];
+                const filteredESXIMigrations = esxiMigrations.filter(esxi =>
+                    esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/rollingmigrationplan'] === plan.metadata.name
+                );
 
-                relatedClusterMigrations.forEach(cluster => {
-                    const clusterName = cluster.spec.clusterName || '';
-                    const esxHosts = getESXHosts(esxiMigrations
-                        .filter(esxi => esxi.metadata?.labels?.['vjailbreak.k8s.pf9.io/clustermigration']?.toLowerCase().includes(clusterName.toLowerCase()))
-                    );
-                    allEsxHosts.push(...esxHosts);
-                });
-
-                result[plan.metadata.name] = allEsxHosts;
+                const esxHosts = getESXHosts(filteredESXIMigrations);
+                result[plan.metadata.name] = esxHosts;
             }
         });
 
         return result;
-    }, [rollingMigrationPlans, clusterMigrationsByPlan, esxiMigrations]);
+    }, [rollingMigrationPlans, esxiMigrations]);
 
     // Map from RollingMigrationPlan to VM migrations
     const migrationsByPlan = useMemo(() => {
@@ -549,7 +539,7 @@ export default function RollingMigrationsTable({
         'Queued': 3
     };
 
-    // RollingMigrationPlan columns for the main table
+    // ClusterMigration columns for the main table
     const clusterColumns: GridColDef[] = [
         {
             field: 'clusterName',
@@ -558,8 +548,8 @@ export default function RollingMigrationsTable({
             flex: 1,
             renderCell: (params) => {
                 const plan = params.row as RollingMigrationPlan;
-                const relatedClusterMigrations = clusterMigrationsByPlan[plan.metadata?.name || ''] || [];
-                const clusterName = relatedClusterMigrations[0]?.spec?.clusterName || 'Unknown';
+                // Get cluster name directly from RollingMigrationPlan cluster sequence
+                const clusterName = plan.spec?.clusterSequence?.[0]?.clusterName || 'Unknown';
 
                 return (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -725,11 +715,11 @@ export default function RollingMigrationsTable({
                 <ClusterDetailsDrawer
                     open={drawerOpen}
                     onClose={handleCloseDrawer}
-                    clusterMigration={clusterMigrationsByPlan[selectedPlan.metadata?.name || '']?.[0] || null}
                     esxHosts={esxHostsByPlan[selectedPlan.metadata?.name || ''] || []}
                     migrations={migrationsByPlan[selectedPlan.metadata?.name || ''] || []}
                     refetchMigrations={refetchMigrations}
-                // refetchESXMigrations={refetchESXMigrations}
+                    rollingMigrationPlan={selectedPlan}
+                    refetchESXMigrations={refetchESXIMigrations}
                 />
             )}
 
