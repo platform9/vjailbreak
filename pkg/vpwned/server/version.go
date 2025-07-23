@@ -33,7 +33,6 @@ type DeploymentConfig struct {
 	Name          string
 	ContainerName string
 	ImagePrefix   string
-	ManualScale   bool
 }
 
 type UpgradeProgress struct {
@@ -57,21 +56,18 @@ var (
 			Name:          "migration-controller-manager",
 			ContainerName: "manager",
 			ImagePrefix:   "quay.io/platform9/vjailbreak-controller",
-			ManualScale:   true,
 		},
 		{
 			Namespace:     "migration-system", 
 			Name:          "migration-vpwned-sdk",
 			ContainerName: "vpwned",
 			ImagePrefix:   "quay.io/platform9/vjailbreak-vpwned",
-			ManualScale:   false,
 		},
 		{
 			Namespace:     "migration-system",
 			Name:          "vjailbreak-ui",
 			ContainerName: "vjailbreak-ui-container", 
 			ImagePrefix:   "quay.io/platform9/vjailbreak-ui",
-			ManualScale:   false,
 		},
 	}
 )
