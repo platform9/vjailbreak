@@ -148,11 +148,6 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{}, err
 			}
 			ctxlog.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
-			openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, openstackcreds.Spec.SecretRef.Name)
-			if err != nil {
-				ctxlog.Error(err, "Failed to get Openstack credentials from secret", "secretName", openstackcreds.Spec.SecretRef.Name)
-				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenstackCredentialsRetrievalFailed", "Failed to retrieve Openstack credentials from secret", err)
-			}
 			openstackClient, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
@@ -162,7 +157,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				ComputeClient:      openstackClient.ComputeClient,
 				NetworkingClient:   openstackClient.NetworkingClient,
 			}
-			volumeID, err := ImportLUNToCinder(ctx, &osclient, openstackCredential.RegionName, rdmDiskObj)
+			volumeID, err := ImportLUNToCinder(ctx, &osclient, rdmDiskObj)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "CinderManageFailed", "Failed to manage RDM disk in Cinder", err)
 			}
@@ -233,10 +228,10 @@ func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alph
 }
 
 // ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
-func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, regionName string, rdmDisk vm.RDMDisk) (string, error) {
+func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, rdmDisk vm.RDMDisk) (string, error) {
 	ctxlog := logf.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
-	volume, err := ExecuteVolumeManageRequest(rdmDisk, openstackClient, "volume 3.8")
+	volume, err := ExecuteVolumeManageRequest(ctx, rdmDisk, openstackClient, "volume 3.8")
 	if err != nil || volume == nil {
 		return "", fmt.Errorf("failed to import LUN: %s", err)
 	} else if volume.ID == "" {
@@ -290,13 +285,11 @@ func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error
 }
 
 // ExecuteVolumeManageRequest triggers the volume manage request and returns volume.
-func ExecuteVolumeManageRequest(rdmDisk vm.RDMDisk, osclient *migrateutils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
-
+func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk vm.RDMDisk, osclient *migrateutils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
 	body, err := BuildVolumeManagePayload(rdmDisk)
 	if err != nil {
 		return nil, err
 	}
-
 	var result map[string]interface{}
 
 	response, err := osclient.BlockStorageClient.Post(osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
@@ -306,19 +299,24 @@ func ExecuteVolumeManageRequest(rdmDisk vm.RDMDisk, osclient *migrateutils.OpenS
 	if err != nil {
 		return nil, err
 	}
-
+	// Add error handling for response.Body.Close()
 	if response != nil && response.Body != nil {
-		defer response.Body.Close()
+		defer func() {
+			if err := response.Body.Close(); err != nil {
+				logf.FromContext(ctx).Error(err, "failed to close response body")
+			}
+		}()
 	}
-
-	volumeMap := result["volume"].(map[string]interface{})
-
+	// Add error handling for type assertion
+	volumeMap, ok := result["volume"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to assert type for volume map")
+	}
 	// Convert volume map to JSON
 	volumeJSON, err := json.Marshal(volumeMap)
 	if err != nil {
 		return nil, err
 	}
-
 	// Unmarshal JSON into your struct
 	var v volumes.Volume
 	if err := json.Unmarshal(volumeJSON, &v); err != nil {

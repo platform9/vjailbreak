@@ -269,7 +269,6 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 	var openstackvoltypes []string
-	var openstacknetworks []string
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -307,10 +306,11 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 			volBackednPools = append(volBackednPools, pool.Name)
 		}
 	}
+	// Pre-allocate openstacknetworks slice
+	openstacknetworks := make([]string, len(allNetworks))
 	for _, networks := range allNetworks {
 		openstacknetworks = append(openstacknetworks, networks.Name)
 	}
-
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
@@ -644,13 +644,9 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			if !ok {
 				continue
 			}
-			dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, hostStorageInfo)
+			dsref, rdmInfos, err := processVMDisk(disk, hostStorageInfo)
 			if err != nil {
 				return nil, err
-			}
-			if skip {
-				skipVM = true
-				break
 			}
 			if !reflect.DeepEqual(rdmInfos, vjailbreakv1alpha1.RDMDiskInfo{}) {
 				rdmDiskInfos = append(rdmDiskInfos, rdmInfos)
@@ -913,10 +909,7 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 // processVMDisk processes a single virtual disk device and updates the disk information
 // it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
-func processVMDisk(ctx context.Context,
-	disk *types.VirtualDisk,
-	hostStorageInfo *types.HostStorageDeviceInfo) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
-
+func processVMDisk(disk *types.VirtualDisk, hostStorageInfo *types.HostStorageDeviceInfo) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, err error) {
 	switch backing := disk.Backing.(type) {
 	case *types.VirtualDiskFlatVer2BackingInfo:
 		ref := backing.Datastore.Reference()
@@ -941,10 +934,10 @@ func processVMDisk(ctx context.Context,
 			}
 		}
 	default:
-		return nil, vjailbreakv1alpha1.RDMDiskInfo{}, false, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
+		return nil, vjailbreakv1alpha1.RDMDiskInfo{}, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
 	}
 
-	return dsref, rdmDiskInfos, false, nil
+	return dsref, rdmDiskInfos, nil
 }
 
 // AppendUnique appends unique values to a slice
