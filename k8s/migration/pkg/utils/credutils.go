@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1143,7 +1144,8 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 // GetClosestFlavour gets the closest flavor for the given CPU and memory
-func GetClosestFlavour(_ context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+func GetClosestFlavour(ctx context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+	ctxlog := ctrllog.FromContext(ctx)
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
@@ -1153,6 +1155,14 @@ func GetClosestFlavour(_ context.Context, cpu, memory int, computeClient *gopher
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract all flavors: %w", err)
 	}
+
+	// sort ascending
+	sort.Slice(allFlavors, func(i, j int) bool {
+		return allFlavors[i].VCPUs < allFlavors[j].VCPUs ||
+			(allFlavors[i].VCPUs == allFlavors[j].VCPUs && allFlavors[i].RAM < allFlavors[j].RAM)
+	})
+
+	ctxlog.Info("Found flavors", "flavors", allFlavors)
 
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxVCPUs

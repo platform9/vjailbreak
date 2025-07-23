@@ -618,12 +618,14 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	var err error
 
 	if migobj.TargetFlavorId == "" {
+		migobj.logMessage("No target flavor id provided, getting closest flavor")
 		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return fmt.Errorf("failed to get closest OpenStack flavor: %s", err)
 		}
 		migobj.logMessage(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	} else {
+		migobj.logMessage("Target flavor id provided, getting flavor")
 		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
 		if err != nil {
 			return fmt.Errorf("failed to get OpenStack flavor: %s", err)
