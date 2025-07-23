@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight';
 import { defineConfig } from "astro/config";
 import AutoImport from 'astro-auto-import';
 import mdx from '@astrojs/mdx';
+import mermaid from "astro-mermaid";
 // https://astro.build/config
 export default defineConfig({
 	site: process.env.SITE_URL || 'https://platform9.github.io',
@@ -10,6 +11,16 @@ export default defineConfig({
 	base: '/' + (process.env.BASE || ''),
 	trailingSlash: "always",
 	integrations: [
+		mermaid({
+			theme: 'forest',
+			autoTheme: true,
+			iconPacks: [
+				{
+				  name: 'logos',
+				  loader: () => fetch('https://unpkg.com/@iconify-json/logos@1/icons.json').then(res => res.json())
+				},
+			  ],
+		  }),
 		AutoImport({
 			imports: [
 			  './src/components/ReadMore.astro',
