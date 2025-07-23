@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -315,9 +316,11 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 		return allFlavors[i].VCPUs < allFlavors[j].VCPUs ||
 			(allFlavors[i].VCPUs == allFlavors[j].VCPUs && allFlavors[i].RAM < allFlavors[j].RAM)
 	})
+	utils.PrintLog("All flavors:")
 
 	for _, flavor := range allFlavors {
 		utils.PrintLog(fmt.Sprintf("Flavor: %s, CPU: %d, RAM: %d", flavor.Name, flavor.VCPUs, flavor.RAM))
+		log.Println(fmt.Sprintf("Flavor: %s, CPU: %d, RAM: %d", flavor.Name, flavor.VCPUs, flavor.RAM))
 	}
 
 	bestFlavor := new(flavors.Flavor)
