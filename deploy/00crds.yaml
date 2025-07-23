@@ -1436,8 +1436,7 @@ spec:
                 type: array
               phase:
                 enum:
-                - Created
-                - Migrate
+                - Pending
                 - Managing
                 - Managed
                 - Error
@@ -3606,7 +3605,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: docker.io/testwall/vjailbreak-controller:v0.2.3
+        image: quay.io/platform9/vjailbreak-controller:v0.3.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3686,7 +3685,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.2.2
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

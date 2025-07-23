@@ -18,8 +18,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -29,10 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 )
 
 // RDMDiskReconciler reconciles a RDMDisk object
@@ -149,11 +153,16 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				ctxlog.Error(err, "Failed to get Openstack credentials from secret", "secretName", openstackcreds.Spec.SecretRef.Name)
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenstackCredentialsRetrievalFailed", "Failed to retrieve Openstack credentials from secret", err)
 			}
-			providerClient, err := utils.ValidateAndGetProviderClient(ctx, r.Client, openstackcreds)
+			openstackClient, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
 			}
-			volumeID, err := openstack.CinderManage(ctx, providerClient, openstackCredential.RegionName, rdmDiskObj)
+			osclient := migrateutils.OpenStackClients{
+				BlockStorageClient: openstackClient.BlockStorageClient,
+				ComputeClient:      openstackClient.ComputeClient,
+				NetworkingClient:   openstackClient.NetworkingClient,
+			}
+			volumeID, err := ImportLUNToCinder(ctx, &osclient, openstackCredential.RegionName, rdmDiskObj)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "CinderManageFailed", "Failed to manage RDM disk in Cinder", err)
 			}
@@ -221,4 +230,99 @@ func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alph
 		return updateErr
 	}
 	return err
+}
+
+// ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
+func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, regionName string, rdmDisk vm.RDMDisk) (string, error) {
+	ctxlog := logf.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
+	volume, err := ExecuteVolumeManageRequest(rdmDisk, openstackClient, "volume 3.8")
+	if err != nil || volume == nil {
+		return "", fmt.Errorf("failed to import LUN: %s", err)
+	} else if volume.ID == "" {
+		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
+	}
+	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
+	// Wait for the volume to become available
+	err = openstackClient.WaitForVolume(volume.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	ctxlog.Info(fmt.Sprintf("Volume %s is now available", volume.ID))
+	return volume.ID, nil
+}
+
+// BuildVolumeManagePayload builds the request payload for manage volume.
+func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {
+	// Validate required fields
+	if rdmDisk.DiskName == "" {
+		return nil, fmt.Errorf("disk name cannot be empty")
+	}
+	if rdmDisk.CinderBackendPool == "" {
+		return nil, fmt.Errorf("cinder backend pool cannot be empty")
+	}
+	if rdmDisk.VolumeType == "" {
+		return nil, fmt.Errorf("volume type cannot be empty")
+	}
+	if len(rdmDisk.VolumeRef) == 0 {
+		return nil, fmt.Errorf("volume reference cannot be empty")
+	}
+
+	var key, value string
+	for k, rm := range rdmDisk.VolumeRef {
+		key = k
+		value = rm
+	}
+	payload := map[string]interface{}{
+		"volume": map[string]interface{}{
+			"host": rdmDisk.CinderBackendPool,
+			"ref": map[string]string{
+				key: value,
+			},
+			"name":              rdmDisk.DiskName,
+			"volume_type":       rdmDisk.VolumeType,
+			"description":       fmt.Sprintf("Volume for %s", rdmDisk.DiskName),
+			"bootable":          false,
+			"availability_zone": nil,
+		},
+	}
+	return payload, nil
+}
+
+// ExecuteVolumeManageRequest triggers the volume manage request and returns volume.
+func ExecuteVolumeManageRequest(rdmDisk vm.RDMDisk, osclient *migrateutils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
+
+	body, err := BuildVolumeManagePayload(rdmDisk)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+
+	response, err := osclient.BlockStorageClient.Post(osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
+		OkCodes:     []int{http.StatusAccepted},
+		MoreHeaders: map[string]string{"OpenStack-API-Version": openstackAPIVersion},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+
+	volumeMap := result["volume"].(map[string]interface{})
+
+	// Convert volume map to JSON
+	volumeJSON, err := json.Marshal(volumeMap)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal JSON into your struct
+	var v volumes.Volume
+	if err := json.Unmarshal(volumeJSON, &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
