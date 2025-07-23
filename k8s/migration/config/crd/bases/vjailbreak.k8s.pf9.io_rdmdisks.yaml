@@ -144,8 +144,7 @@ spec:
                 type: array
               phase:
                 enum:
-                - Created
-                - Migrate
+                - Pending
                 - Managing
                 - Managed
                 - Error

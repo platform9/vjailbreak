@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // MockVirtV2VOperations is a mock of VirtV2VOperations interface.
@@ -48,6 +49,20 @@ func (mr *MockVirtV2VOperationsMockRecorder) AddFirstBootScript(firstbootscript,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstBootScript", reflect.TypeOf((*MockVirtV2VOperations)(nil).AddFirstBootScript), firstbootscript, firstbootscriptname)
 }
 
+// AddUdevRules mocks base method.
+func (m *MockVirtV2VOperations) AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces, macs []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddUdevRules", disks, useSingleDisk, diskPath, interfaces, macs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddUdevRules indicates an expected call of AddUdevRules.
+func (mr *MockVirtV2VOperationsMockRecorder) AddUdevRules(disks, useSingleDisk, diskPath, interfaces, macs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddUdevRules", reflect.TypeOf((*MockVirtV2VOperations)(nil).AddUdevRules), disks, useSingleDisk, diskPath, interfaces, macs)
+}
+
 // AddWildcardNetplan mocks base method.
 func (m *MockVirtV2VOperations) AddWildcardNetplan(path string) error {
 	m.ctrl.T.Helper()
@@ -74,6 +89,21 @@ func (m *MockVirtV2VOperations) ConvertDisk(ctx context.Context, path, ostype, v
 func (mr *MockVirtV2VOperationsMockRecorder) ConvertDisk(ctx, path, ostype, virtiowindriver, firstbootscripts, useSingleDisk, diskPath interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertDisk", reflect.TypeOf((*MockVirtV2VOperations)(nil).ConvertDisk), ctx, path, ostype, virtiowindriver, firstbootscripts, useSingleDisk, diskPath)
+}
+
+// GetNetworkInterfaceNames mocks base method.
+func (m *MockVirtV2VOperations) GetNetworkInterfaceNames(path string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNetworkInterfaceNames", path)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNetworkInterfaceNames indicates an expected call of GetNetworkInterfaceNames.
+func (mr *MockVirtV2VOperationsMockRecorder) GetNetworkInterfaceNames(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkInterfaceNames", reflect.TypeOf((*MockVirtV2VOperations)(nil).GetNetworkInterfaceNames), path)
 }
 
 // GetOsRelease mocks base method.

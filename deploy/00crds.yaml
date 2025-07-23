@@ -1311,7 +1311,11 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
+<<<<<<< HEAD
         description: RDMDisk is the Schema for the RDMDisks API.
+=======
+        description: RDMDisk is the Schema for the rdmdisks API.
+>>>>>>> feature/rdm-disk-cr-intro
         properties:
           apiVersion:
             description: |-
@@ -1345,6 +1349,11 @@ spec:
               importToCinder:
                 type: boolean
               openstackVolumeRef:
+<<<<<<< HEAD
+=======
+                description: VolumeRefInfo contains information about the OpenStack
+                  volume reference.
+>>>>>>> feature/rdm-disk-cr-intro
                 properties:
                   cinderBackendPool:
                     type: string
@@ -1438,8 +1447,12 @@ spec:
                 type: array
               phase:
                 enum:
+<<<<<<< HEAD
                 - Created
                 - Migrate
+=======
+                - Pending
+>>>>>>> feature/rdm-disk-cr-intro
                 - Managing
                 - Managed
                 - Error
@@ -3573,7 +3586,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.2.2
+        image: quay.io/platform9/vjailbreak-controller:v0.3.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3653,7 +3666,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.2.2
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

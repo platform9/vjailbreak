@@ -18,8 +18,12 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 
+	v2vhelperutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,11 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // RDMDiskReconciler reconciles a RDMDisk object
@@ -67,42 +71,57 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// Handle different phases
+	// Updated logic for handling phases and conditions
 	switch rdmDisk.Status.Phase {
-	case "Created":
-		// Validate the RDM disk specifications
+	case "":
+		// Initial phase, validate the RDM disk specifications
 		if err := ValidateRDMDiskFields(rdmDisk); err != nil {
 			log.Error(err, "validation failed")
 			rdmDisk.Status.Phase = "Error"
-			startCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "ValidationFailed",
 				Status:  metav1.ConditionTrue,
-				Reason:  "Required Fields Missing",
+				Reason:  "RequiredFieldsMissing",
 				Message: err.Error(),
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
+
+		// Validation passed, move to Pending phase
+		rdmDisk.Status.Phase = "Pending"
+		meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
+			Type:    "Validated",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ValidationPassed",
+			Message: "All required fields validated",
+		})
+		if err := r.Status().Update(ctx, rdmDisk); err != nil {
+			log.Error(err, "unable to update RDMDisk status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+
+	case "Pending":
+		// Check if ImportToCinder is true, move to Managing phase
 		if rdmDisk.Spec.ImportToCinder {
-			// All validations passed, move to Managing phase
 			rdmDisk.Status.Phase = "Managing"
-			startCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "MigrationStarted",
 				Status:  metav1.ConditionTrue,
-				Reason:  "ValidationPassed",
-				Message: "All required fields validated, starting migration",
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, startCondition)
+				Reason:  "ImportToCinderEnabled",
+				Message: "Starting migration to Cinder Importing LUN",
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status")
 				return ctrl.Result{}, err
 			}
+			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{}, nil
 
 	case "Managing":
 		ctxlog := log.WithName(constants.RDMDiskControllerName)
@@ -110,6 +129,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
 			// Create the RDM disk object with required fields
 			rdmDiskObj := vm.RDMDisk{
+				DiskName:          rdmDisk.Name,
 				VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.Source,
 				CinderBackendPool: rdmDisk.Spec.OpenstackVolumeRef.CinderBackendPool,
 				VolumeType:        rdmDisk.Spec.OpenstackVolumeRef.VolumeType,
@@ -128,24 +148,28 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{}, err
 			}
 			ctxlog.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
-			providerClient, err := utils.ValidateAndGetProviderClient(ctx, r.Client, openstackcreds)
+			openstackClient, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
 			}
-			volumeID, err := openstack.CinderManage(ctx, providerClient, rdmDiskObj)
+			osclient := v2vhelperutils.OpenStackClients{
+				BlockStorageClient: openstackClient.BlockStorageClient,
+				ComputeClient:      openstackClient.ComputeClient,
+				NetworkingClient:   openstackClient.NetworkingClient,
+			}
+			volumeID, err := ImportLUNToCinder(ctx, &osclient, rdmDiskObj)
 			if err != nil {
 				return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "CinderManageFailed", "Failed to manage RDM disk in Cinder", err)
 			}
 			// Update status with the volume ID in CinderReference
 			rdmDisk.Status.Phase = "Managed"
 			rdmDisk.Status.CinderVolumeID = volumeID
-			successCondition := metav1.Condition{
+			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "MigrationSucceeded",
 				Status:  metav1.ConditionTrue,
 				Reason:  "CinderManageSucceeded",
 				Message: "Successfully imported RDM disk to Cinder",
-			}
-			meta.SetStatusCondition(&rdmDisk.Status.Conditions, successCondition)
+			})
 			if err := r.Status().Update(ctx, rdmDisk); err != nil {
 				log.Error(err, "unable to update RDMDisk status with volume ID")
 				return ctrl.Result{}, err
@@ -201,4 +225,102 @@ func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alph
 		return updateErr
 	}
 	return err
+}
+
+// ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
+func ImportLUNToCinder(ctx context.Context, openstackClient *v2vhelperutils.OpenStackClients, rdmDisk vm.RDMDisk) (string, error) {
+	ctxlog := logf.FromContext(ctx)
+	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
+	volume, err := ExecuteVolumeManageRequest(ctx, rdmDisk, openstackClient, "volume 3.8")
+	if err != nil || volume == nil {
+		return "", fmt.Errorf("failed to import LUN: %s", err)
+	} else if volume.ID == "" {
+		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
+	}
+	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
+	// Wait for the volume to become available
+	err = openstackClient.WaitForVolume(volume.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	ctxlog.Info(fmt.Sprintf("Volume %s is now available", volume.ID))
+	return volume.ID, nil
+}
+
+// BuildVolumeManagePayload builds the request payload for manage volume.
+func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error) {
+	// Validate required fields
+	if rdmDisk.DiskName == "" {
+		return nil, fmt.Errorf("disk name cannot be empty")
+	}
+	if rdmDisk.CinderBackendPool == "" {
+		return nil, fmt.Errorf("cinder backend pool cannot be empty")
+	}
+	if rdmDisk.VolumeType == "" {
+		return nil, fmt.Errorf("volume type cannot be empty")
+	}
+	if len(rdmDisk.VolumeRef) == 0 {
+		return nil, fmt.Errorf("volume reference cannot be empty")
+	}
+
+	var key, value string
+	for k, rm := range rdmDisk.VolumeRef {
+		key = k
+		value = rm
+	}
+	payload := map[string]interface{}{
+		"volume": map[string]interface{}{
+			"host": rdmDisk.CinderBackendPool,
+			"ref": map[string]string{
+				key: value,
+			},
+			"name":              rdmDisk.DiskName,
+			"volume_type":       rdmDisk.VolumeType,
+			"description":       fmt.Sprintf("Volume for %s", rdmDisk.DiskName),
+			"bootable":          false,
+			"availability_zone": nil,
+		},
+	}
+	return payload, nil
+}
+
+// ExecuteVolumeManageRequest triggers the volume manage request and returns volume.
+func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk vm.RDMDisk, osclient *v2vhelperutils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
+	body, err := BuildVolumeManagePayload(rdmDisk)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]interface{}
+
+	response, err := osclient.BlockStorageClient.Post(osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
+		OkCodes:     []int{http.StatusAccepted},
+		MoreHeaders: map[string]string{"OpenStack-API-Version": openstackAPIVersion},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Add error handling for response.Body.Close()
+	if response != nil && response.Body != nil {
+		defer func() {
+			if err := response.Body.Close(); err != nil {
+				logf.FromContext(ctx).Error(err, "failed to close response body")
+			}
+		}()
+	}
+	// Add error handling for type assertion
+	volumeMap, ok := result["volume"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to assert type for volume map")
+	}
+	// Convert volume map to JSON
+	volumeJSON, err := json.Marshal(volumeMap)
+	if err != nil {
+		return nil, err
+	}
+	// Unmarshal JSON into your struct
+	var v volumes.Volume
+	if err := json.Unmarshal(volumeJSON, &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }

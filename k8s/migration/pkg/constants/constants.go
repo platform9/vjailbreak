@@ -13,7 +13,16 @@ const (
 	TerminationPeriod = int64(120)
 
 	// NameMaxLength defines the maximum length of a name
-	NameMaxLength = 242
+	K8sNameMaxLength = 63
+
+	// HashSuffixLength defines the length of the hash suffix
+	HashSuffixLength = 5
+
+	// VMNameMaxLength defines the maximum length of a VM name excluding the hash suffix
+	VMNameMaxLength = 57
+
+	// MaxJobNameLength defines the maximum length of a job name
+	MaxJobNameLength = 46 // 63 - 11 (prefix v2v-helper-) - 1 (hyphen) - 5 (hash)
 
 	// VjailbreakNodeControllerName is the name of the vjailbreak node controller
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
@@ -50,6 +59,9 @@ const (
 
 	// IsPCDCredsLabel is the label for pcd credentials
 	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd" //nolint:gosec // not a password string
+
+	// VMNameLabel is the label for vm name
+	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"

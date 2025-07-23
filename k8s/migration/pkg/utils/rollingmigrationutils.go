@@ -418,9 +418,9 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for j := range cluster.VMSequence {
-			k8sVMName, err := ConvertToK8sName(cluster.VMSequence[j].VMName)
+			k8sVMName, err := GetVMwareMachineNameForVMName(cluster.VMSequence[j].VMName)
 			if err != nil {
-				return errors.Wrap(err, "failed to convert vm name to k8s name")
+				return errors.Wrap(err, "failed to get vm name")
 			}
 			vm := &vjailbreakv1alpha1.VMwareMachine{}
 			err = scope.Client.Get(ctx, client.ObjectKey{

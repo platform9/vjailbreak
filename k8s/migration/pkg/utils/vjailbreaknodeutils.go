@@ -579,9 +579,9 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 // GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
 // It returns the Migration resource associated with the VM or an error if not found.
 func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
-	vmk8sName, err := ConvertToK8sName(vmName)
+	vmk8sName, err := GetVMwareMachineNameForVMName(vmName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert vm name to k8s name")
+		return nil, errors.Wrap(err, "failed to get vm name")
 	}
 	migration := &vjailbreakv1alpha1.Migration{}
 	err = k3sclient.Get(ctx, client.ObjectKey{

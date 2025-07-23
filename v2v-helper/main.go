@@ -23,7 +23,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Ensure context is canceled when we exit
 
-	utils.WriteToLogFile(fmt.Sprintf("-----	 Migration started at %s for VM %s -----", time.Now().Format(time.RFC3339), os.Getenv("SOURCE_VM_NAME")))
 	// Initialize error reporter early
 	eventReporter, err := reporter.NewReporter()
 	if err != nil {
@@ -62,6 +61,8 @@ func main() {
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get migration parameters: %v", err))
 	}
+
+	utils.WriteToLogFile(fmt.Sprintf("-----	 Migration started at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))
 
 	var (
 		vCenterURL        = strings.TrimSpace(os.Getenv("VCENTER_HOST"))
