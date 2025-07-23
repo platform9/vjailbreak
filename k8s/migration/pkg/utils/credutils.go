@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1157,6 +1159,16 @@ func GetClosestFlavour(_ context.Context, cpu, memory int, computeClient *gopher
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxVCPUs
 	bestFlavor.RAM = constants.MaxRAM
+
+	// sort ascending
+	sort.Slice(allFlavors, func(i, j int) bool {
+		return allFlavors[i].VCPUs < allFlavors[j].VCPUs ||
+			(allFlavors[i].VCPUs == allFlavors[j].VCPUs && allFlavors[i].RAM < allFlavors[j].RAM)
+	})
+
+	for _, flavor := range allFlavors {
+		utils.PrintLog(fmt.Sprintf("Flavor: %s, CPU: %d, RAM: %d", flavor.Name, flavor.VCPUs, flavor.RAM))
+	}
 
 	// Find the smallest flavor that meets the requirements
 	for _, flavor := range allFlavors {
