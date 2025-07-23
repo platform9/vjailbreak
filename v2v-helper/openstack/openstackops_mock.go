@@ -54,18 +54,18 @@ func (mr *MockOpenstackOperationsMockRecorder) AttachVolumeToVM(volumeID interfa
 }
 
 // CinderManage mocks base method.
-func (m *MockOpenstackOperations) CinderManage(rdmDisk vm.RDMDisk,version string) (*volumes.Volume, error) {
+func (m *MockOpenstackOperations) CinderManage(rdmDisk vm.RDMDisk, openstackAPIVersion string) (*volumes.Volume, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CinderManage", rdmDisk)
+	ret := m.ctrl.Call(m, "CinderManage", rdmDisk, openstackAPIVersion)
 	ret0, _ := ret[0].(*volumes.Volume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CinderManage indicates an expected call of CinderManage.
-func (mr *MockOpenstackOperationsMockRecorder) CinderManage(rdmDisk interface{},version string) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CinderManage(rdmDisk, openstackAPIVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CinderManage", reflect.TypeOf((*MockOpenstackOperations)(nil).CinderManage), rdmDisk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CinderManage", reflect.TypeOf((*MockOpenstackOperations)(nil).CinderManage), rdmDisk, openstackAPIVersion)
 }
 
 // CreatePort mocks base method.

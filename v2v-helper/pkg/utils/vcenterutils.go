@@ -2,8 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -36,21 +34,13 @@ type MigrationParams struct {
 	TARGET_FLAVOR_ID       string
 	TargetAvailabilityZone string
 	AssignedIP             string
-}
-
-// GetMigrationConfigMapName is function that returns the name of the secret
-func GetMigrationConfigMapName(vmname string) (string, error) {
-	vmname, err := ConvertToK8sName(vmname)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("migration-config-%s", vmname), nil
+	VMwareMachineName      string
 }
 
 // GetMigrationParams is function that returns the migration parameters
 func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationParams, error) {
 	// Get the values from the secret
-	configMapName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
+	configMapName, err := GetMigrationConfigMapName()
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +53,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		return nil, errors.Wrap(err, "Failed to get configmap")
 	}
 	return &MigrationParams{
-		SourceVMName:           os.Getenv("SOURCE_VM_NAME"),
+		SourceVMName:           string(configMap.Data["SOURCE_VM_NAME"]),
 		OpenstackNetworkNames:  string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
 		OpenstackNetworkPorts:  string(configMap.Data["NEUTRON_PORT_IDS"]),
 		OpenstackVolumeTypes:   string(configMap.Data["CINDER_VOLUME_TYPES"]),
@@ -80,5 +70,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		TARGET_FLAVOR_ID:       string(configMap.Data["TARGET_FLAVOR_ID"]),
 		TargetAvailabilityZone: string(configMap.Data["TARGET_AVAILABILITY_ZONE"]),
 		AssignedIP:             string(configMap.Data["ASSIGNED_IP"]),
+		VMwareMachineName:      string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 	}, nil
 }

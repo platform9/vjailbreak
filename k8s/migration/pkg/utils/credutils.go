@@ -755,10 +755,10 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 		}
 
 		// Convert VM name to Kubernetes-safe name
-		vmName, err := ConvertToK8sName(vmProps.Config.Name)
+		vmName, err := GetVMwareMachineNameForVMName(vmProps.Config.Name)
 		if err != nil {
 			errMu.Lock()
-			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to convert vm name: %w", err)})
+			vmErrors = append(vmErrors, vmError{vmName: vm.Name(), err: fmt.Errorf("failed to get vm name: %w", err)})
 			errMu.Unlock()
 		}
 
@@ -1023,9 +1023,9 @@ func CreateOrUpdateVMwareMachines(ctx context.Context, client client.Client,
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
-	sanitizedVMName, err := ConvertToK8sName(vminfo.Name)
+	sanitizedVMName, err := GetVMwareMachineNameForVMName(vminfo.Name)
 	if err != nil {
-		return fmt.Errorf("failed to convert VM name: %w", err)
+		return fmt.Errorf("failed to get VM name: %w", err)
 	}
 	esxiK8sName, err := ConvertToK8sName(vminfo.ESXiName)
 	if err != nil {

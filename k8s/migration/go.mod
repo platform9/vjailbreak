@@ -4,7 +4,7 @@ go 1.24.0
 
 toolchain go1.24.2
 
-// replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
