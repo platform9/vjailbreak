@@ -557,10 +557,9 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
-	for _, vm := range vms {
-
+	for i := range vms {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			// Don't panic on error
 			defer func() {
@@ -571,8 +570,8 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 				}
 			}()
 
-			processSingleVM(ctx, scope, vm, &errMu, &vmErrors, &vminfo, c, finder)
-		}()
+			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfo, c)
+		}(i)
 	}
 	// Wait for all VMs to be processed
 	wg.Wait()
@@ -1266,11 +1265,11 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, finder *find.Finder) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
-	var networks []string
-	var disks []string
+	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
+	disks := make([]string, 0, 8) // Pre-allocate with estimated capacity
 	var clusterName string
 	log := scope.Logger
 	err := vm.Properties(ctx, vm.Reference(), []string{
