@@ -76,8 +76,7 @@ Please refer the following table for the required ports:
 The vJailbreak VM and any helper nodes must be able to resolve and connect to the following:
 
 - **vCenter, ESXi, and OpenStack API endpoints** — required for API communication.
-- **Cloud-init certificate endpoints**:
-- [`https://<FQDN>:443`](https://<FQDN>) — the FQDN is typically the hostname or IP of the VM where vJailbreak is deployed, used to retrieve certificates during cloud-init.
+- **Cloud-init certificate endpoints**
 - **Virtio ISO download source**:
   - [https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso)
 - **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports.
