@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -308,6 +309,16 @@ func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*f
 	}
 
 	utils.PrintLog(fmt.Sprintf("Current requirements: %d CPUs and %d MB of RAM", cpu, memory))
+
+	// sort ascending
+	sort.Slice(allFlavors, func(i, j int) bool {
+		return allFlavors[i].VCPUs < allFlavors[j].VCPUs ||
+			(allFlavors[i].VCPUs == allFlavors[j].VCPUs && allFlavors[i].RAM < allFlavors[j].RAM)
+	})
+
+	for _, flavor := range allFlavors {
+		utils.PrintLog(fmt.Sprintf("Flavor: %s, CPU: %d, RAM: %d", flavor.Name, flavor.VCPUs, flavor.RAM))
+	}
 
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxCPU
