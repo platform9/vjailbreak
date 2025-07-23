@@ -88,9 +88,23 @@ const baseURL = Astro.site || '/'; // Fallback to '/' if Astro.site is undefined
       select.innerHTML = releases.map(release => {
         const nameModified = release.name.replace(/\./g, '');
         const releaseDocsURL = `${currentURL}${pathPrefix}${nameModified}/`;
-        return `<option value="${releaseDocsURL}">${release.name}</option>`;
+        return `<option value="${release.name}">${release.name}</option>`;
       }).join('');
-      select.onchange = (e) => window.open(e.target.value, '_blank');
+
+      select.selectedIndex = 0;
+
+      localStorage.setItem('vjailbreakSelectedVersion', select.value);
+      select.onchange = (e) => {
+        localStorage.setItem('vjailbreakSelectedVersion', e.target.value);
+
+        const version = e.target.value;
+        const btns = document.querySelectorAll('.version-btn');
+        btns.forEach(btn => {
+          if (btn.textContent === version) {
+            btn.click();
+          }
+        });
+      };
     }
   });
 </script>
