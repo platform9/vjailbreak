@@ -22,7 +22,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
-	"github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -639,7 +638,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			if err != nil {
 				return nil, nil, err
 			}
-			if !reflect.DeepEqual(rdmInfo, v1alpha1.RDMDisk{}) {
+			if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
 				rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
 				if savedRDMDetails, ok := rdmDiskInfos[rdmInfo.Name]; ok {
 					// Compare OpenstackVolumeRef details
@@ -658,7 +657,6 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 				} else {
 					rdmDiskInfos[strings.TrimSpace(rdmInfo.Name)] = rdmInfo
 				}
-
 			}
 			var ds mo.Datastore
 			err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
@@ -672,7 +670,6 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			datastores = AppendUnique(datastores, ds.Name)
 			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
-
 		// Get the host name and parent (cluster) information
 		host := mo.HostSystem{}
 		err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
@@ -832,7 +829,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			GuestNetworks:     guestNetworks,
 		})
 	}
-	var rdmDiskValues []vjailbreakv1alpha1.RDMDisk
+	rdmDiskValues := make([]vjailbreakv1alpha1.RDMDisk, 0, len(rdmDiskInfos))
 	// Convert map to slices
 	for _, value := range rdmDiskInfos {
 		rdmDiskValues = append(rdmDiskValues, value)
@@ -873,7 +870,6 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
 				if backing.Network != nil {
-
 					network = backing.Network.Value
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
@@ -881,7 +877,6 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
 				network = backing.OpaqueNetworkId
 			}
-
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
 				MAC:     strings.ToLower(nic.MacAddress),
 				Index:   nicsIndex,
@@ -1396,24 +1391,24 @@ func containsString(slice []string, target string) bool {
 }
 
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
-func syncRDMDisks(ctx context.Context, k3sclient client.Client, rdmInfo []vjailbreakv1alpha1.RDMDisk) error {
+func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, rdmInfo []vjailbreakv1alpha1.RDMDisk) error {
 	// Both have RDM disks - preserve OpenStack related information
 	// Create a map of existing VMware Machine RDM disks by disk name
 	existingDisks := make(map[string]vjailbreakv1alpha1.RDMDisk)
 	for _, disk := range rdmInfo {
 		rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}
 		err := k3sclient.Get(ctx, k8stypes.NamespacedName{
-			Name:      strings.TrimSpace(disk.Spec.DiskName),
+			Name:      strings.TrimSpace(disk.Name),
 			Namespace: constants.NamespaceMigrationSystem,
 		}, rdmDiskCR)
 
 		if err == nil {
-			existingDisks[disk.Spec.DiskName] = *rdmDiskCR
+			existingDisks[disk.Name] = *rdmDiskCR
 		}
 
 		// Update VMInfo RDM disks while preserving OpenStack information
 		for i, vmwareDisks := range rdmInfo {
-			if existingDisk, ok := existingDisks[vmwareDisks.Spec.DiskName]; ok {
+			if existingDisk, ok := existingDisks[vmwareDisks.Name]; ok {
 				// Preserve OpenStack volume reference if new one is nil
 				if reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
 					!reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
@@ -1432,7 +1427,37 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, rdmInfo []vjailb
 					}
 				}
 			} else {
-				return errors.New("RDM attributes exist on VM but disk not found in  RDM disks CR ,Please create RDM CR for " + disk.Spec.DiskName)
+				// Create RDM disk CR if it doesn't exist
+				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      strings.TrimSpace(vmwareDisks.Name),
+						Namespace: constants.NamespaceMigrationSystem,
+						Labels: map[string]string{
+							constants.VMwareCredsLabel: vmwcreds.Name,
+						},
+					},
+					Spec: vjailbreakv1alpha1.RDMDiskSpec{
+						DiskName:           vmwareDisks.Spec.DiskName,
+						DiskSize:           vmwareDisks.Spec.DiskSize,
+						DisplayName:        vmwareDisks.Spec.DisplayName,
+						UUID:               vmwareDisks.Spec.UUID,
+						OwnerVMs:           vmwareDisks.Spec.OwnerVMs,
+						OpenstackVolumeRef: vmwareDisks.Spec.OpenstackVolumeRef,
+					},
+				}
+				err := k3sclient.Create(ctx, rdmDiskCR)
+				if err != nil {
+					if !apierrors.IsAlreadyExists(err) {
+						return fmt.Errorf("failed to create RDM disk CR: %w", err)
+					}
+					// If it already exists, update the existing CR with new information
+					err = k3sclient.Update(ctx, rdmDiskCR)
+					if err != nil {
+						return fmt.Errorf("failed to update existing RDM disk CR: %w", err)
+					}
+				}
+				log := ctrllog.FromContext(ctx)
+				log.Info("Created new RDM disk CR", "name", rdmDiskCR.Name)
 			}
 		}
 	}
@@ -1470,7 +1495,7 @@ func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 //
 //	VJB_RDM:Hard Disk:volumeRef:"source-id"="abac111"
 func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDisk, attributes []string) ([]vjailbreakv1alpha1.RDMDisk, error) {
-	rdmMap := make(map[string]v1alpha1.RDMDisk)
+	rdmMap := make(map[string]vjailbreakv1alpha1.RDMDisk)
 	log := ctrllog.FromContext(ctx)
 
 	// Create copies of base RDM disks to preserve existing data
@@ -1564,7 +1589,7 @@ func getClusterNameFromHost(ctx context.Context, c *vim25.Client, host mo.HostSy
 // CreateOrUpdateRDMDisks creates or updates CreateOrUpdateRDMDisks objects for the given VMs
 func CreateOrUpdateRDMDisks(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, rdmInfo []vjailbreakv1alpha1.RDMDisk) error {
-	err := syncRDMDisks(ctx, client, rdmInfo)
+	err := syncRDMDisks(ctx, client, vmwcreds, rdmInfo)
 	if err != nil {
 		return err
 	}

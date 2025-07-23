@@ -32,7 +32,6 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	definedErrors "github.com/platform9/vjailbreak/k8s/migration/pkg/errors"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -381,7 +380,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		err := r.migrateRDMdisks(ctx, migrationplan)
-		if reflect.DeepEqual(err, definedErrors.ErrRDMDiskNotMigrated) {
+		if err != nil {
 			retries := migrationplan.Status.RetryCount
 			if retries >= 5 {
 				r.ctxlog.Info("RDM disk not migrated after 5 retries, failing MigrationPlan.")
@@ -1269,7 +1268,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 						if !rdmDiskCR.Spec.ImportToCinder {
 							rdmDiskCR.Spec.ImportToCinder = true
 							rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
-
 						}
 						allRDMDisks = append(allRDMDisks, rdmDiskCR)
 					}
@@ -1293,7 +1291,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			return err
 		}
 		if reFetchedRDMDiskCR.Status.Phase != "Managed" || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
-			return definedErrors.ErrRDMDiskNotMigrated
+			return errors.New("RDM disk has not been migrated yet, preventing the completion of VM migration")
 		}
 	}
 	return nil
