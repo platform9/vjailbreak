@@ -91,7 +91,7 @@ func GetVMwareMachineNameForVMName(vmname string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert vm name to k8s name")
 	}
-	return fmt.Sprintf("%s-%s", vmk8sname[:min(len(vmk8sname), constants.VMNameMaxLength)], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
+	return fmt.Sprintf("%s-%s", vmk8sname[:min(len(vmk8sname), constants.VMNameMaxLength)], GenerateSha256Hash(vmname)[:constants.HashSuffixLength]), nil
 }
 
 // GetJobNameForVMName generates a unique name for a job resource
@@ -100,7 +100,7 @@ func GetJobNameForVMName(vmname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("v2v-helper-%s-%s", vmk8sname[:min(len(vmk8sname), constants.MaxJobNameLength)], GenerateSha256Hash(vmk8sname)[:constants.HashSuffixLength]), nil
+	return fmt.Sprintf("v2v-helper-%s-%s", vmk8sname[:min(len(vmk8sname), constants.MaxJobNameLength)], GenerateSha256Hash(vmname)[:constants.HashSuffixLength]), nil
 }
 
 // GenerateSha256Hash generates a SHA256 hash of the input string
