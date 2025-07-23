@@ -574,6 +574,8 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			processSingleVM(ctx, scope, vm, &errMu, &vmErrors, &vminfo, c, finder)
 		}()
 	}
+	// Wait for all VMs to be processed
+	wg.Wait()
 
 	if len(vmErrors) > 0 {
 		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
