@@ -226,7 +226,7 @@ loop:
 // Extracted function to handle successful migration updates
 func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope *scope.MigrationScope) error {
 	scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
-	name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
+	name, err := utils.GetVMwareMachineNameForVMName(scope.Migration.Spec.VMName)
 	if err != nil {
 		return err
 	}
@@ -275,14 +275,14 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 // GetPod retrieves the pod associated with a migration
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
-	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)
+	vmname, err := utils.GetVMwareMachineNameForVMName(migration.Spec.VMName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert VM name to k8s name")
+		return nil, errors.Wrap(err, "failed to get vm name")
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace),
-		client.MatchingLabels(map[string]string{"vm-name": vmname})); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
+		client.MatchingLabels(map[string]string{constants.VMNameLabel: vmname})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", constants.VMNameLabel, vmname))
 	}
 	if len(podList.Items) == 0 {
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))

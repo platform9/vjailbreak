@@ -158,9 +158,9 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
 	// Get the vmware machine from k8s
-	vmk8sName, err := k8sutils.ConvertToK8sName(o.Name)
+	vmk8sName, err := utils.GetVMwareMachineName()
 	if err != nil {
-		return VMInfo{}, fmt.Errorf("failed to convert vm name to k8s name: %s", err)
+		return VMInfo{}, fmt.Errorf("failed to get vmware machine name: %w", err)
 	}
 
 	vmwareMachine, err := k8sutils.GetVMwareMachine(vmops.ctx, vmk8sName)
@@ -582,9 +582,9 @@ func GetVMwareMachine(ctx context.Context, client k8sclient.Client, vmName strin
 		return nil, fmt.Errorf("invalid parameters: client, context, and vmName must not be nil or empty")
 	}
 	// Convert VM name to k8s compatible name
-	sanitizedVMName, err := utils.ConvertToK8sName(vmName)
+	sanitizedVMName, err := utils.GetVMwareMachineName()
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert VM name to k8s name: %w", err)
+		return nil, fmt.Errorf("failed to get vmware machine name: %w", err)
 	}
 
 	// Create namespaced name for lookup
