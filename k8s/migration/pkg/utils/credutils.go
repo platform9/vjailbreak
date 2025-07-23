@@ -292,29 +292,18 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all networks")
 	}
-	allPagesv, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
+	volumeBackendPools, err := getCinderVolumeBackendPools(openstackClients)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
+		return nil, errors.Wrap(err, "failed to get cinder volume backend pools")
 	}
-	pools, err := schedulerstats.ExtractStoragePools(allPagesv)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
-	}
-	volBackednPools := make([]string, 0, len(pools))
-	for _, pool := range pools {
-		if pool.Name != "" {
-			volBackednPools = append(volBackednPools, pool.Name)
-		}
-	}
-	// Pre-allocate openstacknetworks slice
 	openstacknetworks := make([]string, len(allNetworks))
-	for _, networks := range allNetworks {
-		openstacknetworks = append(openstacknetworks, networks.Name)
+	for i := 0; i < len(allNetworks); i++ {
+		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
-		VolumeBackends: volBackednPools,
+		VolumeBackends: volumeBackendPools,
 	}, nil
 }
 
@@ -1532,4 +1521,21 @@ func getClusterNameFromHost(ctx context.Context, c *vim25.Client, host mo.HostSy
 		fmt.Printf("unknown parent type for host %s: %s\n", host.Name, parentType)
 		return ""
 	}
+}
+
+// getCinderVolumeBackendPools retrieves the list of Cinder volume backend pools from OpenStack
+func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, error) {
+	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
+	}
+	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
+	}
+	volBackendPools := make([]string, 0, len(pools))
+	for _, pool := range pools {
+		volBackendPools = append(volBackendPools, pool.Name)
+	}
+	return volBackendPools, nil
 }
