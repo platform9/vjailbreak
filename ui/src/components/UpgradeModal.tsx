@@ -83,24 +83,26 @@ export const UpgradeModal = ({ show, onClose }) => {
 
   useEffect(() => {
     if (!upgradeInProgress) return;
+    
     const interval = setInterval(async () => {
       try {
         const progress = await getUpgradeProgress();
         setProgressData(progress);
 
-        if (progress.status === 'completed' || progress.status === 'deploying') {
+        if (progress.status === 'deploying') {
           setSuccessMsg('');
           setErrorMsg('');
-        } else if (progress.status === 'deployments_ready') {
-          setUpgradeInProgress(false);
-          setSuccessMsg(progress.currentStep || 'Upgrade completed successfully');
+        } else if (progress.status === 'server_restarting') {
+          setUpgradeInProgress(false); 
+          setSuccessMsg('Upgrade complete successfully');
           clearInterval(interval);
+          
           setTimeout(() => {
             sessionStorage.setItem('showUpgradeSuccess', 'true');
             sessionStorage.setItem('upgradedVersion', selectedVersion);
             onClose();
             window.location.href = '/dashboard/migrations';
-          }, 3000);
+          }, 5000);
         } else if (progress.status === 'failed') {
           setUpgradeInProgress(false);
           setErrorMsg(`Upgrade failed: ${progress.error}`);
@@ -112,6 +114,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         clearInterval(interval);
       }
     }, 3000);
+
     return () => clearInterval(interval);
   }, [upgradeInProgress, onClose, selectedVersion]);
 

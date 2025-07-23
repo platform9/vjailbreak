@@ -212,83 +212,92 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				time.Sleep(2 * time.Second)
 			
 				upgradeProgress.Status = "deploying"
-				upgradeProgress.CurrentStep = "Updating deployments"
+				upgradeProgress.CurrentStep = "Upgrading"
 				saveProgress(ctx, kubeClient)
 				
-				for _, depConfig := range deploymentConfigs {
-					if !depConfig.ManualScale {
-						err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							dep := &appsv1.Deployment{}
-							if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); getErr != nil { return getErr }
-							found := false
-							newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion)
-							for i, c := range dep.Spec.Template.Spec.Containers {
-								if c.Name == depConfig.ContainerName {
-									dep.Spec.Template.Spec.Containers[i].Image = newImage
-									dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways 
-									found = true
-									break
-								}
-							}
-							if !found { return fmt.Errorf("container not found in %s", depConfig.Name) }
-							return kubeClient.Update(ctx, dep)
-						})
-						if err != nil {
-							return fmt.Errorf("failed to update %s: %w", depConfig.Name, err)
-						}
+				var controllerConfig DeploymentConfig
+				for _, cfg := range deploymentConfigs {
+					if cfg.Name == "migration-controller-manager" {
+						controllerConfig = cfg
+						break
 					}
 				}
-			
-				for _, depConfig := range deploymentConfigs {
-					if depConfig.ManualScale {
-						if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); getErr != nil { return getErr }; dep.Spec.Replicas = &[]int32{0}[0]; return kubeClient.Update(ctx, dep)
-						}); err != nil {
-							return fmt.Errorf("failed to scale down %s: %w", depConfig.Name, err)
-						}
-
-						if err := waitForDeploymentScaledDown(ctx, kubeClient, depConfig); err != nil {
-							return err
-						}
-
-						if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); getErr != nil { return getErr }; found := false; newImage := fmt.Sprintf("%s:%s", depConfig.ImagePrefix, in.TargetVersion); for i, c := range dep.Spec.Template.Spec.Containers { if c.Name == depConfig.ContainerName { dep.Spec.Template.Spec.Containers[i].Image = newImage; dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways; found = true; break } }; if !found { return fmt.Errorf("container not found in %s", depConfig.Name) }; return kubeClient.Update(ctx, dep)
-						}); err != nil {
-							return fmt.Errorf("failed to patch image for %s: %w", depConfig.Name, err)
-						}
-						
-						if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); getErr != nil { return getErr }; dep.Spec.Replicas = &[]int32{1}[0]; return kubeClient.Update(ctx, dep)
-						}); err != nil {
-							return fmt.Errorf("failed to scale up %s: %w", depConfig.Name, err)
-						}
-					}
+				// Scale down controller
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil { return getErr }; dep.Spec.Replicas = &[]int32{0}[0]; return kubeClient.Update(ctx, dep)
+				}); err != nil {
+					return fmt.Errorf("failed to scale down controller: %w", err)
 				}
-			
+				if err := waitForDeploymentScaledDown(ctx, kubeClient, controllerConfig); err != nil {
+					return err
+				}
+
+				// Patch Controller Image
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil { return getErr }; found := false; newImage := fmt.Sprintf("%s:%s", controllerConfig.ImagePrefix, in.TargetVersion); for i, c := range dep.Spec.Template.Spec.Containers { if c.Name == controllerConfig.ContainerName { dep.Spec.Template.Spec.Containers[i].Image = newImage; dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways; found = true; break } }; if !found { return fmt.Errorf("container not found in %s", controllerConfig.Name) }; return kubeClient.Update(ctx, dep)
+				}); err != nil {
+					return fmt.Errorf("failed to patch controller image: %w", err)
+				}
+				
+				// Scale Up Controller
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil { return getErr }; dep.Spec.Replicas = &[]int32{1}[0]; return kubeClient.Update(ctx, dep)
+				}); err != nil {
+					return fmt.Errorf("failed to scale up controller: %w", err)
+				}
+
 				upgradeProgress.CurrentStep = "Waiting for deployments to be ready"
 				saveProgress(ctx, kubeClient)
-				for _, depConfig := range deploymentConfigs {
-					if err := waitForDeploymentReady(ctx, kubeClient, depConfig); err != nil {
-						return fmt.Errorf("deployment %s failed readiness check: %w", depConfig.Name, err)
+				if err := waitForDeploymentReady(ctx, kubeClient, controllerConfig); err != nil {
+					return fmt.Errorf("controller deployment failed readiness check: %w", err)
+				}
+
+				var uiConfig DeploymentConfig
+				for _, cfg := range deploymentConfigs {
+					if cfg.Name == "vjailbreak-ui" {
+						uiConfig = cfg
+						break
 					}
 				}
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: uiConfig.Name, Namespace: uiConfig.Namespace}, dep); getErr != nil { return getErr }; found := false; newImage := fmt.Sprintf("%s:%s", uiConfig.ImagePrefix, in.TargetVersion); for i, c := range dep.Spec.Template.Spec.Containers { if c.Name == uiConfig.ContainerName { dep.Spec.Template.Spec.Containers[i].Image = newImage; dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways; found = true; break } }; if !found { return fmt.Errorf("container not found in %s", uiConfig.Name) }; return kubeClient.Update(ctx, dep)
+				}); err != nil {
+					return fmt.Errorf("failed to update UI deployment: %w", err)
+				}
+
+				if err := waitForDeploymentReady(ctx, kubeClient, controllerConfig); err != nil { return err }
+				if err := waitForDeploymentReady(ctx, kubeClient, uiConfig); err != nil { return err }
+
+				upgradeProgress.Status = "server_restarting"
+				upgradeProgress.CurrentStep = "Server restarting"
+				saveProgress(ctx, kubeClient)
+				log.Printf("UI and Controller are ready. Signaling server restart to UI.")
+
+				var sdkConfig DeploymentConfig
+				for _, cfg := range deploymentConfigs {
+					if cfg.Name == "migration-vpwned-sdk" {
+						sdkConfig = cfg
+						break
+					}
+				}
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					dep := &appsv1.Deployment{}; if getErr := kubeClient.Get(ctx, client.ObjectKey{Name: sdkConfig.Name, Namespace: sdkConfig.Namespace}, dep); getErr != nil { return getErr }; found := false; newImage := fmt.Sprintf("%s:%s", sdkConfig.ImagePrefix, in.TargetVersion); for i, c := range dep.Spec.Template.Spec.Containers { if c.Name == sdkConfig.ContainerName { dep.Spec.Template.Spec.Containers[i].Image = newImage; dep.Spec.Template.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways; found = true; break } }; if !found { return fmt.Errorf("container not found in %s", sdkConfig.Name) }; return kubeClient.Update(ctx, dep)
+				}); err != nil {
+					log.Printf("Error updating SDK in the background: %v", err)
+				}
+				
 				return nil 
 			}()
 
 			if err != nil {
-				log.Printf("Upgrade failed: %v", err)
+				log.Printf("Upgrade failed during deployment phase: %v", err)
 				upgradeProgress.Status = "failed"
 				upgradeProgress.Error = err.Error()
+				saveProgress(ctx, kubeClient)
 				return 
 			}
-
-			upgradeProgress.CompletedSteps++ 
-			upgradeProgress.Status = "deployments_ready"
-			upgradeProgress.CurrentStep = "Upgrade completed successfully"
-			saveProgress(ctx, kubeClient)
-			log.Printf("Upgrade Successful: All deployments updated and ready")
-			time.Sleep(10 * time.Second)
- 			_ = kubeClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: progressConfigMapName, Namespace: "migration-system"}})
+			
+			log.Printf("Upgrade process handed off to UI for finalization.")
 		}()
 
 	} else {
