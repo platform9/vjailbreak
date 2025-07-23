@@ -550,7 +550,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 							{
 								Name:            "fedora",
 								Image:           v2vimage,
-								ImagePullPolicy: corev1.PullAlways,
+								ImagePullPolicy: corev1.PullIfNotPresent,
 								Command:         []string{"/home/fedora/manager"},
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
