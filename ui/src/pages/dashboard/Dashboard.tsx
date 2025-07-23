@@ -3,6 +3,8 @@ import { useEffect, useState } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
+import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery"
+import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery"
 import { deleteMigration } from "src/api/migrations/migrations"
 import { useQueryClient } from "@tanstack/react-query"
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
@@ -236,12 +238,19 @@ export default function Dashboard() {
   }
 
   const { data: nodes } = useNodesQuery()
+  const { data: vmwareCredentials } = useVmwareCredentialsQuery()
+  const { data: openstackCredentials } = useOpenstackCredentialsQuery()
 
   useEffect(() => {
-    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
+    if (
+      !!migrations && 
+      migrations.length === 0 && 
+      (!nodes || nodes.length === 0) && 
+      (!vmwareCredentials || vmwareCredentials.length === 0 || !openstackCredentials || openstackCredentials.length === 0)
+    ) {
       navigate("/onboarding")
     }
-  }, [migrations, navigate])
+  }, [migrations, nodes, vmwareCredentials, openstackCredentials, navigate])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

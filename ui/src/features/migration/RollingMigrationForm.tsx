@@ -1923,12 +1923,12 @@ export default function RollingMigrationFormDrawer({
                             loadingPCD={loadingPCD}
                         />
                         <Box>
-                            <Step stepNumber="2" label="MAAS Config (Verify the configuration)" />
+                            <Step stepNumber="2" label="BMConfig (Verify the configuration)" />
                             <Box sx={{ ml: 5, mt: 1 }}>
                                 {loadingMaasConfig ? (
-                                    <Typography variant="body2">Loading MAAS Config...</Typography>
+                                    <Typography variant="body2">Loading BMConfig...</Typography>
                                 ) : maasConfigs.length === 0 ? (
-                                    <Typography variant="body2">No MAAS Config available</Typography>
+                                    <Typography variant="body2">No BMConfig available</Typography>
                                 ) : (
                                     <Typography
                                         variant="subtitle2"
@@ -1941,7 +1941,7 @@ export default function RollingMigrationFormDrawer({
                                         }}
                                         onClick={handleViewMaasConfig}
                                     >
-                                        View MAAS Config Details
+                                        View BMConfig Details
                                     </Typography>
                                 )}
                             </Box>
@@ -2121,7 +2121,7 @@ export default function RollingMigrationFormDrawer({
                     aria-labelledby="maas-config-dialog-title"
                 >
                     <DialogTitle id="maas-config-dialog-title">
-                        <Typography variant="h6">ESXi - MAAS Configuration</Typography>
+                        <Typography variant="h6">ESXi - BMConfiguration</Typography>
                     </DialogTitle>
                     <DialogContent dividers>
                         {loadingMaasConfig ? (

@@ -4,6 +4,8 @@ import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import { useNodesQuery } from "src/hooks/api/useNodesQuery"
+import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery"
+import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery"
 import Sidenav from "src/components/Sidenav"
 import { navigationItems } from "src/config/navigation"
 
@@ -47,12 +49,19 @@ export default function DashboardLayout() {
   const location = useLocation()
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()
+  const { data: vmwareCredentials } = useVmwareCredentialsQuery()
+  const { data: openstackCredentials } = useOpenstackCredentialsQuery()
 
   useEffect(() => {
-    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
+    if (
+      !!migrations &&
+      migrations.length === 0 &&
+      (!nodes || nodes.length === 0) &&
+      (!vmwareCredentials || vmwareCredentials.length === 0 || !openstackCredentials || openstackCredentials.length === 0)
+    ) {
       navigate("/onboarding")
     }
-  }, [migrations, nodes, navigate])
+  }, [migrations, nodes, vmwareCredentials, openstackCredentials, navigate])
 
   // Handle redirect from old /dashboard route to default page  
   if (location.pathname === '/dashboard') {

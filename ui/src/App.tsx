@@ -7,6 +7,8 @@ import RouteCompatibility from "./components/RouteCompatibility"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
 import RollingMigrationFormDrawer from "./features/migration/RollingMigrationForm"
 import { useMigrationsQuery } from "./hooks/api/useMigrationsQuery"
+import { useVmwareCredentialsQuery } from "./hooks/api/useVmwareCredentialsQuery"
+import { useOpenstackCredentialsQuery } from "./hooks/api/useOpenstackCredentialsQuery"
 import DashboardLayout from "./pages/dashboard/DashboardLayout"
 import MigrationsPage from "./pages/dashboard/MigrationsPage"
 import AgentsPage from "./pages/dashboard/AgentsPage"
@@ -44,16 +46,22 @@ function App() {
 
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()
+  const { data: vmwareCredentials } = useVmwareCredentialsQuery()
+  const { data: openstackCredentials } = useOpenstackCredentialsQuery()
 
   useEffect(() => {
-    if (!migrations || !nodes) {
+    if (!migrations || !nodes || !vmwareCredentials || !openstackCredentials) {
       return
-    } else if (migrations.length === 0 && nodes.length === 0) {
+    } else if (
+      migrations.length === 0 &&
+      nodes.length === 0 &&
+      (vmwareCredentials.length === 0 || openstackCredentials.length === 0)
+    ) {
       navigate("/onboarding")
     } else if (location.pathname === "/") {
       navigate("/dashboard/migrations")
     }
-  }, [migrations, nodes, navigate, location.pathname])
+  }, [migrations, nodes, vmwareCredentials, openstackCredentials, navigate, location.pathname])
 
   const hideAppbar =
     location.pathname === "/onboarding" || location.pathname === "/"
