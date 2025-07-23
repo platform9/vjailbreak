@@ -137,71 +137,7 @@ interface VM {
     ipValidationMessage?: string;
 }
 
-const esxColumns: GridColDef[] = [
-    {
-        field: "name",
-        headerName: "ESX Name",
-        flex: 1.5,
-        renderCell: (params) => (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CdsIconWrapper>
-                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                    {/* @ts-ignore */}
-                    <cds-icon shape="host" size="md" badge="info"></cds-icon>
-                </CdsIconWrapper>
-                {params.value}
-            </Box>
-        ),
-    },
-    {
-        field: "pcdHostConfigName",
-        headerName: "Host Config",
-        flex: 1,
-        align: "center",
-        valueGetter: (value) => value || "—",
-        renderCell: (params) => (
-            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                <Typography variant="body2">
-                    {params.value || "—"}
-                </Typography>
-            </Box>
-        ),
-    },
-    // {
-    //     field: "ip",
-    //     headerName: "Current IP",
-    //     flex: 1,
-    //     valueGetter: (value) => value || "—",
-    // },
-    // {
-    //     field: "bmcIp",
-    //     headerName: "BMC IP Address",
-    //     flex: 1,
-    //     valueGetter: (value) => value || "—",
-    // },
-    // {
-    //     field: "maasState",
-    //     headerName: "MaaS State",
-    //     flex: 0.5,
-    //     valueGetter: (value) => value || "—",
-    // },
-    // {
-    //     field: "vms",
-    //     headerName: "# VMs",
-    //     flex: 0.5,
-    //     valueGetter: (value) => value || "—",
-    // },
-    // {
-    //     field: "state",
-    //     headerName: "State",
-    //     flex: 0.5,
-    //     renderHeader: () => (
-    //         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-    //             <div style={{ fontWeight: 500 }}>State</div>
-    //         </Box>
-    //     ),
-    // },
-];
+// ESX columns will be defined inside the component
 
 const CustomToolbarWithActions = (props) => {
     const { rowSelectionModel, onEditIPs, onAssignFlavor, ...toolbarProps } = props;
@@ -239,21 +175,19 @@ const CustomToolbarWithActions = (props) => {
 };
 
 const CustomESXToolbarWithActions = (props) => {
-    const { rowSelectionModel, onAddPcdHost, ...toolbarProps } = props;
+    const { onAssignHostConfig, ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-            {rowSelectionModel && rowSelectionModel.length > 0 && (
-                <Button
-                    variant="text"
-                    color="primary"
-                    onClick={onAddPcdHost}
-                    size="small"
-                    sx={{ ml: 1 }}
-                >
-                    Add Host Config ({rowSelectionModel.length})
-                </Button>
-            )}
+            <Button
+                variant="text"
+                color="primary"
+                onClick={onAssignHostConfig}
+                size="small"
+                sx={{ ml: 1 }}
+            >
+                Assign Host Config
+            </Button>
             <CustomSearchToolbar {...toolbarProps} />
         </Box>
     );
@@ -337,8 +271,6 @@ export default function RollingMigrationFormDrawer({
     const [selectedPcdCredName, setSelectedPcdCredName] = useState("");
 
     const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([]);
-    const [selectedESXHosts, setSelectedESXHosts] = useState<GridRowSelectionModel>([]);
-    const [esxHostToPcdMapping, setEsxHostToPcdMapping] = useState<Record<string, string>>({});
     const [pcdHostConfigDialogOpen, setPcdHostConfigDialogOpen] = useState(false);
     const [selectedPcdHostConfig, setSelectedPcdHostConfig] = useState("");
     const [updatingPcdMapping, setUpdatingPcdMapping] = useState(false);
@@ -807,6 +739,80 @@ export default function RollingMigrationFormDrawer({
 
     }, [vmsWithAssignments, selectedVMs]);
 
+    // Define ESX columns inside component to access state and functions
+    const esxColumns: GridColDef[] = [
+        {
+            field: "name",
+            headerName: "ESX Name",
+            flex: 2,
+            renderCell: (params) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CdsIconWrapper>
+                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                        {/* @ts-ignore */}
+                        <cds-icon shape="host" size="md" badge="info"></cds-icon>
+                    </CdsIconWrapper>
+                    {params.value}
+                </Box>
+            ),
+        },
+        {
+            field: "pcdHostConfigName",
+            headerName: "Host Config",
+            flex: 1,
+            renderCell: (params) => {
+                const hostId = params.row.id;
+                const currentConfig = params.value || "";
+
+                return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                        <Select
+                            size="small"
+                            value={currentConfig}
+                            onChange={(e) => handleIndividualHostConfigChange(hostId, e.target.value)}
+                            displayEmpty
+                            sx={{
+                                width: 250,
+                                '& .MuiSelect-select': {
+                                    padding: '4px 8px',
+                                    fontSize: '0.875rem'
+                                }
+                            }}
+                            renderValue={(selected) => {
+                                if (!selected) {
+                                    return (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                                            <WarningIcon sx={{ fontSize: 16 }} />
+                                            <em>Select Host Config</em>
+                                        </Box>
+                                    );
+                                }
+                                return <Typography variant="body2">{selected}</Typography>;
+                            }}
+                        >
+                            <MenuItem value="">
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                                    <WarningIcon sx={{ fontSize: 16 }} />
+                                    <em>Select Host Config</em>
+                                </Box>
+                            </MenuItem>
+                            {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
+                                <MenuItem key={config.id} value={config.name}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="body2">{config.name}</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {config.mgmtInterface}
+                                        </Typography>
+                                    </Box>
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </Box>
+                );
+            },
+        },
+    ];
+
     // Calculate ESX host to PCD config mapping status
     const esxHostMappingStatus = useMemo(() => {
         const mappedHostsCount = orderedESXHosts.filter(host => host.pcdHostConfigName).length;
@@ -989,8 +995,10 @@ export default function RollingMigrationFormDrawer({
 
             for (const host of hostsToUpdate) {
                 try {
-                    // Get the host config ID from the mapping
-                    const hostConfigId = esxHostToPcdMapping[host.id] || host.pcdHostConfigName;
+                    // Find the config ID from the name
+                    const availablePcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || [];
+                    const selectedPcdConfig = availablePcdHostConfigs.find(config => config.name === host.pcdHostConfigName);
+                    const hostConfigId = selectedPcdConfig ? selectedPcdConfig.id : host.pcdHostConfigName;
 
                     if (hostConfigId) {
                         console.log(`Updating host ${host.name} with hostConfigId: ${hostConfigId}`);
@@ -1003,7 +1011,7 @@ export default function RollingMigrationFormDrawer({
                         metadata: {
                             hostId: host.id,
                             hostName: host.name,
-                            hostConfigId: esxHostToPcdMapping[host.id] || host.pcdHostConfigName,
+                            hostConfigId: host.pcdHostConfigName,
                             action: 'host-config-update'
                         }
                     });
@@ -1134,12 +1142,7 @@ export default function RollingMigrationFormDrawer({
             return true;
         });
 
-        // PCD host config validation - ensure all selected ESX hosts have PCD host configs assigned
-        const pcdHostConfigValid = selectedESXHosts.length === 0 ||
-            selectedESXHosts.every(hostId => {
-                const host = orderedESXHosts.find(h => h.id === hostId);
-                return host?.pcdHostConfigName;
-            });
+        // PCD host config validation - not needed anymore since validation is handled by esxHostConfigValid
 
         // ESX host config validation - ensure all ESX hosts have host configs assigned
         const esxHostConfigValid = !esxHostConfigValidation.hasError;
@@ -1150,7 +1153,7 @@ export default function RollingMigrationFormDrawer({
         // OS validation - ensure all selected powered-off VMs have OS assigned
         const osValidationPassed = !osValidation.hasError;
 
-        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !pcdHostConfigValid || !esxHostConfigValid || !ipValidationPassed || !osValidationPassed;
+        return basicRequirementsMissing || !mappingsValid || !migrationOptionValidated || !esxHostConfigValid || !ipValidationPassed || !osValidationPassed;
     }, [
         sourceCluster,
         destinationPCD,
@@ -1164,7 +1167,6 @@ export default function RollingMigrationFormDrawer({
         selectedMigrationOptions,
         params,
         fieldErrors,
-        selectedESXHosts,
         orderedESXHosts,
         vmIpValidation.hasError,
         esxHostConfigValidation.hasError,
@@ -1187,7 +1189,6 @@ export default function RollingMigrationFormDrawer({
     };
 
     const handleOpenPcdHostConfigDialog = () => {
-        if (selectedESXHosts.length === 0) return;
         setPcdHostConfigDialogOpen(true);
     };
 
@@ -1213,25 +1214,13 @@ export default function RollingMigrationFormDrawer({
             const selectedPcdConfig = availablePcdHostConfigs.find(config => config.id === selectedPcdHostConfig);
             const pcdConfigName = selectedPcdConfig ? selectedPcdConfig.name : selectedPcdHostConfig;
 
-            // Update the ESX hosts with the selected host config
-            const updatedESXHosts = orderedESXHosts.map(host => {
-                if (selectedESXHosts.includes(host.id)) {
-                    return {
-                        ...host,
-                        pcdHostConfigName: pcdConfigName
-                    };
-                }
-                return host;
-            });
+            // Update ALL ESX hosts with the selected host config
+            const updatedESXHosts = orderedESXHosts.map(host => ({
+                ...host,
+                pcdHostConfigName: pcdConfigName
+            }));
 
             setOrderedESXHosts(updatedESXHosts);
-
-            // Update the mapping record
-            const newMapping = { ...esxHostToPcdMapping };
-            selectedESXHosts.forEach(hostId => {
-                newMapping[hostId as string] = selectedPcdHostConfig;
-            });
-            setEsxHostToPcdMapping(newMapping);
 
             handleClosePcdHostConfigDialog();
         } catch (error) {
@@ -1239,7 +1228,6 @@ export default function RollingMigrationFormDrawer({
             reportError(error as Error, {
                 context: 'pcd-host-config-mapping',
                 metadata: {
-                    selectedESXHosts: selectedESXHosts,
                     selectedPcdHostConfig: selectedPcdHostConfig,
                     action: 'update-pcd-host-config-mapping'
                 }
@@ -1784,6 +1772,37 @@ export default function RollingMigrationFormDrawer({
         }
     };
 
+    const handleIndividualHostConfigChange = async (hostId: string, configName: string) => {
+        try {
+            // Update the ESX host with the selected host config
+            const updatedESXHosts = orderedESXHosts.map(host => {
+                if (host.id === hostId) {
+                    return {
+                        ...host,
+                        pcdHostConfigName: configName
+                    };
+                }
+                return host;
+            });
+
+            setOrderedESXHosts(updatedESXHosts);
+
+            console.log(`Successfully assigned host config "${configName}" to ESX host ${hostId}`);
+
+        } catch (error) {
+            console.error(`Failed to update host config for ESX host ${hostId}:`, error);
+            reportError(error as Error, {
+                context: 'individual-host-config-update',
+                metadata: {
+                    hostId: hostId,
+                    configName: configName,
+                    action: 'individual-host-config-update'
+                }
+            });
+            alert(`Failed to assign host config to ESX host: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    };
+
     const handleApplyFlavor = async () => {
         if (!selectedFlavor) {
             handleCloseFlavorDialog();
@@ -1900,7 +1919,7 @@ export default function RollingMigrationFormDrawer({
                 anchor="right"
                 open={open}
                 onClose={handleClose}
-                ModalProps={{ 
+                ModalProps={{
                     keepMounted: false,
                     style: { zIndex: 1300 }
                 }}
@@ -1976,15 +1995,11 @@ export default function RollingMigrationFormDrawer({
                                         }}
                                         pageSizeOptions={[5, 10, 25]}
                                         rowHeight={45}
-                                        checkboxSelection
-                                        onRowSelectionModelChange={setSelectedESXHosts}
-                                        rowSelectionModel={selectedESXHosts}
                                         slots={{
                                             toolbar: (props) => (
                                                 <CustomESXToolbarWithActions
                                                     {...props}
-                                                    rowSelectionModel={selectedESXHosts}
-                                                    onAddPcdHost={handleOpenPcdHostConfigDialog}
+                                                    onAssignHostConfig={handleOpenPcdHostConfigDialog}
                                                 />
                                             )
                                         }}
@@ -2248,7 +2263,7 @@ export default function RollingMigrationFormDrawer({
                     maxWidth="sm"
                 >
                     <DialogTitle>
-                        Assign Host Config to {selectedESXHosts.length} {selectedESXHosts.length === 1 ? 'ESXi Host' : 'ESXi Hosts'}
+                        Assign Host Config to All ESXi Hosts
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ my: 2 }}>
@@ -2287,7 +2302,7 @@ export default function RollingMigrationFormDrawer({
                             color="primary"
                             disabled={!selectedPcdHostConfig || updatingPcdMapping}
                         >
-                            {updatingPcdMapping ? "Applying..." : "Apply to selected hosts"}
+                            {updatingPcdMapping ? "Applying..." : "Apply to all hosts"}
                         </Button>
                     </DialogActions>
                 </Dialog>
