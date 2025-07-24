@@ -5,6 +5,7 @@ package utils
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -30,7 +31,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
 	clusterList, err := finder.ClusterComputeResourceList(ctx, "*")
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return nil, errors.Wrap(err, "failed to get cluster list")
 	}
 
@@ -301,7 +302,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
 	hostList, err := finder.HostSystemList(ctx, "*")
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return nil, errors.Wrap(err, "failed to get host list")
 	}
 	var vmHosts []*object.HostSystem
