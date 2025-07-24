@@ -108,8 +108,8 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 	return nil
 }
 
-// CreateEntryForNoPCDCluster creates a PCDCluster for no cluster
-func CreateEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
+// CreateDummyPCDClusterForStandAlonePCDHosts creates a PCDCluster for no cluster
+func CreateDummyPCDClusterForStandAlonePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	k8sClusterName, err := getK8sClusterObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
@@ -472,11 +472,11 @@ func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, open
 	return false, nil
 }
 
-func getK8sClusterObjectName(clusterName, openstackCredsName string) (string, error) {
+func getK8sClusterObjectName(clusterName, credName string) (string, error) {
 	k8sClusterName, err := ConvertToK8sName(clusterName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
-	name := fmt.Sprintf("%s-%s", k8sClusterName, openstackCredsName)
+	name := fmt.Sprintf("%s-%s", k8sClusterName, credName)
 	return name[:min(len(name), 63)], nil
 }
