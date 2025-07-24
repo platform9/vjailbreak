@@ -1253,7 +1253,7 @@ func getClusterNameFromHost(ctx context.Context, c *vim25.Client, host mo.HostSy
 func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, error) {
 	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
+		return nil, errors.Wrap(err, "failed to list all storage backend pools")
 	}
 	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
 	if err != nil {
