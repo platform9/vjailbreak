@@ -169,7 +169,7 @@ func CreateVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsS
 	}
 
 	// Create a dummy cluster for standalone ESX
-	if err := CreateDummyClusterForStandAloneESX(ctx, scope, clusters, scope.Client); err != nil {
+	if err := CreateDummyClusterForStandAloneESX(ctx, scope, clusters); err != nil {
 		return errors.Wrap(err, "failed to create dummy cluster for standalone ESX")
 	}
 
@@ -196,7 +196,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch standalone ESX hosts")
 	}
-	var vmHosts []VMwareHostInfo
+	vmHosts := make([]VMwareHostInfo, 0, len(standAloneHosts))
 	for _, host := range standAloneHosts {
 		vmHosts = append(vmHosts, VMwareHostInfo{
 			Name: host.Name(),
@@ -305,7 +305,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return nil, errors.Wrap(err, "failed to get host list")
 	}
-	var vmHosts []*object.HostSystem
+	vmHosts := make([]*object.HostSystem, 0, len(hostList))
 	for _, host := range hostList {
 		// if part of a cluster, skip
 		if clusteredHosts[host.Name()] {
@@ -317,7 +317,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 }
 
 // CreateDummyClusterForStandAloneESX creates a VMware cluster for standalone ESX
-func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMwareCredsScope, existingClusters []VMwareClusterInfo, k8sClient client.Client) error {
+func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMwareCredsScope, existingClusters []VMwareClusterInfo) error {
 	log := scope.Logger
 	k8sClusterName, err := getK8sClusterObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
 	if err != nil {
