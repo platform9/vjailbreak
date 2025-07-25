@@ -561,10 +561,18 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
+
+	// Create a semaphore to limit concurrent goroutines to 100
+	semaphore := make(chan struct{}, 100)
+
 	for i := range vms {
+		// Acquire semaphore (blocks if 100 goroutines are already running)
+		semaphore <- struct{}{}
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			// Release semaphore when done
+			defer func() { <-semaphore }()
 			// Don't panic on error
 			defer func() {
 				if r := recover(); r != nil {
@@ -579,6 +587,9 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	// Wait for all VMs to be processed
 	wg.Wait()
+	
+	// Close the semaphore channel after all goroutines have completed
+	close(semaphore)
 
 	if len(vmErrors) > 0 {
 		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
@@ -1290,7 +1301,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
-	disks := make([]string, 0, 8) // Pre-allocate with estimated capacity
+	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
 	var clusterName string
 	log := scope.Logger
 	err := vm.Properties(ctx, vm.Reference(), []string{
