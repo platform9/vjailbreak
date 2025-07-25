@@ -447,14 +447,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		openstacknws = append(openstacknws, servers.Network{
 			UUID: networkIDs[idx],
 			Port: portIDs[idx],
-			SecurityGroups: securityGroups,
 		})
 	}
 	serverCreateOpts := servers.CreateOpts{
-		Name:      vminfo.Name,
-		FlavorRef: flavor.ID,
-		Networks:  openstacknws,
-		KeyName:   sshKeyName,
+		Name:          vminfo.Name,
+		FlavorRef:     flavor.ID,
+		Networks:      openstacknws,
+		KeyName:       sshKeyName,
+		SecurityGroups: securityGroups,
 	}
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
