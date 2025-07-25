@@ -62,8 +62,8 @@ apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
      - inp44xpapp6470
   volumeRef:
    source-name: "unm-3lHw1AUPSySgEu1m3XTPGA"
-   cinderBackendPool: "primera@A600-TDV"
-   volumeType: "Primera-A600-TDV-Cinder"
+   cinderBackendPool: "mera@TDV"
+   volumeType: "PTDV-Cinder"
    openstackCreds: openstack-cred-name
  status:(outside spec)
  phase: Created | Migrate | Managing | Managed | Error
@@ -134,18 +134,9 @@ items:
       networks:
       - tnet2
       - tnet1
-      - VLAN920
-      - test-prd-backup-834
-      - VLAN841
       volumeTypes:
       - NetApp-TDV-Cinder-Glance-cache-testing
-      - Primera-Glance-Cache-Testing
-      - alletra
-      - Primera-Private-Cloud-Multiattach-Cinder
-      - NetApp-iSCSI-TDV-Cinder
-      - NetApp-TDV-Glance
-      - NetApp-TDV-Cinder
-      - Primera-A600-TDV-Cinder
+      - Primera-TDV-Cinder
       - __DEFAULT__
       cinderBackendPool:
       - pool1
@@ -190,15 +181,15 @@ spec:
      vms:
          cpu: 1
          datastores:
-             - PROD-HPE-PRIMERA-A670-10TB-EXT-028
-             - PROD-HPE-PRIMERA-A670-10TB-EXT-023
+             - EXT-028
+             - EXT-023
          disks:
              - Hard disk 1
              - Hard disk 2
    rdmDisks: 
      - rdm-disk-xyz
    memory: 4096
-         name: inp44xpapp6470
+         name: vm001
          networks:
              - prd-it-back-office-app-920
              - prd-backup-834
