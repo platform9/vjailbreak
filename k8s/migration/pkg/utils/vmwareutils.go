@@ -202,12 +202,8 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 			Name: host.Name(),
 		})
 	}
-	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
-	if err != nil {
-		return errors.Wrap(err, "failed to convert cluster name to k8s name")
-	}
 	clusters = append(clusters, VMwareClusterInfo{
-		Name:  k8sClusterName,
+		Name:  constants.VMwareClusterNameStandAloneESX,
 		Hosts: vmHosts,
 	})
 
