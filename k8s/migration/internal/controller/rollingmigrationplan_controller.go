@@ -24,6 +24,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -401,25 +402,43 @@ func (r *RollingMigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) erro
 // UpdateRollingMigrationPlanStatus updates the status fields of a RollingMigrationPlan resource including phase, message, and current targets.
 // It also updates statistics about migrated and failed VMs by checking the status of related VMMigration resources.
 func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx context.Context, scope *scope.RollingMigrationPlanScope, status vjailbreakv1alpha1.RollingMigrationPlanPhase, message, currentCluster, currentESXi string) error {
+
+	// update phase and message
 	scope.RollingMigrationPlan.Status.Phase = status
 	scope.RollingMigrationPlan.Status.Message = message
 	scope.RollingMigrationPlan.Status.CurrentCluster = currentCluster
 	scope.RollingMigrationPlan.Status.CurrentESXi = currentESXi
 
-	// update migrated and failed VMs
-	for _, vm := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		migration, err := utils.GetVMMigration(ctx, scope.Client, vm, scope.RollingMigrationPlan)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
+	// reset failed and migrated VMs
+	scope.RollingMigrationPlan.Status.FailedVMs = []string{}
+	scope.RollingMigrationPlan.Status.MigratedVMs = []string{}
+
+	migrationplanList := &vjailbreakv1alpha1.MigrationPlanList{}
+	err := r.List(ctx, migrationplanList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			constants.RollingMigrationPlanLabel: scope.RollingMigrationPlan.Name,
+		}),
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to list migration plans")
+	}
+	for _, migrationplan := range migrationplanList.Items {
+		for _, parallelvms := range migrationplan.Spec.VirtualMachines {
+			for _, vm := range parallelvms {
+				migration, err := utils.GetVMMigration(ctx, scope.Client, vm, scope.RollingMigrationPlan)
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					return errors.Wrap(err, "failed to get VMMigration")
+				}
+				switch migration.Status.Phase {
+				case vjailbreakv1alpha1.VMMigrationPhaseFailed:
+					scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
+				case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+					scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
+				}
 			}
-			return errors.Wrap(err, "failed to get VMMigration")
-		}
-		switch migration.Status.Phase {
-		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-			scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
-		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-			scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
 		}
 	}
 	return r.Status().Update(ctx, scope.RollingMigrationPlan)

@@ -227,7 +227,7 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	}
 
 	ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-	err = utils.CreateEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds)
+	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, r.Client, scope.OpenstackCreds)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create dummy PCD cluster")
 	}

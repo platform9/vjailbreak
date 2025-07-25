@@ -579,7 +579,11 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 // GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
 // It returns the Migration resource associated with the VM or an error if not found.
 func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.Migration, error) {
-	vmk8sName, err := GetVMwareMachineNameForVMName(vmName)
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
+	vmk8sName, err := GetK8sCompatibleVMWareObjectName(vmName, vmwarecreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}

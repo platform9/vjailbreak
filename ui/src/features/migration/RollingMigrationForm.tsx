@@ -971,7 +971,6 @@ export default function RollingMigrationFormDrawer({
                 .filter(vm => selectedVMs.includes(vm.id))
                 .map(vm => ({
                     vmName: vm.name,
-                    esxiName: vm.esxHost
                 })) as VMSequence[];
 
             // Create cluster mapping between VMware cluster and PCD cluster
