@@ -548,6 +548,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	errMu := sync.Mutex{}
 	panicMu := sync.Mutex{}
 	panicErrors := []interface{}{}
+	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
@@ -582,7 +583,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 				}
 			}()
 
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfo, c)
+			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -1283,6 +1284,12 @@ func appendToVMErrorsThreadSafe(errMu *sync.Mutex, vmErrors *[]vmError, vmName s
 	errMu.Unlock()
 }
 
+func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, vmInfo vjailbreakv1alpha1.VMInfo) {
+	vminfoMu.Lock()
+	*vminfo = append(*vminfo, vmInfo)
+	vminfoMu.Unlock()
+}
+
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
@@ -1297,7 +1304,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
@@ -1475,7 +1482,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
 	}
-	*vminfo = append(*vminfo, currentVM)
+	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
