@@ -148,7 +148,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 		ctxlog.Info("No VMName specified in Migration")
 		return ctrl.Result{}, nil
 	}
-	name, err := utils.ConvertToK8sName(vmName)
+	name, err := utils.GetVMwareMachineNameForVMName(vmName)
 	if err != nil {
 		ctxlog.Error(err, "Failed to convert VM name to k8s name", "vmName", vmName)
 		return ctrl.Result{}, err
