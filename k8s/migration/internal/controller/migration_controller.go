@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -43,6 +44,8 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
+
+const MigrationFinalizer = "vjailbreak.k8s.pf9.io/migration-finalizer"
 
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
@@ -71,6 +74,28 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
+
+	if migration.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
+			controllerutil.AddFinalizer(migration, MigrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
+			if _, err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+			controllerutil.RemoveFinalizer(migration, MigrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,
@@ -130,6 +155,42 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+// nolint:unparam // always returns ctrl.Result{}, but keep signature for controller-runtime conventions
+func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
+	vmName := migration.Spec.VMName
+	if vmName == "" {
+		ctxlog.Info("No VMName specified in Migration")
+		return ctrl.Result{}, nil
+	}
+	name, err := utils.GetVMwareMachineNameForVMName(vmName)
+	if err != nil {
+		ctxlog.Error(err, "Failed to convert VM name to k8s name", "vmName", vmName)
+		return ctrl.Result{}, err
+	}
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+	err = r.Get(ctx, types.NamespacedName{Name: name, Namespace: migration.Namespace}, vmwvm)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("VMwareMachine not found", "vmName", name)
+			return ctrl.Result{}, nil
+		}
+		ctxlog.Error(err, "Failed to get VMwareMachine", "vmName", name)
+		return ctrl.Result{}, err
+	}
+	if vmwvm.Status.Migrated {
+		ctxlog.Info("Resetting migrated status on VMwareMachine", "vmName", name)
+		vmwvm.Status.Migrated = false
+		if err := r.Status().Update(ctx, vmwvm); err != nil {
+			ctxlog.Error(err, "Failed to update VMwareMachine status", "vmName", name)
+			return ctrl.Result{}, err
+		}
+	} else {
+		ctxlog.Info("VMwareMachine does not have status as migrated", "vmName", name)
 	}
 	return ctrl.Result{}, nil
 }
