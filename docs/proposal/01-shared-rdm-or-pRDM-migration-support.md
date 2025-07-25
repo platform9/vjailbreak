@@ -173,7 +173,7 @@ metadata:
          openstack-rishabh: d3f3d5c7-f6d8-410e-bb9f-a7afe4b962d8
          vjailbreak.k8s.pf9.io/cluster-name: Prod-windowsI
          vjailbreak.k8s.pf9.io/is-shared-rdm: true
-     name: inp44xpapp6470
+     name: vm001
      namespace: migration-system
      resourceVersion: '982995'
      uid: 3c02b201-922e-4bef-b44e-41d081974b21
@@ -225,7 +225,7 @@ apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
      - vm001
   volumeRef:
  source-name: "unm-3lHw1AUPSySgEu1m3XTPGA"
- cinderBackendPool: "primera@TDV"
+ cinderBackendPool: "TDV"
   	 volumeType: "TDV-Cinder"
  status:(outside spec)
  phase: Pending
@@ -360,7 +360,7 @@ spec:
 </li> 
 <ul>
  
-<li>Dropdown to select Cinder Backend Pool (e.g., "primera@ATDV") 
+<li>Dropdown to select Cinder Backend Pool (e.g., "p@ATDV") 
 </li>
  
 <li>Dropdown to select Volume Type (e.g., "TDV-Cinder")</li>
