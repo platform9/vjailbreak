@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	v2vhelperutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -74,10 +75,27 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Updated logic for handling phases and conditions
 	switch rdmDisk.Status.Phase {
 	case "":
+		var mostRecentValidationFailedCondition *metav1.Condition
+		for i := range rdmDisk.Status.Conditions {
+			cond := rdmDisk.Status.Conditions[i]
+			if cond.Type == "ValidationFailed" && cond.Status == metav1.ConditionTrue {
+				if mostRecentValidationFailedCondition == nil || cond.LastTransitionTime.After(mostRecentValidationFailedCondition.LastTransitionTime.Time) {
+					mostRecentValidationFailedCondition = &cond
+				}
+			}
+		}
+		if mostRecentValidationFailedCondition != nil {
+			lastTransitionTime := mostRecentValidationFailedCondition.LastTransitionTime.Time
+			if time.Since(lastTransitionTime) < 2*time.Minute {
+				log.Info("Skipping validation as a ValidationFailed condition was set less than 2 minutes ago", "RDMDisk", rdmDisk.Name, "LastReason", mostRecentValidationFailedCondition.Reason)
+				// Requeue after the remaining time to reach 2 minutes
+				requeueAfter := 2*time.Minute - time.Since(lastTransitionTime)
+				return ctrl.Result{RequeueAfter: requeueAfter}, nil
+			}
+		}
 		// Initial phase, validate the RDM disk specifications
 		if err := ValidateRDMDiskFields(rdmDisk); err != nil {
 			log.Error(err, "validation failed")
-			rdmDisk.Status.Phase = "Error"
 			meta.SetStatusCondition(&rdmDisk.Status.Conditions, metav1.Condition{
 				Type:    "ValidationFailed",
 				Status:  metav1.ConditionTrue,
@@ -204,6 +222,9 @@ func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 
 	if rdmDisk.Spec.OpenstackVolumeRef.VolumeType == "" {
 		return fmt.Errorf("OpenstackVolumeRef.volumeType is required")
+	}
+	if rdmDisk.Spec.DiskName == "" {
+		return fmt.Errorf("DiskName is required")
 	}
 	return nil
 }
