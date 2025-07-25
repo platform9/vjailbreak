@@ -562,8 +562,8 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
-	// Create a semaphore to limit concurrent goroutines to 100
-	semaphore := make(chan struct{}, 100)
+	// Create a semaphore to limit concurrent goroutines
+	semaphore := make(chan struct{}, constants.VCenterVMScanConcurrencyLimit)
 
 	for i := range vms {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
@@ -587,7 +587,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	// Wait for all VMs to be processed
 	wg.Wait()
-	
+
 	// Close the semaphore channel after all goroutines have completed
 	close(semaphore)
 
