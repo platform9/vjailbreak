@@ -510,7 +510,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "failed to get vm name")
 	}
-	jobName, err := utils.GetJobNameForVMName(vmk8sname, vmwarecreds)
+	jobName, err := utils.GetJobNameForVMName(vm, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get job name")
 	}
