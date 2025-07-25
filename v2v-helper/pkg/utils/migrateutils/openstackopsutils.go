@@ -464,10 +464,6 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		CreateOptsBuilder: serverCreateOpts,
 		KeyName:           sshKeyName,
 	}
-	createOpts := bootfromvolume.CreateOptsExt{
-		CreateOptsBuilder: keyPairOpts,
-		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
-	}
 
 	// Wait for disks to become available
 	for _, disk := range vminfo.VMDisks {
