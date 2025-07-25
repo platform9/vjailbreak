@@ -20,6 +20,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -270,6 +272,9 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 	var openstackvoltypes []string
 	var openstacknetworks []string
+	var openstacksecuritygroups []string
+	var openstacksshkeys []string
+
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -298,9 +303,35 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, nil).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list security groups")
+	}
+	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all security groups")
+	}
+	for i := 0; i < len(allSecGroups); i++ {
+		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+	}
+
+	allKeypairPages, err := keypairs.List(openstackClients.ComputeClient).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list SSH keypairs")
+	}
+	allKeypairs, err := keypairs.ExtractKeyPairs(allKeypairPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all SSH keypairs")
+	}
+	for i := 0; i < len(allKeypairs); i++ {
+		openstacksshkeys = append(openstacksshkeys, allKeypairs[i].Name)
+	}
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
-		VolumeTypes: openstackvoltypes,
-		Networks:    openstacknetworks,
+		VolumeTypes:     openstackvoltypes,
+		Networks:        openstacknetworks,
+		SecurityGroups:  openstacksecuritygroups,
+		SSHKeys:         openstacksshkeys,
 	}, nil
 }
 

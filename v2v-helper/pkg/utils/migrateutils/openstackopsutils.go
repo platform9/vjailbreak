@@ -420,7 +420,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, sshKeyName string) (*servers.Server, error) {
 
 	uuid := ""
 	bootableDiskIndex := 0
@@ -447,12 +447,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		openstacknws = append(openstacknws, servers.Network{
 			UUID: networkIDs[idx],
 			Port: portIDs[idx],
+			SecurityGroups: securityGroups,
 		})
 	}
 	serverCreateOpts := servers.CreateOpts{
 		Name:      vminfo.Name,
 		FlavorRef: flavor.ID,
 		Networks:  openstacknws,
+		KeyName:   sshKeyName,
 	}
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name

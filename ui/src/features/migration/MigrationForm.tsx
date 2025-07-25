@@ -49,6 +49,7 @@ import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import { useClusterData } from "./useClusterData"
 import { useErrorHandler } from "src/hooks/useErrorHandler"
+import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
 
 const stringsCompareFn = (a, b) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
@@ -110,6 +111,9 @@ export interface FormValues extends Record<string, unknown> {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  // Security Group and SSH Key selection
+  securityGroups?: string[]
+  sshKeys?: string[]
 }
 
 
@@ -734,6 +738,13 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors["storageMapping"]}
           />
           {/* Step 4 */}
+          <SecurityGroupAndSSHKeyStep
+            params={params}
+            onChange={getParamsUpdater}
+            openstackCredentials={openstackCredentials}
+            stepNumber="4"
+          />
+          {/* Step 5 */}
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
@@ -741,7 +752,7 @@ export default function MigrationFormDrawer({
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
-            stepNumber="4"
+            stepNumber="5"
           />
 
 

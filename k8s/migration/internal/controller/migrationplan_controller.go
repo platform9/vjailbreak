@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -568,7 +569,21 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:  "VMWARE_MACHINE_OBJECT_NAME",
 										Value: vmk8sname,
 									},
+									{
+										Name:  "SECURITY_GROUPS",
+										Value: strings.Join(migrationplan.Spec.SecurityGroups, ","),
+									},
+									{
+										Name:  "SSH_KEY_NAME",
+										Value: "",
+									},
 								},
+								if len(migrationplan.Spec.SSHKeys) > 0 {
+									Env = append(Env, corev1.EnvVar{
+										Name:  "SSH_KEY_NAME",
+										Value: migrationplan.Spec.SSHKeys[0],
+									})
+								}
 								EnvFrom: []corev1.EnvFromSource{
 									{
 										SecretRef: &corev1.SecretEnvSource{
