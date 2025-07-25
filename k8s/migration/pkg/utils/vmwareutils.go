@@ -64,11 +64,11 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 
 // createVMwareHost creates a VMware host resource in Kubernetes
 func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host VMwareHostInfo, credName, clusterName, namespace string) (string, error) {
-	hostk8sName, err := ConvertToK8sName(host.Name)
+	hostk8sName, err := GetK8sCompatibleVMWareObjectName(host.Name, credName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert host name to k8s name")
 	}
-	clusterk8sName, err := ConvertToK8sName(clusterName)
+	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterName, credName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -111,7 +111,7 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, cluster VMwareClusterInfo) error {
 	log := scope.Logger
 
-	clusterk8sName, err := ConvertToK8sName(cluster.Name)
+	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(cluster.Name, scope.Name())
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -202,7 +202,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 			Name: host.Name(),
 		})
 	}
-	k8sClusterName, err := getK8sClusterObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
+	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -229,7 +229,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	// Create a map of valid cluster names for O(1) lookups
 	clusterNames := make(map[string]bool)
 	for _, cluster := range clusters {
-		cname, err := ConvertToK8sName(cluster.Name)
+		cname, err := GetK8sCompatibleVMWareObjectName(cluster.Name, scope.Name())
 		if err != nil {
 			return errors.Wrap(err, "failed to convert cluster name to k8s name")
 		}
@@ -248,7 +248,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	// Create a map of valid host names for O(1) lookups
 	hostNames := make(map[string]bool)
 	for _, host := range hosts {
-		hname, err := ConvertToK8sName(host.Name)
+		hname, err := GetK8sCompatibleVMWareObjectName(host.Name, scope.Name())
 		if err != nil {
 			return errors.Wrap(err, "failed to convert host name to k8s name")
 		}
@@ -319,7 +319,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 // CreateDummyClusterForStandAloneESX creates a VMware cluster for standalone ESX
 func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMwareCredsScope, existingClusters []VMwareClusterInfo) error {
 	log := scope.Logger
-	k8sClusterName, err := getK8sClusterObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
+	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(constants.VMwareClusterNameStandAloneESX, scope.Name())
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
