@@ -23,6 +23,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
@@ -453,15 +454,18 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		Name:          vminfo.Name,
 		FlavorRef:     flavor.ID,
 		Networks:      openstacknws,
-		KeyName:       sshKeyName,
 		SecurityGroups: securityGroups,
 	}
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
-	createOpts := bootfromvolume.CreateOptsExt{
+	keyPairOpts := keypairs.CreateOptsExt{
 		CreateOptsBuilder: serverCreateOpts,
+		KeyName:           sshKeyName,
+	}
+	createOpts := bootfromvolume.CreateOptsExt{
+		CreateOptsBuilder: keyPairOpts,
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
 	}
 
@@ -478,7 +482,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			return nil, fmt.Errorf("failed to wait for volume to become available: %s", err)
 		}
 	}
-	server, err := servers.Create(osclient.ComputeClient, createOpts).Extract()
+	server, err := servers.Create(osclient.ComputeClient, keyPairOpts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}
