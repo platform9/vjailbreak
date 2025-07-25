@@ -471,7 +471,14 @@ export default function MigrationFormDrawer({
         vmCutoverEnd: params.cutoverEndTime
       }),
       retry: params.retryOnFailure,
-      ...(postMigrationAction && { postMigrationAction })
+      ...(postMigrationAction && { postMigrationAction }),
+
+      ...(params.securityGroups && params.securityGroups.length > 0 && {
+        securityGroups: params.securityGroups,
+      }),
+      ...(params.sshKeys && params.sshKeys.length > 0 && params.sshKeys[0] !== "None" && {
+        sshKeys: params.sshKeys,
+      }),
     };
 
     console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));

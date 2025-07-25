@@ -314,6 +314,15 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	for i := 0; i < len(allSecGroups); i++ {
 		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
 	}
+	groupSet := make(map[string]struct{})
+	deduped := []string{}
+	for _, group := range openstacksecuritygroups {
+		if _, exists := groupSet[group]; !exists {
+			groupSet[group] = struct{}{}
+			deduped = append(deduped, group)
+		}
+	}
+	openstacksecuritygroups = deduped
 
 	allKeypairPages, err := keypairs.List(openstackClients.ComputeClient, keypairs.ListOpts{}).AllPages()
 	if err != nil {
