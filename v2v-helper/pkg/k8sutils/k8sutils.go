@@ -40,7 +40,7 @@ func GetVMwareMachine(ctx context.Context, vmName string) (*vjailbreakv1alpha1.V
 		return nil, err
 	}
 	vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
-	vmK8sName, err := utils.ConvertToK8sName(vmName)
+	vmK8sName, err := utils.GetVMwareMachineName()
 	if err != nil {
 		return nil, err
 	}

@@ -13,10 +13,13 @@ const (
 	TerminationPeriod = int64(120)
 
 	// NameMaxLength defines the maximum length of a name
-	NameMaxLength = 63
+	K8sNameMaxLength = 63
 
 	// HashSuffixLength defines the length of the hash suffix
 	HashSuffixLength = 5
+
+	// VMNameMaxLength defines the maximum length of a VM name excluding the hash suffix
+	VMNameMaxLength = 57
 
 	// MaxJobNameLength defines the maximum length of a job name
 	MaxJobNameLength = 46 // 63 - 11 (prefix v2v-helper-) - 1 (hyphen) - 5 (hash)
