@@ -135,8 +135,8 @@ items:
       - tnet2
       - tnet1
       volumeTypes:
-      - NetApp-TDV-Cinder-Glance-cache-testing
-      - Primera-TDV-Cinder
+      - Glance-cache-testing
+      - TDV-Cinder
       - __DEFAULT__
       cinderBackendPool:
       - pool1
@@ -191,8 +191,8 @@ spec:
    memory: 4096
          name: vm001
          networks:
-             - prd-it-back-office-app-920
-             - prd-backup-834
+             - prd2
+             - prd1
          os Type: linuxGuest
          vmState: notRunning
 status:
@@ -222,11 +222,11 @@ apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
   ownerVMs:
     - winserver2k16
     - winserver2k19
-     - inp44xpapp6470
+     - vm001
   volumeRef:
  source-name: "unm-3lHw1AUPSySgEu1m3XTPGA"
- cinderBackendPool: "primera@A600-TDV"
-  	 volumeType: "Primera-A600-TDV-Cinder"
+ cinderBackendPool: "primera@TDV"
+  	 volumeType: "TDV-Cinder"
  status:(outside spec)
  phase: Pending
 cinderReference: vol-id
@@ -241,7 +241,7 @@ cinderReference: vol-id
     * UI mandates selection of **all** VMs in the cluster.
     * Error shown if user attempts partial selection.
 
-If a user wants to trigger the migration of a VM (e.g., inp44xpapp6470), they must select **all VMs listed in the ownerVMs reference** of the associated RdmDisk CR. \
+If a user wants to trigger the migration of a VM (e.g., vm001), they must select **all VMs listed in the ownerVMs reference** of the associated RdmDisk CR. \
  If any of the newly selected VMs are linked to additional RDM disks, then **all VMs referenced by those RDM disks must also be selected**.
 
 Once all required VMs are selected, the UI should display a **dedicated section for RDM disk configuration**, allowing the user to choose the appropriate **OpenStack Cinder backend pool and volume type and also editing volumeRef: key:value field**. \
@@ -273,7 +273,7 @@ Given:
 
 
 * A VmwareMachine named inp44xpapp6470
-* An RdmDisk named rdm-disk-xyz with ownerVMs: [winserver2k16, winserver2k19, inp44xpapp6470] \
+* An RdmDisk named rdm-disk-xyz with ownerVMs: [winserver2k16, winserver2k19, vm001] \
 
 
 
@@ -299,7 +299,7 @@ GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/default/vmwaremachines?label
 
 ** Step 3: UI checks if the selected VM has rdmDisks defined**
 
-- Inspect the VmwareMachine spec of inp44xpapp6470:
+- Inspect the VmwareMachine spec of vm001:
 
 ```yaml
 spec:
@@ -313,7 +313,7 @@ spec:
   ownerVMs:
     - winserver2k16
     - winserver2k19
-    - inp44xpapp6470
+    - vm001
 ```
 
 **Step 5: UI ensures full VM selection**
@@ -328,7 +328,7 @@ spec:
 <li>winserver2k19 
 </li>
  
-<li>inp44xpapp6470 
+<li>vm001 
 </li> 
 </ul>
 
@@ -360,10 +360,10 @@ spec:
 </li> 
 <ul>
  
-<li>Dropdown to select Cinder Backend Pool (e.g., "primera@A600-TDV") 
+<li>Dropdown to select Cinder Backend Pool (e.g., "primera@ATDV") 
 </li>
  
-<li>Dropdown to select Volume Type (e.g., "Primera-A600-TDV-Cinder")</li>
+<li>Dropdown to select Volume Type (e.g., "TDV-Cinder")</li>
  
 <li>Text Box to edit volumeRef 
 </li> 
@@ -454,12 +454,12 @@ The **RDM Disk Controller** will:
 POST /v3/{project_id}/volumes/manage
 {
   "volume": {
-    "host": "primera@A600-TDV",
+    "host": "pTDV",
     "ref": {
       "source-name": "unm-3lHw1AUPSySgEu1m3XTPGA"
     },
     "name": "Disk1",
-    "volume_type": "Primera-A600-TDV-Cinder",
+    "volume_type": "TDV-Cinder",
     "description": "Volume for Disk1",
     "bootable": false
   }
