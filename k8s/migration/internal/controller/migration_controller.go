@@ -85,7 +85,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		if controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
-			if err := r.reconcileDelete(ctx, migration); err != nil {
+			if _, err := r.reconcileDelete(ctx, migration); err != nil {
 				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(migration, MigrationFinalizer)
