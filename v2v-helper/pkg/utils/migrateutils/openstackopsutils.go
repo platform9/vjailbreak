@@ -464,7 +464,10 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		CreateOptsBuilder: serverCreateOpts,
 		KeyName:           sshKeyName,
 	}
-
+	createOpts := bootfromvolume.CreateOptsExt{
+		CreateOptsBuilder: keyPairOpts,
+		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
+	}
 	// Wait for disks to become available
 	for _, disk := range vminfo.VMDisks {
 		err := osclient.WaitForVolume(disk.OpenstackVol.ID)
@@ -478,7 +481,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			return nil, fmt.Errorf("failed to wait for volume to become available: %s", err)
 		}
 	}
-	server, err := servers.Create(osclient.ComputeClient, keyPairOpts).Extract()
+	server, err := servers.Create(osclient.ComputeClient, createOpts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}
