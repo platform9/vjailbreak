@@ -24,6 +24,8 @@ import (
 // including resource allocation, network configuration, storage details, and host placement.
 // This comprehensive data is necessary for accurately recreating the VM in the target environment.
 type VMInfo struct {
+	// MacAddresses is the list of MAC addresses assigned to the VM's network interfaces
+	MacAddresses []string `json:"macAddresses,omitempty"`
 	// Name is the name of the virtual machine
 	Name string `json:"name"`
 	// Datastores is the list of datastores for the virtual machine
@@ -48,12 +50,14 @@ type VMInfo struct {
 	ClusterName string `json:"clusterName,omitempty"`
 	// AssignedIp is the IP address assigned to the VM
 	AssignedIP string `json:"assignedIp,omitempty"`
+	// RDMDisks is the list of RDM disks for the virtual machine
+	RDMDisks []RDMDiskInfo `json:"rdmDisks,omitempty"`
 }
 
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMInfo is the info of the VMs in the VMwareMachine
-	VMInfo VMInfo `json:"vms,omitempty"`
+	VMInfo VMInfo `json:"vms,omitempty"` // VM details including MAC addresses
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
@@ -94,6 +98,31 @@ type VMwareMachineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []VMwareMachine `json:"items"`
+}
+
+// OpenStackVolumeRefInfo contains information about the OpenStack volume reference in migrating rdm disks
+// This struct is used to store the reference to the OpenStack volume and its associated metadata
+type OpenStackVolumeRefInfo struct {
+	// VolumeRef is the reference to the OpenStack volume
+	VolumeRef map[string]string `json:"volumeRef,omitempty"`
+	// CinderBackendPool is the cinder backend pool of the disk
+	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+	// VolumeType is the volume type of the disk
+	VolumeType string `json:"volumeType,omitempty"`
+}
+
+// RDMDiskInfo contains information about a Raw Device Mapping (RDM) disk
+type RDMDiskInfo struct {
+	// DiskName is the name of the disk
+	DiskName string `json:"diskName,omitempty"`
+	// DiskSize is the size of the disk in GB
+	DiskSize int64 `json:"diskSize,omitempty"`
+	// UUID (VML id) is the unique identifier of the disk
+	UUID string `json:"uuid,omitempty"`
+	// DisplayName is the display name of the disk
+	DisplayName string `json:"displayName,omitempty"`
+	// OpenstackVolumeRef contains OpenStack volume reference information
+	OpenstackVolumeRef OpenStackVolumeRefInfo `json:"openstackVolumeRef,omitempty"`
 }
 
 func init() {

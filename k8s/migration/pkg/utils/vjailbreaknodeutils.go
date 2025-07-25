@@ -25,26 +25,12 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	openstackutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
-
-// Network represents network configuration for OpenStack VMs
-type Network struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Link      string `json:"link"`
-	NetworkID string `json:"network_id"`
-}
-
-// OpenStackMetadata represents metadata for OpenStack VMs
-type OpenStackMetadata struct {
-	Networks []Network `json:"networks"`
-}
 
 // CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
 func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
@@ -112,11 +98,6 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials for master")
-	}
-	// Add finalizer to openstack creds
-	err = AddFinalizerToCreds(ctx, k3sclient)
-	if err != nil {
-		return errors.Wrap(err, "failed to add finalizer to openstack creds")
 	}
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err = k3sclient.Get(ctx, types.NamespacedName{
@@ -591,64 +572,6 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 	err = k3sclient.Delete(ctx, node)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete node")
-	}
-	return nil
-}
-
-// AddFinalizerToCreds adds finalizers to credentials and their associated secret
-// nolint:dupl // separation of logic
-func AddFinalizerToCreds(ctx context.Context, k3sclient client.Client) error {
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
-	if err != nil {
-		return errors.Wrap(err, "failed to get credentials")
-	}
-
-	secret := &corev1.Secret{}
-	err = k3sclient.Get(ctx, types.NamespacedName{
-		Name:      creds.Spec.SecretRef.Name,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, secret)
-	if err != nil {
-		return errors.Wrap(err, "failed to get credentials from secret")
-	}
-
-	controllerutil.AddFinalizer(creds, constants.VjailbreakNodeFinalizer)
-	controllerutil.AddFinalizer(secret, constants.VjailbreakNodeFinalizer)
-
-	if err := k3sclient.Update(ctx, creds); err != nil {
-		return errors.Wrap(err, "failed to update credentials with finalizer")
-	}
-	if err := k3sclient.Update(ctx, secret); err != nil {
-		return errors.Wrap(err, "failed to update secret with finalizer")
-	}
-	return nil
-}
-
-// DeleteFinalizerFromCreds removes finalizers from credentials and their associated secret
-// nolint:dupl // separation of logic
-func DeleteFinalizerFromCreds(ctx context.Context, k3sclient client.Client) error {
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
-	if err != nil {
-		return errors.Wrap(err, "failed to get credentials")
-	}
-
-	secret := &corev1.Secret{}
-	err = k3sclient.Get(ctx, types.NamespacedName{
-		Name:      creds.Spec.SecretRef.Name,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, secret)
-	if err != nil {
-		return errors.Wrap(err, "failed to get credentials from secret")
-	}
-
-	controllerutil.RemoveFinalizer(creds, constants.VjailbreakNodeFinalizer)
-	controllerutil.RemoveFinalizer(secret, constants.VjailbreakNodeFinalizer)
-
-	if err := k3sclient.Update(ctx, creds); err != nil {
-		return errors.Wrap(err, "failed to update credentials with finalizer")
-	}
-	if err := k3sclient.Update(ctx, secret); err != nil {
-		return errors.Wrap(err, "failed to update secret with finalizer")
 	}
 	return nil
 }
