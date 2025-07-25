@@ -59,7 +59,7 @@ apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
   ownerVMs:
     - winserver2k16
     - winserver2k19
-     - inp44xpapp6470
+     - vm001
   volumeRef:
    source-name: "unm-3lHw1AUPSySgEu1m3XTPGA"
    cinderBackendPool: "mera@TDV"
@@ -283,7 +283,7 @@ Given:
 
 
 
-* User selects inp44xpapp6470 for migration. \
+* User selects vm001 for migration. \
 
 
 
