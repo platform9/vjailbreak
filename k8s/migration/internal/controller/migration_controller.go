@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -43,6 +44,8 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
+
+const MigrationFinalizer = "vjailbreak.k8s.pf9.io/migration-finalizer"
 
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
@@ -72,9 +75,25 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	if !migration.DeletionTimestamp.IsZero() {
-		ctxlog.Info("Migration object is being deleted, resetting status on VMwareMachine", "migration", migration.Name)
-		return r.reconcileDelete(ctx, migration)
+	if migration.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
+			controllerutil.AddFinalizer(migration, MigrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+			controllerutil.RemoveFinalizer(migration, MigrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
 	}
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
