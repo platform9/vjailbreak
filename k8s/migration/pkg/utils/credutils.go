@@ -303,7 +303,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
-	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, nil).AllPages()
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list security groups")
 	}
@@ -315,7 +315,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
 	}
 
-	allKeypairPages, err := keypairs.List(openstackClients.ComputeClient).AllPages()
+	allKeypairPages, err := keypairs.List(openstackClients.ComputeClient, keypairs.ListOpts{}).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list SSH keypairs")
 	}
