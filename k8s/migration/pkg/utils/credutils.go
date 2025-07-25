@@ -16,6 +16,7 @@ import (
 
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
@@ -295,7 +296,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cinder volume backend pools")
 	}
-	openstacknetworks := make([]string, len(allNetworks))
+	openstacknetworks := make([]string, 0, len(allNetworks))
 	for i := 0; i < len(allNetworks); i++ {
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
@@ -546,6 +547,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	errMu := sync.Mutex{}
 	panicMu := sync.Mutex{}
 	panicErrors := []interface{}{}
+	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
@@ -559,10 +561,18 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
+
+	// Create a semaphore to limit concurrent goroutines
+	semaphore := make(chan struct{}, constants.VCenterVMScanConcurrencyLimit)
+
 	for i := range vms {
+		// Acquire semaphore (blocks if 100 goroutines are already running)
+		semaphore <- struct{}{}
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			// Release semaphore when done
+			defer func() { <-semaphore }()
 			// Don't panic on error
 			defer func() {
 				if r := recover(); r != nil {
@@ -572,11 +582,14 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 				}
 			}()
 
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfo, c)
+			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c)
 		}(i)
 	}
 	// Wait for all VMs to be processed
 	wg.Wait()
+
+	// Close the semaphore channel after all goroutines have completed
+	close(semaphore)
 
 	if len(vmErrors) > 0 {
 		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
@@ -1235,10 +1248,33 @@ func getClusterNameFromHost(ctx context.Context, c *vim25.Client, host mo.HostSy
 	}
 }
 
+// getCinderVolumeBackendPools retrieves the list of Cinder volume backend pools from OpenStack
+func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, error) {
+	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list all storage backend pools")
+	}
+	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
+	}
+	volBackendPools := make([]string, 0, len(pools))
+	for _, pool := range pools {
+		volBackendPools = append(volBackendPools, pool.Name)
+	}
+	return volBackendPools, nil
+}
+
 func appendToVMErrorsThreadSafe(errMu *sync.Mutex, vmErrors *[]vmError, vmName string, err error) {
 	errMu.Lock()
 	*vmErrors = append(*vmErrors, vmError{vmName: vmName, err: err})
 	errMu.Unlock()
+}
+
+func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, vmInfo vjailbreakv1alpha1.VMInfo) {
+	vminfoMu.Lock()
+	*vminfo = append(*vminfo, vmInfo)
+	vminfoMu.Unlock()
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
@@ -1255,7 +1291,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
@@ -1433,7 +1469,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
 	}
-	*vminfo = append(*vminfo, currentVM)
+	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
