@@ -11,10 +11,12 @@ export const createMigrationPlanJson = (params) => {
     vmCutoverEnd,
     virtualMachines,
     adminInitiatedCutOver,
-    postMigrationAction, 
-  } = params || {}
-  
-  const spec: any = {  
+    postMigrationAction,
+    securityGroups,
+    sshKeys,
+  } = params || {};
+
+  const spec: any = {
     migrationTemplate: migrationTemplateName,
     retry,
     migrationStrategy: {
@@ -25,17 +27,26 @@ export const createMigrationPlanJson = (params) => {
       vmCutoverEnd,
     },
     virtualMachines: [virtualMachines],
-  }
+  };
 
- 
-  if (postMigrationAction && 
-      (postMigrationAction.renameVm || postMigrationAction.moveToFolder)) {
+  if (
+    postMigrationAction &&
+    (postMigrationAction.renameVm || postMigrationAction.moveToFolder)
+  ) {
     spec.postMigrationAction = {
       renameVm: postMigrationAction.renameVm || false,
       suffix: postMigrationAction.suffix || "",
       moveToFolder: postMigrationAction.moveToFolder || false,
-      folderName: postMigrationAction.folderName || "vjailbreakedVMs"
-    }
+      folderName: postMigrationAction.folderName || "vjailbreakedVMs",
+    };
+  }
+
+  if (securityGroups && securityGroups.length > 0) {
+    spec.securityGroups = securityGroups;
+  }
+
+  if (sshKeys && sshKeys.length > 0) {
+    spec.sshKeys = sshKeys;
   }
 
   return {
@@ -44,6 +55,6 @@ export const createMigrationPlanJson = (params) => {
     metadata: {
       name: name || uuidv4(),
     },
-    spec
-  }
-}
+    spec,
+  };
+};
