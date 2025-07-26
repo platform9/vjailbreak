@@ -20,10 +20,10 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
@@ -368,7 +368,7 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error) {
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -394,7 +394,8 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	if len(network.Subnets) == 0 {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
-	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+
+	createOpts := ports.CreateOpts{
 		Name:       "port-" + vmname,
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -404,15 +405,15 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 				IPAddress: ip,
 			},
 		},
-	}).Extract()
+		SecurityGroups: &securityGroups,
+	}
+
+	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
 		// return nil, err
 		utils.PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
-		port, err = ports.Create(osclient.NetworkingClient, ports.CreateOpts{
-			Name:       "port-" + vmname,
-			NetworkID:  network.ID,
-			MACAddress: mac,
-		}).Extract()
+		createOpts.FixedIPs = nil
+		port, err = ports.Create(osclient.NetworkingClient, createOpts).Extract()
 		if err != nil {
 			return nil, err
 		}
@@ -451,9 +452,9 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		})
 	}
 	serverCreateOpts := servers.CreateOpts{
-		Name:          vminfo.Name,
-		FlavorRef:     flavor.ID,
-		Networks:      openstacknws,
+		Name:           vminfo.Name,
+		FlavorRef:      flavor.ID,
+		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
