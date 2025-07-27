@@ -51,6 +51,8 @@ spec:
               importToCinder:
                 type: boolean
               openstackVolumeRef:
+                description: VolumeRefInfo defines the structure for OpenStack volume
+                  reference information.
                 properties:
                   cinderBackendPool:
                     type: string
