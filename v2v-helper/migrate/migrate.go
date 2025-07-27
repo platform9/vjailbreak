@@ -275,15 +275,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx := range vminfo.VMDisks {
-				startTime := time.Now()
-				migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
-
 				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
-				duration := time.Since(startTime)
-				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -322,15 +318,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					done = false
 					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
-					// incremental block copy
-
-					startTime := time.Now()
-					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-
-					duration := time.Since(startTime)
-
 					if err != nil {
 						changedBlockCopySuccess = false
 					}
@@ -341,11 +330,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					}
 					if !changedBlockCopySuccess {
 						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
+						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
 					}
-
-					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
-
+					migobj.logMessage("Finished copying changed blocks")
+					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
 				}
 			}
 			if final {
@@ -481,7 +469,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
 			if err != nil {
-				return fmt.Errorf("failed to get os release: %s: %s", err, strings.TrimSpace(osRelease))
+				return fmt.Errorf("failed to get os release: %s: %s\n", err, strings.TrimSpace(osRelease))
 			}
 		}
 		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
@@ -538,18 +526,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return fmt.Errorf("failed to run ntfsfix: %s", err)
 			}
 		}
-		// Turn on DHCP for interfaces in rhel VMs
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
-			if strings.Contains(osRelease, "rhel") {
-				firstbootscriptname := "rhel_enable_dhcp"
-				firstbootscript := constants.RhelFirstBootScript
-				firstbootscripts = append(firstbootscripts, firstbootscriptname)
-				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
-				if err != nil {
-					return fmt.Errorf("failed to add first boot script: %s", err)
-				}
-			}
-		}
 
 		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 		if err != nil {
@@ -563,7 +539,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 	}
 
-	//TODO(omkar): can disable DHCP here
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Check if netplan is supported
@@ -612,6 +587,64 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					}
 				}
 			}
+		} else if virtv2v.IsRHELFamily(osRelease) {
+			diskPath := vminfo.VMDisks[bootVolumeIndex].Path
+			// For RHEL family, we need to inject a script to force DHCP on the network interfaces
+			// This is because RHEL family uses NetworkManager by default and it does not automatically
+			// configure the network interfaces to use DHCP after migration.
+
+			versionID := parseVersionID(osRelease)
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+
+			if majorVersion >= 7 { // As per request; covers RHEL8+ where NM is mandatory
+				// Inject the script for first-boot
+
+				scriptContent := `#!/bin/bash
+nmcli -t -f NAME connection show | while read -r conn; do
+    nmcli con modify "$conn" ipv4.method auto ipv4.address "" ipv4.gateway ""
+    nmcli con modify "$conn" ipv6.method auto ipv6.address "" ipv6.gateway ""
+    nmcli con reload
+    nmcli con down "$conn"
+    nmcli con up "$conn"
+done
+systemctl enable --now serial-getty@ttyS0.service`
+				scriptName := "rhel_force_dhcp.sh"
+				err = virtv2v.AddFirstBootScript(scriptContent, scriptName) // Your existing function
+				if err != nil {
+					return fmt.Errorf("failed to add first-boot script: %v", err)
+				}
+				utils.PrintLog("Injected NM DHCP force script for majorVersion >7.")
+			} else {
+				// Legacy (majorVersion <7, e.g., RHEL6): Offline ifcfg edit
+				cmd := "ls /etc/sysconfig/network-scripts | grep '^ifcfg-' | grep -v 'lo'"
+				lsOut, err := virtv2v.RunCommandInGuest(diskPath, cmd, false)
+				if err != nil {
+					return fmt.Errorf("failed to list ifcfg: %v", err)
+				}
+				files := strings.Split(strings.TrimSpace(lsOut), "\n")
+				for _, file := range files {
+					if file == "" {
+						continue
+					}
+					sedCmd := fmt.Sprintf("sed -i 's/BOOTPROTO=static/BOOTPROTO=dhcp/g; /IPADDR=/d; /GATEWAY=/d; /NETMASK=/d; /PREFIX=/d' /etc/sysconfig/network-scripts/%s", file)
+					_, err := virtv2v.RunCommandInGuest(diskPath, sedCmd, false)
+					if err != nil {
+						utils.PrintLog(fmt.Sprintf("Warning: Failed to modify %s: %v", file, err))
+					}
+				}
+				// Add serial enable for legacy (via script injection)
+				legacySerial := `#!/bin/bash
+chkconfig serial-getty@ttyS0 on || systemctl enable --now serial-getty@ttyS0.service`
+				err = virtv2v.AddFirstBootScript(legacySerial, "enable_serial.sh")
+				if err != nil {
+					utils.PrintLog(fmt.Sprintf("Warning: Failed to add serial script: %v", err))
+				}
+				utils.PrintLog("Modified legacy ifcfg to DHCP for majorVersion <7.")
+			}
+
 		}
 	}
 	err = migobj.DetachAllVolumes(vminfo)
@@ -785,7 +818,7 @@ func (migobj *Migrate) pingVM(ips []string) error {
 		if pinger.Statistics().PacketLoss == 0 {
 			migobj.logMessage("Ping succeeded")
 		} else {
-			return fmt.Errorf("ping failed")
+			return fmt.Errorf("Ping failed")
 		}
 	}
 	return nil
@@ -814,7 +847,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 		}
 
 		// Both HTTP and HTTPS failed
-		return fmt.Errorf("both HTTP and HTTPS failed for %s:%s", ip, port)
+		return fmt.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
 	}
 
 	return nil
