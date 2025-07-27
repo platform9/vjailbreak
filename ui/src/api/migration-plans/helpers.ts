@@ -11,7 +11,9 @@ export const createMigrationPlanJson = (params) => {
     vmCutoverEnd,
     virtualMachines,
     adminInitiatedCutOver,
-    postMigrationAction, 
+    postMigrationAction,
+    securityGroups,
+    sshKeys, 
   } = params || {}
   
   const spec: any = {  
@@ -36,6 +38,14 @@ export const createMigrationPlanJson = (params) => {
       moveToFolder: postMigrationAction.moveToFolder || false,
       folderName: postMigrationAction.folderName || "vjailbreakedVMs"
     }
+  }
+
+  if (securityGroups && securityGroups.length > 0) {
+    spec.securityGroups = securityGroups;
+  }
+  
+  if (sshKeys && sshKeys.length > 0) {
+    spec.sshKeys = sshKeys;
   }
 
   return {

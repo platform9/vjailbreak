@@ -182,6 +182,14 @@ spec:
                     items:
                       type: string
                     type: array
+                  securityGroups:
+                    items:
+                      type: string
+                    type: array
+                  sshKeys:
+                    items:
+                      type: string
+                    type: array
                   volumeBackends:
                     items:
                       type: string

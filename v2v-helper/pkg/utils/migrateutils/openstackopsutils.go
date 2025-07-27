@@ -20,9 +20,11 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
@@ -367,7 +369,7 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error) {
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -393,34 +395,33 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	if len(network.Subnets) == 0 {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
-	port, err := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
-		Name:       "port-" + vmname,
-		NetworkID:  network.ID,
-		MACAddress: mac,
+	createOpts := ports.CreateOpts{
+		Name:           "port-" + vmname,
+		NetworkID:      network.ID,
+		MACAddress:     mac,
+		SecurityGroups: &securityGroups,
 		FixedIPs: []ports.IP{
 			{
 				SubnetID:  network.Subnets[0],
 				IPAddress: ip,
 			},
 		},
-	}).Extract()
+	}
+	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
 		// return nil, err
-		utils.PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
-		port, err = ports.Create(osclient.NetworkingClient, ports.CreateOpts{
-			Name:       "port-" + vmname,
-			NetworkID:  network.ID,
-			MACAddress: mac,
-		}).Extract()
+		utils.PrintLog(fmt.Sprintf("Could not create port with IP %s, falling back to DHCP. Error: %v", ip, err))
+		createOpts.FixedIPs = nil
+		port, err = ports.Create(osclient.NetworkingClient, createOpts).Extract()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create port with DHCP: %s", err)
 		}
 	}
 	utils.PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, sshKeyName string) (*servers.Server, error) {
 
 	uuid := ""
 	bootableDiskIndex := 0
@@ -450,16 +451,21 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		})
 	}
 	serverCreateOpts := servers.CreateOpts{
-		Name:      vminfo.Name,
-		FlavorRef: flavor.ID,
-		Networks:  openstacknws,
+		Name:           vminfo.Name,
+		FlavorRef:      flavor.ID,
+		Networks:       openstacknws,
+		SecurityGroups: securityGroups,
 	}
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
-	createOpts := bootfromvolume.CreateOptsExt{
+	keyPairOpts := keypairs.CreateOptsExt{
 		CreateOptsBuilder: serverCreateOpts,
+		KeyName:           sshKeyName,
+	}
+	createOpts := bootfromvolume.CreateOptsExt{
+		CreateOptsBuilder: keyPairOpts,
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
 	}
 
@@ -518,4 +524,36 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 		return false, fmt.Errorf("server is not active")
 	}
 	return true, nil
+}
+
+func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]string, error) {
+	if len(groupNames) == 0 {
+		return nil, nil
+	}
+
+	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list security groups: %w", err)
+	}
+
+	allGroups, err := groups.ExtractGroups(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract security groups: %w", err)
+	}
+
+	nameToIDMap := make(map[string]string)
+	for _, group := range allGroups {
+		nameToIDMap[group.Name] = group.ID
+	}
+
+	var groupIDs []string
+	for _, name := range groupNames {
+		id, found := nameToIDMap[name]
+		if !found {
+			return nil, fmt.Errorf("security group with name '%s' not found", name)
+		}
+		groupIDs = append(groupIDs, id)
+	}
+
+	return groupIDs, nil
 }

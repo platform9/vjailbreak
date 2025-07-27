@@ -513,6 +513,14 @@ spec:
               retry:
                 description: Retry the migration if it fails
                 type: boolean
+              securityGroups:
+                items:
+                  type: string
+                type: array
+              sshKeys:
+                items:
+                  type: string
+                type: array
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -1073,6 +1081,14 @@ spec:
                 description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
                   networks:
+                    items:
+                      type: string
+                    type: array
+                  securityGroups:
+                    items:
+                      type: string
+                    type: array
+                  sshKeys:
                     items:
                       type: string
                     type: array

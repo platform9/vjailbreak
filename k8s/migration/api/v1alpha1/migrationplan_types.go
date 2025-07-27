@@ -69,6 +69,8 @@ type MigrationPlanSpec struct {
 	MigrationPlanSpecPerVM `json:",inline"`
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
+	SecurityGroups  []string   `json:"securityGroups,omitempty"`
+	SSHKeys         []string   `json:"sshKeys,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
