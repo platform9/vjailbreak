@@ -315,14 +315,14 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
 	}
 	groupSet := make(map[string]struct{})
-	deduped := []string{}
+	uniqueSecurityGroups := []string{}
 	for _, group := range openstacksecuritygroups {
 		if _, exists := groupSet[group]; !exists {
 			groupSet[group] = struct{}{}
-			deduped = append(deduped, group)
+			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
 		}
 	}
-	openstacksecuritygroups = deduped
+	openstacksecuritygroups = uniqueSecurityGroups
 
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,

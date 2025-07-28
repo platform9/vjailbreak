@@ -524,10 +524,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},
-		{
-			Name:  "SECURITY_GROUPS",
-			Value: strings.Join(migrationplan.Spec.SecurityGroups, ","),
-		},
 	}
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
@@ -793,6 +789,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"PERFORM_HEALTH_CHECKS":      strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
+				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
