@@ -168,6 +168,8 @@ const (
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
 
+	// RDMDiskControllerName is the name of the RDM disk controller
+	RDMDiskControllerName = "rdmdisk-controller"
 	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
 	VCenterVMScanConcurrencyLimit = 100
 )
@@ -245,4 +247,14 @@ runcmd:
   - echo "Preparing the node..."
   - cloud-ctl prep-node
   - echo "Node preparation complete. Setup finished successfully."`
+)
+
+const (
+	ConditionValidationFailed   = "ValidationFailed"
+	ConditionValidationPassed   = "ValidationPassed"
+	ReasonRequiredFieldsMissing = "RequiredFieldsMissing"
+	ReasonValidatedSpecs        = "Validated RDM Disk specs"
+	MigrationStarted            = "MigrationStarted"
+	MigrationSucceeded          = "MigrationSucceeded"
+	MigrationFailed             = "MigrationFailed"
 )
