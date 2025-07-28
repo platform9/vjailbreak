@@ -1,16 +1,20 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -102,4 +106,57 @@ func WriteToLogFile(message string) error {
 		return errors.Wrap(err, "failed to write log message to log file")
 	}
 	return nil
+}
+
+func atoi(s string) int {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+func GetVcenterSettings(ctx context.Context, k8sClient client.Client) (*VcenterSettings, error) {
+	vcenterSettingsCM := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vcenterSettingsCM); err != nil {
+		return nil, errors.Wrap(err, "failed to get vcenter settings configmap")
+	}
+
+	if vcenterSettingsCM.Data == nil {
+		return &VcenterSettings{
+			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
+			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
+			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
+			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
+		}, nil
+	}
+
+	if vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
+		vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
+	}
+
+	if vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
+		vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
+	}
+
+	if vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
+		vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
+	}
+
+	if vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
+		vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
+	}
+
+	if vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
+		vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
+	}
+
+	return &VcenterSettings{
+		ChangedBlocksCopyIterationThreshold: atoi(vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		VMActiveWaitIntervalSeconds:         atoi(vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
+		VMActiveWaitRetryLimit:              atoi(vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		DefaultMigrationMethod:              vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
+		VCenterScanConcurrencyLimit:         atoi(vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
+	}, nil
 }

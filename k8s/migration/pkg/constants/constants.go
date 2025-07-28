@@ -172,6 +172,24 @@ const (
 	VCenterVMScanConcurrencyLimit = 100
 	// VMwareClusterNameStandAloneESX is the name of the VMware cluster when there is no cluster
 	VMwareClusterNameStandAloneESX = "NO CLUSTER"
+
+	// ConfigMap default values
+	ChangedBlocksCopyIterationThreshold = 20
+
+	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
+	VMActiveWaitIntervalSeconds = 20
+
+	// VMActiveWaitRetryLimit is the number of retries to wait for vm to become active
+	VMActiveWaitRetryLimit = 15
+
+	// DefaultMigrationMethod is the default migration method
+	DefaultMigrationMethod = "hot"
+
+	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
+	VCenterScanConcurrencyLimit = 100
+
+	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
+	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
