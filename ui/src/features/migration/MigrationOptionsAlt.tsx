@@ -331,7 +331,7 @@ export default function MigrationOptionsAlt({
             </Fields>
 <Fields>
   <FormControlLabel
-    label="Rename VM"
+    label="Rename VMware VM"
     control={
       <Checkbox
         checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
@@ -365,13 +365,13 @@ export default function MigrationOptionsAlt({
     <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
   </Select>
   <Typography variant="caption">
-    Optional: This suffix will be appended to the source VM name after migration.
+    This suffix will be appended to the source VM name after migration.
   </Typography>
 </Fields>
 
 <Fields>
   <FormControlLabel
-    label="Move to Folder"
+    label="Move to Folder in VMware"
     control={
       <Checkbox
         checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
@@ -405,7 +405,7 @@ export default function MigrationOptionsAlt({
     <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
   </Select>
   <Typography variant="caption">
-    Optional: This folder name will be used to organize the migrated VMs in vCenter.
+    This folder name will be used to organize the migrated VMs in vCenter.
   </Typography>
 </Fields>
 

@@ -511,6 +511,24 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
 		cutoverlabel = "no"
 	}
+	envVars := []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  "VMWARE_MACHINE_OBJECT_NAME",
+			Value: vmk8sname,
+		},
+		{
+			Name:  "SECURITY_GROUPS",
+			Value: strings.Join(migrationplan.Spec.SecurityGroups, ","),
+		},
+	}
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -555,20 +573,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
 								},
-								Env: []corev1.EnvVar{
-									{
-										Name: "POD_NAME",
-										ValueFrom: &corev1.EnvVarSource{
-											FieldRef: &corev1.ObjectFieldSelector{
-												FieldPath: "metadata.name",
-											},
-										},
-									},
-									{
-										Name:  "VMWARE_MACHINE_OBJECT_NAME",
-										Value: vmk8sname,
-									},
-								},
+								Env: envVars,
 								EnvFrom: []corev1.EnvFromSource{
 									{
 										SecretRef: &corev1.SecretEnvSource{
