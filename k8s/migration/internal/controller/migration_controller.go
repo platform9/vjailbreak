@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -45,13 +45,13 @@ import (
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
-const MigrationFinalizer = "vjailbreak.k8s.pf9.io/migration-finalizer"
-
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
@@ -64,36 +64,15 @@ type MigrationReconciler struct {
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	ctxlog.Info("Reconciling Migration object")
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
 		if apierrors.IsNotFound(err) {
+			// Object deleted successfully
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
-	}
-
-	if migration.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
-			controllerutil.AddFinalizer(migration, MigrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-	} else {
-		if controllerutil.ContainsFinalizer(migration, MigrationFinalizer) {
-			if _, err := r.reconcileDelete(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-			controllerutil.RemoveFinalizer(migration, MigrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
 	}
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
@@ -104,14 +83,49 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
+
+	defer func() {
+		if err := migrationScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	// Handle deletion reconciliation
+	if !migration.ObjectMeta.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Adding finalizer if it doesn't exist
+	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+		controllerutil.AddFinalizer(migration, migrationFinalizer)
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	ctxlog.Info("Reconciling Migration object")
+
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			ctxlog.Info("Migration pod not found yet, requeuing.")
 			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
+
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
@@ -145,60 +159,58 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
-	// Always close the scope when exiting this function such that we can persist any Migration changes.
-	defer func() {
-		if err := migrationScope.Close(); err != nil && reterr == nil {
-			reterr = err
-		}
-	}()
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
+
 	return ctrl.Result{}, nil
 }
 
-// nolint:unparam // always returns ctrl.Result{}, but keep signature for controller-runtime conventions
-func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) (ctrl.Result, error) {
+// reconcileDelete handles the cleanup logic when Migration object is deleted.
+func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) error {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
-	vmName := migration.Spec.VMName
-	if vmName == "" {
-		ctxlog.Info("No VMName specified in Migration")
-		return ctrl.Result{}, nil
+	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
+
+	if migration.Spec.VMName == "" {
+		ctxlog.Info("VMName is empty in Migration spec")
+		return nil
 	}
-	name, err := utils.GetVMwareMachineNameForVMName(vmName)
+
+	vmwMachineName, err := utils.GetVMwareMachineNameForVMName(migration.Spec.VMName)
 	if err != nil {
-		ctxlog.Error(err, "Failed to convert VM name to k8s name", "vmName", vmName)
-		return ctrl.Result{}, err
+		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
+		return nil
 	}
-	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	err = r.Get(ctx, types.NamespacedName{Name: name, Namespace: migration.Namespace}, vmwvm)
+
+	vmwMachine := &vjailbreakv1alpha1.VMwareMachine{}
+	err = r.Get(ctx, types.NamespacedName{Name: vmwMachineName, Namespace: migration.Namespace}, vmwMachine)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			ctxlog.Info("VMwareMachine not found", "vmName", name)
-			return ctrl.Result{}, nil
+			ctxlog.Info("VMwareMachine not found during migration deletion, nothing to do.", "VMwareMachineName", vmwMachineName)
+			return nil
 		}
-		ctxlog.Error(err, "Failed to get VMwareMachine", "vmName", name)
-		return ctrl.Result{}, err
+		return errors.Wrap(err, "failed to get VMwareMachine for cleanup")
 	}
-	if vmwvm.Status.Migrated {
-		ctxlog.Info("Resetting migrated status on VMwareMachine", "vmName", name)
-		vmwvm.Status.Migrated = false
-		if err := r.Status().Update(ctx, vmwvm); err != nil {
-			ctxlog.Error(err, "Failed to update VMwareMachine status", "vmName", name)
-			return ctrl.Result{}, err
+
+	if vmwMachine.Status.Migrated {
+		ctxlog.Info("Setting VMwareMachine status.migrated to false", "VMwareMachineName", vmwMachineName)
+		vmwMachine.Status.Migrated = false
+		if err := r.Status().Update(ctx, vmwMachine); err != nil {
+			return errors.Wrap(err, "failed to update VMwareMachine status")
 		}
 	} else {
-		ctxlog.Info("VMwareMachine does not have status as migrated", "vmName", name)
+		ctxlog.Info("VMwareMachine status.migrated is already false", "VMwareMachineName", vmwMachineName)
 	}
-	return ctrl.Result{}, nil
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&vjailbreakv1alpha1.Migration{}).
 		Owns(&corev1.Pod{}, builder.WithPredicates(
 			predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
