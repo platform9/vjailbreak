@@ -116,14 +116,14 @@ func atoi(s string) int {
 	return i
 }
 
-func GetVcenterSettings(ctx context.Context, k8sClient client.Client) (*VcenterSettings, error) {
-	vcenterSettingsCM := &corev1.ConfigMap{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vcenterSettingsCM); err != nil {
-		return nil, errors.Wrap(err, "failed to get vcenter settings configmap")
+func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+	vjailbreakSettingsCM := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
+		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
 	}
 
-	if vcenterSettingsCM.Data == nil {
-		return &VcenterSettings{
+	if vjailbreakSettingsCM.Data == nil {
+		return &VjailbreakSettings{
 			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
 			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
 			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
@@ -132,31 +132,31 @@ func GetVcenterSettings(ctx context.Context, k8sClient client.Client) (*VcenterS
 		}, nil
 	}
 
-	if vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
-		vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
+	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
+		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
 	}
 
-	if vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
-		vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
 
-	if vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
-		vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
 	}
 
-	if vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
-		vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
+	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
+		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
 	}
 
-	if vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
-		vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
+	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
 	}
 
-	return &VcenterSettings{
-		ChangedBlocksCopyIterationThreshold: atoi(vcenterSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
-		VMActiveWaitIntervalSeconds:         atoi(vcenterSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
-		VMActiveWaitRetryLimit:              atoi(vcenterSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
-		DefaultMigrationMethod:              vcenterSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
-		VCenterScanConcurrencyLimit:         atoi(vcenterSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
+	return &VjailbreakSettings{
+		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
+		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
+		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 	}, nil
 }

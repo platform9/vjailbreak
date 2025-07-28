@@ -271,7 +271,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 	}
 
-	vcenterSettings, err := utils.GetVcenterSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
 	}
@@ -712,9 +712,15 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		return errors.Wrap(err, "failed to create VM")
 	}
 
+	// Get vjailbreak settings
+	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
 	// Wait for VM to become active
-	for i := 0; i < constants.MaxVMActiveCheckCount; i++ {
-		utils.PrintLog(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, constants.MaxVMActiveCheckCount))
+	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
+		utils.PrintLog(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, vjailbreakSettings.VMActiveWaitRetryLimit))
 		active, err := openstackops.WaitUntilVMActive(newVM.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for VM to become active")
@@ -722,10 +728,10 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		if active {
 			break
 		}
-		if i == constants.MaxVMActiveCheckCount-1 {
-			return errors.Errorf("VM is not active after %d retries", constants.MaxVMActiveCheckCount)
+		if i == vjailbreakSettings.VMActiveWaitRetryLimit-1 {
+			return errors.Errorf("VM is not active after %d retries", vjailbreakSettings.VMActiveWaitRetryLimit)
 		}
-		time.Sleep(constants.VMActiveCheckInterval)
+		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
 	}
 
 	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))

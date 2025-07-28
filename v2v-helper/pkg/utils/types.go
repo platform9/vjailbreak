@@ -1,6 +1,6 @@
 package utils
 
-type VcenterSettings struct {
+type VjailbreakSettings struct {
 	ChangedBlocksCopyIterationThreshold int
 	VMActiveWaitIntervalSeconds         int
 	VMActiveWaitRetryLimit              int
