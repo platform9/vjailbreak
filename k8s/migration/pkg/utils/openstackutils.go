@@ -17,20 +17,25 @@ import (
 // ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
 func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, rdmDisk vm.RDMDisk) (string, error) {
 	ctxlog := logf.FromContext(ctx)
-	ctxlog.Info(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
+	ctxlog.Info("Importing LUN", "DiskName", rdmDisk.DiskName)
+
 	volume, err := ExecuteVolumeManageRequest(ctx, rdmDisk, openstackClient, "volume 3.8")
-	if err != nil || volume == nil {
-		return "", fmt.Errorf("failed to import LUN: %s", err)
-	} else if volume.ID == "" {
-		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
+	if err != nil {
+		return "", fmt.Errorf("failed to import LUN %s: %w", rdmDisk.DiskName, err)
 	}
-	ctxlog.Info(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
+	if volume == nil || volume.ID == "" {
+		return "", fmt.Errorf("failed to import LUN %s: received empty volume ID", rdmDisk.DiskName)
+	}
+
+	ctxlog.Info("LUN imported successfully, waiting for volume to become available", "VolumeID", volume.ID)
+
 	// Wait for the volume to become available
 	err = openstackClient.WaitForVolume(volume.ID)
 	if err != nil {
-		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
+		return "", fmt.Errorf("failed to wait for volume %s to become available: %w", volume.ID, err)
 	}
-	ctxlog.Info(fmt.Sprintf("Volume %s is now available", volume.ID))
+
+	ctxlog.Info("Volume is now available", "VolumeID", volume.ID)
 	return volume.ID, nil
 }
 
@@ -50,17 +55,18 @@ func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error
 		return nil, fmt.Errorf("volume reference cannot be empty")
 	}
 
+	// Assumes only one key-value pair in VolumeRef
 	var key, value string
 	for k, rm := range rdmDisk.VolumeRef {
 		key = k
 		value = rm
+		break
 	}
+
 	payload := map[string]interface{}{
 		"volume": map[string]interface{}{
-			"host": rdmDisk.CinderBackendPool,
-			"ref": map[string]string{
-				key: value,
-			},
+			"host":              rdmDisk.CinderBackendPool,
+			"ref":               map[string]string{key: value},
 			"name":              rdmDisk.DiskName,
 			"volume_type":       rdmDisk.VolumeType,
 			"description":       fmt.Sprintf("Volume for %s", rdmDisk.DiskName),
@@ -75,18 +81,18 @@ func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error
 func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk vm.RDMDisk, osclient *migrateutils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
 	body, err := BuildVolumeManagePayload(rdmDisk)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to build volume manage payload: %w", err)
 	}
-	var result map[string]interface{}
 
+	var result map[string]interface{}
 	response, err := osclient.BlockStorageClient.Post(osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
 		OkCodes:     []int{http.StatusAccepted},
 		MoreHeaders: map[string]string{"OpenStack-API-Version": openstackAPIVersion},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute volume manage request: %w", err)
 	}
-	// Add error handling for response.Body.Close()
+
 	if response != nil && response.Body != nil {
 		defer func() {
 			if err := response.Body.Close(); err != nil {
@@ -94,20 +100,21 @@ func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk vm.RDMDisk, osclien
 			}
 		}()
 	}
-	// Add error handling for type assertion
+
 	volumeMap, ok := result["volume"].(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("failed to assert type for volume map")
 	}
-	// Convert volume map to JSON
+
 	volumeJSON, err := json.Marshal(volumeMap)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal volume map to JSON: %w", err)
 	}
-	// Unmarshal JSON into your struct
+
 	var v volumes.Volume
 	if err := json.Unmarshal(volumeJSON, &v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal JSON to volume struct: %w", err)
 	}
+
 	return &v, nil
 }
