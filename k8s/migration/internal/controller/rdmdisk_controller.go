@@ -184,7 +184,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 		}
 		volumeID, err := utils.ImportLUNToCinder(ctx, &osclient, rdmDiskObj)
 		if err != nil {
-			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", constants.MigrationFailed, "Failed to import LUN to Cinder", err)
+			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", constants.MigrationFailed, "FailedToImportLUNToCinder", err)
 		}
 		rdmDisk.Status.Phase = "Managed"
 		rdmDisk.Status.CinderVolumeID = volumeID

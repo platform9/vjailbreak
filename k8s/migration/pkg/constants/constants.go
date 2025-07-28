@@ -257,7 +257,7 @@ const (
 	// ReasonRequiredFieldsMissing ConditionMigrationStarted is the condition type for migration to cinder
 	ReasonRequiredFieldsMissing = "RequiredFieldsMissing"
 	// ReasonValidatedSpecs ConditionMigrationStarted is the condition type for migration to cinder
-	ReasonValidatedSpecs = "Validated RDM Disk specs"
+	ReasonValidatedSpecs = "ValidatedRDMDiskSpecs"
 	// MigrationStarted ConditionMigrationStarted is the condition type for migration to cinder
 	MigrationStarted = "MigrationStarted"
 	// MigrationSucceeded ConditionMigrationStarted is the condition type for migration to cinder
