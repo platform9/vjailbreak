@@ -250,11 +250,18 @@ runcmd:
 )
 
 const (
-	ConditionValidationFailed   = "ValidationFailed"
-	ConditionValidationPassed   = "ValidationPassed"
+	// ConditionValidationFailed is the condition type for migration to cinder validation failure
+	ConditionValidationFailed = "ValidationFailed"
+	// ConditionValidationPassed is the condition type for migration to cinder validation passed
+	ConditionValidationPassed = "ValidationPassed"
+	// ReasonRequiredFieldsMissing ConditionMigrationStarted is the condition type for migration to cinder
 	ReasonRequiredFieldsMissing = "RequiredFieldsMissing"
-	ReasonValidatedSpecs        = "Validated RDM Disk specs"
-	MigrationStarted            = "MigrationStarted"
-	MigrationSucceeded          = "MigrationSucceeded"
-	MigrationFailed             = "MigrationFailed"
+	// ReasonValidatedSpecs ConditionMigrationStarted is the condition type for migration to cinder
+	ReasonValidatedSpecs = "Validated RDM Disk specs"
+	// MigrationStarted ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationStarted = "MigrationStarted"
+	// MigrationSucceeded ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationSucceeded = "MigrationSucceeded"
+	// MigrationFailed ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationFailed = "MigrationFailed"
 )

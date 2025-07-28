@@ -1360,7 +1360,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		if !ok {
 			continue
 		}
-		dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, hostStorageInfo)
+		dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, controllers, hostStorageInfo, vm.Name())
 		if err != nil {
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to process VM disk: %w", err))
 			return
