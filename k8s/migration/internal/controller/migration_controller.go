@@ -45,8 +45,6 @@ import (
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
-const MigrationFinalizer = "vjailbreak.k8s.pf9.io/migration-finalizer"
-
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
@@ -176,7 +174,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
 
 	if migration.Spec.VMName == "" {
-		ctxlog.Info("VMName is empty in Migration spec")
+		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
 		return nil
 	}
 
@@ -187,7 +185,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	}
 
 	vmwMachine := &vjailbreakv1alpha1.VMwareMachine{}
-	err = r.Get(ctx, types.NamespacedName{Name: vmwMachineName, Namespace: migration.Namespace}, vmwMachine)
+	err = r.Get(ctx, types.NamespacedName{Name: vmwMachineName, Namespace: migration.GetNamespace()}, vmwMachine)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			ctxlog.Info("VMwareMachine not found during migration deletion, nothing to do.", "VMwareMachineName", vmwMachineName)
@@ -203,7 +201,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 			return errors.Wrap(err, "failed to update VMwareMachine status")
 		}
 	} else {
-		ctxlog.Info("VMwareMachine status.migrated is already false", "VMwareMachineName", vmwMachineName)
+		ctxlog.Info("VMwareMachine status.migrated is already false, no update needed.", "VMwareMachineName", vmwMachineName)
 	}
 
 	return nil
