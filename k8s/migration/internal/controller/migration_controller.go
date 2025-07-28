@@ -91,7 +91,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}()
 
 	// Handle deletion reconciliation
-	if !migration.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !migration.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
 			if err := r.reconcileDelete(ctx, migration); err != nil {
 				return ctrl.Result{}, err
