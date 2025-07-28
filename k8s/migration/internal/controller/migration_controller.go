@@ -45,6 +45,8 @@ import (
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
 
+const MigrationFinalizer = "vjailbreak.k8s.pf9.io/migration-finalizer"
+
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
