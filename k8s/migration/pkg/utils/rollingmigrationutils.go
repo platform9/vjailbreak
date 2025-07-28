@@ -74,18 +74,29 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	return clusterMigration, nil
 }
 
-// GetClusterMigration retrieves a ClusterMigration object for the given cluster name and rolling migration plan
-func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
+// getMigrationObject is a helper function that retrieves a migration object for a given VMware object name and rolling migration plan
+func getMigrationObject(ctx context.Context, k8sClient client.Client, vmwareObjectName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan, obj client.Object, errorMsg string) error {
 	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get vmware credentials")
+		return errors.Wrap(err, "failed to get vmware credentials")
 	}
-	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(clusterName, vmwarecreds.Name)
+	
+	k8sName, err := GetK8sCompatibleVMWareObjectName(vmwareObjectName, vmwarecreds.Name)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
+		return errors.Wrap(err, errorMsg)
 	}
+	
+	return k8sClient.Get(ctx, types.NamespacedName{
+		Name:      GenerateRollingMigrationObjectName(k8sName, rollingMigrationPlan),
+		Namespace: constants.NamespaceMigrationSystem,
+	}, obj)
+}
+
+// GetClusterMigration retrieves a ClusterMigration object for the given cluster name and rolling migration plan
+func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
 	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(clusterK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
+	err := getMigrationObject(ctx, k8sClient, clusterName, rollingMigrationPlan, clusterMigration, "failed to convert cluster name to k8s name")
+	if err != nil {
 		return nil, err
 	}
 	return clusterMigration, nil
@@ -93,16 +104,9 @@ func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterNa
 
 // GetESXIMigration retrieves an ESXIMigration object for the given ESXi host name and rolling migration plan
 func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ESXIMigration, error) {
-	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get vmware credentials")
-	}
-	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(esxi, vmwarecreds.Name)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
-	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+	err := getMigrationObject(ctx, k8sClient, esxi, rollingMigrationPlan, esxiMigration, "failed to convert ESXi name to k8s name")
+	if err != nil {
 		return nil, err
 	}
 	return esxiMigration, nil

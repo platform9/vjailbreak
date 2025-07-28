@@ -573,7 +573,6 @@ func GetVMwareCredsNameFromMigration(ctx context.Context, k3sclient client.Clien
 		return "", errors.Wrap(err, "failed to get migration template")
 	}
 	return migrationTemplate.Spec.Source.VMwareRef, nil
-
 }
 
 // GetOpenstackCredsNameFromMigration retrieves the destination OpenStack credentials name from a Migration
@@ -592,7 +591,6 @@ func GetVMwareCredsNameFromMigrationPlan(ctx context.Context, k3sclient client.C
 		return "", errors.Wrap(err, "failed to get migration template")
 	}
 	return migrationTemplate.Spec.Source.VMwareRef, nil
-
 }
 
 // GetOpenstackCredsNameFromMigrationPlan retrieves the destination OpenStack credentials name from a MigrationPlan

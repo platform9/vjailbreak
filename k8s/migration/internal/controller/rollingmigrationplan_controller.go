@@ -402,7 +402,6 @@ func (r *RollingMigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) erro
 // UpdateRollingMigrationPlanStatus updates the status fields of a RollingMigrationPlan resource including phase, message, and current targets.
 // It also updates statistics about migrated and failed VMs by checking the status of related VMMigration resources.
 func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx context.Context, scope *scope.RollingMigrationPlanScope, status vjailbreakv1alpha1.RollingMigrationPlanPhase, message, currentCluster, currentESXi string) error {
-
 	// update phase and message
 	scope.RollingMigrationPlan.Status.Phase = status
 	scope.RollingMigrationPlan.Status.Message = message
