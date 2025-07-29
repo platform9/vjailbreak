@@ -58,6 +58,7 @@ type OpenstackInfo struct {
 	VolumeTypes    []string `json:"volumeTypes,omitempty"`
 	VolumeBackends []string `json:"volumeBackends,omitempty"`
 	Networks       []string `json:"networks,omitempty"`
+	SecurityGroups []string `json:"securityGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
