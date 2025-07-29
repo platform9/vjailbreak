@@ -43,8 +43,34 @@ type RDMDiskReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// Define a constant for the validation retry interval
-const validationRetryInterval = 2 * time.Minute
+const (
+	// RetryInterval a constant for the validation retry interval
+	RetryInterval = 2 * time.Minute
+	// ConditionValidationFailed is the condition type for migration to cinder validation failure
+	ConditionValidationFailed = "RDMDiskValidationFailed"
+	// ConditionValidationPassed is the condition type for migration to cinder validation passed
+	ConditionValidationPassed = "RDMDiskValidationPassed"
+	// ReasonRequiredFieldsMissing ConditionMigrationStarted is the condition type for migration to cinder
+	ReasonRequiredFieldsMissing = "RDMDiskRequiredFieldsMissing"
+	// ReasonValidatedSpecs ConditionMigrationStarted is the condition type for migration to cinder
+	ReasonValidatedSpecs = "ValidatedRDMDiskSpecs"
+	// MigrationStarted ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationStarted = "RDMDiskMigrationStarted"
+	// MigrationSucceeded ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationSucceeded = "RDMDiskMigrationSucceeded"
+	// MigrationFailed ConditionMigrationStarted is the condition type for migration to cinder
+	MigrationFailed = "RDMDiskMigrationFailed"
+	// blockStorageAPIVersion is the version of the OpenStack Block Storage API to use
+	blockStorageAPIVersion = "3.8"
+	// RDMPhaseAvailable is the phase for RDMDisk when it is available to migrate
+	RDMPhaseAvailable = "Available"
+	// RDMPhaseManaging is the phase for RDMDisk when it is being managed
+	RDMPhaseManaging = "Managing"
+	// RDMPhaseManaged is the phase for RDMDisk when it has been successfully managed
+	RDMPhaseManaged = "Managed"
+	// RDMPhaseError is the phase for RDMDisk when there is an error
+	RDMPhaseError = "Error"
+)
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=rdmdisks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=rdmdisks/status,verbs=get;update;patch
@@ -52,16 +78,9 @@ const validationRetryInterval = 2 * time.Minute
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the RDMDisk object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
+// Here it is specific to RDMDisk objects.
 func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	ctxlog := log.WithName(constants.RDMDiskControllerName)
+	ctxlog := log.FromContext(ctx).WithName(constants.RDMDiskControllerName)
 
 	// Get the RDMDisk resource
 	rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
@@ -73,15 +92,14 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// Refactored logic for handling phases
 	switch rdmDisk.Status.Phase {
 	case "":
 		return r.handleInitialPhase(ctx, rdmDisk, ctxlog)
 
-	case "Pending":
-		return r.handlePendingPhase(ctx, rdmDisk, ctxlog)
+	case RDMPhaseAvailable:
+		return r.handleAvailablePhase(ctx, rdmDisk, ctxlog)
 
-	case "Managing":
+	case RDMPhaseManaging:
 		return r.handleManagingPhase(ctx, req, rdmDisk, ctxlog)
 
 	default:
@@ -96,19 +114,19 @@ func (r *RDMDiskReconciler) handleInitialPhase(ctx context.Context, rdmDisk *vja
 	if mostRecentValidationFailedCondition != nil {
 		lastTransitionTime := mostRecentValidationFailedCondition.LastTransitionTime.Time
 		timeSinceLastTransition := time.Since(lastTransitionTime)
-		if timeSinceLastTransition < validationRetryInterval {
+		if timeSinceLastTransition < RetryInterval {
 			log.Info("Skipping validation as a ValidationFailed condition was set less than 2 minutes ago",
 				"LastReason", mostRecentValidationFailedCondition.Reason)
-			requeueAfter := validationRetryInterval - timeSinceLastTransition
+			requeueAfter := RetryInterval - timeSinceLastTransition
 			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 	}
 	if err := ValidateRDMDiskFields(rdmDisk); err != nil {
 		log.Error(err, "validation failed")
 		updateStatusCondition(rdmDisk, metav1.Condition{
-			Type:    constants.ConditionValidationFailed,
+			Type:    ConditionValidationFailed,
 			Status:  metav1.ConditionTrue,
-			Reason:  constants.ReasonRequiredFieldsMissing,
+			Reason:  ReasonRequiredFieldsMissing,
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, rdmDisk); err != nil {
@@ -117,26 +135,26 @@ func (r *RDMDiskReconciler) handleInitialPhase(ctx context.Context, rdmDisk *vja
 		}
 		return ctrl.Result{}, nil
 	}
-	rdmDisk.Status.Phase = "Pending"
+	rdmDisk.Status.Phase = RDMPhaseAvailable
 	updateStatusCondition(rdmDisk, metav1.Condition{
-		Type:    constants.ConditionValidationPassed,
+		Type:    ConditionValidationPassed,
 		Status:  metav1.ConditionTrue,
-		Reason:  constants.ReasonValidatedSpecs,
+		Reason:  ReasonValidatedSpecs,
 		Message: "All required fields are present and valid",
 	})
 	if err := r.Status().Update(ctx, rdmDisk); err != nil {
 		log.Error(err, "unable to update RDMDisk status")
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: RetryInterval}, nil
 }
 
-// handlePendingPhase handles the pending phase of RDMDisk reconciliation
-func (r *RDMDiskReconciler) handlePendingPhase(ctx context.Context, rdmDisk *vjailbreakv1alpha1.RDMDisk, log logr.Logger) (ctrl.Result, error) {
+// handleAvailablePhase handles the Available phase of RDMDisk reconciliation
+func (r *RDMDiskReconciler) handleAvailablePhase(ctx context.Context, rdmDisk *vjailbreakv1alpha1.RDMDisk, log logr.Logger) (ctrl.Result, error) {
 	if rdmDisk.Spec.ImportToCinder {
-		rdmDisk.Status.Phase = "Managing"
+		rdmDisk.Status.Phase = RDMPhaseManaging
 		updateStatusCondition(rdmDisk, metav1.Condition{
-			Type:    "MigrationStarted",
+			Type:    MigrationStarted,
 			Status:  metav1.ConditionTrue,
 			Reason:  "ImportToCinderEnabled",
 			Message: "Starting migration to Cinder Importing LUN",
@@ -155,7 +173,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 	if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
 		rdmDiskObj := vm.RDMDisk{
 			DiskName:          rdmDisk.Name,
-			VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.Source,
+			VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.VolumeRef,
 			CinderBackendPool: rdmDisk.Spec.OpenstackVolumeRef.CinderBackendPool,
 			VolumeType:        rdmDisk.Spec.OpenstackVolumeRef.VolumeType,
 		}
@@ -182,14 +200,14 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			ComputeClient:      openstackClient.ComputeClient,
 			NetworkingClient:   openstackClient.NetworkingClient,
 		}
-		volumeID, err := utils.ImportLUNToCinder(ctx, &osclient, rdmDiskObj)
+		volumeID, err := utils.ImportLUNToCinder(ctx, &osclient, rdmDiskObj, blockStorageAPIVersion)
 		if err != nil {
-			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", constants.MigrationFailed, "FailedToImportLUNToCinder", err)
+			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", MigrationFailed, "FailedToImportLUNToCinder", err)
 		}
-		rdmDisk.Status.Phase = "Managed"
+		rdmDisk.Status.Phase = RDMPhaseManaged
 		rdmDisk.Status.CinderVolumeID = volumeID
 		updateStatusCondition(rdmDisk, metav1.Condition{
-			Type:    constants.MigrationSucceeded,
+			Type:    MigrationSucceeded,
 			Status:  metav1.ConditionTrue,
 			Reason:  "CinderManageSucceeded",
 			Message: "Successfully imported RDM disk to Cinder",
@@ -200,7 +218,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -213,7 +231,7 @@ func (r *RDMDiskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // ValidateRDMDiskFields validates all required fields for migration
 func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
-	if len(rdmDisk.Spec.OpenstackVolumeRef.Source) == 0 {
+	if len(rdmDisk.Spec.OpenstackVolumeRef.VolumeRef) == 0 {
 		return fmt.Errorf("OpenstackVolumeRef.source is required")
 	}
 
@@ -253,7 +271,7 @@ func getMostRecentValidationFailedCondition(conditions []metav1.Condition) *meta
 	var mostRecent *metav1.Condition
 	for i := range conditions {
 		cond := conditions[i]
-		if cond.Type == constants.ConditionValidationFailed && cond.Status == metav1.ConditionTrue {
+		if cond.Type == ConditionValidationFailed && cond.Status == metav1.ConditionTrue {
 			if mostRecent == nil || cond.LastTransitionTime.After(mostRecent.LastTransitionTime.Time) {
 				mostRecent = &cond
 			}

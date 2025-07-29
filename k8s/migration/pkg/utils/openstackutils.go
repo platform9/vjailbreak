@@ -14,12 +14,26 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+type VolumePayload struct {
+	Volume Volume `json:"volume"`
+}
+
+type Volume struct {
+	Host             string            `json:"host"`
+	Ref              map[string]string `json:"ref"`
+	Name             string            `json:"name"`
+	VolumeType       string            `json:"volume_type"`
+	Description      string            `json:"description"`
+	Bootable         bool              `json:"bootable"`
+	AvailabilityZone interface{}       `json:"availability_zone,omitempty"`
+}
+
 // ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
-func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, rdmDisk vm.RDMDisk) (string, error) {
+func ImportLUNToCinder(ctx context.Context, openstackClient *migrateutils.OpenStackClients, rdmDisk vm.RDMDisk, volumeAPIVersion string) (string, error) {
 	ctxlog := logf.FromContext(ctx)
 	ctxlog.Info("Importing LUN", "DiskName", rdmDisk.DiskName)
 
-	volume, err := ExecuteVolumeManageRequest(ctx, rdmDisk, openstackClient, "volume 3.8")
+	volume, err := ExecuteVolumeManageRequest(ctx, rdmDisk, openstackClient, volumeAPIVersion)
 	if err != nil {
 		return "", fmt.Errorf("failed to import LUN %s: %w", rdmDisk.DiskName, err)
 	}
@@ -63,16 +77,25 @@ func BuildVolumeManagePayload(rdmDisk vm.RDMDisk) (map[string]interface{}, error
 		break
 	}
 
-	payload := map[string]interface{}{
-		"volume": map[string]interface{}{
-			"host":              rdmDisk.CinderBackendPool,
-			"ref":               map[string]string{key: value},
-			"name":              rdmDisk.DiskName,
-			"volume_type":       rdmDisk.VolumeType,
-			"description":       fmt.Sprintf("Volume for %s", rdmDisk.DiskName),
-			"bootable":          false,
-			"availability_zone": nil,
+	volumePayload := VolumePayload{
+		Volume: Volume{
+			Host:             rdmDisk.CinderBackendPool,
+			Ref:              map[string]string{key: value},
+			Name:             rdmDisk.DiskName,
+			VolumeType:       rdmDisk.VolumeType,
+			Description:      "Volume for " + rdmDisk.DiskName,
+			Bootable:         false,
+			AvailabilityZone: nil,
 		},
+	}
+
+	var payload map[string]interface{}
+	data, err := json.Marshal(volumePayload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal volume payload: %w", err)
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal volume payload: %w", err)
 	}
 	return payload, nil
 }
