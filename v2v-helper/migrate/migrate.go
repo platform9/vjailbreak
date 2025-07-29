@@ -594,7 +594,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			// If NM is present, we inject a script to force DHCP on first boot.
 			// If NM is not present, we add udev rules to pin the interface names
 			err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
-
+			if err != nil {
+				utils.PrintLog(fmt.Sprintf("Warning: Failed to handle network: %v", err))
+				utils.PrintLog("Continuing with migration, network might not come up post migration, please check the network configuration post migration")
+				err = nil
+			}
 		}
 	}
 	err = migobj.DetachAllVolumes(vminfo)
@@ -632,6 +636,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 		if len(interfaces) == 0 {
 			utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
 			come up post migration, please check the network configuration post migration`)
+			return nil
 		}
 		macs := []string{}
 		// By default the network interfaces macs are in the same order as the interfaces
