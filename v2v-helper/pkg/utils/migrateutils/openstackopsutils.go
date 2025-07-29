@@ -406,16 +406,12 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			},
 		},
 	}
+
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
-		// return nil, err
-		utils.PrintLog(fmt.Sprintf("Could not create port with IP %s, falling back to DHCP. Error: %v", ip, err))
-		createOpts.FixedIPs = nil
-		port, err = ports.Create(osclient.NetworkingClient, createOpts).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create port with DHCP: %s", err)
-		}
+		return nil, fmt.Errorf("failed to create port with static IP %s. Error: %w", ip, err)
 	}
+
 	utils.PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
 	return port, nil
 }
