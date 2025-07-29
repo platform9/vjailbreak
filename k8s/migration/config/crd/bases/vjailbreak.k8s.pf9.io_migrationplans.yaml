@@ -126,6 +126,10 @@ spec:
               retry:
                 description: Retry the migration if it fails
                 type: boolean
+              securityGroups:
+                items:
+                  type: string
+                type: array
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:

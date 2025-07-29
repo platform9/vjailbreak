@@ -48,7 +48,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 	configMap := &v1.ConfigMap{}
 	err = client.Get(ctx, types.NamespacedName{
 		Name:      configMapName,
-		Namespace: constants.MigrationSystemNamespace,
+		Namespace: constants.NamespaceMigrationSystem,
 	}, configMap)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get configmap")

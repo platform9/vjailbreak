@@ -643,7 +643,7 @@ func GetVMwareMachine(ctx context.Context, client k8sclient.Client, vmName strin
 	// Create namespaced name for lookup
 	namespacedName := k8stypes.NamespacedName{
 		Name:      sanitizedVMName,                    // Use the sanitized VM name
-		Namespace: constants.MigrationSystemNamespace, // Specify the namespace
+		Namespace: constants.NamespaceMigrationSystem, // Specify the namespace
 	}
 
 	// Create VMwareMachine object

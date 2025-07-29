@@ -8,6 +8,7 @@ import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
 import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { MigrationPlan } from "src/api/migration-plans/model"
 import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
+import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -111,6 +112,7 @@ export interface FormValues extends Record<string, unknown> {
     moveToFolder?: boolean
   }
   disconnectSourceNetwork?: boolean
+  securityGroups?: string[]
 }
 
 
@@ -470,7 +472,11 @@ export default function MigrationFormDrawer({
       retry: params.retryOnFailure,
       ...(postMigrationAction && { postMigrationAction }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false
+      ...(params.securityGroups && params.securityGroups.length > 0 && {
+        securityGroups: params.securityGroups,
+      })
     };
+
 
     console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
 
@@ -594,7 +600,7 @@ export default function MigrationFormDrawer({
       setSubmitting(false)
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
       onClose()
-      navigate("/dashboard?tab=migrations")
+      navigate("/dashboard/migrations")
     }
   }, [migrations, error, onClose, navigate, queryClient])
 
@@ -696,7 +702,7 @@ export default function MigrationFormDrawer({
       anchor="right"
       open={open}
       onClose={handleClose}
-      ModalProps={{ 
+      ModalProps={{
         keepMounted: false,
         style: { zIndex: 1300 }
       }}
@@ -736,6 +742,13 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors["storageMapping"]}
           />
           {/* Step 4 */}
+          <SecurityGroupAndSSHKeyStep
+            params={params}
+            onChange={getParamsUpdater}
+            openstackCredentials={openstackCredentials}
+            stepNumber="4"
+          />
+          {/* Step 5 */}          
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
@@ -743,7 +756,7 @@ export default function MigrationFormDrawer({
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
-            stepNumber="4"
+            stepNumber="5"
           />
 
 

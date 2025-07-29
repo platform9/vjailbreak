@@ -13,6 +13,7 @@ export const createMigrationPlanJson = (params) => {
     adminInitiatedCutOver,
     postMigrationAction,
     disconnectSourceNetwork = false,
+    securityGroups,
   } = params || {}
   
   const spec: any = {  
@@ -40,6 +41,10 @@ export const createMigrationPlanJson = (params) => {
     }
   }
 
+  if (securityGroups && securityGroups.length > 0) {
+    spec.securityGroups = securityGroups;
+  }
+  
   return {
     apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
     kind: "MigrationPlan",
