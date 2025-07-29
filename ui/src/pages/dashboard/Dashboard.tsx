@@ -66,13 +66,6 @@ export default function Dashboard() {
     refetchOnMount: true
   })
 
-  // const { data: clusterMigrations, refetch: refetchClusterMigrations } = useClusterMigrationsQuery({
-  //   queryKey: CLUSTER_MIGRATIONS_QUERY_KEY,
-  //   refetchInterval: THIRTY_SECONDS,
-  //   staleTime: 0,
-  //   refetchOnMount: true
-  // })
-
   const { data: esxiMigrations, refetch: refetchESXIMigrations } = useESXIMigrationsQuery({
     queryKey: ESXI_MIGRATIONS_QUERY_KEY,
     refetchInterval: THIRTY_SECONDS,
