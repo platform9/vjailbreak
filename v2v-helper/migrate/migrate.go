@@ -589,61 +589,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 		} else if virtv2v.IsRHELFamily(osRelease) {
 			diskPath := vminfo.VMDisks[bootVolumeIndex].Path
-			// For RHEL family, we need to inject a script to force DHCP on the network interfaces
-			// This is because RHEL family uses NetworkManager by default and it does not automatically
-			// configure the network interfaces to use DHCP after migration.
-
-			versionID := parseVersionID(osRelease)
-			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
-			if err != nil {
-				return fmt.Errorf("failed to parse major version: %v", err)
-			}
-
-			if majorVersion >= 7 { // As per request; covers RHEL8+ where NM is mandatory
-				// Inject the script for first-boot
-
-				scriptContent := `#!/bin/bash
-nmcli -t -f NAME connection show | while read -r conn; do
-    nmcli con modify "$conn" ipv4.method auto ipv4.address "" ipv4.gateway ""
-    nmcli con modify "$conn" ipv6.method auto ipv6.address "" ipv6.gateway ""
-    nmcli con reload
-    nmcli con down "$conn"
-    nmcli con up "$conn"
-done
-systemctl enable --now serial-getty@ttyS0.service`
-				scriptName := "rhel_force_dhcp.sh"
-				err = virtv2v.AddFirstBootScript(scriptContent, scriptName) // Your existing function
-				if err != nil {
-					return fmt.Errorf("failed to add first-boot script: %v", err)
-				}
-				utils.PrintLog("Injected NM DHCP force script for majorVersion >7.")
-			} else {
-				// Legacy (majorVersion <7, e.g., RHEL6): Offline ifcfg edit
-				cmd := "ls /etc/sysconfig/network-scripts | grep '^ifcfg-' | grep -v 'lo'"
-				lsOut, err := virtv2v.RunCommandInGuest(diskPath, cmd, false)
-				if err != nil {
-					return fmt.Errorf("failed to list ifcfg: %v", err)
-				}
-				files := strings.Split(strings.TrimSpace(lsOut), "\n")
-				for _, file := range files {
-					if file == "" {
-						continue
-					}
-					sedCmd := fmt.Sprintf("sed -i 's/BOOTPROTO=static/BOOTPROTO=dhcp/g; /IPADDR=/d; /GATEWAY=/d; /NETMASK=/d; /PREFIX=/d' /etc/sysconfig/network-scripts/%s", file)
-					_, err := virtv2v.RunCommandInGuest(diskPath, sedCmd, false)
-					if err != nil {
-						utils.PrintLog(fmt.Sprintf("Warning: Failed to modify %s: %v", file, err))
-					}
-				}
-				// Add serial enable for legacy (via script injection)
-				legacySerial := `#!/bin/bash
-chkconfig serial-getty@ttyS0 on || systemctl enable --now serial-getty@ttyS0.service`
-				err = virtv2v.AddFirstBootScript(legacySerial, "enable_serial.sh")
-				if err != nil {
-					utils.PrintLog(fmt.Sprintf("Warning: Failed to add serial script: %v", err))
-				}
-				utils.PrintLog("Modified legacy ifcfg to DHCP for majorVersion <7.")
-			}
+			// For RHEL family, we need to inject a script to make interface come up with DHCP,
+			// We preserve the ip because we have a port created with the same IP
+			// If NM is present, we inject a script to force DHCP on first boot.
+			// If NM is not present, we add udev rules to pin the interface names
+			err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
 
 		}
 	}
@@ -652,6 +602,65 @@ chkconfig serial-getty@ttyS0 on || systemctl enable --now serial-getty@ttyS0.ser
 		return errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 	migobj.logMessage("Successfully converted disk")
+	return nil
+}
+
+// DetectAndHandleNetwork: Checks if RHEL family, then detects NM presence offline.
+// If NM (nmcli exists), injects first-boot nmcli script for DHCP force.
+// If not, adds udev rules to pin names without forcing DHCP.
+func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo) error {
+
+	// Offline detect NM: Check if /usr/bin/nmcli exists
+	cmd := "ls /usr/bin/nmcli 2>/dev/null"
+	_, err := virtv2v.RunCommandInGuest(diskPath, cmd, false)
+	hasNM := (err == nil) // If ls succeeds, nmcli exists (NM installed)
+
+	if hasNM {
+		// Inject nmcli script
+		scriptName := "rhel_force_dhcp.sh"
+		err = virtv2v.AddFirstBootScript(constants.RhelFirstBootScript, scriptName)
+		if err != nil {
+			return fmt.Errorf("failed to add nmcli script: %v", err)
+		}
+		utils.PrintLog("Detected NM; injected nmcli DHCP script.")
+	} else {
+		// No NM: Add udev rules to pin names
+		interfaces, err := virtv2v.GetInterfaceNames(diskPath)
+		if err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: Failed to get interfaces: %v", err))
+		}
+		if len(interfaces) == 0 {
+			utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
+			come up post migration, please check the network configuration post migration`)
+		}
+		macs := []string{}
+		// By default the network interfaces macs are in the same order as the interfaces
+		for _, nic := range vmInfo.NetworkInterfaces {
+			macs = append(macs, nic.MAC)
+		}
+		utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
+		utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
+		if len(interfaces) != len(macs) {
+			utils.PrintLog("Mismatch between number of interfaces and MACs")
+			return fmt.Errorf("mismatch between number of interfaces and MACs")
+		}
+		// Add udev rules to pin names without forcing DHCP
+		utils.PrintLog("Adding udev rules to pin interface names")
+
+		// This will ensure that the network interfaces are named consistently after migration
+		// and they get the correct IP address.
+		// This is important because RHEL family uses NetworkManager by default and it does not
+		// automatically configure the network interfaces to use DHCP after migration.
+		// So we need to add udev rules to pin the names of the network interfaces
+		// to the MAC addresses so that they are consistent after migration.
+		// This will ensure that the network interfaces are named consistently after migration
+		// and they get the correct IP address.
+		err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, false, diskPath, interfaces, macs)
+		if err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: Failed to add udev: %v", err))
+		}
+	}
+
 	return nil
 }
 

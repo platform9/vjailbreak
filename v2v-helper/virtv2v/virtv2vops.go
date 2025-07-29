@@ -449,13 +449,16 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 
 }
 
-func GetInterfaceNameForIP(path string, ip string) (string, error) {
-	// Step 1: Try ifcfg
+func GetInterfaceNames(path string) ([]string, error) {
 	cmd := "ls /etc/sysconfig/network-scripts | grep '^ifcfg-'"
 	lsOut, err := RunCommandInGuest(path, cmd, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	interfaces := []string{}
+	// Parse the output
+	// Split by newline and trim spaces
+	// Ignore 'ifcfg-lo' as it is the loopback interface
 	files := strings.Split(strings.TrimSpace(lsOut), "\n")
 	for _, file := range files {
 		if file == "ifcfg-lo" {
@@ -465,89 +468,14 @@ func GetInterfaceNameForIP(path string, ip string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if !strings.Contains(content, fmt.Sprintf("IPADDR=%s", ip)) && !strings.Contains(content, fmt.Sprintf("IPADDR0=%s", ip)) { // Handle multi-IP
-			continue
-		}
 		// Extract DEVICE or infer from filename
 		device := extractKeyValue(content, "DEVICE")
 		if device != "" {
-			return strings.Trim(device, `"'`), nil
-		}
-		// Fallback to filename after 'ifcfg-'
-		return strings.TrimPrefix(file, "ifcfg-"), nil
-	}
-
-	// Step 2: Try NM connections
-	cmd = "ls /etc/NetworkManager/system-connections"
-	lsOut, err = RunCommandInGuest(path, cmd, false)
-	if err == nil { // Dir may not exist
-		files = strings.Split(strings.TrimSpace(lsOut), "\n")
-		for _, file := range files {
-			content, err := RunCommandInGuest(path, fmt.Sprintf("cat /etc/NetworkManager/system-connections/%s", file), false)
-			if err != nil {
-				continue
-			}
-			if !strings.Contains(content, fmt.Sprintf("address=%s", ip)) && !strings.Contains(content, fmt.Sprintf("address1=%s", ip)) {
-				continue
-			}
-			device := extractKeyValue(content, "interface-name")
-			if device != "" {
-				return strings.Trim(device, `"'`), nil
-			}
+			interfaces = append(interfaces, device)
 		}
 	}
 
-	// Step 3: Try NM leases - simplified, pick first match
-	cmd = "ls /var/lib/NetworkManager | grep '.lease$'"
-	lsOut, err = RunCommandInGuest(path, cmd, false)
-	if err == nil {
-		files = strings.Split(strings.TrimSpace(lsOut), "\n")
-		for _, file := range files {
-			content, err := RunCommandInGuest(path, fmt.Sprintf("cat /var/lib/NetworkManager/%s", file), false)
-			if err != nil || !strings.Contains(content, fmt.Sprintf("ADDRESS=%s", ip)) {
-				continue
-			}
-			// Parse filename for interface: e.g., internal-uuid-eth0.lease → eth0
-			parts := strings.Split(file, "-")
-			if len(parts) >= 3 {
-				iface := parts[len(parts)-1]
-				iface = strings.TrimSuffix(iface, ".lease")
-				return iface, nil
-			}
-		}
-	}
-
-	// Step 4: Try dhclient leases (like udev_from_dhclient_lease) - parse blocks
-	cmd = "ls /var/lib/dhclient"
-	lsOut, err = RunCommandInGuest(path, cmd, false)
-	if err == nil {
-		files = strings.Split(strings.TrimSpace(lsOut), "\n")
-		var latestName string
-		for _, file := range files {
-			content, err := RunCommandInGuest(path, fmt.Sprintf("cat /var/lib/dhclient/%s", file), false)
-			if err != nil {
-				continue
-			}
-			blocks := strings.Split(content, "lease {") // Split on blocks
-			for _, block := range blocks[1:] {
-				if !strings.Contains(block, fmt.Sprintf("fixed-address %s", ip)) {
-					continue
-				}
-				iface := regexp.MustCompile(`interface "([^"]+)"`).FindStringSubmatch(block)
-				expireStr := regexp.MustCompile(`expire [^;]+;`).FindString(block)
-				if len(iface) > 1 && expireStr != "" {
-					// Parse expire to epoch (use date command via guest if needed, but simplify)
-					// For now, assume latest is last found
-					latestName = iface[1]
-				}
-			}
-		}
-		if latestName != "" {
-			return latestName, nil
-		}
-	}
-
-	return "", fmt.Errorf("no interface found for IP %s", ip)
+	return interfaces, nil
 }
 
 // Helper: Extract key=value from content, trim quotes/spaces
