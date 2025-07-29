@@ -1,10 +1,11 @@
 import { EventProperties } from "../types/amplitude"
+import { AnalyticsConfig } from "../services/configService"
 
 // Pure Amplitude configuration
 export interface AmplitudeConfig {
   apiKey: string
-  serverUrl?: string
   disabled?: boolean
+  releaseStage?: string
   trackingOptions?: {
     ipAddress?: boolean
     deviceId?: boolean
@@ -19,14 +20,18 @@ export interface TrackingBehavior {
   logToConsole?: boolean
 }
 
-// Create Amplitude config from environment
-export const createAmplitudeConfig = (): AmplitudeConfig => {
+// Create Amplitude config from ConfigMap or environment fallback
+export const createAmplitudeConfig = (configMapData?: AnalyticsConfig): AmplitudeConfig => {
   const isDevelopment = import.meta.env.MODE === "development"
-  const hasApiKey = Boolean(import.meta.env.VITE_AMPLITUDE_API_KEY)
+  
+  // Use ConfigMap data if available, otherwise fall back to environment variables
+  const apiKey = configMapData?.amplitude?.apiKey || import.meta.env.VITE_AMPLITUDE_API_KEY || "dev-api-key"
+  const releaseStage = configMapData?.releaseStage || import.meta.env.MODE || "development"
+  const hasApiKey = Boolean(apiKey && apiKey !== "dev-api-key")
 
   return {
-    apiKey: import.meta.env.VITE_AMPLITUDE_API_KEY || "dev-api-key",
-    serverUrl: import.meta.env.VITE_AMPLITUDE_SERVER_URL,
+    apiKey,
+    releaseStage,
     disabled: isDevelopment && !hasApiKey,
     trackingOptions: {
       ipAddress: true,

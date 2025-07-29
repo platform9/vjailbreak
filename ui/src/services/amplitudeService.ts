@@ -26,6 +26,14 @@ export const initializeAmplitude = (config: AmplitudeConfig): boolean => {
     }
 
     amplitude.init(config.apiKey, undefined, initOptions)
+
+    // Set release stage as a global user property if available
+    if (config.releaseStage) {
+      const identify = new amplitude.Identify()
+      identify.setOnce("release_stage", config.releaseStage)
+      amplitude.identify(identify)
+    }
+
     isInitialized = true
     console.log("Amplitude initialized successfully")
     return true
