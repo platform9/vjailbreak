@@ -110,6 +110,7 @@ export interface FormValues extends Record<string, unknown> {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  disconnectSourceNetwork?: boolean
 }
 
 
