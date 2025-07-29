@@ -455,7 +455,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	ctxlog := r.ctxlog.WithValues("vm", vm)
 	ctxlog.Info("Creating Migration for VM")
 
-	vmk8sname, err := utils.GetVMwareMachineNameForVMName(vm)
+	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
+	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
@@ -498,11 +502,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string) error {
-	vmk8sname, err := utils.GetVMwareMachineNameForVMName(vm)
+	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials")
+	}
+	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vm name")
 	}
-	jobName, err := utils.GetJobNameForVMName(vmk8sname)
+	jobName, err := utils.GetJobNameForVMName(vm, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get job name")
 	}
@@ -691,7 +699,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 // CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) (*corev1.ConfigMap, error) {
-	vmname, err := utils.GetVMwareMachineNameForVMName(vm)
+	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
+	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
@@ -725,7 +737,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*corev1.ConfigMap, error) {
-	vmname, err := utils.GetVMwareMachineNameForVMName(vm)
+	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
