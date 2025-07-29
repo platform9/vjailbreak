@@ -8,6 +8,7 @@ import { Condition, Migration, Phase } from "src/api/migrations/model";
 import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
+import { calculateTimeElapsed } from "src/utils";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -75,7 +76,12 @@ const columns: GridColDef[] = [
         valueGetter: (_, row) => row.status?.agentName,
         flex: 1,
     },
-
+    {
+        field: "timeElapsed",
+        headerName: "Time Elapsed",
+        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp),
+        flex: 0.8,
+    },
     {
         field: "status.conditions",
         headerName: "Progress",

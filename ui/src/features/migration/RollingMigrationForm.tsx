@@ -336,7 +336,7 @@ export default function RollingMigrationFormDrawer({
 
     const [selectedPcdCredName, setSelectedPcdCredName] = useState("");
 
-    const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([]);
+    const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set());
     const [selectedESXHosts, setSelectedESXHosts] = useState<GridRowSelectionModel>([]);
     const [esxHostToPcdMapping, setEsxHostToPcdMapping] = useState<Record<string, string>>({});
     const [pcdHostConfigDialogOpen, setPcdHostConfigDialogOpen] = useState(false);
@@ -403,6 +403,13 @@ export default function RollingMigrationFormDrawer({
     const [updating, setUpdating] = useState(false);
 
     const paginationModel = { page: 0, pageSize: 5 };
+
+    // Clear selection when component is closed
+    useEffect(() => {
+        if (!open) {
+            setSelectedVMs(new Set());
+        }
+    }, [open]);
 
     useEffect(() => {
         if (open) {
@@ -539,6 +546,16 @@ export default function RollingMigrationFormDrawer({
             });
 
             setVmsWithAssignments(mappedVMs);
+
+            // Clean up persistent selection - remove VMs that no longer exist
+            const availableVmIds = new Set(mappedVMs.map(vm => vm.id));
+            const cleanedSelection = new Set(
+                Array.from(selectedVMs).filter(vmId => availableVmIds.has(vmId))
+            );
+
+            if (cleanedSelection.size !== selectedVMs.size) {
+                setSelectedVMs(cleanedSelection);
+            }
         } catch (error) {
             console.error("Failed to fetch cluster VMs:", error);
             setVmsWithAssignments([]);
@@ -774,10 +791,10 @@ export default function RollingMigrationFormDrawer({
 
 
     const availableVmwareNetworks = useMemo(() => {
-        if (!vmsWithAssignments.length || !selectedVMs.length) return [];
+        if (!vmsWithAssignments.length || !selectedVMs.size) return [];
 
         const selectedVMsData = vmsWithAssignments.filter(vm =>
-            selectedVMs.includes(vm.id));
+            selectedVMs.has(vm.id));
 
         const extractedNetworks = selectedVMsData
             .filter(vm => vm.networks)
@@ -791,10 +808,10 @@ export default function RollingMigrationFormDrawer({
     }, [vmsWithAssignments, selectedVMs]);
 
     const availableVmwareDatastores = useMemo(() => {
-        if (!vmsWithAssignments.length || !selectedVMs.length) return [];
+        if (!vmsWithAssignments.length || !selectedVMs.size) return [];
 
         const selectedVMsData = vmsWithAssignments.filter(vm =>
-            selectedVMs.includes(vm.id));
+            selectedVMs.has(vm.id));
 
         const extractedDatastores = selectedVMsData
             .filter(vm => vm.datastores)
@@ -873,12 +890,12 @@ export default function RollingMigrationFormDrawer({
 
     // Validate IP addresses for selected VMs
     const vmIpValidation = useMemo(() => {
-        if (selectedVMs.length === 0) {
+        if (selectedVMs.size === 0) {
             setVmIpValidationError("");
             return { hasError: false, vmsWithoutIPs: [] };
         }
 
-        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.has(vm.id));
         const vmsWithoutIPs = selectedVMsData.filter(vm => vm.ip === "—" || !vm.ip);
 
         if (vmsWithoutIPs.length > 0) {
@@ -912,12 +929,12 @@ export default function RollingMigrationFormDrawer({
 
     // Validate OS assignment for selected powered-off VMs
     const osValidation = useMemo(() => {
-        if (selectedVMs.length === 0) {
+        if (selectedVMs.size === 0) {
             setOsValidationError("");
             return { hasError: false, vmsWithoutOS: [] };
         }
 
-        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.has(vm.id));
         const poweredOffVMsWithoutOS = selectedVMsData.filter(vm => {
             const assignedOS = vmOSAssignments[vm.id];
             const currentOS = assignedOS || vm.osFamily;
@@ -937,7 +954,7 @@ export default function RollingMigrationFormDrawer({
     const handleSubmit = async () => {
         setSubmitting(true);
 
-        if (selectedVMs.length > 0) {
+        if (selectedVMs.size > 0) {
             if (availableVmwareNetworks.some(network =>
                 !networkMappings.some(mapping => mapping.source === network))) {
                 setNetworkMappingError("All networks from selected VMs must be mapped");
@@ -968,7 +985,7 @@ export default function RollingMigrationFormDrawer({
             const clusterName = clusterObj?.name || "";
 
             const selectedVMsData = vmsWithAssignments
-                .filter(vm => selectedVMs.includes(vm.id))
+                .filter(vm => selectedVMs.has(vm.id))
                 .map(vm => ({
                     vmName: vm.name,
                     esxiName: vm.esxHost
@@ -1106,7 +1123,7 @@ export default function RollingMigrationFormDrawer({
         const basicRequirementsMissing = !sourceCluster ||
             !destinationPCD ||
             !selectedMaasConfig ||
-            !selectedVMs.length ||
+            !selectedVMs.size ||
             submitting;
 
 
@@ -1276,7 +1293,7 @@ export default function RollingMigrationFormDrawer({
             hideable: true,
             renderCell: (params) => {
                 const vmId = params.row.id;
-                const isSelected = selectedVMs.includes(vmId);
+                const isSelected = selectedVMs.has(vmId);
                 const isEditing = editingIpFor === vmId;
                 const validationStatus = ipValidationStatus[vmId];
                 const validationMessage = ipValidationMessages[vmId];
@@ -1364,7 +1381,7 @@ export default function RollingMigrationFormDrawer({
             hideable: true,
             renderCell: (params) => {
                 const vmId = params.row.id;
-                const isSelected = selectedVMs.includes(vmId);
+                const isSelected = selectedVMs.has(vmId);
                 const powerState = params.row?.powerState;
                 const detectedOsFamily = params.row?.osFamily;
                 const assignedOsFamily = vmOSAssignments[vmId];
@@ -1492,7 +1509,7 @@ export default function RollingMigrationFormDrawer({
             hideable: true,
             renderCell: (params) => {
                 const vmId = params.row.id;
-                const isSelected = selectedVMs.includes(vmId);
+                const isSelected = selectedVMs.has(vmId);
                 const currentFlavor = params.value || "auto-assign";
 
                 if (isSelected) {
@@ -1549,10 +1566,10 @@ export default function RollingMigrationFormDrawer({
     ];
 
     const handleOpenBulkEditDialog = () => {
-        if (selectedVMs.length === 0) return;
+        if (selectedVMs.size === 0) return;
 
         // Initialize bulk edit state
-        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
+        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.has(vm.id));
         const initialIPs: Record<string, string> = {};
         const initialStatus: Record<string, 'empty' | 'valid' | 'invalid' | 'validating'> = {};
 
@@ -1726,7 +1743,7 @@ export default function RollingMigrationFormDrawer({
 
     // Flavor assignment handlers
     const handleOpenFlavorDialog = () => {
-        if (selectedVMs.length === 0) return;
+        if (selectedVMs.size === 0) return;
         setFlavorDialogOpen(true);
     };
 
@@ -1798,7 +1815,7 @@ export default function RollingMigrationFormDrawer({
             const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : selectedFlavor);
 
             // Update VMs via API
-            const updatePromises = selectedVMs.map(async (vmId) => {
+            const updatePromises = Array.from(selectedVMs).map(async (vmId) => {
                 try {
                     const payload = {
                         spec: {
@@ -1823,7 +1840,7 @@ export default function RollingMigrationFormDrawer({
                     context: 'vm-flavor-batch-update-failures',
                     metadata: {
                         failedUpdates: failedUpdates,
-                        totalVMs: selectedVMs.length,
+                        totalVMs: selectedVMs.size,
                         successCount: results.length - failedUpdates.length,
                         failedCount: failedUpdates.length,
                         action: 'vm-flavor-batch-update'
@@ -1833,7 +1850,7 @@ export default function RollingMigrationFormDrawer({
             } else {
                 // Update local state only if all API calls succeeded
                 const updatedVMs = vmsWithAssignments.map(vm => {
-                    if (selectedVMs.includes(vm.id)) {
+                    if (selectedVMs.has(vm.id)) {
                         return {
                             ...vm,
                             flavor: flavorName,
@@ -1845,7 +1862,7 @@ export default function RollingMigrationFormDrawer({
                 setVmsWithAssignments(updatedVMs);
 
                 const actionText = isAutoAssign ? "cleared flavor assignment for" : "assigned flavor to";
-                console.log(`Successfully ${actionText} ${selectedVMs.length} VM${selectedVMs.length > 1 ? 's' : ''}`);
+                console.log(`Successfully ${actionText} ${selectedVMs.size} VM${selectedVMs.size > 1 ? 's' : ''}`);
 
                 // Refresh VM list to get updated flavor information from API
                 await fetchClusterVMs();
@@ -1857,7 +1874,7 @@ export default function RollingMigrationFormDrawer({
             reportError(error as Error, {
                 context: 'vm-flavor-assignment',
                 metadata: {
-                    selectedVMs: selectedVMs,
+                    selectedVMs: Array.from(selectedVMs),
                     selectedFlavor: selectedFlavor,
                     action: 'vm-flavor-assignment'
                 }
@@ -1900,7 +1917,7 @@ export default function RollingMigrationFormDrawer({
                 anchor="right"
                 open={open}
                 onClose={handleClose}
-                ModalProps={{ 
+                ModalProps={{
                     keepMounted: false,
                     style: { zIndex: 1300 }
                 }}
@@ -2025,13 +2042,33 @@ export default function RollingMigrationFormDrawer({
                                         pageSizeOptions={[5, 10, 25]}
                                         rowHeight={45}
                                         checkboxSelection
-                                        onRowSelectionModelChange={setSelectedVMs}
-                                        rowSelectionModel={selectedVMs}
+                                        onRowSelectionModelChange={(selectedRowIds) => {
+                                            const newSelection = new Set(selectedVMs);
+
+                                            selectedRowIds.forEach(id => {
+                                                if (!selectedVMs.has(id as string)) {
+                                                    newSelection.add(id as string);
+                                                }
+                                            });
+
+                                            selectedVMs.forEach(id => {
+                                                if (!selectedRowIds.includes(id)) {
+                                                    newSelection.delete(id);
+                                                }
+                                            });
+
+                                            setSelectedVMs(newSelection);
+                                        }}
+                                        rowSelectionModel={Array.from(selectedVMs).filter(vmId =>
+                                            vmsWithAssignments.some(vm => vm.id === vmId)
+                                        )}
                                         slots={{
                                             toolbar: (props) => (
                                                 <CustomToolbarWithActions
                                                     {...props}
-                                                    rowSelectionModel={selectedVMs}
+                                                    rowSelectionModel={Array.from(selectedVMs).filter(vmId =>
+                                                        vmsWithAssignments.some(vm => vm.id === vmId)
+                                                    )}
                                                     onEditIPs={handleEditIPs}
                                                     onAssignFlavor={handleOpenFlavorDialog}
                                                 />
@@ -2299,7 +2336,7 @@ export default function RollingMigrationFormDrawer({
                     maxWidth="md"
                 >
                     <DialogTitle>
-                        Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+                        Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ my: 2 }}>
@@ -2374,7 +2411,7 @@ export default function RollingMigrationFormDrawer({
                     maxWidth="sm"
                 >
                     <DialogTitle>
-                        Assign Flavor to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+                        Assign Flavor to {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ my: 2 }}>

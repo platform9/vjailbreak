@@ -48,3 +48,45 @@ export const debounce = (func, delay) => {
 
   return debouncedFunction;
 };
+
+/**
+ * Calculates the time elapsed since a given timestamp and returns a human-readable string.
+ * @param creationTimestamp - ISO 8601 timestamp string from metadata.creationTimestamp
+ * @returns Human-readable time elapsed string (e.g., "5m 30s", "2h 15m", "3d 4h")
+ */
+export const calculateTimeElapsed = (creationTimestamp: string): string => {
+  if (!creationTimestamp) {
+    return 'N/A';
+  }
+
+  try {
+    const createdAt = new Date(creationTimestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - createdAt.getTime();
+
+    if (diffMs < 0) {
+      return 'N/A';
+    }
+
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) {
+      const remainingHours = diffHours % 24;
+      return remainingHours > 0 ? `${diffDays}d ${remainingHours}h` : `${diffDays}d`;
+    } else if (diffHours > 0) {
+      const remainingMinutes = diffMinutes % 60;
+      return remainingMinutes > 0 ? `${diffHours}h ${remainingMinutes}m` : `${diffHours}h`;
+    } else if (diffMinutes > 0) {
+      const remainingSeconds = diffSeconds % 60;
+      return remainingSeconds > 0 ? `${diffMinutes}m ${remainingSeconds}s` : `${diffMinutes}m`;
+    } else {
+      return `${diffSeconds}s`;
+    }
+  } catch (error) {
+    console.error('Error calculating time elapsed:', error);
+    return 'N/A';
+  }
+};
