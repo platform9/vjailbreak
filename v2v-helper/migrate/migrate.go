@@ -73,10 +73,27 @@ func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
 		return nil
 	}
 
-	migobj.logMessage("Disconnecting source VM network interfaces")
+	migobj.logMessage(fmt.Sprintf("Disconnecting source VM network interfaces (DisconnectSourceNetwork=%v)", migobj.DisconnectSourceNetwork))
+	vmObj := migobj.VMops.GetVMObj()
+	vmCtx := context.Background()
+	vmState, err := vmObj.PowerState(vmCtx)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to get VM power state: %v", err))
+	} else {
+		migobj.logMessage(fmt.Sprintf("VM power state before disconnection: %s", vmState))
+	}
+
 	if err := migobj.VMops.DisconnectNetworkInterfaces(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
+		errMsg := fmt.Sprintf("Failed to disconnect source VM network interfaces: %v", err)
+		migobj.logMessage("ERROR: " + errMsg)
 		return fmt.Errorf("failed to disconnect network interfaces: %w", err)
+	}
+
+	vmState, err = vmObj.PowerState(vmCtx)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to get VM power state after disconnection: %v", err))
+	} else {
+		migobj.logMessage(fmt.Sprintf("VM power state after disconnection: %s", vmState))
 	}
 
 	migobj.logMessage("Successfully disconnected source VM network interfaces")
