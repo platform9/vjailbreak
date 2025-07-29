@@ -26,7 +26,7 @@ systemctl enable --now serial-getty@ttyS0.service`
 	MaxHTTPRetryCount        = 5
 	MaxVMActiveCheckCount    = 15
 	VMActiveCheckInterval    = 20 * time.Second
-	MigrationSystemNamespace = "migration-system"
+	NamespaceMigrationSystem = "migration-system"
 	TrueString               = "true"
 
 	LogsDir = "/var/log/pf9"
@@ -46,4 +46,25 @@ systemctl enable --now serial-getty@ttyS0.service`
 	OSFamilyLinux   = "linuxguest"
 
 	PCDClusterNameNoCluster = "NO CLUSTER"
+
+	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
+	VCenterVMScanConcurrencyLimit = 100
+
+	// ConfigMap default values
+	ChangedBlocksCopyIterationThreshold = 20
+
+	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
+	VMActiveWaitIntervalSeconds = 20
+
+	// VMActiveWaitRetryLimit is the number of retries to wait for vm to become active
+	VMActiveWaitRetryLimit = 15
+
+	// DefaultMigrationMethod is the default migration method
+	DefaultMigrationMethod = "hot"
+
+	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
+	VCenterScanConcurrencyLimit = 100
+
+	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
+	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 )
