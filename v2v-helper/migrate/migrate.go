@@ -275,6 +275,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
 	}
+	utils.PrintLog(fmt.Sprintf("Fetched Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
 	incrementalCopyCount := 0
 	for {
@@ -717,10 +718,11 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
+	utils.PrintLog(fmt.Sprintf("Fetched VM active wait retry limit: %d", vjailbreakSettings.VMActiveWaitRetryLimit))
 
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
-		utils.PrintLog(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, vjailbreakSettings.VMActiveWaitRetryLimit))
+		migobj.logMessage(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, vjailbreakSettings.VMActiveWaitRetryLimit))
 		active, err := openstackops.WaitUntilVMActive(newVM.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for VM to become active")
