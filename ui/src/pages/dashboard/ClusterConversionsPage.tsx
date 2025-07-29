@@ -3,10 +3,11 @@ import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import { useClusterMigrationsQuery, CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
 import { useESXIMigrationsQuery, ESXI_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useESXIMigrationsQuery"
 import { THIRTY_SECONDS } from "src/constants"
+import { useClusterMigrationStatusMonitor } from "src/hooks/useClusterMigrationStatusMonitor"
 
 export default function ClusterConversionsPage() {
   const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery()
-  
+
   const { data: clusterMigrations, refetch: refetchClusterMigrations } = useClusterMigrationsQuery({
     queryKey: CLUSTER_MIGRATIONS_QUERY_KEY,
     refetchInterval: THIRTY_SECONDS,
@@ -20,6 +21,9 @@ export default function ClusterConversionsPage() {
     staleTime: 0,
     refetchOnMount: true
   })
+
+  // Monitor cluster migration status changes for failure reporting
+  useClusterMigrationStatusMonitor(clusterMigrations)
 
   return (
     <RollingMigrationsTable

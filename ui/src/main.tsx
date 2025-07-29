@@ -13,12 +13,15 @@ import BugsnagPerformance from '@bugsnag/browser-performance'
 import App from "./App.tsx"
 import { ThemeProvider } from "./theme/ThemeContext.tsx"
 import { getBugsnagConfig, getBugsnagPerformanceConfig } from "./config/bugsnag"
+import { createAmplitudeConfig } from "./config/amplitude"
 import { errorReportingService } from "./services/errorReporting"
+import { initializeAmplitude } from "./services/amplitudeService"
 
 const queryClient = new QueryClient()
 
 const bugsnagConfig = getBugsnagConfig()
 const bugsnagPerformanceConfig = getBugsnagPerformanceConfig()
+const amplitudeConfig = createAmplitudeConfig()
 
 if (bugsnagConfig.apiKey) {
   Bugsnag.start({
@@ -33,6 +36,9 @@ if (bugsnagConfig.apiKey) {
   errorReportingService.addMetadata('app', 'name', 'vjailbreak')
   errorReportingService.addMetadata('app', 'component', 'ui')
 }
+
+// Initialize Amplitude
+initializeAmplitude(amplitudeConfig)
 
 const ErrorBoundary = Bugsnag.getPlugin('react')?.createErrorBoundary(React) || React.Fragment
 

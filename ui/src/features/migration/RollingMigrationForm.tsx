@@ -49,6 +49,8 @@ import { validateOpenstackIPs } from "src/api/openstack-creds/openstackCreds"
 import "@cds/core/icon/register.js"
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from "@cds/core/icon"
 import { getSecret } from "src/api/secrets/secrets"
+import { useAmplitude } from "src/hooks/useAmplitude"
+import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
 // Define types for MigrationOptions
 interface FormValues extends Record<string, unknown> {
@@ -328,6 +330,7 @@ export default function RollingMigrationFormDrawer({
 }: RollingMigrationFormDrawerProps) {
     const navigate = useNavigate();
     const { reportError } = useErrorHandler({ component: "RollingMigrationForm" });
+    const { track } = useAmplitude({ component: "RollingMigrationForm" });
     const [sourceCluster, setSourceCluster] = useState("");
     const [destinationPCD, setDestinationPCD] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -1015,7 +1018,7 @@ export default function RollingMigrationFormDrawer({
             const networkMappingJson = createNetworkMappingJson({
                 networkMappings: networkMappings.map(mapping => ({
                     source: mapping.source,
-                    target: mapping.target  // Changed from destination to target
+                    target: mapping.target
                 }))
             });
             const networkMappingResponse = await postNetworkMapping(networkMappingJson);
@@ -1024,7 +1027,7 @@ export default function RollingMigrationFormDrawer({
             const storageMappingJson = createStorageMappingJson({
                 storageMappings: storageMappings.map(mapping => ({
                     source: mapping.source,
-                    target: mapping.target  // Changed from destination to target
+                    target: mapping.target
                 }))
             });
             const storageMappingResponse = await postStorageMapping(storageMappingJson);
@@ -1075,10 +1078,56 @@ export default function RollingMigrationFormDrawer({
             await postRollingMigrationPlan(migrationPlanJson, VJAILBREAK_DEFAULT_NAMESPACE);
 
             console.log("Submitted rolling migration plan", migrationPlanJson);
+
+            // Track successful cluster conversion creation
+            track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_CREATED, {
+                clusterMigrationName: clusterName,
+                sourceCluster: clusterObj?.name,
+                destinationCluster: selectedPCD?.name,
+                vmwareCredential: selectedVMwareCredName,
+                pcdCredential: selectedPcdCredName,
+                maasConfig: selectedMaasConfig?.metadata.name,
+                virtualMachineCount: selectedVMsData?.length || 0,
+                esxHostCount: selectedESXHosts?.length || 0,
+                networkMappingCount: networkMappings?.length || 0,
+                storageMappingCount: storageMappings?.length || 0,
+                migrationType: params.dataCopyMethod || "hot",
+                hasAdminInitiatedCutover: selectedMigrationOptions.cutoverOption &&
+                    params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
+                hasTimedCutover: selectedMigrationOptions.cutoverOption &&
+                    params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW,
+                migrationTemplate: migrationTemplateResponse.metadata.name,
+                namespace: VJAILBREAK_DEFAULT_NAMESPACE,
+            });
+
             onClose();
             navigate("/dashboard?tab=clusterconversions");
         } catch (error) {
             console.error("Failed to submit rolling migration plan:", error);
+
+            // Track cluster conversion failure
+            const parts = sourceCluster.split(":");
+            const credName = parts[0];
+            const sourceItem = sourceData.find(item => item.credName === credName);
+            const clusterObj = sourceItem?.clusters.find(cluster =>
+                cluster.id === sourceCluster
+            );
+            const selectedPCD = pcdData.find(p => p.id === destinationPCD);
+            const selectedVMsData = vmsWithAssignments
+                .filter(vm => selectedVMs.includes(vm.id));
+
+            track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_SUBMISSION_FAILED, {
+                clusterMigrationName: clusterObj?.name,
+                sourceCluster: clusterObj?.name,
+                destinationCluster: selectedPCD?.name,
+                vmwareCredential: selectedVMwareCredName,
+                pcdCredential: selectedPcdCredName,
+                virtualMachineCount: selectedVMsData?.length || 0,
+                esxHostCount: selectedESXHosts?.length || 0,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                stage: "creation",
+            });
+
             reportError(error as Error, {
                 context: 'rolling-migration-plan-submission',
                 metadata: {
@@ -1900,7 +1949,7 @@ export default function RollingMigrationFormDrawer({
                 anchor="right"
                 open={open}
                 onClose={handleClose}
-                ModalProps={{ 
+                ModalProps={{
                     keepMounted: false,
                     style: { zIndex: 1300 }
                 }}

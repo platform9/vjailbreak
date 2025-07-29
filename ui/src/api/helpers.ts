@@ -30,6 +30,18 @@ import {
 } from "./secrets/secrets"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
+import { AMPLITUDE_EVENTS, EventProperties } from "src/types/amplitude"
+import {
+  enrichEventProperties,
+  getTrackingBehavior,
+} from "src/config/amplitude"
+import { trackEvent } from "src/services/amplitudeService"
+
+export interface TrackingContext {
+  component?: string
+  userId?: string
+  userEmail?: string
+}
 
 export const cleanupAllResources = async () => {
   // Clean up vmware creds
@@ -180,6 +192,48 @@ export const deleteOpenStackCredsWithSecretFlow = async (
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
+    throw error
+  }
+}
+
+// Simplified API call tracking
+export const trackApiCall = async <T>(
+  operation: () => Promise<T>,
+  successEvent: keyof typeof AMPLITUDE_EVENTS,
+  failureEvent: keyof typeof AMPLITUDE_EVENTS,
+  baseProperties: EventProperties = {},
+  context: TrackingContext = {}
+): Promise<T> => {
+  const behavior = getTrackingBehavior()
+
+  // If tracking disabled, just execute operation
+  if (!behavior.enabled) {
+    return operation()
+  }
+
+  try {
+    const result = await operation()
+
+    // Track success
+    const successProperties = enrichEventProperties(baseProperties, {
+      component: context.component || behavior.defaultComponent,
+      userId: context.userId,
+      userEmail: context.userEmail,
+    })
+
+    trackEvent(AMPLITUDE_EVENTS[successEvent], successProperties)
+    return result
+  } catch (error) {
+    // Track failure
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const failureProperties = enrichEventProperties(baseProperties, {
+      component: context.component || behavior.defaultComponent,
+      userId: context.userId,
+      userEmail: context.userEmail,
+      errorMessage,
+    })
+
+    trackEvent(AMPLITUDE_EVENTS[failureEvent], failureProperties)
     throw error
   }
 }
