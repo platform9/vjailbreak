@@ -178,7 +178,14 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 		return nil
 	}
 
-	vmwMachineName, err := utils.GetVMwareMachineNameForVMName(migration.Spec.VMName)
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get VMware credentials name for migration")
+		return nil
+	}
+
+	// Then use it to get the k8s compatible name
+	vmwMachineName, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
 		return nil
@@ -200,8 +207,6 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 		if err := r.Status().Update(ctx, vmwMachine); err != nil {
 			return errors.Wrap(err, "failed to update VMwareMachine status")
 		}
-	} else {
-		ctxlog.Info("VMwareMachine status.migrated is already false, no update needed.", "VMwareMachineName", vmwMachineName)
 	}
 
 	return nil
