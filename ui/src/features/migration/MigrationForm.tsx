@@ -468,7 +468,8 @@ export default function MigrationFormDrawer({
         vmCutoverEnd: params.cutoverEndTime
       }),
       retry: params.retryOnFailure,
-      ...(postMigrationAction && { postMigrationAction })
+      ...(postMigrationAction && { postMigrationAction }),
+      disconnectSourceNetwork: params.disconnectSourceNetwork || false
     };
 
     console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));

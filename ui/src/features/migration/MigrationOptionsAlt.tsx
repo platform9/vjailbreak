@@ -330,23 +330,6 @@ export default function MigrationOptionsAlt({
               </Typography>
             </Fields>
 
-            <Fields sx={{ gridGap: "0" }}>
-              <FormControlLabel
-                label="Disconnect Source VM Network"
-                control={
-                  <Checkbox
-                    checked={params?.disconnectSourceNetwork || false}
-                    onChange={(e) => {
-                      onChange("disconnectSourceNetwork")(e.target.checked);
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                Disconnect NICs on the source VM to prevent IP conflicts.
-              </Typography>
-            </Fields>
-
             <Fields>
               <FormControlLabel
                 label="Rename VM"
@@ -424,6 +407,23 @@ export default function MigrationOptionsAlt({
               </Select>
               <Typography variant="caption">
                 Optional: This folder name will be used to organize the migrated VMs in vCenter.
+              </Typography>
+            </Fields>
+
+            <Fields sx={{ gridGap: "0" }}>
+              <FormControlLabel
+                label="Disconnect Source VM Network"
+                control={
+                  <Checkbox
+                    checked={params?.disconnectSourceNetwork || false}
+                    onChange={(e) => {
+                      onChange("disconnectSourceNetwork")(e.target.checked);
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                Disconnect NICs on the source VM to prevent IP conflicts.
               </Typography>
             </Fields>
 
