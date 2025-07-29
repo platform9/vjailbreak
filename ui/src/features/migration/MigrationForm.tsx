@@ -471,10 +471,10 @@ export default function MigrationFormDrawer({
       }),
       retry: params.retryOnFailure,
       ...(postMigrationAction && { postMigrationAction }),
-      disconnectSourceNetwork: params.disconnectSourceNetwork || false
       ...(params.securityGroups && params.securityGroups.length > 0 && {
         securityGroups: params.securityGroups,
-      })
+      }),
+      disconnectSourceNetwork: params.disconnectSourceNetwork || false
     };
 
 

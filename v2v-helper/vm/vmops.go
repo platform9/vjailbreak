@@ -559,23 +559,21 @@ func (vmops *VMOps) VMPowerOff() error {
 }
 
 func (vmops *VMOps) VMPowerOn() error {
-	ctx := vmops.ctx
-	vm := vmops.VMObj
-
-	state, err := vm.PowerState(ctx)
+	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get VM power state: %s", err)
 	}
-	if state == types.VirtualMachinePowerStatePoweredOn {
+	if currstate == types.VirtualMachinePowerStatePoweredOn {
 		return nil
 	}
-
-	task, err := vm.PowerOn(ctx)
+	task, err := vmops.VMObj.PowerOn(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to power on VM: %s", err)
 	}
-
-	return task.Wait(ctx)
+	if err := task.Wait(vmops.ctx); err != nil {
+		return fmt.Errorf("failed to wait for power on task: %w", err)
+	}
+	return nil
 }
 
 func (vmops *VMOps) DisconnectNetworkInterfaces() error {
