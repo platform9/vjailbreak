@@ -473,6 +473,9 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  disconnectSourceNetwork:
+                    default: false
+                    type: boolean
                   healthCheckPort:
                     default: "443"
                     type: string
@@ -1467,6 +1470,9 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  disconnectSourceNetwork:
+                    default: false
+                    type: boolean
                   healthCheckPort:
                     default: "443"
                     type: string
