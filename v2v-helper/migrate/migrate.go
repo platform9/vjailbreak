@@ -21,6 +21,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -96,13 +97,16 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Attaching volumes to VM")
-
-	if err := openstackops.AttachVolumeToVM(disk.OpenstackVol.ID); err != nil {
+	if disk.OpenstackVol == nil {
+		return "", fmt.Errorf("OpenStack volume is nil")
+	}
+	volumeID := disk.OpenstackVol.ID
+	if err := openstackops.AttachVolumeToVM(volumeID); err != nil {
 		return "", errors.Wrap(err, "failed to attach volume to VM")
 	}
 
 	// Get the Path of the attached volume
-	devicePath, err := openstackops.FindDevice(disk.OpenstackVol.ID)
+	devicePath, err := openstackops.FindDevice(volumeID)
 	if err != nil {
 		return "", fmt.Errorf("failed to find device: %s", err)
 	}
@@ -271,11 +275,15 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx := range vminfo.VMDisks {
+				startTime := time.Now()
+				migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
+
 				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, fmt.Errorf("failed to copy disk: %s", err)
 				}
-				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
+				duration := time.Since(startTime)
+				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -314,8 +322,15 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					done = false
 					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
+					// incremental block copy
+
+					startTime := time.Now()
+					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+
+					duration := time.Since(startTime)
+
 					if err != nil {
 						changedBlockCopySuccess = false
 					}
@@ -326,10 +341,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					}
 					if !changedBlockCopySuccess {
 						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed block	s for disk: %d", idx))
+						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 					}
-					migobj.logMessage("Finished copying changed blocks")
-					migobj.logMessage(fmt.Sprintf("Syncing Changed blocks [%d/20]", incrementalCopyCount))
+
+					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
+
 				}
 			}
 			if final {
@@ -419,7 +435,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// create XML for conversion
-	err = utils.GenerateXMLConfig(vminfo)
+	err = migrateutils.GenerateXMLConfig(vminfo)
 	if err != nil {
 		return fmt.Errorf("failed to generate XML: %s", err)
 	}
@@ -465,7 +481,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
 			if err != nil {
-				return fmt.Errorf("failed to get os release: %s: %s\n", err, strings.TrimSpace(osRelease))
+				return fmt.Errorf("failed to get os release: %s: %s", err, strings.TrimSpace(osRelease))
 			}
 		}
 		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
@@ -769,7 +785,7 @@ func (migobj *Migrate) pingVM(ips []string) error {
 		if pinger.Statistics().PacketLoss == 0 {
 			migobj.logMessage("Ping succeeded")
 		} else {
-			return fmt.Errorf("Ping failed")
+			return fmt.Errorf("ping failed")
 		}
 	}
 	return nil
@@ -798,7 +814,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 		}
 
 		// Both HTTP and HTTPS failed
-		return fmt.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
+		return fmt.Errorf("both HTTP and HTTPS failed for %s:%s", ip, port)
 	}
 
 	return nil
@@ -928,7 +944,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
-
+	// Import LUN and MigrateRDM disk
+	for idx, rdmDisk := range vminfo.RDMDisks {
+		volumeID, err := migobj.cinderManage(rdmDisk)
+		if err != nil {
+			migobj.cleanup(vminfo, fmt.Sprintf("failed to import LUN: %s", err))
+			return errors.Wrap(err, "failed to import LUN")
+		}
+		vminfo.RDMDisks[idx].VolumeId = volumeID
+	}
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
@@ -967,4 +991,24 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
 	}
 	return nil
+}
+
+// cinderManage imports a LUN into OpenStack Cinder and returns the volume ID.
+func (migobj *Migrate) cinderManage(rdmDisk vm.RDMDisk) (string, error) {
+	openstackops := migobj.Openstackclients
+	migobj.logMessage(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
+	volume, err := openstackops.CinderManage(rdmDisk, "volume 3.8")
+	if err != nil || volume == nil {
+		return "", fmt.Errorf("failed to import LUN: %s", err)
+	} else if volume.ID == "" {
+		return "", fmt.Errorf("failed to import LUN: received empty volume ID")
+	}
+	migobj.logMessage(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
+	// Wait for the volume to become available
+	err = openstackops.WaitForVolume(volume.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to wait for volume to become available: %s", err)
+	}
+	migobj.logMessage(fmt.Sprintf("Volume %s is now available", volume.ID))
+	return volume.ID, nil
 }

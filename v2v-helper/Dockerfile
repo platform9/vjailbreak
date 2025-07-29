@@ -25,10 +25,6 @@ COPY manager manager
 # Using same Fedora version for consistency and required runtime dependencies
 FROM fedora:42
 
-# Add virtio-win repository for Windows drivers
-# Required for VM migration and conversion support
-# This provides Windows VirtIO drivers needed during VM conversion
-ADD https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo /etc/yum.repos.d/virtio-win.repo
 WORKDIR /tmp
 RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
 
