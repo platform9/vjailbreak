@@ -1092,7 +1092,7 @@ export default function RollingMigrationFormDrawer({
 
             console.log("Submitted rolling migration plan", migrationPlanJson);
             onClose();
-            navigate("/dashboard?tab=clusterconversions");
+            navigate("/dashboard/cluster-conversions");
         } catch (error) {
             console.error("Failed to submit rolling migration plan:", error);
             reportError(error as Error, {
