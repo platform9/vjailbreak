@@ -19,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
@@ -269,6 +270,8 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 	var openstackvoltypes []string
+	var openstacknetworks []string
+	var openstacksecuritygroups []string
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -296,14 +299,36 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cinder volume backend pools")
 	}
-	openstacknetworks := make([]string, 0, len(allNetworks))
 	for i := 0; i < len(allNetworks); i++ {
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
+
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list security groups")
+	}
+	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all security groups")
+	}
+	for i := 0; i < len(allSecGroups); i++ {
+		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+	}
+	groupSet := make(map[string]struct{})
+	uniqueSecurityGroups := []string{}
+	for _, group := range openstacksecuritygroups {
+		if _, exists := groupSet[group]; !exists {
+			groupSet[group] = struct{}{}
+			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
+		}
+	}
+	openstacksecuritygroups = uniqueSecurityGroups
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
+		SecurityGroups: openstacksecuritygroups,
 	}, nil
 }
 

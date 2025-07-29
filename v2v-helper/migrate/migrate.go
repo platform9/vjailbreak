@@ -58,6 +58,7 @@ type Migrate struct {
 	TargetFlavorId         string
 	TargetAvailabilityZone string
 	AssignedIP             string
+	SecurityGroups         []string
 }
 
 type MigrationTimes struct {
@@ -606,7 +607,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 					if err != nil {
 						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
-					 network might not come up post migration, please check the network configuration post migration`, err)
+					    network might not come up post migration, please check the network configuration post migration`, err)
 						log.Println("Continuing with migration")
 						err = nil
 					}
@@ -641,6 +642,12 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			return fmt.Errorf("failed to get OpenStack flavor: %s", err)
 		}
 	}
+
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups)
+	if err != nil {
+		return fmt.Errorf("failed to resolve security group names to IDs: %w", err)
+	}
+	utils.PrintLog(fmt.Sprintf("Resolved security group names %v to IDs %v", migobj.SecurityGroups, securityGroupIDs))
 
 	networkids := []string{}
 	ipaddresses := []string{}
@@ -682,7 +689,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			if migobj.AssignedIP != "" {
 				ip = migobj.AssignedIP
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
 			if err != nil {
 				return fmt.Errorf("failed to create port group: %s", err)
 			}
@@ -695,7 +702,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	}
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs)
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s", err)
 	}

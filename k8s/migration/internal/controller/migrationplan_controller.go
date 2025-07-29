@@ -519,6 +519,20 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	if migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver {
 		cutoverlabel = "no"
 	}
+	envVars := []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  "VMWARE_MACHINE_OBJECT_NAME",
+			Value: vmk8sname,
+		},
+	}
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -563,20 +577,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
 								},
-								Env: []corev1.EnvVar{
-									{
-										Name: "POD_NAME",
-										ValueFrom: &corev1.EnvVarSource{
-											FieldRef: &corev1.ObjectFieldSelector{
-												FieldPath: "metadata.name",
-											},
-										},
-									},
-									{
-										Name:  "VMWARE_MACHINE_OBJECT_NAME",
-										Value: vmk8sname,
-									},
-								},
+								Env: envVars,
 								EnvFrom: []corev1.EnvFromSource{
 									{
 										SecretRef: &corev1.SecretEnvSource{
@@ -800,6 +801,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"PERFORM_HEALTH_CHECKS":      strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
+				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
