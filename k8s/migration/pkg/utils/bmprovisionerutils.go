@@ -43,7 +43,7 @@ func ConvertESXiToPCDHost(ctx context.Context,
 	bmProvider providers.BMCProvider) error {
 	ctxlog := log.FromContext(ctx).WithName(constants.ESXIMigrationControllerName)
 
-	vmwarecreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
@@ -281,7 +281,7 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 }
 
 func generatePCDOnboardingCloudInit(ctx context.Context, scope *scope.RollingMigrationPlanScope, local bool) (string, error) {
-	openstackCreds, err := GetDestinationOpenstackCredsInfoFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	openstackCreds, err := GetOpenstackCredsInfoFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack credentials")
 	}
@@ -467,8 +467,8 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	), nil
 }
 
-// GetSourceVMwareCredsFromRollingMigrationPlan retrieves the source VMware credentials from a RollingMigrationPlan
-func GetSourceVMwareCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCreds, error) {
+// GetVMwareCredsFromRollingMigrationPlan retrieves the source VMware credentials from a RollingMigrationPlan
+func GetVMwareCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCreds, error) {
 	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get migration template")
@@ -481,9 +481,9 @@ func GetSourceVMwareCredsFromRollingMigrationPlan(ctx context.Context, k3sclient
 	return vmwarecreds, nil
 }
 
-// GetSourceVMwareCredsInfoFromRollingMigrationPlan retrieves the source VMware credentials info from a RollingMigrationPlan
-func GetSourceVMwareCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCredsInfo, error) {
-	vmwarecreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
+// GetVMwareCredsInfoFromRollingMigrationPlan retrieves the source VMware credentials info from a RollingMigrationPlan
+func GetVMwareCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCredsInfo, error) {
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
 	}
@@ -494,8 +494,8 @@ func GetSourceVMwareCredsInfoFromRollingMigrationPlan(ctx context.Context, k3scl
 	return &vmwareCredsInfo, nil
 }
 
-// GetDestinationOpenstackCredsFromRollingMigrationPlan retrieves the destination OpenStack credentials from a RollingMigrationPlan
-func GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenstackCreds, error) {
+// GetOpenstackCredsFromRollingMigrationPlan retrieves the destination OpenStack credentials from a RollingMigrationPlan
+func GetOpenstackCredsFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	migrationTemplate, err := GetMigrationTemplateFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get migration template")
@@ -508,9 +508,9 @@ func GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx context.Context, k
 	return openstackcreds, nil
 }
 
-// GetDestinationOpenstackCredsInfoFromRollingMigrationPlan retrieves the destination OpenStack credentials info from a RollingMigrationPlan
-func GetDestinationOpenstackCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenStackCredsInfo, error) {
-	openstackcreds, err := GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
+// GetOpenstackCredsInfoFromRollingMigrationPlan retrieves the destination OpenStack credentials info from a RollingMigrationPlan
+func GetOpenstackCredsInfoFromRollingMigrationPlan(ctx context.Context, k3sclient client.Client, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenStackCredsInfo, error) {
+	openstackcreds, err := GetOpenstackCredsFromRollingMigrationPlan(ctx, k3sclient, rollingMigrationPlan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials")
 	}
@@ -531,4 +531,73 @@ func GetMigrationTemplateFromRollingMigrationPlan(ctx context.Context, k3sclient
 		return nil, errors.Wrap(err, "failed to get migration template")
 	}
 	return &migrationTemplate, nil
+}
+
+// GetMigrationPlanFromMigration retrieves the migration plan from a Migration
+func GetMigrationPlanFromMigration(ctx context.Context, k3sclient client.Client, migration *vjailbreakv1alpha1.Migration) (*vjailbreakv1alpha1.MigrationPlan, error) {
+	migrationPlan := vjailbreakv1alpha1.MigrationPlan{}
+	if err := k3sclient.Get(ctx, types.NamespacedName{
+		Name:      migration.Spec.MigrationPlan,
+		Namespace: constants.NamespaceMigrationSystem},
+		&migrationPlan); err != nil {
+		return nil, errors.Wrap(err, "failed to get migration plan")
+	}
+	return &migrationPlan, nil
+}
+
+// GetMigrationTemplateFromMigrationPlan retrieves the migration template from a MigrationPlan
+func GetMigrationTemplateFromMigrationPlan(ctx context.Context, k3sclient client.Client, migrationPlan *vjailbreakv1alpha1.MigrationPlan) (*vjailbreakv1alpha1.MigrationTemplate, error) {
+	migrationTemplate := vjailbreakv1alpha1.MigrationTemplate{}
+	if err := k3sclient.Get(ctx, types.NamespacedName{
+		Name:      migrationPlan.Spec.MigrationTemplate,
+		Namespace: constants.NamespaceMigrationSystem},
+		&migrationTemplate); err != nil {
+		return nil, errors.Wrap(err, "failed to get migration template")
+	}
+	return &migrationTemplate, nil
+}
+
+// GetMigrationTemplateFromMigration retrieves the migration template from a Migration
+func GetMigrationTemplateFromMigration(ctx context.Context, k3sclient client.Client, migration *vjailbreakv1alpha1.Migration) (*vjailbreakv1alpha1.MigrationTemplate, error) {
+	migrationPlan, err := GetMigrationPlanFromMigration(ctx, k3sclient, migration)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get migration plan")
+	}
+	return GetMigrationTemplateFromMigrationPlan(ctx, k3sclient, migrationPlan)
+}
+
+// GetVMwareCredsNameFromMigration retrieves the source VMware credentials name from a Migration
+func GetVMwareCredsNameFromMigration(ctx context.Context, k3sclient client.Client, migration *vjailbreakv1alpha1.Migration) (string, error) {
+	migrationTemplate, err := GetMigrationTemplateFromMigration(ctx, k3sclient, migration)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get migration template")
+	}
+	return migrationTemplate.Spec.Source.VMwareRef, nil
+}
+
+// GetOpenstackCredsNameFromMigration retrieves the destination OpenStack credentials name from a Migration
+func GetOpenstackCredsNameFromMigration(ctx context.Context, k3sclient client.Client, migration *vjailbreakv1alpha1.Migration) (string, error) {
+	migrationTemplate, err := GetMigrationTemplateFromMigration(ctx, k3sclient, migration)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get migration template")
+	}
+	return migrationTemplate.Spec.Destination.OpenstackRef, nil
+}
+
+// GetVMwareCredsNameFromMigrationPlan retrieves the source VMware credentials name from a MigrationPlan
+func GetVMwareCredsNameFromMigrationPlan(ctx context.Context, k3sclient client.Client, migrationPlan *vjailbreakv1alpha1.MigrationPlan) (string, error) {
+	migrationTemplate, err := GetMigrationTemplateFromMigrationPlan(ctx, k3sclient, migrationPlan)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get migration template")
+	}
+	return migrationTemplate.Spec.Source.VMwareRef, nil
+}
+
+// GetOpenstackCredsNameFromMigrationPlan retrieves the destination OpenStack credentials name from a MigrationPlan
+func GetOpenstackCredsNameFromMigrationPlan(ctx context.Context, k3sclient client.Client, migrationPlan *vjailbreakv1alpha1.MigrationPlan) (string, error) {
+	migrationTemplate, err := GetMigrationTemplateFromMigrationPlan(ctx, k3sclient, migrationPlan)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get migration template")
+	}
+	return migrationTemplate.Spec.Destination.OpenstackRef, nil
 }
