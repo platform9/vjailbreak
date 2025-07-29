@@ -71,6 +71,11 @@ type MigrationSpec struct {
 
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
+
+	// DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
+	// after a successful migration to prevent network conflicts. Defaults to false.
+	// +optional
+	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration

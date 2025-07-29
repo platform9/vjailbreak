@@ -830,6 +830,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		}
 
 		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
+		configMap.Data["DISCONNECT_SOURCE_NETWORK"] = strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork)
 
 		if migrationtemplate.Spec.OSFamily != "" {
 			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
