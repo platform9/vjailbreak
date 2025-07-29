@@ -172,6 +172,8 @@ const (
 	RDMDiskControllerName = "rdmdisk-controller"
 	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
 	VCenterVMScanConcurrencyLimit = 100
+	// VMwareClusterNameStandAloneESX is the name of the VMware cluster when there is no cluster
+	VMwareClusterNameStandAloneESX = "NO CLUSTER"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
