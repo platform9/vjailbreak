@@ -299,14 +299,18 @@ loop:
 // Extracted function to handle successful migration updates
 func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope *scope.MigrationScope) error {
 	scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
-	name, err := utils.GetVMwareMachineNameForVMName(scope.Migration.Spec.VMName)
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, scope.Migration)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get vmware credentials name")
+	}
+	name, err := utils.GetK8sCompatibleVMWareObjectName(scope.Migration.Spec.VMName, vmwareCredsName)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware machine name")
 	}
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
-		return err
+		return errors.Wrap(err, "failed to get vmware machine")
 	}
 
 	vmwvm.Status.Migrated = true
@@ -348,7 +352,11 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 // GetPod retrieves the pod associated with a migration
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
-	vmname, err := utils.GetVMwareMachineNameForVMName(migration.Spec.VMName)
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, scope.Migration)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials name")
+	}
+	vmname, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}

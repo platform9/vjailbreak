@@ -8,6 +8,7 @@ import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
 import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { MigrationPlan } from "src/api/migration-plans/model"
 import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
+import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -110,6 +111,7 @@ export interface FormValues extends Record<string, unknown> {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  securityGroups?: string[]
 }
 
 
@@ -467,8 +469,13 @@ export default function MigrationFormDrawer({
         vmCutoverEnd: params.cutoverEndTime
       }),
       retry: params.retryOnFailure,
-      ...(postMigrationAction && { postMigrationAction })
+      ...(postMigrationAction && { postMigrationAction }),
+
+      ...(params.securityGroups && params.securityGroups.length > 0 && {
+        securityGroups: params.securityGroups,
+      })
     };
+
 
     console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
 
@@ -734,6 +741,13 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors["storageMapping"]}
           />
           {/* Step 4 */}
+          <SecurityGroupAndSSHKeyStep
+            params={params}
+            onChange={getParamsUpdater}
+            openstackCredentials={openstackCredentials}
+            stepNumber="4"
+          />
+          {/* Step 5 */}          
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
@@ -741,7 +755,7 @@ export default function MigrationFormDrawer({
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
-            stepNumber="4"
+            stepNumber="5"
           />
 
 
