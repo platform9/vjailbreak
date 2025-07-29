@@ -718,7 +718,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
-	utils.PrintLog(fmt.Sprintf("Fetched VM active wait retry limit: %d", vjailbreakSettings.VMActiveWaitRetryLimit))
+	utils.PrintLog(fmt.Sprintf("Fetched VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
