@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: analytics-secret
+  name: analytics-keys
   namespace: migration-system
 type: Opaque
 data:

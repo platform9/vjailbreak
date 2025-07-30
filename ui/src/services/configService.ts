@@ -12,7 +12,7 @@ export interface AnalyticsConfig {
 }
 
 export class ConfigService {
-  private static readonly SECRET_NAME = "analytics-secret"
+  private static readonly SECRET_NAME = "analytics-keys"
   private static readonly SECRET_NAMESPACE = "migration-system"
 
   static async fetchAnalyticsConfig(): Promise<AnalyticsConfig | null> {
