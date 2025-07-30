@@ -60,12 +60,6 @@ for iface in $NEW_IFACES; do
     nmcli con up "$conn_name" 2>>"$LOG_FILE" || \
         echo "$(date '+%Y-%m-%d %H:%M:%S') - Error: Failed to activate $iface" >> "$LOG_FILE"
 done
-
-if ! systemctl enable --now serial-getty@ttyS0.service 2>>"$LOG_FILE"; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Warning: Failed to enable serial-getty" >> "$LOG_FILE"
-else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Enabled serial-getty@ttyS0.service" >> "$LOG_FILE"
-fi
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE"`
 
 	MaxCPU = 9999999

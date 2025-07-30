@@ -899,7 +899,7 @@ func (migobj *Migrate) pingVM(ips []string) error {
 		if pinger.Statistics().PacketLoss == 0 {
 			migobj.logMessage("Ping succeeded")
 		} else {
-			return fmt.Errorf("Ping failed")
+			return errors.Errorf("Ping failed")
 		}
 	}
 	return nil
@@ -928,7 +928,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 		}
 
 		// Both HTTP and HTTPS failed
-		return fmt.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
+		return errors.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
 	}
 
 	return nil
