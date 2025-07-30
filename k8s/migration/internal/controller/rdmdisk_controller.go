@@ -105,7 +105,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ctxlog.Info("RDMDisk is already managed", "CinderVolumeID", rdmDisk.Status.CinderVolumeID)
 		return ctrl.Result{}, nil
 	case RDMPhaseError:
-		ctxlog.Info("RDMDisk is in error state, skipping reconciliation, to trigger a reconcilation re create CR", "CinderVolumeID", rdmDisk.Status.CinderVolumeID)
+		ctxlog.Info("RDMDisk is in error state, skipping reconciliation, to trigger a reconciliation re create rdm disk custom resource", "CinderVolumeID", rdmDisk.Status.CinderVolumeID)
 		return ctrl.Result{}, nil
 	default:
 		ctxlog.Info("Unknown phase", "phase", rdmDisk.Status.Phase)
