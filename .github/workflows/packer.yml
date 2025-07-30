@@ -369,17 +369,23 @@ jobs:
             echo "release_found=false" >> $GITHUB_ENV
           fi
 
-      - name: Substitue image tags in manifests
+      - name: Substitue image tags in ui manifest
         uses: danielr1996/envsubst-action@1.0.0
         with:
           input: ./ui/deploy/ui.yaml
           output: ./image_builder/deploy/01ui.yaml
 
-      - name: Substitue image tags in manifests
+      - name: Substitue image tags in version config
         uses: danielr1996/envsubst-action@1.0.0
         with:
           input: ./image_builder/configs/version-config.yaml
           output: ./image_builder/deploy/version-config.yaml
+
+      - name: Substitue image tags in analytics secret
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./image_builder/configs/analytics-secret.yaml
+          output: ./image_builder/deploy/analytics-secret.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -472,4 +478,3 @@ jobs:
             image_builder/deploy/01ui.yaml
             image_builder/deploy/version-config.yaml
             image_builder/deploy/vjailbreak-settings.yaml
-            
