@@ -399,6 +399,7 @@ jobs:
           cp -r ./k8s/kube-prometheus image_builder/deploy/
           cp ./image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
           cp ./image_builder/configs/analytics-secret.yaml image_builder/deploy/analytics-secret.yaml          
+      
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1
 
