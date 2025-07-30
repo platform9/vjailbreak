@@ -472,6 +472,12 @@ func GetInterfaceNames(path string) ([]string, error) {
 		device := extractKeyValue(content, "DEVICE")
 		if device != "" {
 			interfaces = append(interfaces, device)
+		} else {
+			// Fall back to filename if DEVICE not found
+			device = strings.TrimPrefix(file, "ifcfg-")
+			if device != "" {
+				interfaces = append(interfaces, device)
+			}
 		}
 	}
 
