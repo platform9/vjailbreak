@@ -60,7 +60,7 @@ type RDMDiskList struct {
 	Items           []RDMDisk `json:"items"`
 }
 
-// OpenstackVolumeRefInfo contains information about the OpenStack volume reference.
+// OpenstackVolumeRef ... contains information about the OpenStack volume reference.
 type OpenstackVolumeRef struct {
 	VolumeRef         map[string]string `json:"source"` // volumeRef contains the OpenStack volume reference information - obtained by query - openstack block storage volume manageable list
 	CinderBackendPool string            `json:"cinderBackendPool"`

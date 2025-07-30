@@ -14,10 +14,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// VolumePayload represents the payload structure for managing a volume in OpenStack.
 type VolumePayload struct {
 	Volume Volume `json:"volume"`
 }
 
+// Volume represents the structure of a volume in OpenStack.
 type Volume struct {
 	Host             string            `json:"host"`
 	Ref              map[string]string `json:"ref"`

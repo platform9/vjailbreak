@@ -49,7 +49,7 @@ const (
 	// ConditionValidationFailed is the condition type for migration to cinder validation failure
 	ConditionValidationFailed = "RDMDiskValidationFailed"
 	// ConditionValidationPassed is the condition type for migration to cinder validation passed
-	ConditionValidationPassed = "RDMDiskValidationPassed"
+	ConditionValidationPassed = "RDMDiskValidationPassed" // #nosec G101
 	// ReasonRequiredFieldsMissing ConditionMigrationStarted is the condition type for migration to cinder
 	ReasonRequiredFieldsMissing = "RDMDiskRequiredFieldsMissing"
 	// ReasonValidatedSpecs ConditionMigrationStarted is the condition type for migration to cinder
