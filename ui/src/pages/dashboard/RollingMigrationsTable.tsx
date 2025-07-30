@@ -589,7 +589,7 @@ export default function RollingMigrationsTable({
             field: 'timeElapsed',
             headerName: 'Time Elapsed',
             flex: 0.5,
-            valueGetter: (_, row) => calculateTimeElapsed((row as ClusterMigration).metadata?.creationTimestamp),
+            valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp),
         },
         {
             field: 'esxCount',

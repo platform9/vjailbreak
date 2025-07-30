@@ -1130,7 +1130,7 @@ export default function RollingMigrationFormDrawer({
             );
             const selectedPCD = pcdData.find(p => p.id === destinationPCD);
             const selectedVMsData = vmsWithAssignments
-                .filter(vm => selectedVMs.includes(vm.id));
+                .filter(vm => selectedVMs.has(vm.id));
 
             track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_SUBMISSION_FAILED, {
                 clusterMigrationName: clusterObj?.name,
