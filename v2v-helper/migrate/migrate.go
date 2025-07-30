@@ -621,13 +621,14 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 // If not, adds udev rules to pin names without forcing DHCP.
 func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo) error {
 
-	// Offline detect NM: Check if /usr/bin/nmcli exists
-	cmd := "ls /usr/bin/nmcli 2>/dev/null"
-	_, err := virtv2v.RunCommandInGuest(diskPath, cmd, false)
-	utils.PrintLog(fmt.Sprintf("Running command '%s' to check for NM: %v", cmd, err))
-	hasNM := (err == nil) // If ls succeeds, nmcli exists (NM installed)
+	versionID := parseVersionID(osRelease)
+	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse major version: %v", err)
+	}
 
-	if hasNM {
+	if majorVersion >= 7 {
+		// Inject nmcli script for NM-managed systems (RHEL 7+)
 		// Inject nmcli script
 		scriptName := "rhel_force_dhcp.sh"
 		err = virtv2v.AddFirstBootScript(constants.RhelFirstBootScript, scriptName)
