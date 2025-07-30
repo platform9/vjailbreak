@@ -505,7 +505,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if err != nil {
 				return errors.Wrap(err, "Failed to get bootable volume index")
 			}
-			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
+			osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
 			if err != nil {
 				return errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
 			}

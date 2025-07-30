@@ -37,6 +37,7 @@ type VirtV2VOperations interface {
 	AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
+	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
 }
 
 func RetainAlphanumeric(input string) string {
@@ -214,22 +215,35 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 }
 
 func GetOsRelease(path string) (string, error) {
-	// Get the os-release file
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := exec.Command(
-		"guestfish",
-		"--ro",
-		"-a",
-		path,
-		"-i")
+
+	// Attempt to cat /etc/os-release
+	cmd := exec.Command("guestfish", "--ro", "-a", path, "-i")
 	input := `cat /etc/os-release`
 	cmd.Stdin = strings.NewReader(input)
-	log.Printf("Executing %s", cmd.String()+" "+input)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get os-release: %s, %s", out, err)
+	log.Printf("Executing %s with input: %s", cmd.String(), input)
+	out, err := cmd.CombinedOutput() // Use CombinedOutput to capture stderr for error parsing
+	if err == nil {
+		return strings.ToLower(string(out)), nil
 	}
-	return strings.ToLower(string(out)), nil
+
+	// Check if the error is due to missing /etc/os-release
+	errorOutput := string(out)
+	if strings.Contains(errorOutput, "No such file or directory") {
+		// Fallback to /etc/redhat-release
+		cmd = exec.Command("guestfish", "--ro", "-a", path, "-i")
+		input = `cat /etc/redhat-release`
+		cmd.Stdin = strings.NewReader(input)
+		log.Printf("Executing %s with input: %s", cmd.String(), input)
+		out, err = cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("failed to get redhat-release: %s, %v", string(out), err)
+		}
+		return strings.ToLower(string(out)), nil
+	}
+
+	// If not a missing file error, return the original error
+	return "", fmt.Errorf("failed to get os-release: %s, %v", errorOutput, err)
 }
 
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
@@ -492,4 +506,20 @@ func extractKeyValue(content, key string) string {
 		return strings.Trim(strings.Trim(match[1], `"'`), " ")
 	}
 	return ""
+}
+
+func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
+	// Attempt /etc/os-release first
+	osRelease, err := RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/os-release")
+	if err == nil {
+		return osRelease, nil
+	}
+
+	// Fallback if file is missing
+	if strings.Contains(err.Error(), "No such file or directory") {
+		return RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/redhat-release")
+	}
+
+	// Return original error if not a missing file issue
+	return "", err
 }
