@@ -25,9 +25,9 @@ export const createAmplitudeConfig = (configMapData?: AnalyticsConfig): Amplitud
   const isDevelopment = import.meta.env.MODE === "development"
   
   // Use ConfigMap data if available, otherwise fall back to environment variables
-  const apiKey = configMapData?.amplitude?.apiKey || import.meta.env.VITE_AMPLITUDE_API_KEY || "dev-api-key"
+  const apiKey = configMapData?.amplitude?.apiKey || import.meta.env.VITE_AMPLITUDE_API_KEY || ""
   const releaseStage = configMapData?.releaseStage || import.meta.env.MODE || "development"
-  const hasApiKey = Boolean(apiKey && apiKey !== "dev-api-key")
+  const hasApiKey = Boolean(apiKey)
 
   return {
     apiKey,

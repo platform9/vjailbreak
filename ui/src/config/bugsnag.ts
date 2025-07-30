@@ -18,7 +18,7 @@ export const getBugsnagConfig = (
   configMapData?: AnalyticsConfig
 ): BugsnagConfig => {
   const apiKey =
-    configMapData?.bugsnag?.apiKey || import.meta.env.VITE_BUGSNAG_API_KEY
+    configMapData?.bugsnag?.apiKey || import.meta.env.VITE_BUGSNAG_API_KEY || ""
 
   const appVersion =
     configMapData?.bugsnag?.appVersion ||
@@ -49,7 +49,7 @@ export const getBugsnagPerformanceConfig = (
   configMapData?: AnalyticsConfig
 ): BugsnagPerformanceConfig => {
   const apiKey =
-    configMapData?.bugsnag?.apiKey || import.meta.env.VITE_BUGSNAG_API_KEY
+    configMapData?.bugsnag?.apiKey || import.meta.env.VITE_BUGSNAG_API_KEY || ""
 
   return {
     apiKey,
