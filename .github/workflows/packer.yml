@@ -391,6 +391,8 @@ jobs:
           make -C ./k8s/migration/ build-installer
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
           cp -r ./k8s/kube-prometheus image_builder/deploy/
+          cp ./image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
+          
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1
 
@@ -469,4 +471,5 @@ jobs:
             image_builder/deploy/00controller.yaml
             image_builder/deploy/01ui.yaml
             image_builder/deploy/version-config.yaml
+            image_builder/deploy/vjailbreak-settings.yaml
             

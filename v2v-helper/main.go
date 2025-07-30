@@ -76,6 +76,13 @@ func main() {
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
 
+	securityGroupsVar := os.Getenv("SECURITY_GROUPS")
+
+	var securityGroupsSlice []string
+	if securityGroupsVar != "" {
+		securityGroupsSlice = strings.Split(securityGroupsVar, ",")
+	}
+
 	// Validate vCenter connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
@@ -134,6 +141,7 @@ func main() {
 		TargetFlavorId:         migrationparams.TARGET_FLAVOR_ID,
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
+		SecurityGroups:         securityGroupsSlice,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -270,6 +272,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 	var openstackvoltypes []string
 	var openstacknetworks []string
+	var openstacksecuritygroups []string
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -301,10 +304,32 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list security groups")
+	}
+	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all security groups")
+	}
+	for i := 0; i < len(allSecGroups); i++ {
+		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+	}
+	groupSet := make(map[string]struct{})
+	uniqueSecurityGroups := []string{}
+	for _, group := range openstacksecuritygroups {
+		if _, exists := groupSet[group]; !exists {
+			groupSet[group] = struct{}{}
+			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
+		}
+	}
+	openstacksecuritygroups = uniqueSecurityGroups
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
+		SecurityGroups: openstacksecuritygroups,
 	}, nil
 }
 
@@ -551,6 +576,12 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, scope.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
+	}
+	log.Info("Fetched vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
@@ -564,7 +595,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
 	// Create a semaphore to limit concurrent goroutines
-	semaphore := make(chan struct{}, constants.VCenterVMScanConcurrencyLimit)
+	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 
 	for i := range vms {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
@@ -737,15 +768,15 @@ func AppendUnique(slice []string, values ...string) []string {
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
-	sanitizedVMName, err := GetVMwareMachineNameForVMName(vminfo.Name)
+	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
 	}
-	esxiK8sName, err := ConvertToK8sName(vminfo.ESXiName)
+	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
-	clusterK8sName, err := ConvertToK8sName(vminfo.ClusterName)
+	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ClusterName, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -1425,7 +1456,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetVMwareMachineNameForVMName(vmProps.Config.Name)
+	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
 	}
