@@ -282,10 +282,15 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		// If its the first copy, copy the entire disk
 		if incrementalCopyCount == 0 {
 			for idx := range vminfo.VMDisks {
+				startTime := time.Now()
+				migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
+
 				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to copy disk")
 				}
+				duration := time.Since(startTime)
+				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
 				migobj.logMessage(fmt.Sprintf("Disk %d copied successfully: %s", idx, vminfo.VMDisks[idx].Path))
 			}
 		} else {
@@ -537,7 +542,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if virtv2v.IsRHELFamily(osRelease) {
 			// If RHEL family, we need to inject a script to make interface come up with DHCP,
 			// We preserve the ip because we have a port created with the same IP
-			// If NM is present, we inject a script to force DHCP on first boot.
+			// If NM is present, we inject a script to force neutron DHCP on first boot.
 			// If NM is not present, we add udev rules to pin the interface names
 			versionID := parseVersionID(osRelease)
 			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
@@ -631,8 +636,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				// If NM is not present, we add udev rules to pin the interface names
 				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
 				if err != nil {
-					utils.PrintLog(fmt.Sprintf("Warning: Failed to handle network: %v", err))
-					utils.PrintLog("Continuing with migration, network might not come up post migration, please check the network configuration post migration")
+					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
+					network might not come up post migration, please check the network configuration post migration`, err))
 					err = nil
 				}
 			}
