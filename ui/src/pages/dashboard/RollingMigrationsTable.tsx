@@ -39,6 +39,7 @@ import { Migration, Phase } from "src/api/migrations/model";
 import { RollingMigrationPlan } from "src/api/rolling-migration-plans/model";
 import { getESXHosts } from "src/api/esximigrations/helper";
 import MigrationsTable from "./MigrationsTable";
+import { calculateTimeElapsed } from "src/utils";
 
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon);
@@ -207,6 +208,12 @@ function ClusterDetailsDrawer({ open, onClose, esxHosts, migrations, refetchMigr
             headerName: 'State',
             flex: 1,
             renderCell: (params) => <StatusChip status={params.value as string} />
+        },
+        {
+            field: 'timeElapsed',
+            headerName: 'Time Elapsed',
+            flex: 0.8,
+            valueGetter: (_, row) => calculateTimeElapsed(row.creationTimestamp),
         },
         {
             field: 'ip',
@@ -577,6 +584,12 @@ export default function RollingMigrationsTable({
                 const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
                 return order1 - order2;
             }
+        },
+        {
+            field: 'timeElapsed',
+            headerName: 'Time Elapsed',
+            flex: 0.5,
+            valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp),
         },
         {
             field: 'esxCount',

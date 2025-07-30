@@ -32,6 +32,7 @@ import (
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -575,6 +576,12 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, scope.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
+	}
+	log.Info("Fetched vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
@@ -588,7 +595,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
 	// Create a semaphore to limit concurrent goroutines
-	semaphore := make(chan struct{}, constants.VCenterVMScanConcurrencyLimit)
+	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 
 	for i := range vms {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
