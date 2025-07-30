@@ -527,6 +527,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			"alt linux",
 			"debian",
 			"ubuntu",
+			"rocky linux",
 		}
 
 		supported := false
