@@ -229,6 +229,7 @@ func GetOsRelease(path string) (string, error) {
 
 	// Check if the error is due to missing /etc/os-release
 	errorOutput := string(out)
+	log.Printf("Failed to get /etc/os-release: %v", errorOutput)
 	if strings.Contains(errorOutput, "No such file or directory") {
 		// Fallback to /etc/redhat-release
 		cmd = exec.Command("guestfish", "--ro", "-a", path, "-i")
@@ -514,7 +515,7 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	if err == nil {
 		return osRelease, nil
 	}
-
+	log.Printf("Failed to get /etc/os-release: %v", err)
 	// Fallback if file is missing
 	if strings.Contains(err.Error(), "No such file or directory") {
 		return RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/redhat-release")
