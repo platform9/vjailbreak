@@ -617,6 +617,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	// Offline detect NM: Check if /usr/bin/nmcli exists
 	cmd := "ls /usr/bin/nmcli 2>/dev/null"
 	_, err := virtv2v.RunCommandInGuest(diskPath, cmd, false)
+	utils.PrintLog(fmt.Sprintf("Running command '%s' to check for NM: %v", cmd, err))
 	hasNM := (err == nil) // If ls succeeds, nmcli exists (NM installed)
 
 	if hasNM {
