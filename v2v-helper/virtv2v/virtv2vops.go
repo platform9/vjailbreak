@@ -228,9 +228,10 @@ func GetOsRelease(path string) (string, error) {
 	}
 
 	// Check if the error is due to missing /etc/os-release
-	errorOutput := string(out)
-	log.Printf("Failed to get /etc/os-release: %v", errorOutput)
-	if strings.Contains(errorOutput, "No such file or directory") {
+	errorOutput := strings.TrimSpace(string(out))
+	log.Printf("Failed to get /etc/os-release: %v, error: %v", errorOutput, err)
+	err = nil
+	if strings.Contains(strings.ToLower(errorOutput), "no such file or directory") {
 		// Fallback to /etc/redhat-release
 		cmd = exec.Command("guestfish", "--ro", "-a", path, "-i")
 		input = `cat /etc/redhat-release`
