@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -592,6 +593,8 @@ func (vmops *VMOps) DisconnectNetworkInterfaces() error {
 
 	for _, device := range mvm.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
+			nicName := nic.GetVirtualEthernetCard().DeviceInfo.GetDescription().Label
+			log.Printf("Found NIC to disconnect: %s", nicName)
 			deviceCopy := device
 			connectable := nic.GetVirtualEthernetCard().Connectable
 			connectable.Connected = false
@@ -613,11 +616,11 @@ func (vmops *VMOps) DisconnectNetworkInterfaces() error {
 
 	task, err := vm.Reconfigure(ctx, *spec)
 	if err != nil {
-		return fmt.Errorf("failed to reconfigure VM network interfaces: %w", err)
+		return errors.Wrap(err, "failed to reconfigure VM network interfaces")
 	}
 
 	if err := task.Wait(ctx); err != nil {
-		return fmt.Errorf("failed to wait for VM reconfiguration: %w", err)
+		return errors.Wrap(err, "failed to wait for VM reconfiguration")
 	}
 
 	return nil

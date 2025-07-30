@@ -76,7 +76,7 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
-			return false, errors.New("Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment")
+			return false, errors.Wrap(err, "Wrong OpenStack environment. Use credentials from this environment.")
 		}
 		return false, fmt.Errorf("failed to verify instance access: %w. "+
 			"Please check if the provided credentials have compute:get_server permission", err)
