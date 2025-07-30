@@ -15,6 +15,8 @@ import { useInterval } from "src/hooks/useInterval";
 import { THREE_SECONDS } from "src/constants";
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 import { useErrorHandler } from "src/hooks/useErrorHandler";
+import { useAmplitude } from "src/hooks/useAmplitude";
+import { AMPLITUDE_EVENTS } from "src/types/amplitude";
 
 interface VMwareCredentialsDrawerProps {
     open: boolean;
@@ -26,6 +28,7 @@ export default function VMwareCredentialsDrawer({
     onClose,
 }: VMwareCredentialsDrawerProps) {
     const { reportError } = useErrorHandler({ component: "VMwareCredentialsDrawer" });
+    const { track } = useAmplitude({ component: "VMwareCredentialsDrawer" });
     const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false);
     const [vmwareCredsValidated, setVmwareCredsValidated] = useState<boolean | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -118,6 +121,14 @@ export default function VMwareCredentialsDrawer({
         if (status === "Succeeded") {
             setVmwareCredsValidated(true);
             setValidatingVmwareCreds(false);
+
+            // Track successful credential validation
+            track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
+                credentialType: "vmware",
+                credentialName: createdCredentialName,
+                stage: "validation_success",
+            });
+
             // Close the drawer after a short delay to show success state
             setTimeout(() => {
                 refetchVmwareCreds();
@@ -127,7 +138,15 @@ export default function VMwareCredentialsDrawer({
             setVmwareCredsValidated(false);
             setValidatingVmwareCreds(false);
             setError(message || "Validation failed");
-            
+
+            // Track credential validation failure
+            track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
+                credentialType: "vmware",
+                credentialName: createdCredentialName,
+                errorMessage: message || "Validation failed",
+                stage: "validation",
+            });
+
             reportError(new Error(`VMware credential validation failed: ${message || "Unknown reason"}`), {
                 context: 'vmware-validation-failure',
                 metadata: {
@@ -215,8 +234,27 @@ export default function VMwareCredentialsDrawer({
             );
 
             setCreatedCredentialName(response.metadata.name);
+
+            // Track successful credential creation
+            track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
+                credentialType: "vmware",
+                credentialName: formValues.credentialName,
+                vcenterHost: formValues.vcenterHost,
+                namespace: response.metadata.namespace,
+            });
+
         } catch (error) {
             console.error("Error creating VMware credentials:", error);
+
+            // Track credential creation failure
+            track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
+                credentialType: "vmware",
+                credentialName: formValues.credentialName,
+                vcenterHost: formValues.vcenterHost,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                stage: "creation",
+            });
+
             reportError(error as Error, {
                 context: 'vmware-credential-creation',
                 metadata: {
@@ -233,7 +271,7 @@ export default function VMwareCredentialsDrawer({
             );
             setSubmitting(false);
         }
-    }, [formValues, isValidCredentialName]);
+    }, [formValues, isValidCredentialName, track]);
 
     useKeyboardSubmit({
         open,

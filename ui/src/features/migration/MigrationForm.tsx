@@ -50,6 +50,8 @@ import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import { useClusterData } from "./useClusterData"
 import { useErrorHandler } from "src/hooks/useErrorHandler"
+import { useAmplitude } from "src/hooks/useAmplitude"
+import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
 const stringsCompareFn = (a, b) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
@@ -170,6 +172,7 @@ export default function MigrationFormDrawer({
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
   const { pcdData } = useClusterData()
   const { reportError } = useErrorHandler({ component: "MigrationForm" })
+  const { track } = useAmplitude({ component: "MigrationForm" })
   const [error, setError] = useState<{ title: string; message: string } | null>(
     null
   )
@@ -424,26 +427,18 @@ export default function MigrationFormDrawer({
     }
   }
 
-  const createMigrationPlan = async (updatedMigrationTemplate) => {
-    console.log('=== Migration Plan Creation Debug ===');
-    console.log('Selected Migration Options:', JSON.stringify(selectedMigrationOptions, null, 2));
-    console.log('Current params:', JSON.stringify(params, (key, value) =>
-      key === 'password' || key === 'OS_PASSWORD' ? '***' : value, 2));
+  const createMigrationPlan = async (
+    updatedMigrationTemplate?: MigrationTemplate | null
+  ): Promise<MigrationPlan> => {
+    if (!updatedMigrationTemplate?.metadata?.name) {
+      throw new Error("Migration template is not available")
+    }
+
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+      ? params.postMigrationAction
+      : undefined
 
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name);
-
-    // Prepare postMigrationAction only if at least one action is enabled
-    const postMigrationAction = (selectedMigrationOptions.postMigrationAction?.renameVm ||
-      selectedMigrationOptions.postMigrationAction?.moveToFolder) ? {
-      renameVm: Boolean(selectedMigrationOptions.postMigrationAction?.renameVm),
-      moveToFolder: Boolean(selectedMigrationOptions.postMigrationAction?.moveToFolder),
-      ...(selectedMigrationOptions.postMigrationAction?.suffix && {
-        suffix: params.postMigrationAction?.suffix || ''
-      }),
-      ...(selectedMigrationOptions.postMigrationAction?.folderName && {
-        folderName: params.postMigrationAction?.folderName || ''
-      })
-    } : undefined;
 
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
@@ -487,9 +482,34 @@ export default function MigrationFormDrawer({
       console.log('Sending migration plan creation request...');
       const data = await postMigrationPlan(body);
       console.log('Migration plan created successfully:', data);
+
+      // Track successful migration creation
+      track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
+        migrationName: data.metadata?.name,
+        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+        virtualMachineCount: vmsToMigrate?.length || 0,
+        migrationType: migrationFields.type,
+        hasDataCopyStartTime: !!migrationFields.dataCopyStart,
+        hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
+        hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
+        retryEnabled: !!migrationFields.retry,
+        postMigrationAction,
+        namespace: data.metadata?.namespace,
+      });
+
       return data;
     } catch (error: unknown) {
       console.error("Error creating migration plan", error);
+
+      // Track migration creation failure
+      track(AMPLITUDE_EVENTS.MIGRATION_CREATION_FAILED, {
+        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+        virtualMachineCount: vmsToMigrate?.length || 0,
+        migrationType: migrationFields.type,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stage: "creation",
+      });
+
       reportError(error as Error, {
         context: 'migration-plan-creation',
         metadata: {
