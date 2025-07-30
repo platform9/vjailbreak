@@ -113,6 +113,7 @@ export interface FormValues extends Record<string, unknown> {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  disconnectSourceNetwork?: boolean
   securityGroups?: string[]
 }
 
@@ -465,10 +466,10 @@ export default function MigrationFormDrawer({
       }),
       retry: params.retryOnFailure,
       ...(postMigrationAction && { postMigrationAction }),
-
       ...(params.securityGroups && params.securityGroups.length > 0 && {
         securityGroups: params.securityGroups,
-      })
+      }),
+      disconnectSourceNetwork: params.disconnectSourceNetwork || false
     };
 
 

@@ -12,6 +12,7 @@ export const createMigrationPlanJson = (params) => {
     virtualMachines,
     adminInitiatedCutOver,
     postMigrationAction,
+    disconnectSourceNetwork = false,
     securityGroups,
   } = params || {}
   
@@ -24,6 +25,7 @@ export const createMigrationPlanJson = (params) => {
       adminInitiatedCutOver,
       vmCutoverStart,
       vmCutoverEnd,
+      disconnectSourceNetwork,
     },
     virtualMachines: [virtualMachines],
   }
