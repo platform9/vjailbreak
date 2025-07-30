@@ -32,39 +32,58 @@ import (
 )
 
 type Migrate struct {
-	URL                    string
-	UserName               string
-	Password               string
-	Insecure               bool
-	Networknames           []string
-	Networkports           []string
-	Volumetypes            []string
-	Virtiowin              string
-	Ostype                 string
-	Thumbprint             string
-	Convert                bool
-	Openstackclients       openstack.OpenstackOperations
-	Vcclient               vcenter.VCenterOperations
-	VMops                  vm.VMOperations
-	Nbdops                 []nbd.NBDOperations
-	EventReporter          chan string
-	PodLabelWatcher        chan string
-	InPod                  bool
-	MigrationTimes         MigrationTimes
-	MigrationType          string
-	PerformHealthChecks    bool
-	HealthCheckPort        string
-	K8sClient              client.Client
-	TargetFlavorId         string
-	TargetAvailabilityZone string
-	AssignedIP             string
-	SecurityGroups         []string
+	URL                     string
+	UserName                string
+	Password                string
+	Insecure                bool
+	Networknames            []string
+	Networkports            []string
+	Volumetypes             []string
+	Virtiowin               string
+	Ostype                  string
+	Thumbprint              string
+	Convert                 bool
+	DisconnectSourceNetwork bool
+	Openstackclients        openstack.OpenstackOperations
+	Vcclient                vcenter.VCenterOperations
+	VMops                   vm.VMOperations
+	Nbdops                  []nbd.NBDOperations
+	EventReporter           chan string
+	PodLabelWatcher         chan string
+	InPod                   bool
+	MigrationTimes          MigrationTimes
+	MigrationType           string
+	PerformHealthChecks     bool
+	HealthCheckPort         string
+	K8sClient               client.Client
+	TargetFlavorId          string
+	TargetAvailabilityZone  string
+	AssignedIP              string
+	SecurityGroups          []string
 }
 
 type MigrationTimes struct {
 	DataCopyStart  time.Time
 	VMCutoverStart time.Time
 	VMCutoverEnd   time.Time
+}
+
+// disconnects the source VM's network interfaces
+func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
+	if !migobj.DisconnectSourceNetwork {
+		return nil
+	}
+
+	migobj.logMessage(fmt.Sprintf("Disconnecting source VM network interfaces (DisconnectSourceNetwork=%v)", migobj.DisconnectSourceNetwork))
+
+	if err := migobj.VMops.DisconnectNetworkInterfaces(); err != nil {
+		errMsg := fmt.Sprintf("Failed to disconnect source VM network interfaces: %v", err)
+		migobj.logMessage("ERROR: " + errMsg)
+		return fmt.Errorf("failed to disconnect network interfaces: %w", err)
+	}
+
+	migobj.logMessage("Successfully disconnected source VM network interfaces")
+	return nil
 }
 
 func (migobj *Migrate) logMessage(message string) {
@@ -991,6 +1010,11 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
+
+	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
+	}
+
 	cancel()
 	return nil
 }

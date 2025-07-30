@@ -473,6 +473,9 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  disconnectSourceNetwork:
+                    default: false
+                    type: boolean
                   healthCheckPort:
                     default: "443"
                     type: string
@@ -608,6 +611,11 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              disconnectSourceNetwork:
+                description: |-
+                  DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
+                  after a successful migration to prevent network conflicts. Defaults to false.
+                type: boolean
               initiateCutover:
                 description: InitiateCutover is the flag to initiate cutover
                 type: boolean
@@ -1629,6 +1637,9 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  disconnectSourceNetwork:
+                    default: false
+                    type: boolean
                   healthCheckPort:
                     default: "443"
                     type: string
