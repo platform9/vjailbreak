@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,6 +51,8 @@ type MigrationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
+
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
@@ -61,16 +64,17 @@ type MigrationReconciler struct {
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	ctxlog.Info("Reconciling Migration object")
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
 		if apierrors.IsNotFound(err) {
+			// Object deleted successfully
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
+
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,
@@ -79,14 +83,49 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
+
+	defer func() {
+		if err := migrationScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	// Handle deletion reconciliation
+	if !migration.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Adding finalizer if it doesn't exist
+	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+		controllerutil.AddFinalizer(migration, migrationFinalizer)
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	ctxlog.Info("Reconciling Migration object")
+
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			ctxlog.Info("Migration pod not found yet, requeuing.")
 			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
+
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
@@ -120,24 +159,63 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
-	// Always close the scope when exiting this function such that we can persist any Migration changes.
-	defer func() {
-		if err := migrationScope.Close(); err != nil && reterr == nil {
-			reterr = err
-		}
-	}()
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
+
 	return ctrl.Result{}, nil
+}
+
+// reconcileDelete handles the cleanup logic when Migration object is deleted.
+func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) error {
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
+	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
+
+	if migration.Spec.VMName == "" {
+		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
+		return nil
+	}
+
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get VMware credentials name for migration")
+		return nil
+	}
+
+	// Then use it to get the k8s compatible name
+	vmwMachineName, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
+	if err != nil {
+		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
+		return nil
+	}
+
+	vmwMachine := &vjailbreakv1alpha1.VMwareMachine{}
+	err = r.Get(ctx, types.NamespacedName{Name: vmwMachineName, Namespace: migration.GetNamespace()}, vmwMachine)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("VMwareMachine not found during migration deletion, nothing to do.", "VMwareMachineName", vmwMachineName)
+			return nil
+		}
+		return errors.Wrap(err, "failed to get VMwareMachine for cleanup")
+	}
+
+	if vmwMachine.Status.Migrated {
+		ctxlog.Info("Setting VMwareMachine status.migrated to false", "VMwareMachineName", vmwMachineName)
+		vmwMachine.Status.Migrated = false
+		if err := r.Status().Update(ctx, vmwMachine); err != nil {
+			return errors.Wrap(err, "failed to update VMwareMachine status")
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&vjailbreakv1alpha1.Migration{}).
 		Owns(&corev1.Pod{}, builder.WithPredicates(
 			predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
