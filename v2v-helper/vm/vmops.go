@@ -592,19 +592,15 @@ func (vmops *VMOps) DisconnectNetworkInterfaces() error {
 
 	for _, device := range mvm.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
-			info := nic.GetVirtualEthernetCard().Connectable
-
-			if info.Connected {
-				deviceCopy := device
-				connectable := deviceCopy.(types.BaseVirtualEthernetCard).GetVirtualEthernetCard().Connectable
-				connectable.Connected = false
-				connectable.StartConnected = false
-				spec := &types.VirtualDeviceConfigSpec{
-					Operation: types.VirtualDeviceConfigSpecOperationEdit,
-					Device:    deviceCopy,
-				}
-				deviceChanges = append(deviceChanges, spec)
+			deviceCopy := device
+			connectable := nic.GetVirtualEthernetCard().Connectable
+			connectable.Connected = false
+			connectable.StartConnected = false
+			spec := &types.VirtualDeviceConfigSpec{
+				Operation: types.VirtualDeviceConfigSpecOperationEdit,
+				Device:    deviceCopy,
 			}
+			deviceChanges = append(deviceChanges, spec)
 		}
 	}
 
