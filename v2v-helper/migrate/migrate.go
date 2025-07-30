@@ -534,6 +534,29 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 		}
 
+		if virtv2v.IsRHELFamily(osRelease) {
+			// If RHEL family, we need to inject a script to make interface come up with DHCP,
+			// We preserve the ip because we have a port created with the same IP
+			// If NM is present, we inject a script to force DHCP on first boot.
+			// If NM is not present, we add udev rules to pin the interface names
+			versionID := parseVersionID(osRelease)
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+
+			if majorVersion >= 7 {
+				firstbootscriptname := "rhel_enable_dhcp"
+				firstbootscript := constants.RhelFirstBootScript
+				firstbootscripts = append(firstbootscripts, firstbootscriptname)
+				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
+				if err != nil {
+					return errors.Wrap(err, "failed to add first boot script")
+				}
+				utils.PrintLog("First boot script added successfully")
+			}
+		}
+
 		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 		if err != nil {
 			return errors.Wrap(err, "failed to run virt-v2v")
@@ -595,16 +618,23 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				}
 			}
 		} else if virtv2v.IsRHELFamily(osRelease) {
-			diskPath := vminfo.VMDisks[bootVolumeIndex].Path
-			// For RHEL family, we need to inject a script to make interface come up with DHCP,
-			// We preserve the ip because we have a port created with the same IP
-			// If NM is present, we inject a script to force DHCP on first boot.
-			// If NM is not present, we add udev rules to pin the interface names
-			err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
+			versionID := parseVersionID(osRelease)
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
 			if err != nil {
-				utils.PrintLog(fmt.Sprintf("Warning: Failed to handle network: %v", err))
-				utils.PrintLog("Continuing with migration, network might not come up post migration, please check the network configuration post migration")
-				err = nil
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+			if majorVersion < 7 {
+				diskPath := vminfo.VMDisks[bootVolumeIndex].Path
+				// For RHEL family, we need to inject a script to make interface come up with DHCP,
+				// We preserve the ip because we have a port created with the same IP
+				// If NM is present, we inject a script to force DHCP on first boot.
+				// If NM is not present, we add udev rules to pin the interface names
+				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
+				if err != nil {
+					utils.PrintLog(fmt.Sprintf("Warning: Failed to handle network: %v", err))
+					utils.PrintLog("Continuing with migration, network might not come up post migration, please check the network configuration post migration")
+					err = nil
+				}
 			}
 		}
 	}
@@ -621,60 +651,42 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 // If not, adds udev rules to pin names without forcing DHCP.
 func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo) error {
 
-	versionID := parseVersionID(osRelease)
-	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+	// No NM: Add udev rules to pin names
+	interfaces, err := virtv2v.GetInterfaceNames(diskPath)
 	if err != nil {
-		return fmt.Errorf("failed to parse major version: %v", err)
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to get interfaces: %v", err))
 	}
-
-	if majorVersion >= 7 {
-		// Inject nmcli script for NM-managed systems (RHEL 7+)
-		// Inject nmcli script
-		scriptName := "rhel_force_dhcp.sh"
-		err = virtv2v.AddFirstBootScript(constants.RhelFirstBootScript, scriptName)
-		if err != nil {
-			return fmt.Errorf("failed to add nmcli script: %v", err)
-		}
-		utils.PrintLog("Detected NM; injected nmcli DHCP script.")
-	} else {
-		// No NM: Add udev rules to pin names
-		interfaces, err := virtv2v.GetInterfaceNames(diskPath)
-		if err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: Failed to get interfaces: %v", err))
-		}
-		if len(interfaces) == 0 {
-			utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
+	if len(interfaces) == 0 {
+		utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
 			come up post migration, please check the network configuration post migration`)
-			return nil
-		}
-		macs := []string{}
-		// By default the network interfaces macs are in the same order as the interfaces
-		for _, nic := range vmInfo.NetworkInterfaces {
-			macs = append(macs, nic.MAC)
-		}
-		utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
-		utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
-		if len(interfaces) != len(macs) {
-			utils.PrintLog("Mismatch between number of interfaces and MACs")
-			return fmt.Errorf("mismatch between number of interfaces and MACs")
-		}
-		// Add udev rules to pin names without forcing DHCP
-		utils.PrintLog("Adding udev rules to pin interface names")
-
-		// This will ensure that the network interfaces are named consistently after migration
-		// and they get the correct IP address.
-		// This is important because RHEL family uses NetworkManager by default and it does not
-		// automatically configure the network interfaces to use DHCP after migration.
-		// So we need to add udev rules to pin the names of the network interfaces
-		// to the MAC addresses so that they are consistent after migration.
-		// This will ensure that the network interfaces are named consistently after migration
-		// and they get the correct IP address.
-		err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, false, diskPath, interfaces, macs)
-		if err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: Failed to add udev: %v", err))
-		}
+		return nil
 	}
+	macs := []string{}
+	// By default the network interfaces macs are in the same order as the interfaces
+	for _, nic := range vmInfo.NetworkInterfaces {
+		macs = append(macs, nic.MAC)
+	}
+	utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
+	utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
+	if len(interfaces) != len(macs) {
+		utils.PrintLog("Mismatch between number of interfaces and MACs")
+		return fmt.Errorf("mismatch between number of interfaces and MACs")
+	}
+	// Add udev rules to pin names without forcing DHCP
+	utils.PrintLog("Adding udev rules to pin interface names")
 
+	// This will ensure that the network interfaces are named consistently after migration
+	// and they get the correct IP address.
+	// This is important because RHEL family uses NetworkManager by default and it does not
+	// automatically configure the network interfaces to use DHCP after migration.
+	// So we need to add udev rules to pin the names of the network interfaces
+	// to the MAC addresses so that they are consistent after migration.
+	// This will ensure that the network interfaces are named consistently after migration
+	// and they get the correct IP address.
+	err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, false, diskPath, interfaces, macs)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to add udev: %v", err))
+	}
 	return nil
 }
 
