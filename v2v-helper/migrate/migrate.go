@@ -335,12 +335,13 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					startTime := time.Now()
 					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
-					duration := time.Since(startTime)
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
 						changedBlockCopySuccess = false
 					}
+
+					duration := time.Since(startTime)
 
 					migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
 
