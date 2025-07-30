@@ -5,7 +5,7 @@ import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery, MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
 import { deleteMigration } from "src/api/migrations/migrations"
 import { useQueryClient } from "@tanstack/react-query"
-import { useClusterMigrationsQuery, CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
+import { CLUSTER_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useClusterMigrationsQuery"
 import { useESXIMigrationsQuery, ESXI_MIGRATIONS_QUERY_KEY } from "src/hooks/api/useESXIMigrationsQuery"
 import { Migration } from "src/api/migrations/model"
 import { ClusterMigration } from "src/api/clustermigrations/model"
@@ -21,6 +21,7 @@ import BMConfigForm from "./BMConfigForm"
 import RollingMigrationsTable from "./RollingMigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNodesQuery } from "../../hooks/api/useNodesQuery"
+import { useRollingMigrationPlansQuery } from "../../hooks/api/useRollingMigrationPlansQuery"
 
 
 const DashboardContainer = styled("div")({
@@ -64,15 +65,14 @@ export default function Dashboard() {
     refetchOnMount: true
   })
 
-  const { data: clusterMigrations, refetch: refetchClusterMigrations } = useClusterMigrationsQuery({
-    queryKey: CLUSTER_MIGRATIONS_QUERY_KEY,
+  const { data: esxiMigrations, refetch: refetchESXIMigrations } = useESXIMigrationsQuery({
+    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
     refetchInterval: THIRTY_SECONDS,
     staleTime: 0,
     refetchOnMount: true
   })
 
-  const { data: esxiMigrations } = useESXIMigrationsQuery({
-    queryKey: ESXI_MIGRATIONS_QUERY_KEY,
+  const { data: rollingMigrationPlans, refetch: refetchRollingMigrationPlans } = useRollingMigrationPlansQuery({
     refetchInterval: THIRTY_SECONDS,
     staleTime: 0,
     refetchOnMount: true
@@ -329,10 +329,11 @@ export default function Dashboard() {
           <CredentialsTable />
         ) : activeTab === 3 ? (
           <RollingMigrationsTable
-            clusterMigrations={clusterMigrations || []}
+            rollingMigrationPlans={rollingMigrationPlans || []}
             esxiMigrations={esxiMigrations || []}
             migrations={migrations || []}
-            refetchClusterMigrations={refetchClusterMigrations}
+            refetchRollingMigrationPlans={refetchRollingMigrationPlans}
+            refetchESXIMigrations={refetchESXIMigrations}
             refetchMigrations={refetchMigrations}
           />
         ) : (
