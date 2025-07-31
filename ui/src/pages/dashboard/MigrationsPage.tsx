@@ -8,6 +8,7 @@ import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog"
 import { Migration } from "src/api/migrations/model"
 import MigrationsTable from "./MigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning'
+import { useMigrationStatusMonitor } from "src/hooks/useMigrationStatusMonitor"
 
 export default function MigrationsPage() {
   const queryClient = useQueryClient()
@@ -26,6 +27,9 @@ export default function MigrationsPage() {
     staleTime: 0,
     refetchOnMount: true
   })
+
+  // Monitor migration status changes for failure reporting
+  useMigrationStatusMonitor(migrations)
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)

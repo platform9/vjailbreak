@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -42,6 +43,7 @@ type VMOperations interface {
 	VMGuestShutdown() error
 	VMPowerOff() error
 	VMPowerOn() error
+	DisconnectNetworkInterfaces() error
 }
 
 type VMInfo struct {
@@ -557,12 +559,60 @@ func (vmops *VMOps) VMPowerOn() error {
 	}
 	task, err := vmops.VMObj.PowerOn(vmops.ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to power on VM: %s", err)
 	}
-	err = task.Wait(vmops.ctx)
+	if err := task.Wait(vmops.ctx); err != nil {
+		return fmt.Errorf("failed to wait for power on task: %w", err)
+	}
+	return nil
+}
+
+func (vmops *VMOps) DisconnectNetworkInterfaces() error {
+	ctx := vmops.ctx
+	vm := vmops.VMObj
+
+	var mvm mo.VirtualMachine
+	if err := vm.Properties(ctx, vm.Reference(), []string{"config.hardware"}, &mvm); err != nil {
+		return fmt.Errorf("failed to get VM properties: %w", err)
+	}
+
+	if mvm.Config == nil || len(mvm.Config.Hardware.Device) == 0 {
+		return nil
+	}
+	var deviceChanges []types.BaseVirtualDeviceConfigSpec
+
+	for _, device := range mvm.Config.Hardware.Device {
+		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
+			nicName := nic.GetVirtualEthernetCard().DeviceInfo.GetDescription().Label
+			log.Printf("Found NIC to disconnect: %s", nicName)
+			deviceCopy := device
+			connectable := nic.GetVirtualEthernetCard().Connectable
+			connectable.Connected = false
+			connectable.StartConnected = false
+			spec := &types.VirtualDeviceConfigSpec{
+				Operation: types.VirtualDeviceConfigSpecOperationEdit,
+				Device:    deviceCopy,
+			}
+			deviceChanges = append(deviceChanges, spec)
+		}
+	}
+
+	if len(deviceChanges) == 0 {
+		return nil
+	}
+	spec := &types.VirtualMachineConfigSpec{
+		DeviceChange: deviceChanges,
+	}
+
+	task, err := vm.Reconfigure(ctx, *spec)
 	if err != nil {
-		return fmt.Errorf("failed while waiting for power on task: %s", err)
+		return errors.Wrap(err, "failed to reconfigure VM network interfaces")
 	}
+
+	if err := task.Wait(ctx); err != nil {
+		return errors.Wrap(err, "failed to wait for VM reconfiguration")
+	}
+
 	return nil
 }
 

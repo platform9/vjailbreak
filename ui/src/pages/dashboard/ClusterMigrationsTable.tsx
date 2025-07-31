@@ -20,6 +20,7 @@ import { ClusterMigration } from "src/api/clustermigrations/model";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { getClusterMigrationPhase, getClusterName, getCurrentESXi } from "src/api/clustermigrations/helper";
+import { calculateTimeElapsed } from "src/utils";
 
 // Phase ordering for sorting
 const STATUS_ORDER = {
@@ -60,6 +61,12 @@ const columns: GridColDef[] = [
         headerName: "Current ESXi",
         valueGetter: (_, row) => getCurrentESXi(row),
         flex: 1.5,
+    },
+    {
+        field: "timeElapsed",
+        headerName: "Time Elapsed",
+        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
+        flex: 1,
     },
     {
         field: "status",

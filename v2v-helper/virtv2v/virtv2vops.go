@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ type VirtV2VOperations interface {
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
 	AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error
 	GetNetworkInterfaceNames(path string) ([]string, error)
+	IsRHELFamily(osRelease string) (bool, error)
 }
 
 func RetainAlphanumeric(input string) string {
@@ -45,6 +47,15 @@ func RetainAlphanumeric(input string) string {
 		}
 	}
 	return builder.String()
+}
+
+func IsRHELFamily(osRelease string) bool {
+	lowerRelease := strings.ToLower(osRelease)
+	return strings.Contains(lowerRelease, "red hat") ||
+		strings.Contains(lowerRelease, "rhel") ||
+		strings.Contains(lowerRelease, "centos") ||
+		strings.Contains(lowerRelease, "rocky") ||
+		strings.Contains(lowerRelease, "alma")
 }
 
 func GetPartitions(disk string) ([]string, error) {
@@ -436,4 +447,49 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 	}
 	return interfaces, nil
 
+}
+
+func GetInterfaceNames(path string) ([]string, error) {
+	cmd := "ls /etc/sysconfig/network-scripts | grep '^ifcfg-'"
+	lsOut, err := RunCommandInGuest(path, cmd, false)
+	if err != nil {
+		return nil, err
+	}
+	interfaces := []string{}
+	// Parse the output
+	// Split by newline and trim spaces
+	// Ignore 'ifcfg-lo' as it is the loopback interface
+	files := strings.Split(strings.TrimSpace(lsOut), "\n")
+	for _, file := range files {
+		if file == "ifcfg-lo" {
+			continue
+		}
+		content, err := RunCommandInGuest(path, fmt.Sprintf("cat /etc/sysconfig/network-scripts/%s", file), false)
+		if err != nil {
+			continue
+		}
+		// Extract DEVICE or infer from filename
+		device := extractKeyValue(content, "DEVICE")
+		if device != "" {
+			interfaces = append(interfaces, device)
+		} else {
+			// Fall back to filename if DEVICE not found
+			device = strings.TrimPrefix(file, "ifcfg-")
+			if device != "" {
+				interfaces = append(interfaces, device)
+			}
+		}
+	}
+
+	return interfaces, nil
+}
+
+// Helper: Extract key=value from content, trim quotes/spaces
+func extractKeyValue(content, key string) string {
+	re := regexp.MustCompile(fmt.Sprintf(`(?m)^%s=(.*)$`, key))
+	match := re.FindStringSubmatch(content)
+	if len(match) > 1 {
+		return strings.Trim(strings.Trim(match[1], `"'`), " ")
+	}
+	return ""
 }

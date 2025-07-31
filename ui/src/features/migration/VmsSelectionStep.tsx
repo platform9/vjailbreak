@@ -246,12 +246,18 @@ export default function VmsSelectionStep({
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
   const [selectedFlavor, setSelectedFlavor] = useState<string>("");
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
+  const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set());
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
   const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedVMs(new Set());
+    }
+  }, [open]);
 
   const {
     data: vmList = [],
@@ -313,16 +319,53 @@ export default function VmsSelectionStep({
       };
     });
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName]);
+
+  // Separate effect for cleaning up selections when VM list changes
+  useEffect(() => {
+    if (vmsWithFlavor.length === 0) return;
+    
+    // Clean up selection - remove VMs that no longer exist
+    const availableVmNames = new Set(vmsWithFlavor.map(vm => vm.name));
+    const cleanedSelection = new Set(
+      Array.from(selectedVMs).filter(vmName => availableVmNames.has(vmName))
+    );
+
+    if (cleanedSelection.size !== selectedVMs.size) {
+      setSelectedVMs(cleanedSelection);
+      // Update parent with cleaned selection
+      const selectedVmData = vmsWithFlavor.filter(vm => cleanedSelection.has(vm.name));
+      onChange("vms")(selectedVmData);
+    }
+  }, [vmsWithFlavor, selectedVMs, onChange]);
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
-    setRowSelectionModel(selectedRowIds);
-    const selectedVms = vmsWithFlavor.filter((vm) => selectedRowIds.includes(vm.name));
-    onChange("vms")(selectedVms);
+    // Update selection based on the difference
+    const newSelection = new Set(selectedVMs);
+
+    // Add newly selected items
+    selectedRowIds.forEach(id => {
+      if (!selectedVMs.has(id as string)) {
+        newSelection.add(id as string);
+      }
+    });
+
+    // Remove deselected items
+    selectedVMs.forEach(id => {
+      if (!selectedRowIds.includes(id)) {
+        newSelection.delete(id);
+      }
+    });
+
+    setSelectedVMs(newSelection);
+
+    // Use persistent selection for onChange callback
+    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name));
+    onChange("vms")(selectedVmData);
   };
 
   const handleOpenFlavorDialog = () => {
-    if (rowSelectionModel.length === 0) return;
+    if (selectedVMs.size === 0) return;
     setFlavorDialogOpen(true);
   };
 
@@ -349,7 +392,7 @@ export default function VmsSelectionStep({
       const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : selectedFlavor);
 
       const updatedVms = vmsWithFlavor.map(vm => {
-        if (rowSelectionModel.includes(vm.name)) {
+        if (selectedVMs.has(vm.name)) {
           return {
             ...vm,
             targetFlavorId: isAutoAssign ? "" : selectedFlavor,
@@ -361,7 +404,7 @@ export default function VmsSelectionStep({
         return vm;
       });
 
-      const selectedVmNames = rowSelectionModel as string[];
+      const selectedVmNames = Array.from(selectedVMs);
 
       const updatePromises = selectedVmNames.map(vmName => {
         const vmwareMachineName = vmList.find(vm => vm.name === vmName)?.vmWareMachineName
@@ -379,7 +422,7 @@ export default function VmsSelectionStep({
       await Promise.all(updatePromises);
 
       setVmsWithFlavor(updatedVms);
-      onChange("vms")(updatedVms.filter((vm) => rowSelectionModel.includes(vm.name)));
+      onChange("vms")(updatedVms.filter((vm) => selectedVMs.has(vm.name)));
 
       const actionText = isAutoAssign ? "cleared flavor assignment for" : "assigned flavor to";
       setSnackbarMessage(`Successfully ${actionText} ${selectedVmNames.length} VM${selectedVmNames.length > 1 ? 's' : ''}`);
@@ -394,7 +437,7 @@ export default function VmsSelectionStep({
       reportError(error as Error, {
         context: 'vm-flavors-update',
         metadata: {
-          selectedVMs: Array.from(rowSelectionModel),
+          selectedVMs: Array.from(selectedVMs),
           selectedFlavor: selectedFlavor,
           isAutoAssign: selectedFlavor === "auto-assign",
           action: 'vm-flavors-bulk-update'
@@ -446,7 +489,9 @@ export default function VmsSelectionStep({
               localeText={{ noRowsLabel: getNoRowsLabel() }}
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
-              rowSelectionModel={rowSelectionModel}
+              rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
+                vmsWithFlavor.some(vm => vm.name === vmName)
+              )}
               getRowId={(row) => row.name}
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
@@ -457,7 +502,9 @@ export default function VmsSelectionStep({
                     onRefresh={() => refreshVMList()}
                     disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
                     placeholder="Search by Name, Network Interface, CPU, or Memory"
-                    rowSelectionModel={rowSelectionModel}
+                    rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
+                      vmsWithFlavor.some(vm => vm.name === vmName)
+                    )}
                     onAssignFlavor={handleOpenFlavorDialog}
                   />
                 ),
@@ -515,7 +562,7 @@ export default function VmsSelectionStep({
         maxWidth="sm"
       >
         <DialogTitle>
-          Assign Flavor to {rowSelectionModel.length} {rowSelectionModel.length === 1 ? 'VM' : 'VMs'}
+          Assign Flavor to {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ my: 2 }}>

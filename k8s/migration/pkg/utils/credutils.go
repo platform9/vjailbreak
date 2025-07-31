@@ -19,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -271,6 +273,8 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 	var openstackvoltypes []string
+	var openstacknetworks []string
+	var openstacksecuritygroups []string
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -298,14 +302,36 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cinder volume backend pools")
 	}
-	openstacknetworks := make([]string, 0, len(allNetworks))
 	for i := 0; i < len(allNetworks); i++ {
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
+
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list security groups")
+	}
+	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract all security groups")
+	}
+	for i := 0; i < len(allSecGroups); i++ {
+		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+	}
+	groupSet := make(map[string]struct{})
+	uniqueSecurityGroups := []string{}
+	for _, group := range openstacksecuritygroups {
+		if _, exists := groupSet[group]; !exists {
+			groupSet[group] = struct{}{}
+			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
+		}
+	}
+	openstacksecuritygroups = uniqueSecurityGroups
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
+		SecurityGroups: openstacksecuritygroups,
 	}, nil
 }
 
@@ -412,6 +438,15 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, fmt.Errorf("authentication failed: %w. Please verify your OpenStack credentials", err)
 		}
 	}
+
+	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
+	if err != nil {
+		if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
+	}
+
 	return providerClient, nil
 }
 
@@ -552,6 +587,12 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, scope.Client)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
+	}
+	log.Info("Fetched vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
@@ -565,7 +606,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
 	// Create a semaphore to limit concurrent goroutines
-	semaphore := make(chan struct{}, constants.VCenterVMScanConcurrencyLimit)
+	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
 	for i := range vms {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
@@ -583,7 +624,6 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 					panicMu.Unlock()
 				}
 			}()
-
 			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
 		}(i)
 	}
@@ -728,15 +768,15 @@ func AppendUnique(slice []string, values ...string) []string {
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
-	sanitizedVMName, err := GetVMwareMachineNameForVMName(vminfo.Name)
+	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
 	}
-	esxiK8sName, err := ConvertToK8sName(vminfo.ESXiName)
+	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
-	clusterK8sName, err := ConvertToK8sName(vminfo.ClusterName)
+	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ClusterName, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -1225,13 +1265,13 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 				if strings.TrimSpace(key) == "volumeRef" && value != "" {
 					splotVolRef := strings.Split(value, "=")
 					if len(splotVolRef) != 2 {
-						return nil, fmt.Errorf("invalid volume reference format: %s", rdmInfo.Spec.OpenstackVolumeRef.Source)
+						return nil, fmt.Errorf("invalid volume reference format: %s", rdmInfo.Spec.OpenstackVolumeRef)
 					}
 					mp := make(map[string]string)
 					mp[splotVolRef[0]] = splotVolRef[1]
 					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
-					rdmInfo.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.VolumeRefInfo{
-						Source: mp,
+					rdmInfo.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
+						VolumeRef: mp,
 					}
 					rdmMap[diskName] = rdmInfo
 				}
@@ -1423,7 +1463,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok {
 				savedRDMDetails := savedRDM.(vjailbreakv1alpha1.RDMDisk)
 				// Compare OpenstackVolumeRef details
-				if reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.Source, rdmInfo.Spec.OpenstackVolumeRef.Source) ||
+				if reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) ||
 					savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
 					savedRDMDetails.Spec.OpenstackVolumeRef.VolumeType != rdmInfo.Spec.OpenstackVolumeRef.VolumeType {
 					ctrllog.FromContext(ctx).Info("Details do not match, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
@@ -1466,10 +1506,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if len(listofRDMInVM) > 0 {
 		log.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
 		rdmDiskArray := make([]vjailbreakv1alpha1.RDMDisk, 0)
-
-		for _, rdmData := range listofRDMInVM {
-			rdmDiskArray = append(rdmDiskArray, rdmData)
-		}
+		rdmDiskArray = append(rdmDiskArray, listofRDMInVM...)
 		rdmDiskwithPopulatedAttributes, err := populateRDMDiskInfoFromAttributes(ctx, rdmDiskArray, attributes)
 		if err != nil {
 			log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
@@ -1492,7 +1529,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetVMwareMachineNameForVMName(vmProps.Config.Name)
+	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
 	}

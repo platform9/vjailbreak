@@ -17,26 +17,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // RDMDiskSpec defines the desired state of RDMDisk.
 type RDMDiskSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	DiskName           string        `json:"diskName"`
-	DiskSize           int           `json:"diskSize"`
-	UUID               string        `json:"uuid"`
-	DisplayName        string        `json:"displayName"`
-	OwnerVMs           []string      `json:"ownerVMs"`
-	OpenstackVolumeRef VolumeRefInfo `json:"openstackVolumeRef"`
-	ImportToCinder     bool          `json:"importToCinder,omitempty"` // Indicates if the RDM disk is being imported
+	DiskName           string             `json:"diskName"`
+	DiskSize           int                `json:"diskSize"`
+	UUID               string             `json:"uuid"`
+	DisplayName        string             `json:"displayName"`
+	OwnerVMs           []string           `json:"ownerVMs"`
+	OpenstackVolumeRef OpenstackVolumeRef `json:"openstackVolumeRef"`       // OpenStack volume reference information
+	ImportToCinder     bool               `json:"importToCinder,omitempty"` // Indicates whether the RDM disk should be imported to Cinder and is set by MigrationPlan Controller
 }
 
 // RDMDiskStatus defines the observed state of RDMDisk.
 type RDMDiskStatus struct {
 	// +kubebuilder:validation:Enum=Pending;Managing;Managed;Error
-	Phase          string             `json:"phase,omitempty"` //  Pending | Managing | Managed | Error
+	Phase          string             `json:"phase,omitempty"` //  Available | Managing | Managed | Error
 	CinderVolumeID string             `json:"cinderVolumeID,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -64,12 +60,13 @@ type RDMDiskList struct {
 	Items           []RDMDisk `json:"items"`
 }
 
-// VolumeRefInfo defines the structure for OpenStack volume reference information.
-type VolumeRefInfo struct {
-	Source            map[string]string `json:"source"`
+// OpenstackVolumeRef ... contains information about the OpenStack volume reference.
+type OpenstackVolumeRef struct {
+	VolumeRef         map[string]string `json:"source"` // volumeRef contains the OpenStack volume reference information - obtained by query - openstack block storage volume manageable list
 	CinderBackendPool string            `json:"cinderBackendPool"`
 	VolumeType        string            `json:"volumeType"`
 	OpenstackCreds    string            `json:"openstackCreds,omitempty"` // Optional: OpenStack credentials to use for the volume
+
 }
 
 func init() {

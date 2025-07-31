@@ -46,7 +46,7 @@ func GetVMwareMachine(ctx context.Context, vmName string) (*vjailbreakv1alpha1.V
 	}
 	err = client.Get(ctx, types.NamespacedName{
 		Name:      vmK8sName,
-		Namespace: constants.MigrationSystemNamespace,
+		Namespace: constants.NamespaceMigrationSystem,
 	}, vmwareMachine)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware machine")
