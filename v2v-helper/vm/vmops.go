@@ -14,6 +14,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/vmware/govmomi/object"
@@ -156,7 +157,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
 	// Get the vmware machine from k8s
-	vmk8sName, err := k8sutils.GetVMwareMachineName()
+	vmk8sName, err := utils.GetVMwareMachineName()
 	if err != nil {
 		return VMInfo{}, fmt.Errorf("failed to get vmware machine name: %w", err)
 	}

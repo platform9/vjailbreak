@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,7 +56,7 @@ func PrintLog(logMessage string) error {
 }
 
 func GetMigrationObjectName() (string, error) {
-	vmK8sName, err := k8sutils.GetVMwareMachineName()
+	vmK8sName, err := GetVMwareMachineName()
 	if err != nil {
 		return "", err
 	}
@@ -66,11 +65,18 @@ func GetMigrationObjectName() (string, error) {
 
 // GetMigrationConfigMapName is function that returns the name of the secret
 func GetMigrationConfigMapName() (string, error) {
-	vmK8sName, err := k8sutils.GetVMwareMachineName()
+	vmK8sName, err := GetVMwareMachineName()
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("migration-config-%s", vmK8sName), nil
+}
+func GetVMwareMachineName() (string, error) {
+	vmK8sName := os.Getenv("VMWARE_MACHINE_OBJECT_NAME")
+	if vmK8sName == "" {
+		return "", errors.New("VMWARE_MACHINE_OBJECT_NAME environment variable is not set")
+	}
+	return vmK8sName, nil
 }
 
 func WriteToLogFile(message string) error {

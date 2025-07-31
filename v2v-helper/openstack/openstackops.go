@@ -3,7 +3,6 @@
 package openstack
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -146,60 +145,4 @@ func NewOpenStackClients(insecure bool) (*utils.OpenStackClients, error) {
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
 	}
 	return ostackclients, nil
-}
-
-func NewOpenStackClientFromOptions(ctx context.Context, opts gophercloud.AuthOptions, insecure bool) (*utils.OpenStackClients, error) {
-	opts.AllowReauth = true
-	providerClient, err := openstack.NewClient(opts.IdentityEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider client: %s", err)
-	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-	if insecure {
-		tlsConfig.InsecureSkipVerify = true
-	} else {
-		// Get the certificate for the Openstack endpoint
-		caCert, err := getCert(opts.IdentityEndpoint)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get certificate: %s", err)
-		}
-		caCertPool, _ := x509.SystemCertPool()
-		if caCertPool == nil {
-			caCertPool = x509.NewCertPool()
-		}
-		caCertPool.AddCert(caCert)
-		tlsConfig.RootCAs = caCertPool
-	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-	}
-
-	// Connection Retry Block
-	for i := 0; i < constants.MaxIntervalCount; i++ {
-		err = openstack.Authenticate(providerClient, opts)
-		if err == nil {
-			break
-		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate OpenStack client: %s", err)
-	}
-	// Todo : endpoint should be passed as an argument or set in the environment variable
-	endpoint := gophercloud.EndpointOpts{
-		Region: os.Getenv("OS_REGION_NAME"),
-	}
-
-	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create block storage client: %s", err)
-	}
-	return &utils.OpenStackClients{
-		BlockStorageClient: blockStorageClient,
-	}, nil
 }
