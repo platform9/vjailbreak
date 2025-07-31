@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -165,7 +164,7 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			ctrllog.Log.Info("Error closing connection", "error", err)
+			log.Log.Info("Error closing connection", "error", err)
 		}
 	}()
 	cert := conn.ConnectionState().PeerCertificates[0]
@@ -1198,7 +1197,7 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 						return fmt.Errorf("failed to update existing RDM disk CR: %w", err)
 					}
 				}
-				log := ctrllog.FromContext(ctx)
+				log := log.FromContext(ctx)
 				log.Info("Created new RDM disk CR", "name", rdmDiskCR.Name)
 			}
 		}
@@ -1238,7 +1237,7 @@ func getHostStorageDeviceInfo(ctx context.Context, vm *object.VirtualMachine, ho
 //	VJB_RDM:Hard Disk:volumeRef:"source-id"="abac111"
 func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjailbreakv1alpha1.RDMDisk, attributes []string) ([]vjailbreakv1alpha1.RDMDisk, error) {
 	rdmMap := make(map[string]vjailbreakv1alpha1.RDMDisk)
-	log := ctrllog.FromContext(ctx)
+	log := log.FromContext(ctx)
 
 	// Create copies of base RDM disks to preserve existing data
 	for i := range baseRDMDisks {
@@ -1399,7 +1398,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
 	var clusterName string
 	rdmForVM := make([]string, 0)
-	log := scope.Logger
+	scopelog := scope.Logger
 	err := vm.Properties(ctx, vm.Reference(), []string{
 		"config",
 		"guest",
@@ -1413,7 +1412,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 	if vmProps.Config == nil {
 		// VM is not powered on or is in creating state
-		log.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
+		scopelog.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
 		return
 	}
 	// Fetch details required for RDM disks
@@ -1466,7 +1465,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 				if reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) ||
 					savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
 					savedRDMDetails.Spec.OpenstackVolumeRef.VolumeType != rdmInfo.Spec.OpenstackVolumeRef.VolumeType {
-					ctrllog.FromContext(ctx).Info("Details do not match, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
+					log.FromContext(ctx).Info("Details do not match, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
 					continue
 				}
 				// Add owner VMs if not exists already and sort OwnerVMs alphabetically
@@ -1500,16 +1499,16 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
-		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
+		scopelog.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return
 	}
 	if len(listofRDMInVM) > 0 {
-		log.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
+		scopelog.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
 		rdmDiskArray := make([]vjailbreakv1alpha1.RDMDisk, 0)
 		rdmDiskArray = append(rdmDiskArray, listofRDMInVM...)
 		rdmDiskwithPopulatedAttributes, err := populateRDMDiskInfoFromAttributes(ctx, rdmDiskArray, attributes)
 		if err != nil {
-			log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
+			scopelog.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
 			return
 		}
 		for _, rdm := range rdmDiskwithPopulatedAttributes {
