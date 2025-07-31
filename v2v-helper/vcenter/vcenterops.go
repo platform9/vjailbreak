@@ -54,7 +54,7 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %v", err)
 	}
-	c.RoundTripper = session.KeepAlive(c.RoundTripper, 10*time.Minute)
+	c.RoundTripper = session.KeepAlive(c.RoundTripper, 1*time.Hour)
 	client := &govmomi.Client{
 		Client:         c,
 		SessionManager: session.NewManager(c),

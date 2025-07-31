@@ -82,7 +82,7 @@ func main() {
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
 	}
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
-
+	defer vcclient.VCClient.CloseIdleConnections()
 	// Validate OpenStack connection
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
