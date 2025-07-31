@@ -720,6 +720,7 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 // it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
 func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo *types.HostStorageDeviceInfo, vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDisk, err error) {
+	ctxlog := log.FromContext(ctx)
 	switch backing := disk.Backing.(type) {
 	case *types.VirtualDiskFlatVer2BackingInfo:
 		ref := backing.Datastore.Reference()
@@ -748,6 +749,7 @@ func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo
 			}
 		}
 	default:
+		ctxlog.Error(fmt.Errorf("unsupported disk backing type: %T", disk.Backing), "VM", vmName, "disk", disk.DeviceInfo.GetDescription().Label)
 		return nil, vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
 	}
 
@@ -1332,7 +1334,7 @@ func CreateOrUpdateRDMDisks(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, sm *sync.Map) error {
 	logger := log.FromContext(ctx)
 	var values []vjailbreakv1alpha1.RDMDisk
-	sm.Range(func(key, value interface{}) bool {
+	sm.Range(func(_, value interface{}) bool {
 		rdmDisk, ok := value.(vjailbreakv1alpha1.RDMDisk)
 		if !ok {
 			logger.Error(fmt.Errorf("unexpected type for RDM disk: %T", value), "Type assertion failed")
@@ -1391,6 +1393,14 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
+// processSingleVM processes a single VM, extracting its properties and updating the VMInfo and VMwareMachine resources
+// It handles RDM disks, networks, and other VM properties.
+// It also manages synchronization of RDM disk information across VMs and VMwareMachine resources.
+// It uses a mutex to ensure thread-safe access to shared resources like vmErrors and vminfo.
+// The function is designed to be run concurrently for multiple VMs, hence the use of goroutines and mutexes for synchronization.
+// due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
+//
+//nolint:gocyclo
 func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
@@ -1459,8 +1469,12 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		}*/
 		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
 			rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
-			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok {
-				savedRDMDetails := savedRDM.(vjailbreakv1alpha1.RDMDisk)
+			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
+				savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
+				if !ok {
+					scopelog.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
+					return
+				}
 				// Compare OpenstackVolumeRef details
 				if reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) ||
 					savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
