@@ -34,6 +34,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -380,24 +381,26 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		err := r.migrateRDMdisks(ctx, migrationplan)
-		if err != nil {
+		if err == verrors.ErrRDMDiskNotMigrated {
 			retries := migrationplan.Status.RetryCount
-			if retries >= 5 {
-				r.ctxlog.Info("RDM disk not migrated after 5 retries, failing MigrationPlan.")
-				migrationplan.Status.MigrationStatus = corev1.PodFailed
-				migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
+			if retries <= 5 {
+				delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
+				r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
+				migrationplan.Status.RetryCount++
 				if err := r.Update(ctx, migrationplan); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
 				}
-				return ctrl.Result{}, nil
+				return ctrl.Result{RequeueAfter: delay}, nil
 			}
-			delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
-			r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
-			migrationplan.Status.RetryCount++
+		}
+		if err != nil || migrationplan.Status.RetryCount >= 5 {
+			r.ctxlog.Info("RDM disk not migrated after 5 retries, failing MigrationPlan.")
+			migrationplan.Status.MigrationStatus = corev1.PodFailed
+			migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
 			if err := r.Update(ctx, migrationplan); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 			}
-			return ctrl.Result{RequeueAfter: delay}, nil
+			return ctrl.Result{}, nil
 		}
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
@@ -1307,7 +1310,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			return err
 		}
 		if reFetchedRDMDiskCR.Status.Phase != "Managed" || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
-			return errors.New("RDM disk has not been migrated yet, preventing the completion of VM migration")
+			return verrors.ErrRDMDiskNotMigrated
 		}
 	}
 	return nil
