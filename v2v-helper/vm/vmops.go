@@ -14,7 +14,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	"github.com/vmware/govmomi/object"
@@ -61,7 +60,7 @@ type VMInfo struct {
 	OSType            string
 	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
-	RDMDisks          []RDMDisk
+	RDMDisks          []vjailbreakv1alpha1.RDMDisk
 }
 
 type NIC struct {
@@ -104,29 +103,6 @@ type VMOps struct {
 	k8sClient k8sclient.Client
 }
 
-type RDMDisk struct {
-	// DiskName is the name of the disk
-	DiskName string `json:"diskName,omitempty"`
-	// DiskSize is the size of the disk in GB
-	DiskSize int64 `json:"diskSize,omitempty"`
-	// UUID is the unique identifier of the disk
-	UUID string `json:"uuid,omitempty"`
-	// DisplayName is the display name of the disk
-	DisplayName string `json:"displayName,omitempty"`
-	// CinderBackendPool is the cinder backend pool of the disk
-	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
-	// VolumeType is the volume type of the disk
-	VolumeType string `json:"volumeType,omitempty"`
-	// Bootable indicates if the disk is bootable
-	Bootable bool `json:"bootable,omitempty"`
-	// Bootable indicates if the disk is bootable
-	Path string `json:"path,omitempty"`
-	// VolumeId is the ID of the volume
-	VolumeId string `json:"volumeId,omitempty"`
-	// OpenstackVolumeRef contains OpenStack volume reference information
-	VolumeRef map[string]string `json:"volumeRef,omitempty"`
-}
-
 func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string, k8sClient k8sclient.Client) (*VMOps, error) {
 	vm, err := vcclient.GetVMByName(ctx, name)
 	if err != nil {
@@ -157,7 +133,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
 	// Get the vmware machine from k8s
-	vmk8sName, err := utils.GetVMwareMachineName()
+	vmk8sName, err := k8sutils.GetVMwareMachineName()
 	if err != nil {
 		return VMInfo{}, fmt.Errorf("failed to get vmware machine name: %w", err)
 	}
@@ -202,7 +178,15 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
 		}
 	}
-
+	rdmDiskSlice := make([]vjailbreakv1alpha1.RDMDisk, 0)
+	// Get RDM disks from vmware machine
+	for _, rdm := range vmwareMachine.Spec.VMInfo.RDMDisks {
+		rdmDisk, err := k8sutils.GetRDMDisk(vmops.ctx, rdm)
+		if err != nil {
+			return VMInfo{}, fmt.Errorf("failed to get RDM disk: %w", err)
+		}
+		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
+	}
 	vminfo := VMInfo{
 		CPU:               o.Config.Hardware.NumCPU,
 		Memory:            o.Config.Hardware.MemoryMB,
@@ -213,6 +197,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,
 		VMDisks:           vmdisks,
+		RDMDisks:          rdmDiskSlice,
 		UEFI:              uefi,
 		OSType:            ostype,
 		NetworkInterfaces: vmwareMachine.Spec.VMInfo.NetworkInterfaces,

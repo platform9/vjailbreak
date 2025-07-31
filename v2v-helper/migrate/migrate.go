@@ -21,6 +21,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -96,8 +97,13 @@ func (migobj *Migrate) logMessage(message string) {
 func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Creating volumes in OpenStack")
+
 	for idx, vmdisk := range vminfo.VMDisks {
-		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx])
+		setRDMLabel := false
+		if vmdisk.Boot {
+			setRDMLabel = true
+		}
+		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to create volume")
 		}
@@ -460,7 +466,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// create XML for conversion
-	err = utils.GenerateXMLConfig(vminfo)
+	err = vmutils.GenerateXMLConfig(vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate XML")
 	}

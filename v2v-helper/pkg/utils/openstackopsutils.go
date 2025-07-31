@@ -66,7 +66,7 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
 	opts := volumes.CreateOpts{
@@ -101,7 +101,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	}
 
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
-		err = osclient.SetVolumeImageMetadata(volume)
+		err = osclient.SetVolumeImageMetadata(volume, setRDMLabel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
 		}
@@ -271,12 +271,15 @@ func (osclient *OpenStackClients) SetVolumeUEFI(volume *volumes.Volume) error {
 	return nil
 }
 
-func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume) error {
+func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error {
 	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
 			"os_type":     "windows",
 		},
+	}
+	if setRDMLabel {
+		options.Metadata["hw_scsi_model"] = "virtio-scsi"
 	}
 	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
@@ -458,6 +461,23 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
 	}
 
+	if len((vminfo.RDMDisks)) > 0 {
+		serverCreateOpts.Metadata = map[string]string{
+			"hw_scsi_reservations": "true",
+		}
+	}
+	for _, disk := range vminfo.RDMDisks {
+		blockDevice := bootfromvolume.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     bootfromvolume.DestinationVolume,
+			SourceType:          bootfromvolume.SourceVolume,
+			UUID:                disk.Status.CinderVolumeID,
+			DeviceType:          "lun",
+			DiskBus:             "scsi",
+		}
+		createOpts.BlockDevice = append(createOpts.BlockDevice, blockDevice)
+	}
+
 	// Wait for disks to become available
 	for _, disk := range vminfo.VMDisks {
 		err := osclient.WaitForVolume(disk.OpenstackVol.ID)
@@ -480,15 +500,6 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
 		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
-			DeleteOnTermination: false,
-		}).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
-		}
-	}
-	for _, disk := range vminfo.RDMDisks {
-		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
-			VolumeID:            disk.VolumeId,
 			DeleteOnTermination: false,
 		}).Extract()
 		if err != nil {

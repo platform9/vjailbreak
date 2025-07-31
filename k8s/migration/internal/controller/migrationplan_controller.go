@@ -54,6 +54,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/session"
+	govmomitypes "github.com/vmware/govmomi/vim25/types"
 )
 
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
@@ -381,26 +382,26 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		err := r.migrateRDMdisks(ctx, migrationplan)
-		if err == verrors.ErrRDMDiskNotMigrated {
-			retries := migrationplan.Status.RetryCount
-			if retries <= 5 {
-				delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
-				r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
-				migrationplan.Status.RetryCount++
-				if err := r.Update(ctx, migrationplan); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
+		if err != nil {
+			if err == verrors.ErrRDMDiskNotMigrated {
+				retries := migrationplan.Status.RetryCount
+				if retries <= 5 {
+					delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
+					r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
+					migrationplan.Status.RetryCount++
+					if err := r.Update(ctx, migrationplan); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
+					}
+					return ctrl.Result{RequeueAfter: delay}, nil
 				}
-				return ctrl.Result{RequeueAfter: delay}, nil
 			}
-		}
-		if err != nil || migrationplan.Status.RetryCount >= 5 {
-			r.ctxlog.Info("RDM disk not migrated after 5 retries, failing MigrationPlan.")
+			r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
 			migrationplan.Status.MigrationStatus = corev1.PodFailed
 			migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
 			if err := r.Update(ctx, migrationplan); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 			}
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
@@ -1258,6 +1259,10 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
 			if err := r.Get(ctx, types.NamespacedName{Name: vmName, Namespace: migrationplan.Namespace}, vmMachine); err != nil {
 				return fmt.Errorf("failed to get VMwareMachine %s: %w", vmName, err)
+			}
+			// Check if VM is powered off
+			if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
+				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmName)
 			}
 			if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
 				for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {

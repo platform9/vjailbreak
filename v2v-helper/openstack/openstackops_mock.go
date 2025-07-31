@@ -85,18 +85,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, port
 }
 
 // CreateVolume mocks base method.
-func (m *MockOpenstackOperations) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
+func (m *MockOpenstackOperations) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVolume", name, size, ostype, uefi, volumetype)
+	ret := m.ctrl.Call(m, "CreateVolume", name, size, ostype, uefi, volumetype, setRDMLabel)
 	ret0, _ := ret[0].(*volumes.Volume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVolume indicates an expected call of CreateVolume.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(name, size, ostype, uefi, volumetype interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(name, size, ostype, uefi, volumetype interface{}, setRDMLabel bool) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), name, size, ostype, uefi, volumetype)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), name, size, ostype, uefi, volumetype, setRDMLabel)
 }
 
 // DeleteVolume mocks base method.
@@ -246,7 +246,7 @@ func (mr *MockOpenstackOperationsMockRecorder) SetVolumeBootable(volume interfac
 }
 
 // SetVolumeImageMetadata mocks base method.
-func (m *MockOpenstackOperations) SetVolumeImageMetadata(volume *volumes.Volume) error {
+func (m *MockOpenstackOperations) SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetVolumeImageMetadata", volume)
 	ret0, _ := ret[0].(error)
@@ -254,7 +254,7 @@ func (m *MockOpenstackOperations) SetVolumeImageMetadata(volume *volumes.Volume)
 }
 
 // SetVolumeImageMetadata indicates an expected call of SetVolumeImageMetadata.
-func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(volume interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(volume interface{}, setRDMLabel bool) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeImageMetadata), volume)
 }

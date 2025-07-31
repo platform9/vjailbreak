@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -176,12 +175,6 @@ func (r *RDMDiskReconciler) handleAvailablePhase(ctx context.Context, rdmDisk *v
 // handleManagingPhase handles the managing phase of RDMDisk reconciliation
 func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Request, rdmDisk *vjailbreakv1alpha1.RDMDisk, log logr.Logger) (ctrl.Result, error) {
 	if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
-		rdmDiskObj := vm.RDMDisk{
-			DiskName:          rdmDisk.Name,
-			VolumeRef:         rdmDisk.Spec.OpenstackVolumeRef.VolumeRef,
-			CinderBackendPool: rdmDisk.Spec.OpenstackVolumeRef.CinderBackendPool,
-			VolumeType:        rdmDisk.Spec.OpenstackVolumeRef.VolumeType,
-		}
 		openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 		openstackCredsName := client.ObjectKey{
 			Namespace: req.Namespace,
@@ -205,7 +198,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			ComputeClient:      openstackClient.ComputeClient,
 			NetworkingClient:   openstackClient.NetworkingClient,
 		}
-		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, rdmDiskObj, blockStorageAPIVersion)
+		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, *rdmDisk, blockStorageAPIVersion)
 		if err != nil {
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", MigrationFailed, "FailedToImportLUNToCinder", err)
 		}

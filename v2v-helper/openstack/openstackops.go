@@ -27,14 +27,14 @@ import (
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
 
 type OpenstackOperations interface {
-	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error)
+	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error)
 	WaitForVolume(volumeID string) error
 	AttachVolumeToVM(volumeID string) error
 	WaitForVolumeAttachment(volumeID string) error
 	DetachVolumeFromVM(volumeID string) error
 	SetVolumeUEFI(volume *volumes.Volume) error
 	EnableQGA(volume *volumes.Volume) error
-	SetVolumeImageMetadata(volume *volumes.Volume) error
+	SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error
 	SetVolumeBootable(volume *volumes.Volume) error
 	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
 	GetFlavor(flavorId string) (*flavors.Flavor, error)
