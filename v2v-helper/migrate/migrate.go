@@ -799,18 +799,18 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		}
 	}
 
-	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs)
-	if err != nil {
-		return errors.Wrap(err, "failed to create VM")
-	}
-
 	// Get vjailbreak settings
 	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 	utils.PrintLog(fmt.Sprintf("Fetched VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
+
+	// Create a new VM in OpenStack
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings)
+	if err != nil {
+		return errors.Wrap(err, "failed to create VM")
+	}
 
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
