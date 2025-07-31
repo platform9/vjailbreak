@@ -60,7 +60,7 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 }
 
 // VerifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
-func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient) (bool, error) {
+func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (bool, error) {
 	// Get current instance metadata
 	metadata, err := GetCurrentInstanceMetadata()
 	if err != nil {
@@ -68,7 +68,10 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 			"Please ensure this is running on an OpenStack instance with metadata service enabled", err)
 	}
 
-	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{})
+	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
+		Region: regionName,
+	})
+
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}

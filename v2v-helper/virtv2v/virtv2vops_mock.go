@@ -136,6 +136,21 @@ func (mr *MockVirtV2VOperationsMockRecorder) GetPartitions(disk interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPartitions", reflect.TypeOf((*MockVirtV2VOperations)(nil).GetPartitions), disk)
 }
 
+// IsRHELFamily mocks base method.
+func (m *MockVirtV2VOperations) IsRHELFamily(osRelease string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsRHELFamily", osRelease)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsRHELFamily indicates an expected call of IsRHELFamily.
+func (mr *MockVirtV2VOperationsMockRecorder) IsRHELFamily(osRelease interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRHELFamily", reflect.TypeOf((*MockVirtV2VOperations)(nil).IsRHELFamily), osRelease)
+}
+
 // NTFSFix mocks base method.
 func (m *MockVirtV2VOperations) NTFSFix(path string) error {
 	m.ctrl.T.Helper()

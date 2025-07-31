@@ -79,7 +79,7 @@ const columns: GridColDef[] = [
     {
         field: "timeElapsed",
         headerName: "Time Elapsed",
-        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp),
+        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
         flex: 0.8,
     },
     {

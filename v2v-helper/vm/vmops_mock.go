@@ -106,6 +106,20 @@ func (mr *MockVMOperationsMockRecorder) DeleteSnapshotByRef(snap interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSnapshotByRef", reflect.TypeOf((*MockVMOperations)(nil).DeleteSnapshotByRef), snap)
 }
 
+// DisconnectNetworkInterfaces mocks base method.
+func (m *MockVMOperations) DisconnectNetworkInterfaces() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisconnectNetworkInterfaces")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DisconnectNetworkInterfaces indicates an expected call of DisconnectNetworkInterfaces.
+func (mr *MockVMOperationsMockRecorder) DisconnectNetworkInterfaces() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisconnectNetworkInterfaces", reflect.TypeOf((*MockVMOperations)(nil).DisconnectNetworkInterfaces))
+}
+
 // EnableCBT mocks base method.
 func (m *MockVMOperations) EnableCBT() error {
 	m.ctrl.T.Helper()

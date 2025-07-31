@@ -213,7 +213,7 @@ function ClusterDetailsDrawer({ open, onClose, esxHosts, migrations, refetchMigr
             field: 'timeElapsed',
             headerName: 'Time Elapsed',
             flex: 0.8,
-            valueGetter: (_, row) => calculateTimeElapsed(row.creationTimestamp),
+            valueGetter: (_, row) => calculateTimeElapsed(row.creationTimestamp, row.status),
         },
         {
             field: 'ip',
@@ -589,7 +589,7 @@ export default function RollingMigrationsTable({
             field: 'timeElapsed',
             headerName: 'Time Elapsed',
             flex: 0.5,
-            valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp),
+            valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
         },
         {
             field: 'esxCount',
