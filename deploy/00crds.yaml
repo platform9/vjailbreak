@@ -3592,7 +3592,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:0.3.0
+        image: quay.io/platform9/vjailbreak-controller:v0.3.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3672,7 +3672,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:0.3.0
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -3685,8 +3685,7 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirstWithHostNet
-      hostNetwork: true
+      dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
