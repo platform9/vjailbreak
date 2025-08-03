@@ -7,8 +7,8 @@ import mermaid from "astro-mermaid";
 // https://astro.build/config
 export default defineConfig({
 	site: process.env.SITE_URL || 'https://platform9.github.io',
-	//base: '/vjailbreak/',
-	base: '/' + (process.env.BASE || ''),
+	base: '/vjailbreak/',
+	// base: '/' + (process.env.BASE || ''),
 	trailingSlash: "always",
 	integrations: [
 		mermaid({
