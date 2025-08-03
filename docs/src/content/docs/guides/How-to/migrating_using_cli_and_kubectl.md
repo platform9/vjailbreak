@@ -8,7 +8,7 @@ vJailbreak comprises multiple Kubernetes Controllers which work on Custom Resour
 ## Flow of information and resource creation
 
 Before moving to the action, let’s understand the various resources that will be created to perform a migration, and how they are related to each other.
-![image](../../../assets/information-flow.png)
+![image](../../../../assets/information-flow.png)
 
 **Note**: In the diagram above, the specification/configuration flows towards the arrow, and the status travels backwards (from `v2v-helper` Pod up till `MigrationPlan`).
 

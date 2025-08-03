@@ -6,33 +6,6 @@ const { versions } = Astro.props;
 ---
 
 <style>
-  .version-buttons {
-    margin-bottom: 1.5rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .version-btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--sl-color-gray-5);
-    background-color: transparent;
-    color: var(--sl-color-text);
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
-    width: 90px; 
-    text-align: center;
-  }
-  .version-btn:hover {
-    background-color: var(--sl-color-gray-6);
-  }
-  .version-btn.active {
-    background-color: var(--sl-color-accent);
-    color: var(--sl-color-text-invert);
-    border-color: var(--sl-color-accent);
-    font-weight: bold;
-  }
-
   .iframe-container {
     position: relative;
     width: 100%;
