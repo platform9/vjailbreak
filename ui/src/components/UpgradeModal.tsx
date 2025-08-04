@@ -94,7 +94,7 @@ export const UpgradeModal = ({ show, onClose }) => {
           setErrorMsg('');
         } else if (progress.status === 'server_restarting') {
           setUpgradeInProgress(false); 
-          setSuccessMsg('Upgrade complete successfully');
+          setSuccessMsg('Upgrade completed successfully');
           clearInterval(interval);
           
           setTimeout(() => {
@@ -182,7 +182,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             borderRadius: 1,
             color: theme.palette.text.primary,
           }}>
-            <Typography variant="subtitle1" color="warning.main" fontWeight={600} gutterBottom>
+            <Typography variant="subtitle1" color="primary.main" fontWeight={600} gutterBottom>
               Pre-Upgrade Checklist
             </Typography>
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
