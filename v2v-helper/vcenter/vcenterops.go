@@ -40,6 +40,7 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 
 	// add SDK path if not present
 	if len(host) < 4 || !strings.HasSuffix(host, "/sdk") {
+		// Length check ensures we don't crash on short hosts when checking suffix
 		host += "/sdk"
 	}
 
