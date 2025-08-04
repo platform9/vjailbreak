@@ -1,0 +1,81 @@
+---
+export interface Props {
+  versions: string[];
+}
+const { versions } = Astro.props;
+---
+
+<style>
+  .iframe-container {
+    position: relative;
+    width: 100%;
+    min-height: 80vh;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.25rem;
+    overflow: hidden;
+  }
+  #swagger-iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 80vh;
+    border: none;
+  }
+</style>
+
+<div class="version-buttons">
+  {versions.map(tag => (
+    <button class="version-btn" data-src={`/vjailbreak/swagger-ui/${tag}/`}>{tag}</button>
+  ))}
+</div>
+<div class="iframe-container">
+  <iframe id="swagger-iframe" title="Swagger API Reference" loading="lazy"></iframe>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const container = document.querySelector('.version-buttons').parentElement;
+    const buttons = container.querySelectorAll('.version-btn');
+    const iframe = container.querySelector('#swagger-iframe');
+    const iframeContainer = container.querySelector('.iframe-container');
+
+    function loadApiVersion(event) {
+      buttons.forEach(btn => btn.classList.remove('active'));
+      const clickedButton = event.currentTarget;
+      clickedButton.classList.add('active');
+      const newSrc = clickedButton.getAttribute('data-src');
+      iframe.src = newSrc;
+    }
+
+    buttons.forEach(button => {
+      button.addEventListener('click', loadApiVersion);
+    });
+
+    let defaultIdx = 0;
+    let localStorageVersion = undefined;
+    try {
+      localStorageVersion = localStorage.getItem('vjailbreakSelectedVersion');
+    } catch (e) {}
+    if (localStorageVersion) {
+      buttons.forEach((btn, idx) => {
+        if (btn.textContent === localStorageVersion) {
+          defaultIdx = idx;
+        }
+      });
+    } else if (typeof defaultVersion !== 'undefined') {
+      buttons.forEach((btn, idx) => {
+        if (btn.textContent === defaultVersion) {
+          defaultIdx = idx;
+        }
+      });
+    }
+    if (buttons.length > 0) {
+      buttons[defaultIdx].click();
+    } else if (iframeContainer) {
+      iframeContainer.innerHTML = '<p>No API versions found.</p>';
+    }
+  });
+</script>
