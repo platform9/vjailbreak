@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -33,10 +34,12 @@ type VCenterClient struct {
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
 	// add protocol to host if not present
-	if host[:4] != "http" {
+	if !strings.HasPrefix(host, "http") {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
+
+	// add SDK path if not present
+	if len(host) < 4 || !strings.HasSuffix(host, "/sdk") {
 		host += "/sdk"
 	}
 
