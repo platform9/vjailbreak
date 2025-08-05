@@ -93,6 +93,7 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'vJailbreak CRDs', slug: 'reference/reference' },
+						{ label: 'Compatibility Matrix', slug: 'reference/compatibility' },
 					],
 				},
 				{
