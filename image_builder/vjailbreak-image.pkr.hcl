@@ -94,8 +94,6 @@ build {
     "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
     "sudo mv /etc/pf9/images/virtio-win.iso /home/ubuntu/virtio-win/virtio-win.iso",
     "sudo mv /tmp/yamls /etc/pf9/yamls",
-    "sudo mv /etc/pf9/yamls/vjailbreak-settings.yaml /etc/pf9/vjailbreak-settings.yaml",
-    "sudo mv /etc/pf9/yamls/analytics-keys.yaml /etc/pf9/analytics-keys.yaml",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/vjailbreak-settings.yaml /etc/pf9/vjailbreak-settings.yaml",
