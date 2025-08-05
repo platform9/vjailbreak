@@ -34,8 +34,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_INTERVAL_SECONDS` | Interval to wait for VM to become active (in seconds) | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_RETRY_LIMIT` | Number of retries to wait for VM to become active | `15` | Any positive integer |
-| `DEFAULT_MIGRATION_METHOD` | Default method for VM migration *(placeholder for future releases, not currently used)* | `hot` | `hot`, `cold` |
-| `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `100` | Any positive integer |
+| `DEFAULT_MIGRATION_METHOD` | Default method for VM migration *(placeholder for future releases, not currently used)* | `hot` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
+| `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
 
 ## Modifying Settings
 
@@ -83,10 +83,11 @@ metadata:
   name: vjailbreak-settings
   namespace: migration-system
 data:
-  LOG_LEVEL: "debug"
-  MAX_CONCURRENT_MIGRATIONS: "5"
-  RESOURCE_QUOTA_CPU: "2000m"
-  RESOURCE_QUOTA_MEMORY: "4Gi"
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "30"
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "30"
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "20"
+  DEFAULT_MIGRATION_METHOD: "hot"
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "150"
 EOF
 
 kubectl apply -f vjailbreak-settings.yaml
@@ -122,7 +123,12 @@ kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p 
 
 > **Note:** This setting is currently a placeholder and does not affect the system. It will be implemented in future releases.
 
-In upcoming releases, you'll be able to set the default migration method for VMs:
+In upcoming releases, you'll be able to set the default migration method for VMs. The system supports two migration methods:
+
+- **Hot migration**: Migrates VMs while they are running, minimizing downtime but requiring more coordination and potentially multiple sync iterations to capture changed blocks
+- **Cold migration**: Powers off the VM before migration, ensuring data consistency but causing downtime during the entire migration process
+
+You'll be able to configure the default method as follows:
 
 ```bash
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"DEFAULT_MIGRATION_METHOD":"cold"}}'
@@ -138,7 +144,18 @@ kubectl get configmap -n migration-system vjailbreak-settings -o yaml
 
 ## Applying Changes
 
-After modifying settings in the ConfigMap, no restart is required. The ConfigMap is not mounted as a volume; instead, its values are fetched at runtime by the system components. Changes to the settings take effect immediately for new operations.
+After modifying settings in the ConfigMap, no restart is required. The ConfigMap is not mounted as a volume; instead, its values are fetched at runtime by the system components.
+
+### When Changes Take Effect
+
+The vJailbreak system fetches ConfigMap values as follows:
+
+- **On-demand access**: Values are read from the ConfigMap when they are needed for an operation
+- **New operations**: Changes affect only new operations that start after the ConfigMap is updated
+- **In-progress operations**: Running operations continue using the values they initially read
+- **No caching**: The system does not cache these values for extended periods, ensuring relatively quick propagation of changes
+
+Typically, your changes will be effective within seconds for any new operations initiated after updating the ConfigMap.
 
 ## Best Practices and Considerations
 
