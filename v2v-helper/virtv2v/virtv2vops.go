@@ -519,7 +519,11 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	log.Printf("Failed to get /etc/os-release: %v", err)
 	// Fallback if file is missing
 	if strings.Contains(err.Error(), "No such file or directory") {
-		return RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/redhat-release")
+		fallbackOutput, fallbackErr := RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/redhat-release")
+		if fallbackErr != nil {
+			return "", fmt.Errorf("failed to get OS release: primary (/etc/os-release): %v, fallback (/etc/redhat-release): %v", err, fallbackErr)
+		}
+		return fallbackOutput, nil
 	}
 
 	// Return original error if not a missing file issue
