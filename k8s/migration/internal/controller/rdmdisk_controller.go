@@ -94,10 +94,8 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	switch rdmDisk.Status.Phase {
 	case "":
 		return r.handleInitialPhase(ctx, rdmDisk, ctxlog)
-
 	case RDMPhaseAvailable:
 		return r.handleAvailablePhase(ctx, rdmDisk, ctxlog)
-
 	case RDMPhaseManaging:
 		return r.handleManagingPhase(ctx, req, rdmDisk, ctxlog)
 	case RDMPhaseManaged:
@@ -126,7 +124,7 @@ func (r *RDMDiskReconciler) handleInitialPhase(ctx context.Context, rdmDisk *vja
 		}
 	}
 	if err := ValidateRDMDiskFields(rdmDisk); err != nil {
-		log.Error(err, "validation failed")
+		log.Info("RDMDisk validation failed", "error", err.Error())
 		updateStatusCondition(rdmDisk, metav1.Condition{
 			Type:    ConditionValidationFailed,
 			Status:  metav1.ConditionTrue,

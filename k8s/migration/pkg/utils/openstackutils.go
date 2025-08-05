@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
@@ -74,8 +75,8 @@ func BuildVolumeManagePayload(rdmDisk v1alpha1.RDMDisk) (map[string]interface{},
 	// Assumes only one key-value pair in VolumeRef
 	var key, value string
 	for k, rm := range rdmDisk.Spec.OpenstackVolumeRef.VolumeRef {
-		key = k
-		value = rm
+		key = strings.Trim(k, "'\"")
+		value = strings.Trim(rm, "'\"")
 		break
 	}
 
