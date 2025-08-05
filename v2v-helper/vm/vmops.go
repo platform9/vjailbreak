@@ -686,12 +686,19 @@ func copyRDMDisks(vminfo *VMInfo, rdmDiskInfo *vjailbreakv1alpha1.VMwareMachine)
 	}
 }
 func (vmops *VMOps) ListSnapshots() ([]types.VirtualMachineSnapshotTree, error) {
-	vm := vmops.VMObj
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
-	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"snapshot"}, &o)
+	err = freshVM.Properties(vmops.ctx, freshVM.Reference(), []string{"snapshot"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %s", err)
 	}
+	
 	// Check if o.Snapshot is nil before accessing RootSnapshotList
 	if o.Snapshot == nil {
 		// VM has no snapshots
