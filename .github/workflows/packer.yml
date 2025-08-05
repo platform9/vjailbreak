@@ -362,6 +362,9 @@ jobs:
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+          echo "ANALYTICS_KEY=${{ secrets.AMPLITUDE_API_KEY }}" >> $GITHUB_ENV
+          echo "BUGSNAG_KEY=${{ secrets.BUGSNAG_API_KEY }}" >> $GITHUB_ENV
+          
 
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
@@ -397,8 +400,6 @@ jobs:
           make -C ./k8s/migration/ build-installer
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
           cp -r ./k8s/kube-prometheus image_builder/deploy/
-          cp ./image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
-          cp ./image_builder/configs/analytics-keys.yaml image_builder/deploy/analytics-keys.yaml
       
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1

@@ -55,7 +55,6 @@ generate-manifests: vjail-controller ui
 	rm -rf image_builder/deploy && mkdir -p image_builder/deploy && chmod 755 image_builder/deploy
 	envsubst < ui/deploy/ui.yaml > image_builder/deploy/01ui.yaml
 	envsubst < image_builder/configs/version-config.yaml > image_builder/deploy/version-config.yaml
-	envsubst < image_builder/configs/analytics-keys.yaml > image_builder/deploy/analytics-keys.yaml
 	cp image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 	
