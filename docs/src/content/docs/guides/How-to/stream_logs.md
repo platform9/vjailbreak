@@ -1,5 +1,5 @@
 ---
-title: Stream syslogs from vJailbreak
+title: Stream Logs
 description: How to setup rsyslog to stream logs from vJailbreak VMs to fluentd and integrate with Loki
 ---
 In this guide, we will cover how to enable the streaming of syslogs from vJailbreak VMs to fluentd and integrate with Loki running on the PCD-CE.
