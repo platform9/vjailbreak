@@ -388,9 +388,13 @@ jobs:
 
       - name: Substitue image tags in analytics secret
         uses: danielr1996/envsubst-action@1.0.0
+        env:
+          AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
+          BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
+          TAG: ${{ needs.determine-release.outputs.tag }}
         with:
           input: ./image_builder/configs/analytics-keys.yaml
-          output: ./image_builder/configs/analytics-keys.yaml
+          output: ./image_builder/deploy/analytics-keys.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v5
