@@ -1,5 +1,5 @@
 ---
-title: "Using vjailbreak-settings ConfigMap"
+title: "Use vJailbreak Settings"
 description: "How to modify global settings for vJailbreak using the vjailbreak-settings ConfigMap"
 ---
 
