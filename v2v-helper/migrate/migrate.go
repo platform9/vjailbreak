@@ -574,7 +574,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			// If NM is not present, we add udev rules to pin the interface names
 			versionID := parseVersionID(osRelease)
 			if versionID == "" {
-
+				return errors.Errorf("failed to get version ID")
 			}
 			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
 			if err != nil {
