@@ -1476,11 +1476,12 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 					return
 				}
 				// Compare OpenstackVolumeRef details
-				if reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) ||
-					savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
-					savedRDMDetails.Spec.OpenstackVolumeRef.VolumeType != rdmInfo.Spec.OpenstackVolumeRef.VolumeType {
-					log.FromContext(ctx).Info("Details do not match, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
-					continue
+				if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
+					if savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
+						savedRDMDetails.Spec.OpenstackVolumeRef.VolumeType != rdmInfo.Spec.OpenstackVolumeRef.VolumeType {
+						log.FromContext(ctx).Info("RDM VolumeType and CinderBackend doesn't match compared to previous value, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
+						continue
+					}
 				}
 				// Add owner VMs if not exists already and sort OwnerVMs alphabetically
 				// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs

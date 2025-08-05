@@ -1373,10 +1373,6 @@ spec:
                     type: object
                   volumeType:
                     type: string
-                required:
-                - cinderBackendPool
-                - source
-                - volumeType
                 type: object
               ownerVMs:
                 items:
@@ -1388,7 +1384,6 @@ spec:
             - diskName
             - diskSize
             - displayName
-            - openstackVolumeRef
             - ownerVMs
             - uuid
             type: object
@@ -3592,7 +3587,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.3.0
+        image: quay.io/platform9/vjailbreak-controller:0.3.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
