@@ -15,7 +15,7 @@ This is done through 'evacuating' the ESXi host and converting it into PCD hyper
 
 See below the animation of the cluster conversion process.
 
-![Cluster conversion](/vjailbreak/images/vjailbreak-cluster-conversion.gif)
+![Cluster conversion](/vjailbreak/images/vjb-cluster-conversion.gif)
 
 Choose a VMware cluster and select the destination cluster in PCD. Once the clusters are selected, you will be shown the VMware ESXi hosts and the corresponding VMs. The VM portion of the wizard is similar/same as that in the [VM Migration](#vm-migration) section.
 
