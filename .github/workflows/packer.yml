@@ -18,6 +18,22 @@ on:
         description: "Branch to use"
         required: true
         default: "main"
+        type: string
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: false
+        type: string
+        default: ''
+      short_sha:
+        description: 'Short commit SHA'
+        required: false
+        type: string
+        default: ''
+      is_nightly:
+        description: 'Whether this is a nightly build'
+        required: false
+        type: boolean
+        default: false
 
 env:
   PACKER_VERSION: "latest"
@@ -26,6 +42,7 @@ env:
   V2V_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
   CONTROLLER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-controller
   VPWNED_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-vpwned
+  NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
 
 
 jobs:
@@ -33,6 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is_release: ${{ env.release_found }}
+      is_nightly: ${{ github.event.inputs.is_nightly }}
       tag: ${{ steps.set_env.outputs.tag }}
       ui_img: ${{ steps.set_env.outputs.ui_img }}
       v2v_img: ${{ steps.set_env.outputs.v2v_img }}
@@ -72,6 +90,14 @@ jobs:
             echo "release_found=true" >> $GITHUB_ENV
           fi
 
+      - name: Check if nightly build
+        id: check_nightly
+        run: |
+          if [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            echo "is_nightly=true" >> $GITHUB_ENV
+            echo "is_nightly=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Check if PR raised from release branch
         id: check_pr_is_from_release_branch
         if: github.event.pull_request && startsWith(github.head_ref, 'release-v')
@@ -84,6 +110,25 @@ jobs:
           # Get the branch name, remove 'refs/heads/' from github.ref
           BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
           GIT_SHA=$(echo "$(git rev-parse --short HEAD)")
+         
+          #check if workflow_dispatch is triggered and short sha is provided
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.short_sha }}" != "" ]]; then
+              echo "short_sha is provided as ${{ github.event.inputs.short_sha }}"
+              GIT_SHA=${{ github.event.inputs.short_sha }}
+            fi
+          fi
+
+          #check if workflow_dispatch is triggered and version is provided
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.version }}" != "" ]]; then
+              echo "version is provided as ${{ github.event.inputs.version }}"
+              BUILD_VERSION=${{ github.event.inputs.version }}
+            else 
+             BUILD_VERSION=${{ github.run_number }}
+            fi
+          fi
+
           GIT_BRANCH=$(echo "$(git rev-parse --abbrev-ref HEAD)")
           # if its a release event bump the version and use that as tag
           if [[ "${{ github.event_name }}" == "release" ]]; then
@@ -91,8 +136,10 @@ jobs:
             # build version will be the same as tag
             TAG=${{ github.event.release.tag_name }}
             BUILD_VERSION=${TAG}
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION=${BUILD_VERSION}-${GIT_SHA}
+            TAG=${VERSION}
           else
-            BUILD_VERSION=${{ github.run_number }}
             # build release version as version-branch-sha
             VERSION=${BUILD_VERSION}-${GIT_SHA}
             # Since this is a merge or pull-request 
@@ -258,6 +305,7 @@ jobs:
           ref: ${{ github.event.inputs.branch || github.ref }}
           
       - name: Login to Docker Hub
+        if: ${{ !env.ACT }}
         uses: docker/login-action@v3
         with:
           registry: ${{ vars.REGISTRY }}
@@ -272,38 +320,37 @@ jobs:
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
-
-          if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
-            echo "release_found=true" >> $GITHUB_ENV
-          else
-            echo "release_found=false" >> $GITHUB_ENV
-          fi
           
       - name: Download UI image artifact
+        if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: ui-docker-image
           path: ./docker-images
 
       - name: Download V2V Helper image artifact
+        if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: v2v-docker-image
           path: ./docker-images
           
       - name: Download Controller image artifact
+        if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: controller-docker-image
           path: ./docker-images
           
       - name: Download VPWNED image artifact
+        if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: vpwned-docker-image
           path: ./docker-images
           
       - name: Load Docker images
+        if: ${{ !env.ACT }}
         run: |
           docker load -i ./docker-images/ui-image.tar
           docker load -i ./docker-images/v2v-image.tar
@@ -311,21 +358,21 @@ jobs:
           docker load -i ./docker-images/vpwned-image.tar
         
       - name: Push UI Image
+        if: ${{ !env.ACT }}
         run: docker push ${{ env.UI_IMG }}
         
       - name: Push V2V Helper Image
+        if: ${{ !env.ACT }}
         run: docker push ${{ env.V2V_IMG }}
         
       - name: Push Controller Image
+        if: ${{ !env.ACT }}
         run: docker push ${{ env.CONTROLLER_IMG }}
         
       - name: Push VPWNED Image
+        if: ${{ !env.ACT }}
         run: docker push ${{ env.VPWNED_IMG }}
         
-      - name: Setup ORAS
-        if: env.release_found == 'true'
-        uses: oras-project/setup-oras@v1.2.1
-  
   post-build:
     runs-on: ubuntu-latest
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, push-images]
@@ -369,6 +416,12 @@ jobs:
             echo "release_found=false" >> $GITHUB_ENV
           fi
 
+          if [[ "${{ needs.determine-release.outputs.is_nightly }}" == "true" ]]; then
+            echo "is_nightly=true" >> $GITHUB_ENV
+          else
+            echo "is_nightly=false" >> $GITHUB_ENV
+          fi
+
       - name: Substitue image tags in manifests
         uses: danielr1996/envsubst-action@1.0.0
         with:
@@ -392,76 +445,152 @@ jobs:
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
           cp -r ./k8s/kube-prometheus image_builder/deploy/
           cp ./image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
-          
+
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1
 
       - name: Download ubuntu base image
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
+
+      - name: Configure AWS credentials for S3 download
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+
+      - name: Download ubuntu base image from S3
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          # Create directory for the image if it doesn't exist
+          mkdir -p ./image_builder/images
+          
+          # Download the base image from S3
+          # The path should be adjusted based on where you store the base image in S3
+          aws s3 cp "s3://$S3_BUCKET/vjailbreak/base-images/ubuntu-base-prebaked.qcow2" \
+            ./image_builder/images/ubuntu-base-prebaked.qcow2
+            
+          # Verify the download was successful
+          if [ ! -f "./image_builder/images/ubuntu-base-prebaked.qcow2" ]; then
+            echo "Error: Failed to download base image from S3"
+            exit 1
+          fi
       
       - name: Download images and export as tar
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y containerd.
-          sudo mkdir -p image_builder/images
-          sudo chmod +x image_builder/scripts/download_images.sh
+          sudo mkdir -p ./image_builder/images
+          sudo chmod +x ./image_builder/scripts/download_images.sh
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
           
       - name: Copy opensource.txt to image_builder
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: cp ./opensource.txt ./image_builder/opensource.txt
 
       - name: Enable KVM group perms
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
       - name: Set up QEMU
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: sudo apt-get install qemu-system qemu-utils -y
 
       - name: Setup packer
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         uses: hashicorp/setup-packer@main
         id: setup
         with:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Run packer init
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         id: init
         run: "packer init ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: Run packer validate
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         id: validate
         run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: setup-oras
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         uses: oras-project/setup-oras@v1.2.1
 
       - name: Run packer build for normal image
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         id: build-1
         run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: Upload vjailbreak qcow2 to quay
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
       - name: Upload QCOW2 image artifact
-        if: env.release_found == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Configure AWS credentials for S3 upload
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+
+      - name: Upload to S3 (Nightly Build)
+        if: env.is_nightly == 'true'
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          # Create timestamp for the nightly build path
+          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%S")
+          # Get the short SHA from inputs or generate from current commit
+          if [ -n "${{ github.event.inputs.short_sha }}" ]; then
+            SHORT_SHA="${{ github.event.inputs.short_sha }}"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+          fi
+          
+          # Define S3 paths
+          S3_PATH="vjailbreak/nightly_build/$TIMESTAMP/$SHORT_SHA/vjailbreak-image.qcow2"
+          
+          echo "Uploading nightly build to s3://$S3_BUCKET/$S3_PATH"
+          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://$S3_BUCKET/$S3_PATH"
+          
+          # Output the S3 path for use in other jobs
+          echo "NIGHTLY_S3_PATH=$S3_PATH" >> $GITHUB_ENV
+
+      - name: Upload to S3 (Release)
+        if: env.release_found == 'true' && github.event_name == 'release'
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          # Get the release tag without 'v' prefix if it exists
+          RELEASE_TAG="${GITHUB_REF#refs/tags/v}"
+          RELEASE_TAG="${RELEASE_TAG#v}"  # Remove 'v' prefix if it exists
+          
+          # Define S3 paths
+          S3_PATH="vjailbreak/releases/$RELEASE_TAG/vjailbreak-image.qcow2"
+          
+          echo "Uploading release to s3://$S3_BUCKET/$S3_PATH"
+          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://$S3_BUCKET/$S3_PATH"
+          
+          # Output the S3 path for use in other jobs
+          echo "RELEASE_S3_PATH=$S3_PATH" >> $GITHUB_ENV
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
