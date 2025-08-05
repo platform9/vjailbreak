@@ -62,15 +62,6 @@ build {
     destination = "/tmp/rsyncd.conf"
   }
   provisioner "file" {
-    source      = "${path.root}/deploy/vjailbreak-settings.yaml"
-    destination = "/tmp/vjailbreak-settings.yaml"
-  }
-  provisioner "file" {
-    source      = "${path.root}/deploy/analytics-keys.yaml"
-    destination = "/tmp/analytics-keys.yaml"
-  }
-
-  provisioner "file" {
     source      = "${path.root}/configs/env"
     destination = "/tmp/env"
   }
