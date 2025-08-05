@@ -66,8 +66,8 @@ build {
     destination = "/tmp/vjailbreak-settings.yaml"
   }
   provisioner "file" {
-    source      = "${path.root}/configs/vjailbreak-settings.yaml"
-    destination = "/tmp/vjailbreak-settings.yaml"
+    source      = "${path.root}/configs/analytics-keys.yaml"
+    destination = "/tmp/analytics-keys.yaml"
   }
 
   provisioner "file" {
