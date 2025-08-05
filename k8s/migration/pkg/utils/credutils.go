@@ -1168,6 +1168,17 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 						existingDisk.Spec.OpenstackVolumeRef.VolumeType != "" {
 						rdmInfo[i].Spec.OpenstackVolumeRef.VolumeType = existingDisk.Spec.OpenstackVolumeRef.VolumeType
 					}
+
+					// Update Openstack Volume Reference if existing disk doesn't have it but new one does
+					if !reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+						!reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
+						existingDisk.Spec.OpenstackVolumeRef = vmwareDisks.Spec.OpenstackVolumeRef
+						err = k3sclient.Update(ctx, &existingDisk)
+						if err != nil {
+							return fmt.Errorf("failed to update existing RDM disk CR with new OpenStack volume reference: %w", err)
+						}
+						log.FromContext(ctx).Info("Updated existing RDM disk CR with new OpenStack volume reference", "name", existingDisk.Name)
+					}
 				}
 			} else {
 				// Create RDM disk CR if it doesn't exist
