@@ -31,7 +31,7 @@ add support for additional versions. Verified implies it has been tested and con
 | CentOS Stream10 | linux/amd64 | No | Yes |
 | Debian GNU/Linux 8 (64-bit) | linux/amd64 | No | Yes |
 | Debian 12 | linux/amd64 | Yes | Yes |
-| FreeBSD 14 | bsd/amd64 | Yes |Yes |
+| FreeBSD 14 | bsd/amd64 | Yes | Yes |
 | Microsoft Windows 11 | windows/amd64 | Yes | Yes |
 | Microsoft Windows 11 Enterprise | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2019 | windows/amd64 | Yes | Yes |
