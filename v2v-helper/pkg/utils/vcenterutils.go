@@ -36,6 +36,7 @@ type MigrationParams struct {
 	AssignedIP              string
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
+	SecurityGroups          string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -73,5 +74,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		AssignedIP:              string(configMap.Data["ASSIGNED_IP"]),
 		VMwareMachineName:       string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork: string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
+		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
 	}, nil
 }
