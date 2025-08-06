@@ -144,10 +144,15 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 }
 
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
-	vm := vmops.VMObj
-
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return VMInfo{}, fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
-	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	err = freshVM.Properties(vmops.ctx, freshVM.Reference(), []string{}, &o)
 	if err != nil {
 		return VMInfo{}, fmt.Errorf("failed to get VM properties: %s", err)
 	}
@@ -259,13 +264,19 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 
 func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 	pc := vmops.vcclient.VCPropertyCollector
-	vm := vmops.VMObj
 	var snapbackingdisk []string
 	var snapname []string
 	var snapid []string
-
+	
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
-	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	err = freshVM.Properties(vmops.ctx, freshVM.Reference(), []string{}, &o)
 	if err != nil {
 		return fmt.Errorf("failed to get VM properties: %s", err)
 	}
@@ -310,13 +321,19 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 
 func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
-	vm := vmops.VMObj
 	var snapbackingdisk []string
 	var snapname []string
 	var snapid []string
-
+	
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
-	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	err = freshVM.Properties(vmops.ctx, freshVM.Reference(), []string{}, &o)
 	if err != nil {
 		return fmt.Errorf("failed to get VM properties: %s", err)
 	}
@@ -363,9 +380,14 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess
 }
 
 func (vmops *VMOps) IsCBTEnabled() (bool, error) {
-	vm := vmops.VMObj
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return false, fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
 	var o mo.VirtualMachine
-	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"config.changeTrackingEnabled"}, &o)
+	err = freshVM.Properties(vmops.ctx, freshVM.Reference(), []string{"config.changeTrackingEnabled"}, &o)
 	if err != nil {
 		return false, fmt.Errorf("failed to get VM properties: %s", err)
 	}
@@ -373,12 +395,17 @@ func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 }
 
 func (vmops *VMOps) EnableCBT() error {
-	vm := vmops.VMObj
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
 	configSpec := types.VirtualMachineConfigSpec{
 		ChangeTrackingEnabled: types.NewBool(true),
 	}
 
-	task, err := vm.Reconfigure(vmops.ctx, configSpec)
+	task, err := freshVM.Reconfigure(vmops.ctx, configSpec)
 	if err != nil {
 		return fmt.Errorf("failed to enable CBT: %s", err)
 	}
@@ -390,11 +417,18 @@ func (vmops *VMOps) EnableCBT() error {
 }
 
 func (vmops *VMOps) TakeSnapshot(name string) error {
-	vm := vmops.VMObj
-	task, err := vm.CreateSnapshot(vmops.ctx, name, "", false, false)
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
+	task, err := freshVM.CreateSnapshot(vmops.ctx, name, "", false, false)
 	if err != nil {
 		return fmt.Errorf("failed to take snapshot: %s", err)
 	}
+	
 	err = task.Wait(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed while waiting for task: %s", err)
@@ -403,9 +437,14 @@ func (vmops *VMOps) TakeSnapshot(name string) error {
 }
 
 func (vmops *VMOps) DeleteSnapshot(name string) error {
-	vm := vmops.VMObj
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
 	var consolidate = true
-	task, err := vm.RemoveSnapshot(vmops.ctx, name, false, &consolidate)
+	task, err := freshVM.RemoveSnapshot(vmops.ctx, name, false, &consolidate)
 	if err != nil {
 		return fmt.Errorf("failed to delete snapshot: %s", err)
 	}
@@ -420,20 +459,27 @@ func (vmops *VMOps) DeleteSnapshotByRef(snap *types.ManagedObjectReference) erro
 	// Create a method to remove snapshot using the reference
 	var consolidate = true
 
+	// We need to use the session-aware client for this operation
+	// Get a reference to the snapshot object using the session-aware client
+	snap_obj := types.ManagedObjectReference{
+		Type:  snap.Type,
+		Value: snap.Value,
+	}
+
 	// Create a RemoveSnapshot_Task request
 	req := types.RemoveSnapshot_Task{
-		This:           *snap,
+		This:           snap_obj,
 		RemoveChildren: true,
 		Consolidate:    &consolidate,
 	}
 
-	// Send the request
+	// Send the request using the session-aware client
 	res, err := methods.RemoveSnapshot_Task(vmops.ctx, vmops.vcclient.VCClient, &req)
 	if err != nil {
 		return fmt.Errorf("failed to remove snapshot by ref: %s", err)
 	}
 
-	// Create a task object and wait for completion
+	// Create and monitor the task using the session-aware client
 	task := object.NewTask(vmops.vcclient.VCClient, res.Returnval)
 	err = task.Wait(vmops.ctx)
 	if err != nil {
@@ -443,8 +489,13 @@ func (vmops *VMOps) DeleteSnapshotByRef(snap *types.ManagedObjectReference) erro
 }
 
 func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, error) {
-	vm := vmops.VMObj
-	snap, err := vm.FindSnapshot(vmops.ctx, name)
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	snap, err := freshVM.FindSnapshot(vmops.ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find snapshot: %s", err)
 	}
@@ -453,17 +504,25 @@ func (vmops *VMOps) GetSnapshot(name string) (*types.ManagedObjectReference, err
 
 func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot *types.ManagedObjectReference, disk *types.VirtualDisk, offset int64) (types.DiskChangeInfo, error) {
 	var changedblocks types.DiskChangeInfo
-	v := vmops.VMObj
+	
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return changedblocks, fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
 
 	req := types.QueryChangedDiskAreas{
-		This:        v.Reference(),
-		Snapshot:    curSnapshot,
+		This:        freshVM.Reference(),
+		ChangeId:    baseChangeID,
 		DeviceKey:   disk.Key,
 		StartOffset: offset,
-		ChangeId:    baseChangeID,
+	}
+
+	if curSnapshot != nil {
+		req.Snapshot = curSnapshot
 	}
 	for {
-		res, err := methods.QueryChangedDiskAreas(vmops.ctx, v.Client(), &req)
+		res, err := methods.QueryChangedDiskAreas(vmops.ctx, vmops.vcclient.VCClient, &req)
 		if err != nil {
 			return changedblocks, fmt.Errorf("failed to query changed disk areas: %s", err)
 		}
@@ -487,27 +546,34 @@ func (vmops *VMOps) CustomQueryChangedDiskAreas(baseChangeID string, curSnapshot
 }
 
 func (vmops *VMOps) VMGuestShutdown() error {
-	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	currstate, err := freshVM.PowerState(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get VM power state: %s", err)
 	}
+
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
 
-	// Attempt guest OS shutdown
-	err = vmops.VMObj.ShutdownGuest(vmops.ctx)
+	// Attempt guest OS shutdown with the fresh VM reference
+	err = freshVM.ShutdownGuest(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initiate guest shutdown: %s", err)
 	}
 
-	// Wait for up to 2 minutes for the VM to power off
+	// Wait for up to 5 minutes for the VM to power off
 	poweredOff := false
-	ctx, cancel := context.WithTimeout(vmops.ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(vmops.ctx, 5*time.Minute)
 	defer cancel()
 
 	for !poweredOff {
-		state, err := vmops.VMObj.PowerState(ctx)
+		state, err := freshVM.PowerState(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get VM power state: %s", err)
 		}
@@ -529,10 +595,17 @@ func (vmops *VMOps) VMGuestShutdown() error {
 }
 
 func (vmops *VMOps) VMPowerOff() error {
-	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	currstate, err := freshVM.PowerState(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get VM power state: %s", err)
 	}
+
 	if currstate == types.VirtualMachinePowerStatePoweredOff {
 		return nil
 	}
@@ -547,8 +620,14 @@ func (vmops *VMOps) VMPowerOff() error {
 	// If guest shutdown failed, log the error and fall back to power off
 	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
 
-	// Fall back to power off
-	task, err := vmops.VMObj.PowerOff(vmops.ctx)
+	// Fall back to power off - get a fresh VM reference again for the power operation
+	freshVM, err = vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	// Use the refreshed VM object with current authentication
+	task, err := freshVM.PowerOff(vmops.ctx)
 	if err != nil {
 		return err
 	}
@@ -560,17 +639,27 @@ func (vmops *VMOps) VMPowerOff() error {
 }
 
 func (vmops *VMOps) VMPowerOn() error {
-	currstate, err := vmops.VMObj.PowerState(vmops.ctx)
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
+	currstate, err := freshVM.PowerState(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get VM power state: %s", err)
 	}
+
 	if currstate == types.VirtualMachinePowerStatePoweredOn {
 		return nil
 	}
-	task, err := vmops.VMObj.PowerOn(vmops.ctx)
+
+	// Use the refreshed VM object with current authentication
+	task, err := freshVM.PowerOn(vmops.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to power on VM: %s", err)
 	}
+
 	if err := task.Wait(vmops.ctx); err != nil {
 		return fmt.Errorf("failed to wait for power on task: %w", err)
 	}
@@ -579,10 +668,15 @@ func (vmops *VMOps) VMPowerOn() error {
 
 func (vmops *VMOps) DisconnectNetworkInterfaces() error {
 	ctx := vmops.ctx
-	vm := vmops.VMObj
-
+	
+	// Get a fresh VM object using the current authenticated client to ensure we have valid session
+	freshVM, err := vmops.vcclient.GetVMByName(ctx, vmops.VMObj.Name())
+	if err != nil {
+		return fmt.Errorf("failed to refresh VM reference: %s", err)
+	}
+	
 	var mvm mo.VirtualMachine
-	if err := vm.Properties(ctx, vm.Reference(), []string{"config.hardware"}, &mvm); err != nil {
+	if err := freshVM.Properties(ctx, freshVM.Reference(), []string{"config.hardware"}, &mvm); err != nil {
 		return fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
@@ -614,7 +708,7 @@ func (vmops *VMOps) DisconnectNetworkInterfaces() error {
 		DeviceChange: deviceChanges,
 	}
 
-	task, err := vm.Reconfigure(ctx, *spec)
+	task, err := freshVM.Reconfigure(ctx, *spec)
 	if err != nil {
 		return errors.Wrap(err, "failed to reconfigure VM network interfaces")
 	}
@@ -757,6 +851,7 @@ func (vmops *VMOps) DeleteMigrationSnapshots(snapshots []types.VirtualMachineSna
 }
 
 func (vmops *VMOps) CleanUpSnapshots(ignoreerror bool) error {
+	// ListSnapshots already uses the session-aware client to get a fresh VM reference
 	snapshotlist, err := vmops.ListSnapshots()
 	if err != nil {
 		return err

@@ -26,10 +26,10 @@ type VCenterOperations interface {
 }
 
 type VCenterClient struct {
-	VCClient           *vim25.Client
-	VCFinder          *find.Finder
+	VCClient            *vim25.Client
+	VCFinder            *find.Finder
 	VCPropertyCollector *property.Collector
-	Session            *cache.Session
+	Session             *cache.Session
 }
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
