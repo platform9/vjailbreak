@@ -202,9 +202,9 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		uefi = true
 	}
 	if ostype == "" {
-		if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyWindowsGuest)) {
+		if strings.EqualFold(string(o.Guest.GuestFamily), string(types.VirtualMachineGuestOsFamilyWindowsGuest)) {
 			ostype = constants.OSFamilyWindows
-		} else if strings.ToLower(o.Guest.GuestFamily) == strings.ToLower(string(types.VirtualMachineGuestOsFamilyLinuxGuest)) {
+		} else if strings.EqualFold(string(o.Guest.GuestFamily), string(types.VirtualMachineGuestOsFamilyLinuxGuest)) {
 			ostype = constants.OSFamilyLinux
 		} else {
 			return VMInfo{}, fmt.Errorf("no OS type provided and unable to determine OS type")
@@ -367,10 +367,10 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess
 				}
 				vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 				vminfo.VMDisks[idx].Snapname = snapname[idx]
-				log.Println(fmt.Sprintf("Updated disk info for %s", disk.Name))
-				log.Println(fmt.Sprintf("Snapshot backing disk: %s", snapbackingdisk[idx]))
-				log.Println(fmt.Sprintf("Snapshot name: %s", snapname[idx]))
-				log.Println(fmt.Sprintf("Change ID: %s", snapid[idx]))
+				log.Printf("Updated disk info for %s", disk.Name)
+				log.Printf("Snapshot backing disk: %s", snapbackingdisk[idx])
+				log.Printf("Snapshot name: %s", snapname[idx])
+				log.Printf("Change ID: %s", snapid[idx])
 				break
 			}
 		}

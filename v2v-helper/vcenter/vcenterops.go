@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -111,12 +112,33 @@ func GetThumbprint(host string) (string, error) {
 	return thumbprint, nil
 }
 
-// Get all datacenters
+// Get all datacenters with retry and explicit authentication
 func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Datacenter, error) {
-	// Find all datacenters
+	// Create a new finder with the current client each time to ensure we're using the most up-to-date client
+	vcclient.VCFinder = find.NewFinder(vcclient.VCClient, false)
+
+	// Try to get datacenters
 	datacenters, err := vcclient.VCFinder.DatacenterList(ctx, "*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get datacenters: %v", err)
+		// If we encounter an authentication error, force an explicit re-login and retry once
+		if strings.Contains(err.Error(), "NotAuthenticated") && vcclient.Session != nil {
+			// Explicitly force re-login
+			login := vcclient.Session.Login
+			if err := login(ctx, vcclient.VCClient, nil); err != nil {
+				return nil, fmt.Errorf("failed to re-login during datacenter refresh: %v", err)
+			}
+			
+			// Create a new finder with the refreshed client
+			vcclient.VCFinder = find.NewFinder(vcclient.VCClient, false)
+			
+			// Try again
+			datacenters, err = vcclient.VCFinder.DatacenterList(ctx, "*")
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datacenters after re-login: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to get datacenters: %v", err)
+		}
 	}
 
 	return datacenters, nil
