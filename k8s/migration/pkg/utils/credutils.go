@@ -1151,71 +1151,71 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 			fmt.Println("VMLs adding ", disk.Name, "to existingDisks map")
 			existingDisks[disk.Name] = *rdmDiskCR
 		}
+	}
 
-		// Update VMInfo RDM disks while preserving OpenStack information
-		for i, vmwareDisks := range rdmInfo {
-			if existingDisk, ok := existingDisks[vmwareDisks.Name]; ok {
-				// Preserve OpenStack volume reference if new one is nil
-				if reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
-					!reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
-					rdmInfo[i].Spec.OpenstackVolumeRef = existingDisk.Spec.OpenstackVolumeRef
-				} else {
-					// Preserve CinderBackendPool if new one is nil
-					if rdmInfo[i].Spec.OpenstackVolumeRef.CinderBackendPool == "" &&
-						existingDisk.Spec.OpenstackVolumeRef.CinderBackendPool != "" {
-						rdmInfo[i].Spec.OpenstackVolumeRef.CinderBackendPool = existingDisk.Spec.OpenstackVolumeRef.CinderBackendPool
-					}
-
-					// Preserve VolumeType if new one is nil
-					if rdmInfo[i].Spec.OpenstackVolumeRef.VolumeType == "" &&
-						existingDisk.Spec.OpenstackVolumeRef.VolumeType != "" {
-						rdmInfo[i].Spec.OpenstackVolumeRef.VolumeType = existingDisk.Spec.OpenstackVolumeRef.VolumeType
-					}
-
-					// Update Openstack Volume Reference if existing disk doesn't have it but new one does
-					if reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
-						!reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
-						existingDisk.Spec.OpenstackVolumeRef = vmwareDisks.Spec.OpenstackVolumeRef
-						err = k3sclient.Update(ctx, &existingDisk)
-						if err != nil {
-							return fmt.Errorf("failed to update existing RDM disk CR with new OpenStack volume reference: %w", err)
-						}
-						log.FromContext(ctx).Info("Updated existing RDM disk CR with new OpenStack volume reference", "name", existingDisk.Name)
-					}
-				}
+	// Update VMInfo RDM disks while preserving OpenStack information
+	for i, vmwareDisks := range rdmInfo {
+		if existingDisk, ok := existingDisks[vmwareDisks.Name]; ok {
+			// Preserve OpenStack volume reference if new one is nil
+			if reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+				!reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
+				rdmInfo[i].Spec.OpenstackVolumeRef = existingDisk.Spec.OpenstackVolumeRef
 			} else {
-				// Create RDM disk CR if it doesn't exist
-				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      strings.TrimSpace(vmwareDisks.Name),
-						Namespace: constants.NamespaceMigrationSystem,
-						Labels: map[string]string{
-							constants.VMwareCredsLabel: vmwcreds.Name,
-						},
-					},
-					Spec: vjailbreakv1alpha1.RDMDiskSpec{
-						DiskName:           vmwareDisks.Spec.DiskName,
-						DiskSize:           vmwareDisks.Spec.DiskSize,
-						DisplayName:        vmwareDisks.Spec.DisplayName,
-						UUID:               vmwareDisks.Spec.UUID,
-						OwnerVMs:           vmwareDisks.Spec.OwnerVMs,
-						OpenstackVolumeRef: vmwareDisks.Spec.OpenstackVolumeRef,
-					},
+				// Preserve CinderBackendPool if new one is nil
+				if rdmInfo[i].Spec.OpenstackVolumeRef.CinderBackendPool == "" &&
+					existingDisk.Spec.OpenstackVolumeRef.CinderBackendPool != "" {
+					rdmInfo[i].Spec.OpenstackVolumeRef.CinderBackendPool = existingDisk.Spec.OpenstackVolumeRef.CinderBackendPool
 				}
-				err := k3sclient.Create(ctx, rdmDiskCR)
-				if err != nil {
-					if !apierrors.IsAlreadyExists(err) {
-						return fmt.Errorf("failed to create RDM disk CR: %w", err)
-					}
-					// If it already exists, update the existing CR with new information
-					err = k3sclient.Update(ctx, rdmDiskCR)
+
+				// Preserve VolumeType if new one is nil
+				if rdmInfo[i].Spec.OpenstackVolumeRef.VolumeType == "" &&
+					existingDisk.Spec.OpenstackVolumeRef.VolumeType != "" {
+					rdmInfo[i].Spec.OpenstackVolumeRef.VolumeType = existingDisk.Spec.OpenstackVolumeRef.VolumeType
+				}
+
+				// Update Openstack Volume Reference if existing disk doesn't have it but new one does
+				if reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+					!reflect.DeepEqual(vmwareDisks.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
+					existingDisk.Spec.OpenstackVolumeRef = vmwareDisks.Spec.OpenstackVolumeRef
+					err := k3sclient.Update(ctx, &existingDisk)
 					if err != nil {
-						return fmt.Errorf("failed to update existing RDM disk CR: %w", err)
+						return fmt.Errorf("failed to update existing RDM disk CR with new OpenStack volume reference: %w", err)
 					}
+					log.FromContext(ctx).Info("Updated existing RDM disk CR with new OpenStack volume reference", "name", existingDisk.Name)
 				}
-				log := log.FromContext(ctx)
-				log.Info("Created new RDM disk CR", "name", rdmDiskCR.Name)
 			}
+		} else {
+			// Create RDM disk CR if it doesn't exist
+			rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      strings.TrimSpace(vmwareDisks.Name),
+					Namespace: constants.NamespaceMigrationSystem,
+					Labels: map[string]string{
+						constants.VMwareCredsLabel: vmwcreds.Name,
+					},
+				},
+				Spec: vjailbreakv1alpha1.RDMDiskSpec{
+					DiskName:           vmwareDisks.Spec.DiskName,
+					DiskSize:           vmwareDisks.Spec.DiskSize,
+					DisplayName:        vmwareDisks.Spec.DisplayName,
+					UUID:               vmwareDisks.Spec.UUID,
+					OwnerVMs:           vmwareDisks.Spec.OwnerVMs,
+					OpenstackVolumeRef: vmwareDisks.Spec.OpenstackVolumeRef,
+				},
+			}
+			err := k3sclient.Create(ctx, rdmDiskCR)
+			if err != nil {
+				if !apierrors.IsAlreadyExists(err) {
+					return fmt.Errorf("failed to create RDM disk CR: %w", err)
+				}
+				// If it already exists, update the existing CR with new information
+				err = k3sclient.Update(ctx, rdmDiskCR)
+				if err != nil {
+					return fmt.Errorf("failed to update existing RDM disk CR: %w", err)
+				}
+			}
+			log := log.FromContext(ctx)
+			log.Info("Created new RDM disk CR", "name", rdmDiskCR.Name)
 		}
 	}
 	return nil
