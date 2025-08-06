@@ -8,4 +8,4 @@ data:
   amplitude-api-key: ${AMPLITUDE_API_KEY}
   bugsnag-api-key: ${BUGSNAG_API_KEY}
   app-version: ${TAG}
-  release-stage: "production"
+  release-stage: cHJvZHVjdGlvbgo=

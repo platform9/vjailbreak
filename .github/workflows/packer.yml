@@ -364,9 +364,6 @@ jobs:
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
-          echo "AMPLITUDE_API_KEY=${{ secrets.AMPLITUDE_API_KEY }}" >> $GITHUB_ENV
-          echo "BUGSNAG_API_KEY=${{ secrets.BUGSNAG_API_KEY }}" >> $GITHUB_ENV
-          
 
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
@@ -389,9 +386,9 @@ jobs:
       - name: Substitue image tags in analytics secret
         uses: danielr1996/envsubst-action@1.0.0
         env:
-          AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
-          BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
-          TAG: ${{ needs.determine-release.outputs.tag }}
+          AMPLITUDE_API_KEY: echo -n "${{ secrets.AMPLITUDE_API_KEY }}" | base64 -w 0
+          BUGSNAG_API_KEY: echo -n "${{ secrets.BUGSNAG_API_KEY }}" | base64 -w 0
+          TAG: echo -n "${{ needs.determine-release.outputs.tag }}" | base64 -w 0
         with:
           input: ./image_builder/configs/analytics-keys.yaml
           output: ./image_builder/deploy/analytics-keys.yaml

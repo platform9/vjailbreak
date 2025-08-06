@@ -144,13 +144,6 @@ if [ "$IS_MASTER" == "true" ]; then
   # Create a config map from env file. 
   kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
-
-  # Apply vjailbreak setting config map 
-  kubectl apply -f /etc/pf9/vjailbreak-settings.yaml
-
-  # Apply analytics keys config map 
-  kubectl apply -f /etc/pf9/analytics-keys.yaml
-
   log "Config map created successfully."
 
 else
