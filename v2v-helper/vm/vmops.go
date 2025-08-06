@@ -153,10 +153,8 @@ func (vmops *VMOps) RefreshVM() error {
 }
 
 func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
-	// Get a fresh VM object using the current authenticated client to ensure we have valid session
 	vm := vmops.VMObj
 
-	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
 	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 	if err != nil {
@@ -286,7 +284,6 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 
 	vm := vmops.VMObj
 
-	// Use the refreshed VM object with current authentication
 	var o mo.VirtualMachine
 	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 	if err != nil {
@@ -348,7 +345,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess
 	var snapid []string
 
 	vm := vmops.VMObj
-	// Use the refreshed VM object with current authentication
+
 	var o mo.VirtualMachine
 	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 	if err != nil {
