@@ -1148,7 +1148,6 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 		if err != nil {
 			log.FromContext(ctx).Error(err, "Failed to get existing RDM disk CR", "name", disk.Name)
 		} else {
-			fmt.Println("VMLs adding ", disk.Name, "to existingDisks map")
 			existingDisks[disk.Name] = *rdmDiskCR
 		}
 	}
