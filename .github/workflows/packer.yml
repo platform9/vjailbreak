@@ -385,9 +385,9 @@ jobs:
 
       - name: Set base64-encoded environment variables
         run: |
-          echo "AMPLITUDE_API_KEY=$(echo -n \"${{ secrets.AMPLITUDE_API_KEY }}\" | base64 -w 0)" >> $GITHUB_ENV
-          echo "BUGSNAG_API_KEY=$(echo -n \"${{ secrets.BUGSNAG_API_KEY }}\" | base64 -w 0)" >> $GITHUB_ENV
-          echo "VJB_VERSION_TAG=$(echo -n \"${{ needs.determine-release.outputs.tag }}\" | base64 -w 0)" >> $GITHUB_ENV
+          echo "AMPLITUDE_API_KEY=$(echo -n ${{ secrets.AMPLITUDE_API_KEY }} | base64 -w 0)" >> $GITHUB_ENV
+          echo "BUGSNAG_API_KEY=$(echo -n ${{ secrets.BUGSNAG_API_KEY }} | base64 -w 0)" >> $GITHUB_ENV
+          echo "VJB_VERSION_TAG=$(echo -n ${{ needs.determine-release.outputs.tag }}| base64 -w 0)" >> $GITHUB_ENV
 
       - name: Substitute image tags in analytics secret
         uses: danielr1996/envsubst-action@1.0.0
