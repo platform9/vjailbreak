@@ -392,8 +392,8 @@ jobs:
       - name: Substitute image tags in analytics secret
         uses: danielr1996/envsubst-action@1.0.0
         with:
-          input:   
-          output: path/to/analytics-keys.yaml
+          input: ./image_builder/configs/analytics-keys.yaml 
+          output: ./image_builder/deploy/analytics-keys.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v5
