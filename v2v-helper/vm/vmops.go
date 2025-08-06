@@ -17,8 +17,8 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
-
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25/methods"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -294,6 +294,7 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 			return fmt.Errorf("failed to refresh VM reference: %s", err)
 		}
 		vm = vmops.VMObj
+		pc = property.DefaultCollector(vmops.vcclient.VCClient)
 		err = vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 		if err != nil {
 			return fmt.Errorf("failed to get VM properties: %s", err)
@@ -356,6 +357,7 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess
 			return fmt.Errorf("failed to refresh VM reference: %s", err)
 		}
 		vm = vmops.VMObj
+		pc = property.DefaultCollector(vmops.vcclient.VCClient)
 		err = vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 		if err != nil {
 			return fmt.Errorf("failed to get VM properties: %s", err)
