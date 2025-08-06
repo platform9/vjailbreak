@@ -31,7 +31,7 @@ type RDMDiskSpec struct {
 
 // RDMDiskStatus defines the observed state of RDMDisk.
 type RDMDiskStatus struct {
-	// +kubebuilder:validation:Enum=Pending;Managing;Managed;Error
+	// +kubebuilder:validation:Enum=Available;Managing;Managed;Error
 	Phase          string             `json:"phase,omitempty"` //  Available | Managing | Managed | Error
 	CinderVolumeID string             `json:"cinderVolumeID,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
