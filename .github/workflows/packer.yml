@@ -383,15 +383,17 @@ jobs:
           input: ./image_builder/configs/version-config.yaml
           output: ./image_builder/deploy/version-config.yaml
 
-      - name: Substitue image tags in analytics secret
+      - name: Set base64-encoded environment variables
+        run: |
+          echo "AMPLITUDE_API_KEY=$(echo -n \"${{ secrets.AMPLITUDE_API_KEY }}\" | base64 -w 0)" >> $GITHUB_ENV
+          echo "BUGSNAG_API_KEY=$(echo -n \"${{ secrets.BUGSNAG_API_KEY }}\" | base64 -w 0)" >> $GITHUB_ENV
+          echo "VJB_VERSION_TAG=$(echo -n \"${{ needs.determine-release.outputs.tag }}\" | base64 -w 0)" >> $GITHUB_ENV
+
+      - name: Substitute image tags in analytics secret
         uses: danielr1996/envsubst-action@1.0.0
-        env:
-          AMPLITUDE_API_KEY: echo -n "${{ secrets.AMPLITUDE_API_KEY }}" | base64 -w 0
-          BUGSNAG_API_KEY: echo -n "${{ secrets.BUGSNAG_API_KEY }}" | base64 -w 0
-          TAG: echo -n "${{ needs.determine-release.outputs.tag }}" | base64 -w 0
         with:
-          input: ./image_builder/configs/analytics-keys.yaml
-          output: ./image_builder/deploy/analytics-keys.yaml
+          input:   
+          output: path/to/analytics-keys.yaml
 
       - name: Setup Go
         uses: actions/setup-go@v5

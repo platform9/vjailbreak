@@ -7,5 +7,5 @@ type: Opaque
 data:
   amplitude-api-key: ${AMPLITUDE_API_KEY}
   bugsnag-api-key: ${BUGSNAG_API_KEY}
-  app-version: ${TAG}
+  app-version: ${VJB_VERSION_TAG}
   release-stage: cHJvZHVjdGlvbgo=
