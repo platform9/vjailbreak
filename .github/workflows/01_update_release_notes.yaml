@@ -99,7 +99,7 @@ jobs:
 
       - name: Set Tag from Previous Event
         id: set_tag
-        run: echo "tag=${{ needs.check-artifacts.outputs.tag }}" >> $GITHUB_OUTPUT
+        run: echo "tag=${{ needs.check-and-wait-for-artifacts.outputs.tag }}" >> $GITHUB_OUTPUT
 
       - name: Generate Notes for New Release
         id: process_release
