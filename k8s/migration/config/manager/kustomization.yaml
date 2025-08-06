@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/platform9/vjailbreak-controller
-  newTag: test-branch-2-compare-shared-rdm-controller-changes-7c8d5383
+  newTag: v0.3.0

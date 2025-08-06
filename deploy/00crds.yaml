@@ -3623,7 +3623,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:test-branch-2-compare-shared-rdm-controller-changes-7c8d5383
+        image: quay.io/platform9/vjailbreak-controller:v0.3.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3703,7 +3703,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:test-branch-2-compare-shared-rdm-controller-changes-7c8d5383
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
