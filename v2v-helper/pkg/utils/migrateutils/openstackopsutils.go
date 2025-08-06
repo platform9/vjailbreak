@@ -12,6 +12,7 @@ import (
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -92,7 +93,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, fmt.Errorf("failed to get volume: %s", err)
 	}
-	fmt.Printf("Volume created successfully %s", volume.Status)
+	utils.PrintLog(fmt.Sprintf("Volume created successfully. current status %s", volume.Status))
 
 	if uefi {
 		err = osclient.SetVolumeUEFI(volume)
@@ -409,14 +410,28 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create port with static IP %s. Error: %w", ip, err)
+		// Static IP assignment failed, fall back to DHCP
+		utils.PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
+		dhcpPort, dhcpErr := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+			Name:           "port-" + vmname,
+			NetworkID:      network.ID,
+			MACAddress:     mac,
+			SecurityGroups: &securityGroups,
+		}).Extract()
+		
+		if dhcpErr != nil {
+			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
+		}
+		
+		utils.PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
+		return dhcpPort, nil
 	}
 
 	utils.PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -477,7 +492,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}
 
-	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", 360)
+	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", vjailbreakSettings.VMActiveWaitRetryLimit*vjailbreakSettings.VMActiveWaitIntervalSeconds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for server to become active: %s", err)
 	}

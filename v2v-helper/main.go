@@ -76,20 +76,13 @@ func main() {
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
 
-	securityGroupsVar := os.Getenv("SECURITY_GROUPS")
-
-	var securityGroupsSlice []string
-	if securityGroupsVar != "" {
-		securityGroupsSlice = strings.Split(securityGroupsVar, ",")
-	}
-
 	// Validate vCenter connection
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
 	}
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
-
+	defer vcclient.VCClient.CloseIdleConnections()
 	// Validate OpenStack connection
 	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
 	if err != nil {
@@ -111,24 +104,25 @@ func main() {
 	}
 
 	migrationobj := migrate.Migrate{
-		URL:              vCenterURL,
-		UserName:         vCenterUserName,
-		Password:         vCenterPassword,
-		Insecure:         vCenterInsecure,
-		Networknames:     utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkNames, ",")),
-		Networkports:     utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkPorts, ",")),
-		Volumetypes:      utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackVolumeTypes, ",")),
-		Virtiowin:        migrationparams.OpenstackVirtioWin,
-		Ostype:           migrationparams.OpenstackOSType,
-		Thumbprint:       thumbprint,
-		Convert:          migrationparams.OpenstackConvert,
-		Openstackclients: openstackclients,
-		Vcclient:         vcclient,
-		VMops:            vmops,
-		Nbdops:           []nbd.NBDOperations{},
-		EventReporter:    eventReporterChan,
-		PodLabelWatcher:  podLabelWatcherChan,
-		InPod:            reporter.IsRunningInPod(),
+		URL:                     vCenterURL,
+		UserName:                vCenterUserName,
+		Password:                vCenterPassword,
+		Insecure:                vCenterInsecure,
+		Networknames:            utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkNames, ",")),
+		Networkports:            utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackNetworkPorts, ",")),
+		Volumetypes:             utils.RemoveEmptyStrings(strings.Split(migrationparams.OpenstackVolumeTypes, ",")),
+		Virtiowin:               migrationparams.OpenstackVirtioWin,
+		Ostype:                  migrationparams.OpenstackOSType,
+		Thumbprint:              thumbprint,
+		Convert:                 migrationparams.OpenstackConvert,
+		DisconnectSourceNetwork: migrationparams.DisconnectSourceNetwork,
+		Openstackclients:        openstackclients,
+		Vcclient:                vcclient,
+		VMops:                   vmops,
+		Nbdops:                  []nbd.NBDOperations{},
+		EventReporter:           eventReporterChan,
+		PodLabelWatcher:         podLabelWatcherChan,
+		InPod:                   reporter.IsRunningInPod(),
 		MigrationTimes: migrate.MigrationTimes{
 			DataCopyStart:  starttime,
 			VMCutoverStart: cutstart,
@@ -141,7 +135,7 @@ func main() {
 		TargetFlavorId:         migrationparams.TARGET_FLAVOR_ID,
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
-		SecurityGroups:         securityGroupsSlice,
+		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

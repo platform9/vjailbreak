@@ -155,7 +155,7 @@ export default function SourceDestinationClusterSelection({
                                 const sourceItem = sourceData.find(item => item.credName === credName);
                                 const vcenterName = sourceItem?.vcenterName || credName;
                                 const cluster = sourceItem?.clusters.find(c => c.id === selected);
-                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.name || ""}`;
+                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.displayName || ""}`;
                             }}
                             endAdornment={loadingVMware ? <CircularProgress size={25} sx={{ mr: 3, display: "flex", alignItems: "center", justifyContent: "center" }} /> : null}
                             MenuProps={{
@@ -181,7 +181,7 @@ export default function SourceDestinationClusterSelection({
                                         }
                                         acc[item.vcenterName].datacenters[item.datacenter] = item.clusters;
                                         return acc;
-                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string }[]> }>)
+                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string; displayName: string }[]> }>)
                                 ).map(([vcenterName, { credName, datacenters }]) => [
                                     <ListSubheader key={vcenterName} sx={{ fontWeight: 700 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -212,7 +212,7 @@ export default function SourceDestinationClusterSelection({
                                                         {/* @ts-ignore */}
                                                         <cds-icon shape="cluster" size="md" ></cds-icon>
                                                     </CdsIconWrapper>
-                                                    {cluster.name}
+                                                    {cluster.displayName}
                                                 </Box>
                                             </MenuItem>
                                         ))

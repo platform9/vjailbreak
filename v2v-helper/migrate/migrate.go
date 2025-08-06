@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,39 +33,58 @@ import (
 )
 
 type Migrate struct {
-	URL                    string
-	UserName               string
-	Password               string
-	Insecure               bool
-	Networknames           []string
-	Networkports           []string
-	Volumetypes            []string
-	Virtiowin              string
-	Ostype                 string
-	Thumbprint             string
-	Convert                bool
-	Openstackclients       openstack.OpenstackOperations
-	Vcclient               vcenter.VCenterOperations
-	VMops                  vm.VMOperations
-	Nbdops                 []nbd.NBDOperations
-	EventReporter          chan string
-	PodLabelWatcher        chan string
-	InPod                  bool
-	MigrationTimes         MigrationTimes
-	MigrationType          string
-	PerformHealthChecks    bool
-	HealthCheckPort        string
-	K8sClient              client.Client
-	TargetFlavorId         string
-	TargetAvailabilityZone string
-	AssignedIP             string
-	SecurityGroups         []string
+	URL                     string
+	UserName                string
+	Password                string
+	Insecure                bool
+	Networknames            []string
+	Networkports            []string
+	Volumetypes             []string
+	Virtiowin               string
+	Ostype                  string
+	Thumbprint              string
+	Convert                 bool
+	DisconnectSourceNetwork bool
+	Openstackclients        openstack.OpenstackOperations
+	Vcclient                vcenter.VCenterOperations
+	VMops                   vm.VMOperations
+	Nbdops                  []nbd.NBDOperations
+	EventReporter           chan string
+	PodLabelWatcher         chan string
+	InPod                   bool
+	MigrationTimes          MigrationTimes
+	MigrationType           string
+	PerformHealthChecks     bool
+	HealthCheckPort         string
+	K8sClient               client.Client
+	TargetFlavorId          string
+	TargetAvailabilityZone  string
+	AssignedIP              string
+	SecurityGroups          []string
 }
 
 type MigrationTimes struct {
 	DataCopyStart  time.Time
 	VMCutoverStart time.Time
 	VMCutoverEnd   time.Time
+}
+
+// disconnects the source VM's network interfaces
+func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
+	if !migobj.DisconnectSourceNetwork {
+		return nil
+	}
+
+	migobj.logMessage(fmt.Sprintf("Disconnecting source VM network interfaces (DisconnectSourceNetwork=%v)", migobj.DisconnectSourceNetwork))
+
+	if err := migobj.VMops.DisconnectNetworkInterfaces(); err != nil {
+		errMsg := fmt.Sprintf("Failed to disconnect source VM network interfaces: %v", err)
+		migobj.logMessage("ERROR: " + errMsg)
+		return fmt.Errorf("failed to disconnect network interfaces: %w", err)
+	}
+
+	migobj.logMessage("Successfully disconnected source VM network interfaces")
+	return nil
 }
 
 func (migobj *Migrate) logMessage(message string) {
@@ -275,7 +295,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
 	}
-	utils.PrintLog(fmt.Sprintf("Fetched Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
+	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
 	incrementalCopyCount := 0
 	for {
@@ -329,18 +349,20 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					done = false
 					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
+
 					// incremental block copy
 
 					startTime := time.Now()
 					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-
-					duration := time.Since(startTime)
-
 					if err != nil {
 						changedBlockCopySuccess = false
 					}
+
+					duration := time.Since(startTime)
+
+					migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
 
 					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 					if err != nil {
@@ -350,9 +372,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
 						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 					}
-
 					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
-
 				}
 			}
 			if final {
@@ -486,7 +506,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if err != nil {
 				return errors.Wrap(err, "Failed to get bootable volume index")
 			}
-			osRelease, err = virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "cat", false, "/etc/os-release")
+			osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
 			if err != nil {
 				return errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
 			}
@@ -508,6 +528,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			"alt linux",
 			"debian",
 			"ubuntu",
+			"rocky linux",
 		}
 
 		supported := false
@@ -545,9 +566,22 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return errors.Wrap(err, "failed to run ntfsfix")
 			}
 		}
-		// Turn on DHCP for interfaces in rhel VMs
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
-			if strings.Contains(osRelease, "rhel") {
+
+		if virtv2v.IsRHELFamily(osRelease) {
+			// If RHEL family, we need to inject a script to make interface come up with DHCP,
+			// We preserve the ip because we have a port created with the same IP
+			// If NM is present, we inject a script to force neutron DHCP on first boot.
+			// If NM is not present, we add udev rules to pin the interface names
+			versionID := parseVersionID(osRelease)
+			if versionID == "" {
+				return errors.Errorf("failed to get version ID")
+			}
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+
+			if majorVersion >= 7 {
 				firstbootscriptname := "rhel_enable_dhcp"
 				firstbootscript := constants.RhelFirstBootScript
 				firstbootscripts = append(firstbootscripts, firstbootscriptname)
@@ -555,6 +589,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				if err != nil {
 					return errors.Wrap(err, "failed to add first boot script")
 				}
+				utils.PrintLog("First boot script added successfully")
 			}
 		}
 
@@ -570,7 +605,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 	}
 
-	//TODO(omkar): can disable DHCP here
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if strings.Contains(osRelease, "ubuntu") {
 			// Check if netplan is supported
@@ -619,6 +653,25 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					}
 				}
 			}
+		} else if virtv2v.IsRHELFamily(osRelease) {
+			versionID := parseVersionID(osRelease)
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+			if majorVersion < 7 {
+				diskPath := vminfo.VMDisks[bootVolumeIndex].Path
+				// For RHEL family, we need to inject a script to make interface come up with DHCP,
+				// We preserve the ip because we have a port created with the same IP
+				// If NM is present, we inject a script to force DHCP on first boot.
+				// If NM is not present, we add udev rules to pin the interface names
+				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
+				if err != nil {
+					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
+					network might not come up post migration, please check the network configuration post migration`, err))
+					err = nil
+				}
+			}
 		}
 	}
 	err = migobj.DetachAllVolumes(vminfo)
@@ -626,6 +679,50 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		return errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 	migobj.logMessage("Successfully converted disk")
+	return nil
+}
+
+// DetectAndHandleNetwork: Checks if RHEL family, then detects NM presence offline.
+// If NM (nmcli exists), injects first-boot nmcli script for DHCP force.
+// If not, adds udev rules to pin names without forcing DHCP.
+func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo) error {
+
+	// No NM: Add udev rules to pin names
+	interfaces, err := virtv2v.GetInterfaceNames(diskPath)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to get interfaces: %v", err))
+	}
+	if len(interfaces) == 0 {
+		utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
+			come up post migration, please check the network configuration post migration`)
+		return nil
+	}
+	macs := []string{}
+	// By default the network interfaces macs are in the same order as the interfaces
+	for _, nic := range vmInfo.NetworkInterfaces {
+		macs = append(macs, nic.MAC)
+	}
+	utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
+	utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
+	if len(interfaces) != len(macs) {
+		utils.PrintLog("Mismatch between number of interfaces and MACs")
+		return fmt.Errorf("mismatch between number of interfaces and MACs")
+	}
+	// Add udev rules to pin names without forcing DHCP
+	utils.PrintLog("Adding udev rules to pin interface names")
+
+	// This will ensure that the network interfaces are named consistently after migration
+	// and they get the correct IP address.
+	// This is important because RHEL family uses NetworkManager by default and it does not
+	// automatically configure the network interfaces to use DHCP after migration.
+	// So we need to add udev rules to pin the names of the network interfaces
+	// to the MAC addresses so that they are consistent after migration.
+	// This will ensure that the network interfaces are named consistently after migration
+	// and they get the correct IP address.
+	err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, false, diskPath, interfaces, macs)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to add udev: %v", err))
+	}
 	return nil
 }
 
@@ -707,18 +804,18 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		}
 	}
 
-	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs)
-	if err != nil {
-		return errors.Wrap(err, "failed to create VM")
-	}
-
 	// Get vjailbreak settings
 	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
-	utils.PrintLog(fmt.Sprintf("Fetched VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
+	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
+
+	// Create a new VM in OpenStack
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings)
+	if err != nil {
+		return errors.Wrap(err, "failed to create VM")
+	}
 
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
@@ -749,20 +846,35 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 
 	return nil
 }
-func parseVersionID(osRelease string) string {
-	for _, line := range strings.Split(osRelease, "\n") {
-		kv := strings.SplitN(line, "=", 2)
-		if len(kv) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(strings.ToUpper(kv[0]))
-		val := strings.Trim(kv[1], `"`) // Remove any quotes
 
-		if key == "VERSION_ID" {
-			return val
+// parseVersionID parses the VERSION_ID from /etc/os-release or /etc/redhat-release format.
+// It returns the version ID as a string, or an empty string if not found.
+func parseVersionID(osRelease string) string {
+	osRelease = strings.TrimSpace(osRelease)
+
+	// Check if it's /etc/os-release format (contains key-value pairs)
+	if strings.Contains(osRelease, "=") {
+		for _, line := range strings.Split(osRelease, "\n") {
+			kv := strings.SplitN(line, "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(strings.ToUpper(kv[0]))
+			val := strings.Trim(kv[1], `"`) // Remove any quotes
+			if key == "VERSION_ID" {
+				return val
+			}
+		}
+	} else {
+		// Assume /etc/redhat-release format; extract version with regex
+		re := regexp.MustCompile(`release\s+([0-9]+(\.[0-9]+)?)`)
+		matches := re.FindStringSubmatch(strings.ToLower(osRelease))
+		if len(matches) > 1 {
+			return matches[1] // Return the version (e.g., "9.6" or "6.10")
 		}
 	}
-	return ""
+
+	return "" // Return empty string if version not found
 }
 
 func isNetplanSupported(version string) bool {
@@ -805,7 +917,7 @@ func (migobj *Migrate) pingVM(ips []string) error {
 		if pinger.Statistics().PacketLoss == 0 {
 			migobj.logMessage("Ping succeeded")
 		} else {
-			return errors.Errorf("ping failed")
+			return errors.Errorf("Ping failed")
 		}
 	}
 	return nil
@@ -834,7 +946,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 		}
 
 		// Both HTTP and HTTPS failed
-		return errors.Errorf("both HTTP and HTTPS failed for %s:%s", ip, port)
+		return errors.Errorf("Both HTTP and HTTPS failed for %s:%s", ip, port)
 	}
 
 	return nil
@@ -991,6 +1103,11 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
+
+	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
+	}
+
 	cancel()
 	return nil
 }
