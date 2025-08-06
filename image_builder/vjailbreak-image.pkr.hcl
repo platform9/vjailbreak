@@ -54,6 +54,11 @@ build {
   }
 
   provisioner "file" {
+    source      = "${path.root}/configs/daemonset.yaml"
+    destination = "/tmp/daemonset.yaml"
+  }
+  
+  provisioner "file" {
     source      = "${path.root}/configs/rsyncd.conf"
     destination = "/tmp/rsyncd.conf"
   }
