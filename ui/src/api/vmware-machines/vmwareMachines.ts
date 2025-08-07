@@ -3,7 +3,7 @@ import { VmData } from "../migration-templates/model"
 import { VJAILBREAK_API_BASE_PATH } from "../constants"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "../constants"
 import axios from "../axios"
-
+import {VmNetworkInterface} from "./model"
 export const getVMwareMachines = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
   vmwareCredName?: string
@@ -31,6 +31,7 @@ export const getVMwareMachines = async (
  * @param payload - The payload containing fields to update
  * @param namespace - The namespace of the VM (defaults to migration-system)
  */
+
 export const patchVMwareMachine = async (
   vmName: string,
   payload: {
@@ -39,6 +40,7 @@ export const patchVMwareMachine = async (
       vms?: {
         assignedIp?: string
         osFamily?: string
+        networkInterfaces?: VmNetworkInterface[]
       }
     }
   },
@@ -74,7 +76,11 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     osFamily: machine.spec.vms.osFamily,
     esxHost: machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
     vmWareMachineName: machine.metadata.name,
-
+    networkInterfaces: machine.spec.vms.networkInterfaces?.map((nic) => ({
+      mac: nic.mac,
+      network: nic.network,
+      ipAddress: nic.ipAddress,
+    })),
   }))
 }
 

@@ -1346,9 +1346,8 @@ spec:
             description: Spec defines the desired state of RDMDisk
             properties:
               diskName:
-                description: |-
-                  INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
+                description: 'Important: Run "make" to regenerate code after modifying
+                  this file'
                 type: string
               diskSize:
                 type: integer
@@ -1357,7 +1356,7 @@ spec:
               importToCinder:
                 type: boolean
               openstackVolumeRef:
-                description: OpenstackVolumeRefInfo contains information about the
+                description: OpenstackVolumeRef ... contains information about the
                   OpenStack volume reference.
                 properties:
                   cinderBackendPool:
@@ -2360,6 +2359,8 @@ spec:
                       description: NIC represents a Virtual ethernet card in the virtual
                         machine.
                       properties:
+                        ipAddress:
+                          type: string
                         mac:
                           type: string
                         network:
@@ -3624,7 +3625,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.3.0
+        image: quay.io/platform9/vjailbreak-controller:0.1.13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3704,7 +3705,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.0
+      - image: quay.io/platform9/vjailbreak-vpwned:0.1.13
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
