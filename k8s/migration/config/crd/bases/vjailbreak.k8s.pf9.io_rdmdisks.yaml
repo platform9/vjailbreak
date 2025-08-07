@@ -50,7 +50,7 @@ spec:
               importToCinder:
                 type: boolean
               openstackVolumeRef:
-                description: OpenstackVolumeRefInfo contains information about the
+                description: OpenstackVolumeRef ... contains information about the
                   OpenStack volume reference.
                 properties:
                   cinderBackendPool:
@@ -145,7 +145,7 @@ spec:
                 type: array
               phase:
                 enum:
-                - Pending
+                - Available
                 - Managing
                 - Managed
                 - Error
