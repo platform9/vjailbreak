@@ -3,7 +3,7 @@ import {
   VJAILBREAK_API_BASE_PATH,
   VJAILBREAK_DEFAULT_NAMESPACE,
 } from "../constants"
-import { GetMigrationsList, Migration } from "./model"
+import { GetMigrationsList, Migration, TriggerAdminCutoverRequest, TriggerAdminCutoverResponse } from "./model"
 
 export const getMigrations = async (
   migrationPlanName = "",
@@ -41,5 +41,25 @@ export const deleteMigration = async (
   const response = await axios.del<Migration>({
     endpoint,
   })
+  return response
+}
+
+
+ export const triggerAdminCutover = async (
+  namespace: string,
+  migrationName: string
+): Promise<TriggerAdminCutoverResponse> => {
+  const endpoint = "/dev-api/sdk/vpw/v1/trigger_admin_cutover"
+  
+  const requestBody: TriggerAdminCutoverRequest = {
+    namespace,
+    migration_name: migrationName,
+  }
+
+  const response = await axios.post<TriggerAdminCutoverResponse>({
+    endpoint,
+    data: requestBody,
+  })
+  
   return response
 }

@@ -229,7 +229,7 @@ func (migobj *Migrate) WaitforCutover() error {
 }
 
 func (migobj *Migrate) WaitforAdminCutover() error {
-	migobj.logMessage("Waiting for Cutover conditions to be met")
+	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 	for {
 		label := <-migobj.PodLabelWatcher
 		migobj.logMessage(fmt.Sprintf("Label: %s", label))

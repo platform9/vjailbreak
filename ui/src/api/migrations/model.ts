@@ -129,3 +129,14 @@ export interface GetMigrationsListMetadata {
   continue: string
   resourceVersion: string
 }
+
+
+export interface TriggerAdminCutoverRequest {
+  namespace: string
+  migration_name: string
+}
+
+export interface TriggerAdminCutoverResponse {
+  success: boolean
+  message: string
+}

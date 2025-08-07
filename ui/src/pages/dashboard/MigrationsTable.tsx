@@ -2,6 +2,7 @@ import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } fro
 import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
@@ -9,6 +10,7 @@ import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
+import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -103,23 +105,45 @@ const columns: GridColDef[] = [
         headerName: "Actions",
         flex: 1,
         renderCell: (params) => {
+            const phase = params.row?.status?.phase;
+            const initiateCutover = params.row?.spec?.initiateCutover;
+            const migrationName = params.row?.metadata?.name;
+            
+            // Show admin cutover button if:
+            // 1. initiateCutover is false (manual cutover)
+            // 2. Phase is AwaitingAdminCutOver
+            const showAdminCutover = !initiateCutover && phase === Phase.AwaitingAdminCutOver;
 
             return (
-                <Tooltip title={"Delete migration"} >
-                    <IconButton
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            params.row.onDelete(params.row.metadata?.name);
-                        }}
-                        size="small"
-                        sx={{
-                            cursor: 'pointer',
-                            position: 'relative'
-                        }}
-                    >
-                        <DeleteIcon />
-                    </IconButton>
-                </Tooltip>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    {showAdminCutover && (
+                        <TriggerAdminCutoverButton
+                            migrationName={migrationName}
+                            onSuccess={() => {
+                                params.row.refetchMigrations?.();
+                            }}
+                            onError={(error) => {
+                                console.error("Failed to trigger cutover:", error);
+                            }}
+                        />
+                    )}
+                    
+                    <Tooltip title={"Delete migration"}>
+                        <IconButton
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                params.row.onDelete(params.row.metadata?.name);
+                            }}
+                            size="small"
+                            sx={{
+                                cursor: 'pointer',
+                                position: 'relative'
+                            }}
+                        >
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
             );
         },
     },
@@ -190,7 +214,8 @@ export default function MigrationsTable({
 
     const migrationsWithActions = migrations?.map(migration => ({
         ...migration,
-        onDelete: onDeleteMigration
+        onDelete: onDeleteMigration,
+        refetchMigrations
     })) || [];
 
     return (
