@@ -36,6 +36,7 @@ export default function OpenstackCredentialsDrawer({
     const [submitting, setSubmitting] = useState(false);
     const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null);
     const [isPcd, setIsPcd] = useState(false);
+    const [insecure, setInsecure] = useState(false);
     const rcFileUploaderRef = useRef<OpenstackRCFileUploaderRef>(null);
 
     // Fetch credentials list for the form
@@ -64,6 +65,7 @@ export default function OpenstackCredentialsDrawer({
         setCredNameError(null);
         setSubmitting(false);
         setIsPcd(false);
+        setInsecure(false);
 
         onClose();
     }, [createdCredentialName, onClose]);
@@ -90,11 +92,21 @@ export default function OpenstackCredentialsDrawer({
     };
 
     const handleRCFileChange = (values: unknown) => {
-        setRcFileValues(values as Record<string, string>);
+        const parsedValues = values as Record<string, string>;
+        setRcFileValues(parsedValues);
         setOpenstackCredsValidated(null);
         setError(null);
-    };
+    
 
+    if (parsedValues.OS_INSECURE !== undefined) {
+        const val = parsedValues.OS_INSECURE.toString().toLowerCase().trim();
+        if (["true", "1", "yes"].includes(val)) {
+            setInsecure(true);
+        } else if (["false", "0", "no"].includes(val)) {
+            setInsecure(false);
+         }
+       }
+    };
     const getApiErrorMessage = (error: unknown): string => {
         if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
             return error.response.data.message;
@@ -132,7 +144,7 @@ export default function OpenstackCredentialsDrawer({
                     OS_PASSWORD: rcFileValues.OS_PASSWORD,
                     OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
                     OS_TENANT_NAME: rcFileValues.OS_TENANT_NAME,
-                    OS_INSECURE: rcFileValues.OS_INSECURE?.toLowerCase() === "true"
+                    OS_INSECURE: insecure
                 },
                 isPcd
             );
@@ -174,7 +186,7 @@ export default function OpenstackCredentialsDrawer({
             setError(errorMessage);
             setSubmitting(false);
         }
-    }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd]);
+    }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd, insecure]);
 
     // Use the custom hook for keyboard events
     useKeyboardSubmit({
@@ -322,6 +334,17 @@ export default function OpenstackCredentialsDrawer({
                                 />
                             }
                             label="Is PCD credential"
+                            sx={{ mt: 2 }}
+                        />
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={insecure}
+                                    onChange={(e) => setInsecure(e.target.checked)}
+                                    color="primary"
+                                 />
+                            }
+                            label="Allow insecure TLS (skip SSL verification)"
                             sx={{ mt: 2 }}
                         />
 
