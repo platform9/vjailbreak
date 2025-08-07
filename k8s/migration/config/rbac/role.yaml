@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - deployments
   - pods
   - secrets
   verbs:
@@ -43,6 +44,18 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - batch
   resources:

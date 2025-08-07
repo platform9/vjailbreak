@@ -39,6 +39,7 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
+      serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 30
       volumes:
       - name: hosts-file

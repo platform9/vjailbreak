@@ -1,4 +1,6 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import { useQueryClient } from "@tanstack/react-query"
 import { FIVE_SECONDS, THIRTY_SECONDS } from "src/constants"
 import { useMigrationsQuery, MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
@@ -15,6 +17,7 @@ export default function MigrationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [openSnackbar, setOpenSnackbar] = useState(false);  
 
   const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -30,6 +33,13 @@ export default function MigrationsPage() {
 
   // Monitor migration status changes for failure reporting
   useMigrationStatusMonitor(migrations)
+  useEffect(() => {
+    const showSuccess = sessionStorage.getItem('showUpgradeSuccess');
+    if (showSuccess === 'true') {
+        setOpenSnackbar(true);
+        sessionStorage.removeItem('showUpgradeSuccess');
+    }
+}, []);
 
   const handleDeleteClick = (migrationName: string) => {
     const migration = migrations?.find(m => m.metadata.name === migrationName)
@@ -89,6 +99,13 @@ export default function MigrationsPage() {
     handleDeleteClose()
   }
 
+  const handleCloseSnackbar = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+        return;
+    }
+    setOpenSnackbar(false);
+  };
+
   const getCustomErrorMessage = (error: Error | string) => {
     const baseMessage = "Failed to delete migrations"
     if (error instanceof Error) {
@@ -128,6 +145,16 @@ export default function MigrationsPage() {
         errorMessage={deleteError}
         onErrorChange={setDeleteError}
       />
+      <Snackbar 
+            open={openSnackbar} 
+            autoHideDuration={6000} 
+            onClose={handleCloseSnackbar}
+            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+          Successfully upgraded to {sessionStorage.getItem('upgradedVersion')}!
+          </Alert>
+      </Snackbar>
     </>
   )
 }
