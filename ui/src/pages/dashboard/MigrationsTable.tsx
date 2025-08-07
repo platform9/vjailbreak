@@ -2,7 +2,6 @@ import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } fro
 import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
