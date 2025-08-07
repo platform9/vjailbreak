@@ -312,6 +312,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				duration := time.Since(startTime)
 				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
 			}
+			time.Sleep(100 * time.Minute)
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 			if err != nil {
