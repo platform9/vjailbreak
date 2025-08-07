@@ -62,10 +62,12 @@ build {
     source      = "${path.root}/configs/rsyncd.conf"
     destination = "/tmp/rsyncd.conf"
   }
+  
   provisioner "file" {
     source      = "${path.root}/configs/env"
     destination = "/tmp/env"
   }
+
   provisioner "file" {
     source      = "${path.root}/configs/vjailbreak-settings.yaml"
     destination = "/tmp/vjailbreak-settings.yaml"
