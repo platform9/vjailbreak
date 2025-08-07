@@ -615,7 +615,7 @@ export default function RollingMigrationFormDrawer({
                     return {
                         authUrl: secret.data.OS_AUTH_URL || '',
                         domainName: secret.data.OS_DOMAIN_NAME || 'default',
-                        insecure: secret.data.OS_INSECURE === 'true' || true,
+                        insecure: (secret.data?.OS_INSECURE || '').trim() === 'true',
                         password: secret.data.OS_PASSWORD || '',
                         regionName: secret.data.OS_REGION_NAME || '',
                         tenantName: secret.data.OS_TENANT_NAME || '',
