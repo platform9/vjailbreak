@@ -57,7 +57,7 @@ build {
     source      = "${path.root}/configs/daemonset.yaml"
     destination = "/tmp/daemonset.yaml"
   }
-  
+
   provisioner "file" {
     source      = "${path.root}/configs/rsyncd.conf"
     destination = "/tmp/rsyncd.conf"
@@ -65,6 +65,10 @@ build {
   provisioner "file" {
     source      = "${path.root}/configs/env"
     destination = "/tmp/env"
+  }
+  provisioner "file" {
+    source      = "${path.root}/configs/vjailbreak-settings.yaml"
+    destination = "/tmp/vjailbreak-settings.yaml"
   }
 
   provisioner "file" {
@@ -90,6 +94,7 @@ build {
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/env /etc/pf9/env",
+    "sudo mv /tmp/vjailbreak-settings.yaml /etc/pf9/yamls/vjailbreak-settings.yaml",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
