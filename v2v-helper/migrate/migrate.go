@@ -379,13 +379,13 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				utils.PrintLog("Shutting down source VM and performing final copy")
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
 				if err := migobj.WaitforAdminCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
 				}
+				utils.PrintLog("Shutting down source VM and performing final copy")
 				err = vmops.VMPowerOff()
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
