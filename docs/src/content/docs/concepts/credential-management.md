@@ -8,7 +8,7 @@ Before you start using vJailbreak, you need to provide credentials for both the 
 ### VMware vCenter Credentials
 VMware vCenter credentials are required to connect to the vCenter server and retrieve information about the virtual machines you want to migrate.
 
-The credentials should have enough permissions to retrieve information about the virtual machines you want to migrate and if you are looking to the cluster conversion, the credentials should have enough permissions to retrieve information about the cluster, put host into maintenance mode, etc (see [Cluster Conversion](../../guides/cluster-conversion/) for more details).
+The credentials should have enough permissions to retrieve information about the virtual machines you want to migrate and if you are looking for cluster conversion, the credentials should have enough permissions to retrieve information about the cluster, put host into maintenance mode, etc (see [Cluster Conversion](../../guides/cluster-conversion/) for more details).
 
 The VMware credentials needs vCenter Server IP address or vCenter Server name, username and password.
 The credentials also take the Datacenter name and the VMs, Hosts being worked on would be restricted to the Datacenter specified in the credentials.
