@@ -3,7 +3,7 @@ import {
   VJAILBREAK_API_BASE_PATH,
   VJAILBREAK_DEFAULT_NAMESPACE,
 } from "../constants"
-import { GetMigrationsList, Migration, TriggerAdminCutoverRequest, TriggerAdminCutoverResponse } from "./model"
+import { GetMigrationsList, Migration } from "./model"
 
 export const getMigrations = async (
   migrationPlanName = "",

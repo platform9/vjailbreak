@@ -11,9 +11,8 @@ import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
 import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover} from "src/api/migrations/migrations";
-import  ConfirmationDialog  from "src/components/dialogs/ConfirmationDialog";
-import WarningIcon from '@mui/icons-material/Warning';
+import { triggerAdminCutover } from "src/api/migrations/migrations";
+import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -247,7 +246,7 @@ export default function MigrationsTable({
         setIsBulkCutoverLoading(true);
         
         try {
-            const results = await Promise.all(
+            await Promise.all(
                 eligibleForCutover.map(async (migration) => {
                     const result = await triggerAdminCutover("migration-system", migration.metadata?.name || "");
                     if (!result.success) {
