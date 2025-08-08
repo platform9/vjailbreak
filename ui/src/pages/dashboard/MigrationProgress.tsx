@@ -3,6 +3,7 @@ import { CircularProgress, styled, Typography, Box, Tooltip } from "@mui/materia
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom"
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import { Phase } from "src/api/migrations/model"
 
 const ProgressContainer = styled(Box)({
@@ -30,14 +31,15 @@ export default function MigrationProgress({
   const statusIcon = useMemo(() => {
     if (phase === Phase.Succeeded) {
       return <CheckCircleOutlineIcon style={{ color: "green" }} />
+    } else if (phase === Phase.AwaitingAdminCutOver) {
+      return <PauseCircleOutlineIcon style={{ color: "#1976d2" }} />
     } else if ([
       Phase.Validating,
       Phase.AwaitingDataCopyStart,
       Phase.CopyingBlocks,
       Phase.CopyingChangedBlocks,
       Phase.ConvertingDisk,
-      Phase.AwaitingCutOverStartTime,
-      Phase.AwaitingAdminCutOver
+      Phase.AwaitingCutOverStartTime
     ].includes(phase as Phase)) {
       return <CircularProgress size={20} style={{ marginRight: 3 }} />
     } else if (phase === Phase.Failed) {
