@@ -20,7 +20,7 @@ Ensure that your vJailbreak VM can communicate with your OpenStack and VMware en
 Download and install [ORAS](https://oras.land/docs/installation), a toolkit to download the qcow2 image of vJailbreak. Then, download the latest version of the vJailbreak image with the following command:
   ```shell
   # remember the actual version would vary
-  oras pull quay.io/platform9/vjailbreak:v0.3.1
+  oras pull quay.io/platform9/vjailbreak:v0.3.0
   ```
 This will download the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
 
@@ -33,9 +33,11 @@ These example instructions are for any version of [Private Cloud Director](https
   ```
 
 ### Create vJailbreak VM
+- Reserve IP for VM ( In PCD Go to Physical Networks > Select network > Go to Port Tab > Create Port by reserving IP Address.)
 - Deploy a new VM from the uploaded image, choosing the _m1.xlarge_ flavor (use larger flavor for larger VM migration).
 - Choose a network that can reach your VMware vCenter environment.
 - Assign a network security group that allows inbound and outbound traffic.
+- Recommended to Create VM by specifying From Volume instead of image and volume size should be - 160 GB
 
 ### Configure VM with cloud-init
 Cloud-init can be used during VM creation to automate initial configuration including setting passwords and configuring /etc/hosts entries for DNS resolution.
@@ -86,7 +88,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 - **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, you must restart the controller pod for changes to take effect
   ```shell
   # After modifying resolv.conf
-  kubectl -n vjailbreak rollout restart deployment migration-controller-manager
+  kubectl -n migration-system rollout restart deployment migration-controller-manager
   ```
 
 ### Launch vJailbreak
@@ -97,4 +99,3 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 
 ### Scaling vJailbreak
 <ReadMore>Read more about [scaling vJailbreak](../../guides/how-to/scaling/).</ReadMore>
-
