@@ -24,7 +24,7 @@ Look here for:
 If the logs show image pull issues, run this on the vJailbreak VM:
 
 ```bash
-curl -v <image-url>
+curl -v <quay.io/platform9/vjailbreak>
 ```
 
 🔁 What If the URL Is Accessible but Installation Still Fails?
