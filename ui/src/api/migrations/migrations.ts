@@ -45,21 +45,49 @@ export const deleteMigration = async (
 }
 
 
- export const triggerAdminCutover = async (
+export const triggerAdminCutover = async (
   namespace: string,
   migrationName: string
-): Promise<TriggerAdminCutoverResponse> => {
-  const endpoint = "/dev-api/sdk/vpw/v1/trigger_admin_cutover"
-  
-  const requestBody: TriggerAdminCutoverRequest = {
-    namespace,
-    migration_name: migrationName,
-  }
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    // First get the migration to find the podRef
+    const migration = await getMigration(migrationName, namespace);
+    const podRef = migration.spec?.podRef;
+    
+    if (!podRef) {
+      throw new Error("PodRef is empty in migration object");
+    }
 
-  const response = await axios.post<TriggerAdminCutoverResponse>({
-    endpoint,
-    data: requestBody,
-  })
-  
-  return response
-}
+    // Patch the pod directly with the startCutover label
+    const patchPayload = {
+      metadata: {
+        labels: {
+          startCutover: "yes"
+        }
+      }
+    };
+
+    const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/pods/${podRef}`;
+    
+    await axios.patch({
+      endpoint,
+      data: patchPayload,
+      config: {
+        headers: {
+          "Content-Type": "application/merge-patch+json",
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: "Successfully triggered cutover"
+    };
+  } catch (error) {
+    console.error("Failed to trigger cutover:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to trigger cutover"
+    };
+  }
+};

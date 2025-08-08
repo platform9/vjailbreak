@@ -10,6 +10,10 @@ import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
 import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { triggerAdminCutover} from "src/api/migrations/migrations";
+import  ConfirmationDialog  from "src/components/dialogs/ConfirmationDialog";
+import WarningIcon from '@mui/icons-material/Warning';
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -151,11 +155,13 @@ const columns: GridColDef[] = [
 interface CustomToolbarProps {
     numSelected: number;
     onDeleteSelected: () => void;
+    onBulkAdminCutover: () => void;
+    numEligibleForCutover: number;
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
 }
 
 
-const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: CustomToolbarProps) => {
+const CustomToolbar = ({ numSelected, onDeleteSelected, onBulkAdminCutover, numEligibleForCutover, refetchMigrations }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
             sx={{
@@ -173,15 +179,29 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, refetchMigrations }: Cus
             </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
                 {numSelected > 0 && (
-                    <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={onDeleteSelected}
-                        sx={{ height: 40 }}
-                    >
-                        Delete Selected ({numSelected})
-                    </Button>
+                    <>
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteIcon />}
+                            onClick={onDeleteSelected}
+                            sx={{ height: 40 }}
+                        >
+                            Delete Selected ({numSelected})
+                        </Button>
+                        
+                        {numEligibleForCutover > 0 && (
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                startIcon={<PlayArrowIcon />}
+                                onClick={onBulkAdminCutover}
+                                sx={{ height: 40 }}
+                            >
+                                Trigger Cutover ({numEligibleForCutover})
+                            </Button>
+                        )}
+                    </>
                 )}
                 <CustomSearchToolbar
                     placeholder="Search by Name, Status, or Progress"
@@ -206,9 +226,59 @@ export default function MigrationsTable({
     refetchMigrations
 }: MigrationsTableProps) {
     const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+    const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false);
+    const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false);
+    const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null);
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);
+    };
+
+    // Get selected migrations that are eligible for admin cutover
+    const selectedMigrations = migrations?.filter(m => selectedRows.includes(m.metadata?.name)) || [];
+    const eligibleForCutover = selectedMigrations.filter(migration => 
+    migration.status?.phase === Phase.AwaitingAdminCutOver
+    );
+
+    const handleBulkAdminCutover = async () => {
+        if (eligibleForCutover.length === 0) return;
+        
+        setBulkCutoverError(null);
+        setIsBulkCutoverLoading(true);
+        
+        try {
+            const results = await Promise.all(
+                eligibleForCutover.map(async (migration) => {
+                    const result = await triggerAdminCutover("migration-system", migration.metadata?.name || "");
+                    if (!result.success) {
+                        throw new Error(result.message);
+                    }
+                    return result;
+                })
+            );
+            
+            // Refresh the migrations table
+            await refetchMigrations();
+            
+            // Clear selection after successful cutover
+            setSelectedRows([]);
+            // Don't close here - let ConfirmationDialog handle it
+        } catch (error) {
+            console.error("Failed to trigger bulk admin cutover:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to trigger bulk admin cutover";
+            setBulkCutoverError(errorMessage);
+            // Re-throw to prevent ConfirmationDialog from auto-closing
+            throw error;
+        } finally {
+            setIsBulkCutoverLoading(false);
+        }
+    };
+
+    const handleCloseBulkCutoverDialog = () => {
+        if (!isBulkCutoverLoading) {
+            setBulkCutoverDialogOpen(false);
+            setBulkCutoverError(null);
+        }
     };
 
     const migrationsWithActions = migrations?.map(migration => ({
@@ -218,38 +288,65 @@ export default function MigrationsTable({
     })) || [];
 
     return (
-        <DataGrid
-            rows={migrationsWithActions}
-            columns={onDeleteSelected === undefined && onDeleteMigration === undefined ? columns.filter(column => column.field !== "actions") : columns}
-            initialState={{
-                pagination: { paginationModel: { page: 0, pageSize: 25 } },
-                sorting: {
-                    sortModel: [{ field: 'status', sort: 'asc' }],
-                },
-            }}
-            pageSizeOptions={[25, 50, 100]}
-            localeText={{ noRowsLabel: "No Migrations Available" }}
-            getRowId={(row) => row.metadata?.name}
-            checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
-            onRowSelectionModelChange={handleSelectionChange}
-            rowSelectionModel={selectedRows}
-            disableRowSelectionOnClick
-            slots={{
-                toolbar: onDeleteSelected !== undefined && onDeleteMigration !== undefined ? () => (
-                    <CustomToolbar
-                        numSelected={selectedRows.length}
-                        onDeleteSelected={() => {
-                            const selectedMigrations = migrations?.filter(
-                                m => selectedRows.includes(m.metadata?.name)
-                            );
-                            if (onDeleteSelected) {
-                                onDeleteSelected(selectedMigrations || []);
-                            }
-                        }}
-                        refetchMigrations={refetchMigrations}
-                    />
-                ) : undefined,
-            }}
-        />
+        <>
+            <DataGrid
+                rows={migrationsWithActions}
+                columns={onDeleteSelected === undefined && onDeleteMigration === undefined ? columns.filter(column => column.field !== "actions") : columns}
+                initialState={{
+                    pagination: { paginationModel: { page: 0, pageSize: 25 } },
+                    sorting: {
+                        sortModel: [{ field: 'status', sort: 'asc' }],
+                    },
+                }}
+                pageSizeOptions={[25, 50, 100]}
+                localeText={{ noRowsLabel: "No Migrations Available" }}
+                getRowId={(row) => row.metadata?.name}
+                checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
+                onRowSelectionModelChange={handleSelectionChange}
+                rowSelectionModel={selectedRows}
+                disableRowSelectionOnClick
+                loading={isBulkCutoverLoading}
+                slots={{
+                    toolbar: onDeleteSelected !== undefined && onDeleteMigration !== undefined ? () => (
+                        <CustomToolbar
+                            numSelected={selectedRows.length}
+                            numEligibleForCutover={eligibleForCutover.length}
+                            onDeleteSelected={() => {
+                                const selectedMigrations = migrations?.filter(
+                                    m => selectedRows.includes(m.metadata?.name)
+                                );
+                                if (onDeleteSelected) {
+                                    onDeleteSelected(selectedMigrations || []);
+                                }
+                            }}
+                            onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
+                            refetchMigrations={refetchMigrations}
+                        />
+                    ) : undefined,
+                }}
+            />
+
+            <ConfirmationDialog
+                open={bulkCutoverDialogOpen}
+                onClose={handleCloseBulkCutoverDialog}
+                title="Confirm Bulk Admin Cutover"
+                icon={<PlayArrowIcon color="primary" />}
+                message={
+                    eligibleForCutover.length > 1
+                        ? "Are you sure you want to trigger admin cutover for these migrations? This will start the cutover process and cannot be undone."
+                        : "Are you sure you want to trigger admin cutover for this migration? This will start the cutover process and cannot be undone."
+                }
+                items={eligibleForCutover.map(migration => ({
+                    id: migration.metadata?.name || '',
+                    name: migration.metadata?.name || ''
+                }))}
+                actionLabel="Trigger Cutover"
+                actionColor="primary"
+                actionVariant="contained"
+                onConfirm={handleBulkAdminCutover}
+                errorMessage={bulkCutoverError}
+                onErrorChange={setBulkCutoverError}
+            />
+        </>
     );
 } 

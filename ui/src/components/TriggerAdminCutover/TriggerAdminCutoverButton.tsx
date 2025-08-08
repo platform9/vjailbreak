@@ -60,13 +60,14 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
         <IconButton
           onClick={(e) => {
             e.stopPropagation();
+            setError(null); // Clear any previous errors
             setOpen(true);
           }}
           size="small"
           disabled={isLoading}
           sx={{
             cursor: 'pointer',
-            color: 'warning.main'
+            color: 'primary.main'
           }}
         >
           {isLoading ? (
@@ -98,7 +99,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
           <Button
             onClick={handleTriggerCutover}
             variant="contained"
-            color="warning"
+            color="primary"
             disabled={isLoading}
           >
             Trigger Cutover
