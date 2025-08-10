@@ -419,7 +419,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y containerd.
           sudo mkdir -p image_builder/images
           sudo chmod +x image_builder/scripts/download_images.sh
-          sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
+          sudo ./image_builder/scripts/download_images.sh ${{ vars.REGISTRY }} ${{ vars.REPO }} ${{ env.TAG }} 
           
       - name: Copy opensource.txt to image_builder
         if: env.release_found == 'true'
@@ -475,6 +475,23 @@ jobs:
         with:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Rename QCOW2 image
+        if: env.release_found == 'true'
+        run: |
+          cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 ./vjailbreak-img-${{ env.TAG }}.qcow
+
+      # Handle GitHub Release case
+      - name: Upload QCOW2 to GitHub Release
+        if: env.release_found == 'true' && github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./vjailbreak-img-${{ env.TAG }}.qcow
+          asset_name: vjailbreak-img-${{ env.TAG }}.qcow
+          asset_content_type: application/octet-stream
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
