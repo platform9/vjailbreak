@@ -121,76 +121,53 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 	saveProgress(ctx, kubeClient)
 
-	config, err = rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-	scheme = runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
-	kubeClient, err = client.New(config, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create k8s client: %w", err)
-	}
+	err = func() error {
 
-	upgradeProgress.CurrentStep = "Backing up resources"
-	saveProgress(ctx, kubeClient)
-	if err := upgrade.BackupResources(ctx, kubeClient, config); err != nil {
-		upgradeProgress.Status = "failed"
-		upgradeProgress.Error = fmt.Sprintf("Backup failed: %v", err)
-		return nil, fmt.Errorf("backup failed: %w", err)
-	}
-	upgradeProgress.CompletedSteps++
-
-	upgradeProgress.CurrentStep = "Running pre-upgrade checks"
-	saveProgress(ctx, kubeClient)
-	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
-	if err != nil {
-		upgradeProgress.Status = "failed"
-		upgradeProgress.Error = fmt.Sprintf("Pre-upgrade checks failed: %v", err)
-		return nil, err
-	}
-	upgradeProgress.CompletedSteps++
-
-	if in.AutoCleanup {
-		upgradeProgress.CurrentStep = "Performing automatic cleanup"
+		upgradeProgress.CurrentStep = "Running pre-upgrade checks"
 		saveProgress(ctx, kubeClient)
-		if err := upgrade.CleanupResources(ctx, kubeClient, config); err != nil {
+		checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
+		if err != nil {
 			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = fmt.Sprintf("Automatic cleanup failed: %v", err)
-			return nil, fmt.Errorf("automatic cleanup failed: %w", err)
-		}
-		checks, err = upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
-		if err != nil || !checks.PassedAll {
-			upgradeProgress.Status = "failed"
-			upgradeProgress.Error = "Checks failed even after cleanup"
-			return nil, fmt.Errorf("checks failed even after cleanup")
+			upgradeProgress.Error = fmt.Sprintf("Pre-upgrade checks failed: %v", err)
+			return fmt.Errorf("pre-upgrade checks failed: %w", err)
 		}
 		upgradeProgress.CompletedSteps++
-	}
 
-	var protoChecks *api.ValidationResult
-	if checks != nil {
-		protoChecks = &api.ValidationResult{
-			NoMigrationPlans:        checks.NoMigrationPlans,
-			NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-			VmwareCredsDeleted:      checks.VMwareCredsDeleted,
-			OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
-			AgentsScaledDown:        checks.AgentsScaledDown,
-			NoCustomResources:       checks.NoCustomResources,
-			PassedAll:               checks.PassedAll,
+		if !checks.PassedAll && in.AutoCleanup {
+			upgradeProgress.CurrentStep = "Performing automatic cleanup"
+			saveProgress(ctx, kubeClient)
+			if err := upgrade.CleanupResources(ctx, kubeClient, config); err != nil {
+				upgradeProgress.Status = "failed"
+				upgradeProgress.Error = fmt.Sprintf("Automatic cleanup failed: %v", err)
+				return fmt.Errorf("automatic cleanup failed: %w", err)
+			}
+			checks, err = upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
+			if err != nil || !checks.PassedAll {
+				upgradeProgress.Status = "failed"
+				upgradeProgress.Error = "Checks failed even after cleanup"
+				return fmt.Errorf("checks failed even after cleanup")
+			}
 		}
-	}
 
-	if checks.PassedAll {
-		log.Printf("All checks passed. Starting upgrade to version: %s", in.TargetVersion)
+		if !checks.PassedAll {
+			return errors.New("pre-upgrade checks did not pass, halting upgrade")
+		}
+
+		upgradeProgress.CurrentStep = "Backing up resources"
+		saveProgress(ctx, kubeClient)
+		if err := upgrade.BackupResources(ctx, kubeClient, config); err != nil {
+			upgradeProgress.Status = "failed"
+			upgradeProgress.Error = fmt.Sprintf("Backup failed: %v", err)
+			return fmt.Errorf("backup failed: %w", err)
+		}
+		upgradeProgress.CompletedSteps++
 
 		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
 		saveProgress(ctx, kubeClient)
 		if err := upgrade.ApplyAllCRDs(ctx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("CRD update failed: %v", err)
-			return nil, fmt.Errorf("CRD update failed: %w", err)
+			return fmt.Errorf("CRD update failed: %w", err)
 		}
 		upgradeProgress.CompletedSteps++
 
@@ -350,41 +327,66 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			}()
 
 			if err != nil {
-				log.Printf("Upgrade failed during deployment phase: %v", err)
+				log.Printf("Upgrade failed during deployment phase: %v. Rolling back.", err)
 				upgradeProgress.Status = "failed"
 				upgradeProgress.Error = err.Error()
+				upgradeProgress.CurrentStep = "Deployment failed, rolling back..."
 				saveProgress(ctx, kubeClient)
+
+				if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
+					log.Printf("CRITICAL: Rollback failed: %v", err)
+					upgradeProgress.Status = "rollback_failed"
+					upgradeProgress.Error = "Deployment failed and rollback also failed. Manual intervention required."
+				} else {
+					log.Printf("Rollback completed successfully.")
+					upgradeProgress.Status = "rolled_back"
+				}
+				saveProgress(ctx, kubeClient)
+				_ = kubeClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: progressConfigMapName, Namespace: "migration-system"}})
 				return
 			}
 
 			log.Printf("Upgrade process handed off to UI for finalization.")
 		}()
+		return nil
 
-	} else {
-		upgradeProgress.CurrentStep = "Rollback due to upgrade failure"
+	}()
+
+	if err != nil {
+		log.Printf("Upgrade failed before deployment phase: %v. Rolling back.", err)
+		upgradeProgress.Status = "failed"
+		upgradeProgress.Error = err.Error()
+		upgradeProgress.CurrentStep = "Upgrade failed, rolling back..."
 		saveProgress(ctx, kubeClient)
-		upgradeProgress.Status = "rolled_back"
-		upgradeProgress.Error = "Upgrade failed. Rolling back to previous state."
-		now := time.Now()
-		upgradeProgress.EndTime = &now
-		log.Printf("Upgrade failed. Rolling back to previous state.")
-		if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
-			log.Printf("Rollback failed: %v", err)
-			upgradeProgress.Error = fmt.Sprintf("Rollback failed: %v", err)
+
+		if rollbackErr := upgrade.RestoreResources(ctx, kubeClient); rollbackErr != nil {
+			log.Printf("CRITICAL: Rollback failed: %v", rollbackErr)
 			upgradeProgress.Status = "rollback_failed"
+			upgradeProgress.Error = "Upgrade failed and rollback also failed."
 		} else {
 			log.Printf("Rollback completed successfully.")
+			upgradeProgress.Status = "rolled_back"
 		}
+		saveProgress(ctx, kubeClient)
+		_ = kubeClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: progressConfigMapName, Namespace: "migration-system"}})
+
+		return nil, err
 	}
 
-	upgradeStarted := false
-	if checks != nil {
-		upgradeStarted = checks.PassedAll
+	checks, _ := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
+	protoChecks := &api.ValidationResult{
+		NoMigrationPlans:        checks.NoMigrationPlans,
+		NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
+		VmwareCredsDeleted:      checks.VMwareCredsDeleted,
+		OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+		AgentsScaledDown:        checks.AgentsScaledDown,
+		NoCustomResources:       checks.NoCustomResources,
+		PassedAll:               checks.PassedAll,
 	}
 
 	return &api.UpgradeResponse{
 		Checks:         protoChecks,
-		UpgradeStarted: upgradeStarted,
+		UpgradeStarted: true,
 	}, nil
 }
 

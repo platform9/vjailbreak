@@ -3,11 +3,11 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"strings"
 
 	"encoding/base64"
-	"io/ioutil"
 	"net/http"
 
 	"gopkg.in/yaml.v2"
@@ -16,7 +16,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -252,39 +251,6 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 		}
 	}
 
-	currentCRs, err := DiscoverCurrentCRs(ctx, kubeClient)
-	if err == nil {
-		for _, crInfo := range currentCRs {
-			gvr := schema.GroupVersionResource{
-				Group:    crInfo.Group,
-				Version:  crInfo.Version,
-				Resource: crInfo.Plural,
-			}
-			dynamicClient, err := dynamic.NewForConfig(restConfig)
-			if err != nil {
-				continue
-			}
-			unstructuredList, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for _, item := range unstructuredList.Items {
-				crYaml, err := yaml.Marshal(item.Object)
-				if err == nil {
-					key := "cr-" + strings.ReplaceAll(crInfo.Kind, ":", "-") + "-" + strings.ReplaceAll(item.GetName(), ":", "-")
-					value := base64.StdEncoding.EncodeToString(crYaml)
-					if totalSize+len(key)+len(value) > maxConfigMapSize {
-						log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRs")
-						break
-					}
-
-					backup[key] = value
-					totalSize += len(key) + len(value)
-				}
-			}
-		}
-	}
-
 	backupCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "vjailbreak-upgrade-backup",
@@ -329,15 +295,6 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 			if err := yaml.Unmarshal(data, dep); err == nil {
 				_ = kubeClient.Delete(ctx, dep)
 				_ = kubeClient.Create(ctx, dep)
-			}
-		} else if strings.HasPrefix(key, "cr-") {
-			var obj map[string]interface{}
-			if err := yaml.Unmarshal(data, &obj); err == nil {
-				unstructured := &unstructured.Unstructured{}
-				if err := yaml.Unmarshal(data, unstructured); err == nil {
-					_ = kubeClient.Delete(ctx, unstructured)
-					_ = kubeClient.Create(ctx, unstructured)
-				}
 			}
 		}
 	}
