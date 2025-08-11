@@ -13,8 +13,8 @@ export enum OS_TYPES {
 }
 
 export const DATA_COPY_OPTIONS = [
-  { value: "hot", label: "Copy live VMs, then power off" },
   { value: "cold", label: "Power off live VMs, then copy" },
+  { value: "hot", label: "Copy live VMs, then power off" },
 ]
 
 export const OS_TYPES_OPTIONS = [
