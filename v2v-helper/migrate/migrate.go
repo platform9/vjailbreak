@@ -852,29 +852,42 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 func parseVersionID(osRelease string) string {
 	osRelease = strings.TrimSpace(osRelease)
 
-	// Check if it's /etc/os-release format (contains key-value pairs)
+	// Key-value style (os-release, SuSE-release, etc.)
 	if strings.Contains(osRelease, "=") {
+		var version, patchlevel string
 		for _, line := range strings.Split(osRelease, "\n") {
 			kv := strings.SplitN(line, "=", 2)
 			if len(kv) != 2 {
 				continue
 			}
 			key := strings.TrimSpace(strings.ToUpper(kv[0]))
-			val := strings.Trim(kv[1], `"`) // Remove any quotes
-			if key == "VERSION_ID" {
+			val := strings.TrimSpace(strings.Trim(kv[1], `"`)) // Remove quotes and spaces
+			switch key {
+			case "VERSION_ID":
 				return val
+			case "VERSION":
+				version = val
+			case "PATCHLEVEL":
+				patchlevel = val
 			}
 		}
+		// If it's SLES style, combine VERSION + PATCHLEVEL if available
+		if version != "" {
+			if patchlevel != "" {
+				return version + "." + patchlevel
+			}
+			return version
+		}
 	} else {
-		// Assume /etc/redhat-release format; extract version with regex
+		// /etc/redhat-release style
 		re := regexp.MustCompile(`release\s+([0-9]+(\.[0-9]+)?)`)
 		matches := re.FindStringSubmatch(strings.ToLower(osRelease))
 		if len(matches) > 1 {
-			return matches[1] // Return the version (e.g., "9.6" or "6.10")
+			return matches[1]
 		}
 	}
 
-	return "" // Return empty string if version not found
+	return ""
 }
 
 func isNetplanSupported(version string) bool {
