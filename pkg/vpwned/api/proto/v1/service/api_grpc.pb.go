@@ -785,7 +785,6 @@ var BMProvider_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	VailbreakProxy_ValidateOpenstackIp_FullMethodName = "/api.VailbreakProxy/ValidateOpenstackIp"
-	VailbreakProxy_TriggerAdminCutover_FullMethodName = "/api.VailbreakProxy/TriggerAdminCutover"
 )
 
 // VailbreakProxyClient is the client API for VailbreakProxy service.
@@ -793,7 +792,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VailbreakProxyClient interface {
 	ValidateOpenstackIp(ctx context.Context, in *ValidateOpenstackIpRequest, opts ...grpc.CallOption) (*ValidateOpenstackIpResponse, error)
-	TriggerAdminCutover(ctx context.Context, in *TriggerAdminCutoverRequest, opts ...grpc.CallOption) (*TriggerAdminCutoverResponse, error)
 }
 
 type vailbreakProxyClient struct {
@@ -814,22 +812,11 @@ func (c *vailbreakProxyClient) ValidateOpenstackIp(ctx context.Context, in *Vali
 	return out, nil
 }
 
-func (c *vailbreakProxyClient) TriggerAdminCutover(ctx context.Context, in *TriggerAdminCutoverRequest, opts ...grpc.CallOption) (*TriggerAdminCutoverResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TriggerAdminCutoverResponse)
-	err := c.cc.Invoke(ctx, VailbreakProxy_TriggerAdminCutover_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // VailbreakProxyServer is the server API for VailbreakProxy service.
 // All implementations must embed UnimplementedVailbreakProxyServer
 // for forward compatibility.
 type VailbreakProxyServer interface {
 	ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error)
-	TriggerAdminCutover(context.Context, *TriggerAdminCutoverRequest) (*TriggerAdminCutoverResponse, error)
 	mustEmbedUnimplementedVailbreakProxyServer()
 }
 
@@ -842,9 +829,6 @@ type UnimplementedVailbreakProxyServer struct{}
 
 func (UnimplementedVailbreakProxyServer) ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateOpenstackIp not implemented")
-}
-func (UnimplementedVailbreakProxyServer) TriggerAdminCutover(context.Context, *TriggerAdminCutoverRequest) (*TriggerAdminCutoverResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TriggerAdminCutover not implemented")
 }
 func (UnimplementedVailbreakProxyServer) mustEmbedUnimplementedVailbreakProxyServer() {}
 func (UnimplementedVailbreakProxyServer) testEmbeddedByValue()                        {}
@@ -885,24 +869,6 @@ func _VailbreakProxy_ValidateOpenstackIp_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _VailbreakProxy_TriggerAdminCutover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TriggerAdminCutoverRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(VailbreakProxyServer).TriggerAdminCutover(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: VailbreakProxy_TriggerAdminCutover_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VailbreakProxyServer).TriggerAdminCutover(ctx, req.(*TriggerAdminCutoverRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // VailbreakProxy_ServiceDesc is the grpc.ServiceDesc for VailbreakProxy service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -913,10 +879,6 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateOpenstackIp",
 			Handler:    _VailbreakProxy_ValidateOpenstackIp_Handler,
-		},
-		{
-			MethodName: "TriggerAdminCutover",
-			Handler:    _VailbreakProxy_TriggerAdminCutover_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

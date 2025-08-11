@@ -444,20 +444,4 @@ service VailbreakProxy {
             body: "*"
         };
     }
-    rpc TriggerAdminCutover (TriggerAdminCutoverRequest) returns (TriggerAdminCutoverResponse) {
-        option (google.api.http) = {
-            post: "/vpw/v1/trigger_admin_cutover"
-            body: "*"
-        };
-    }
-}
-
-message TriggerAdminCutoverRequest {
-    string namespace = 1;
-    string migration_name = 2;
-}
-
-message TriggerAdminCutoverResponse {
-    bool success = 1;
-    string message = 2;
 }

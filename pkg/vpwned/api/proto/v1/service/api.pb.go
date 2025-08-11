@@ -3378,110 +3378,6 @@ func (x *ValidateOpenstackIpResponse) GetReason() []string {
 	return nil
 }
 
-type TriggerAdminCutoverRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	MigrationName string                 `protobuf:"bytes,2,opt,name=migration_name,json=migrationName,proto3" json:"migration_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TriggerAdminCutoverRequest) Reset() {
-	*x = TriggerAdminCutoverRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[50]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TriggerAdminCutoverRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TriggerAdminCutoverRequest) ProtoMessage() {}
-
-func (x *TriggerAdminCutoverRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[50]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TriggerAdminCutoverRequest.ProtoReflect.Descriptor instead.
-func (*TriggerAdminCutoverRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{50}
-}
-
-func (x *TriggerAdminCutoverRequest) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *TriggerAdminCutoverRequest) GetMigrationName() string {
-	if x != nil {
-		return x.MigrationName
-	}
-	return ""
-}
-
-type TriggerAdminCutoverResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TriggerAdminCutoverResponse) Reset() {
-	*x = TriggerAdminCutoverResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[51]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TriggerAdminCutoverResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TriggerAdminCutoverResponse) ProtoMessage() {}
-
-func (x *TriggerAdminCutoverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[51]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TriggerAdminCutoverResponse.ProtoReflect.Descriptor instead.
-func (*TriggerAdminCutoverResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{51}
-}
-
-func (x *TriggerAdminCutoverResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *TriggerAdminCutoverResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
 var File_sdk_proto_v1_api_proto protoreflect.FileDescriptor
 
 const file_sdk_proto_v1_api_proto_rawDesc = "" +
@@ -3744,13 +3640,7 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"accessInfo\"P\n" +
 	"\x1bValidateOpenstackIpResponse\x12\x19\n" +
 	"\bis_valid\x18\x01 \x03(\bR\aisValid\x12\x16\n" +
-	"\x06reason\x18\x02 \x03(\tR\x06reason\"a\n" +
-	"\x1aTriggerAdminCutoverRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12%\n" +
-	"\x0emigration_name\x18\x02 \x01(\tR\rmigrationName\"Q\n" +
-	"\x1bTriggerAdminCutoverResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*j\n" +
+	"\x06reason\x18\x02 \x03(\tR\x06reason*j\n" +
 	"\vPowerStatus\x12\x0f\n" +
 	"\vPOWERED_OFF\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -3784,10 +3674,9 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x06WhoAmI\x12\x12.api.WhoAmIRequest\x1a\x13.api.WhoAmIResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/vpw/v1/who_am_i\x12k\n" +
 	"\x0eListBootSource\x12\x1a.api.ListBootSourceRequest\x1a\x1b.api.ListBootSourceResponse\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/vpw/v1/list_boot_source\x12b\n" +
 	"\rReclaimBMHost\x12\x15.api.ReclaimBMRequest\x1a\x16.api.ReclaimBMResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/vpw/v1/reclaim_bm_host\x12i\n" +
-	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\x9a\x02\n" +
+	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\x95\x01\n" +
 	"\x0eVailbreakProxy\x12\x82\x01\n" +
-	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ip\x12\x82\x01\n" +
-	"\x13TriggerAdminCutover\x12\x1f.api.TriggerAdminCutoverRequest\x1a .api.TriggerAdminCutoverResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/trigger_admin_cutoverB$\n" +
+	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ipB$\n" +
 	"\x0fio.grpc.pf9.apiB\x03pf9P\x01Z\n" +
 	"v1/serviceb\x06proto3"
 
@@ -3804,7 +3693,7 @@ func file_sdk_proto_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_sdk_proto_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(PowerStatus)(0),                      // 0: api.PowerStatus
 	(BootDevice)(0),                       // 1: api.BootDevice
@@ -3858,8 +3747,6 @@ var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(*OpenstackAccessInfo)(nil),           // 49: api.OpenstackAccessInfo
 	(*ValidateOpenstackIpRequest)(nil),    // 50: api.ValidateOpenstackIpRequest
 	(*ValidateOpenstackIpResponse)(nil),   // 51: api.ValidateOpenstackIpResponse
-	(*TriggerAdminCutoverRequest)(nil),    // 52: api.TriggerAdminCutoverRequest
-	(*TriggerAdminCutoverResponse)(nil),   // 53: api.TriggerAdminCutoverResponse
 }
 var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	0,  // 0: api.VMInfo.power_status:type_name -> api.PowerStatus
@@ -3915,26 +3802,24 @@ var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	37, // 50: api.BMProvider.ReclaimBMHost:input_type -> api.ReclaimBMRequest
 	39, // 51: api.BMProvider.DeployMachine:input_type -> api.DeployMachineRequest
 	50, // 52: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
-	52, // 53: api.VailbreakProxy.TriggerAdminCutover:input_type -> api.TriggerAdminCutoverRequest
-	4,  // 54: api.Version.Version:output_type -> api.VersionResponse
-	14, // 55: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
-	16, // 56: api.VCenter.GetVM:output_type -> api.GetVMResponse
-	18, // 57: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
-	20, // 58: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
-	12, // 59: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
-	9,  // 60: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
-	24, // 61: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
-	26, // 62: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
-	28, // 63: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
-	30, // 64: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
-	32, // 65: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
-	35, // 66: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
-	38, // 67: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
-	40, // 68: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
-	51, // 69: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
-	53, // 70: api.VailbreakProxy.TriggerAdminCutover:output_type -> api.TriggerAdminCutoverResponse
-	54, // [54:71] is the sub-list for method output_type
-	37, // [37:54] is the sub-list for method input_type
+	4,  // 53: api.Version.Version:output_type -> api.VersionResponse
+	14, // 54: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
+	16, // 55: api.VCenter.GetVM:output_type -> api.GetVMResponse
+	18, // 56: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
+	20, // 57: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
+	12, // 58: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
+	9,  // 59: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
+	24, // 60: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
+	26, // 61: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
+	28, // 62: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
+	30, // 63: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
+	32, // 64: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
+	35, // 65: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
+	38, // 66: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
+	40, // 67: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
+	51, // 68: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
+	53, // [53:69] is the sub-list for method output_type
+	37, // [37:53] is the sub-list for method input_type
 	37, // [37:37] is the sub-list for extension type_name
 	37, // [37:37] is the sub-list for extension extendee
 	0,  // [0:37] is the sub-list for field type_name
@@ -3972,7 +3857,7 @@ func file_sdk_proto_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sdk_proto_v1_api_proto_rawDesc), len(file_sdk_proto_v1_api_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   52,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

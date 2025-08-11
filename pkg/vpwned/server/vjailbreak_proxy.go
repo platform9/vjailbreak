@@ -13,8 +13,6 @@ import (
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -207,89 +205,4 @@ func CreateInClusterClient() (client.Client, error) {
 		return nil, err
 	}
 	return clientset, nil
-}
-
-func (p *vjailbreakProxy) TriggerAdminCutover(ctx context.Context, in *api.TriggerAdminCutoverRequest) (*api.TriggerAdminCutoverResponse, error) {
-	retVal := &api.TriggerAdminCutoverResponse{}
-
-	if in.GetNamespace() == "" || in.GetMigrationName() == "" {
-		retVal.Success = false
-		retVal.Message = "Namespace and migration name are required"
-		return retVal, nil
-	}
-
-	// Create in-cluster k8s client
-	k8sClient, err := CreateInClusterClient()
-	if err != nil {
-		retVal.Success = false
-		retVal.Message = fmt.Sprintf("Failed to create k8s client: %v", err)
-		return retVal, nil
-	}
-
-	// Get the migration object to get the podref.
-	vjailbreakv1alpha1 := vjailbreakv1alpha1.Migration{}
-	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name:      in.GetMigrationName(),
-		Namespace: in.GetNamespace(),
-	}, &vjailbreakv1alpha1)
-	if err != nil {
-		retVal.Success = false
-		retVal.Message = fmt.Sprintf("Failed to get migration object: %v", err)
-		return retVal, nil
-	}
-
-	podRef := vjailbreakv1alpha1.Spec.PodRef
-	if podRef == "" {
-		retVal.Success = false
-		retVal.Message = "PodRef is empty in migration object"
-		return retVal, nil
-	}
-
-	// Get the pod object to trigger cutover
-	pod := &corev1.Pod{}
-	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name:      podRef,
-		Namespace: in.GetNamespace(),
-	}, pod)
-	if err != nil {
-		retVal.Success = false
-		retVal.Message = fmt.Sprintf("Failed to get pod object: %v", err)
-		return retVal, nil
-	}
-
-	// Create a copy of the pod for patching
-	podCopy := pod.DeepCopy()
-
-	successCount := 0
-	var lastError error
-
-	// Initialize labels map if it doesn't exist
-	if podCopy.Labels == nil {
-		podCopy.Labels = make(map[string]string)
-	}
-
-	// Add the startCutover label
-	podCopy.Labels["startCutover"] = "yes"
-
-	// Patch the pod
-	err = k8sClient.Patch(ctx, podCopy, client.MergeFrom(pod))
-	if err != nil {
-		lastError = err
-	}
-	successCount++
-
-	if successCount == 0 {
-		retVal.Success = false
-		retVal.Message = fmt.Sprintf("Failed to trigger cutover for any pods: %v", lastError)
-		return retVal, nil
-	}
-
-	retVal.Success = true
-	message := fmt.Sprintf("Successfully triggered cutover for %d/%d pods", successCount, 1)
-	if successCount < 1 {
-		message += fmt.Sprintf(" (last error: %v)", lastError)
-	}
-	retVal.Message = message
-
-	return retVal, nil
 }

@@ -662,38 +662,6 @@
         ]
       }
     },
-    "/vpw/v1/trigger_admin_cutover": {
-      "post": {
-        "operationId": "VailbreakProxy_TriggerAdminCutover",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/apiTriggerAdminCutoverResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/apiTriggerAdminCutoverRequest"
-            }
-          }
-        ],
-        "tags": [
-          "VailbreakProxy"
-        ]
-      }
-    },
     "/vpw/v1/un_cordon_host": {
       "post": {
         "operationId": "VCenter_UnCordonHost",
@@ -1309,28 +1277,6 @@
           "type": "string"
         },
         "unknown": {
-          "type": "string"
-        }
-      }
-    },
-    "apiTriggerAdminCutoverRequest": {
-      "type": "object",
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "migrationName": {
-          "type": "string"
-        }
-      }
-    },
-    "apiTriggerAdminCutoverResponse": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
           "type": "string"
         }
       }
