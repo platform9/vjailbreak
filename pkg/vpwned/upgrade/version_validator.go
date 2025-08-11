@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type ValidationResult struct {
@@ -189,9 +190,9 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 }
 
 func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
-	log.Println("Starting backup of CRDs, ConfigMaps, Deployments, and CRs")
+	log.Println("Starting backup of CRDs, ConfigMaps, and Deployments")
 
-	backup := make(map[string]string)
+	backupData := make(map[string]string)
 	totalSize := 0
 	const maxConfigMapSize = 1000000
 
@@ -200,17 +201,17 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 		for _, crd := range crdList.Items {
 			if strings.Contains(crd.Spec.Group, "vjailbreak") {
 				crdYaml, err := yaml.Marshal(crd)
-				if err == nil {
-					key := "crd-" + strings.ReplaceAll(crd.Name, ":", "-")
-					value := base64.StdEncoding.EncodeToString(crdYaml)
-					if totalSize+len(key)+len(value) > maxConfigMapSize {
-						log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRDs")
-						break
-					}
-
-					backup[key] = value
-					totalSize += len(key) + len(value)
+				if err != nil {
+					continue
 				}
+				key := "crd-" + crd.Name
+				value := base64.StdEncoding.EncodeToString(crdYaml)
+				if totalSize+len(key)+len(value) > maxConfigMapSize {
+					log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRDs")
+					break
+				}
+				backupData[key] = value
+				totalSize += len(key) + len(value)
 			}
 		}
 	}
@@ -218,18 +219,21 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	cmList := &corev1.ConfigMapList{}
 	if err := kubeClient.List(ctx, cmList, client.InNamespace("migration-system")); err == nil {
 		for _, cm := range cmList.Items {
-			cmYaml, err := yaml.Marshal(cm)
-			if err == nil {
-				key := "configmap-" + strings.ReplaceAll(cm.Name, ":", "-")
-				value := base64.StdEncoding.EncodeToString(cmYaml)
-				if totalSize+len(key)+len(value) > maxConfigMapSize {
-					log.Printf("Warning: ConfigMap size limit reached, skipping remaining ConfigMaps")
-					break
-				}
-
-				backup[key] = value
-				totalSize += len(key) + len(value)
+			if cm.Name == "vjailbreak-upgrade-backup" {
+				continue
 			}
+			cmYaml, err := yaml.Marshal(cm)
+			if err != nil {
+				continue
+			}
+			key := "configmap-" + cm.Name
+			value := base64.StdEncoding.EncodeToString(cmYaml)
+			if totalSize+len(key)+len(value) > maxConfigMapSize {
+				log.Printf("Warning: ConfigMap size limit reached, skipping remaining ConfigMaps")
+				break
+			}
+			backupData[key] = value
+			totalSize += len(key) + len(value)
 		}
 	}
 
@@ -237,17 +241,17 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	if err := kubeClient.List(ctx, depList, client.InNamespace("migration-system")); err == nil {
 		for _, dep := range depList.Items {
 			depYaml, err := yaml.Marshal(dep)
-			if err == nil {
-				key := "deployment-" + strings.ReplaceAll(dep.Name, ":", "-")
-				value := base64.StdEncoding.EncodeToString(depYaml)
-				if totalSize+len(key)+len(value) > maxConfigMapSize {
-					log.Printf("Warning: ConfigMap size limit reached, skipping remaining Deployments")
-					break
-				}
-
-				backup[key] = value
-				totalSize += len(key) + len(value)
+			if err != nil {
+				continue
 			}
+			key := "deployment-" + dep.Name
+			value := base64.StdEncoding.EncodeToString(depYaml)
+			if totalSize+len(key)+len(value) > maxConfigMapSize {
+				log.Printf("Warning: ConfigMap size limit reached, skipping remaining Deployments")
+				break
+			}
+			backupData[key] = value
+			totalSize += len(key) + len(value)
 		}
 	}
 
@@ -256,13 +260,18 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 			Name:      "vjailbreak-upgrade-backup",
 			Namespace: "migration-system",
 		},
-		Data: backup,
 	}
-	_ = kubeClient.Delete(ctx, backupCM)
-	if err := kubeClient.Create(ctx, backupCM); err != nil {
-		return fmt.Errorf("failed to create backup ConfigMap: %w", err)
+
+	op, err := controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+		backupCM.Data = backupData
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create or update backup ConfigMap: %w", err)
 	}
-	log.Printf("Backup completed and stored in ConfigMap vjailbreak-upgrade-backup. Total size: %d bytes", totalSize)
+
+	log.Printf("Backup %s and stored in ConfigMap. Total size: %d bytes", op, totalSize)
 	return nil
 }
 
