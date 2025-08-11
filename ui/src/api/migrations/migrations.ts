@@ -58,6 +58,34 @@ export const triggerAdminCutover = async (
       throw new Error("PodRef is empty in migration object");
     }
 
+    // List all pods in the namespace
+    const podsEndpoint = `/api/v1/namespaces/${namespace}/pods`;
+    const podsResponse = await axios.get<{
+      items: Array<{
+        metadata: {
+          name: string;
+          namespace: string;
+        };
+      }>;
+    }>({
+      endpoint: podsEndpoint,
+    });
+
+    if (!podsResponse?.items || podsResponse.items.length === 0) {
+      throw new Error(`No pods found in namespace: ${namespace}`);
+    }
+
+    // Find pod that starts with podRef name
+    const matchingPod = podsResponse.items.find(pod => 
+      pod.metadata.name.startsWith(podRef)
+    );
+
+    if (!matchingPod) {
+      throw new Error(`No pod found with name starting with: ${podRef}`);
+    }
+
+    const podName = matchingPod.metadata.name;
+
     // Patch the pod directly with the startCutover label
     const patchPayload = {
       metadata: {
@@ -67,7 +95,7 @@ export const triggerAdminCutover = async (
       }
     };
 
-    const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/pods/${podRef}`;
+    const endpoint = `/api/v1/namespaces/${namespace}/pods/${podName}`;
     
     await axios.patch({
       endpoint,
