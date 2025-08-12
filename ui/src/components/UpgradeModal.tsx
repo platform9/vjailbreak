@@ -107,6 +107,10 @@ export const UpgradeModal = ({ show, onClose }) => {
           setUpgradeInProgress(false);
           setErrorMsg('Upgrade failed: Rolling back'); 
           clearInterval(interval);
+
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
         }
       } catch (err) {
         setUpgradeInProgress(false);

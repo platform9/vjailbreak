@@ -153,9 +153,10 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			return errors.New("pre-upgrade checks did not pass, halting upgrade")
 		}
 
+		backupID := time.Now().UTC().Format("20060102T150405Z")
 		upgradeProgress.CurrentStep = "Backing up resources"
 		saveProgress(ctx, kubeClient)
-		if err := upgrade.BackupResources(ctx, kubeClient, config); err != nil {
+		if err := upgrade.BackupResourcesWithID(ctx, kubeClient, config, backupID); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("Backup failed: %v", err)
 			return fmt.Errorf("backup failed: %w", err)
@@ -323,18 +324,44 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					log.Printf("Error updating SDK in the background: %v", err)
 				}
 
-				go func() {
-					time.Sleep(15 * time.Second)
-					log.Println("Upgrade successful. Cleaning up backup ConfigMaps...")
-					backupLabelSelector := client.MatchingLabels{"vjailbreak-backup": "true"}
-					backupCMList := &corev1.ConfigMapList{}
-					if err := kubeClient.List(context.Background(), backupCMList, client.InNamespace("migration-system"), backupLabelSelector); err == nil {
-						for _, backupCM := range backupCMList.Items {
-							_ = kubeClient.Delete(context.Background(), &backupCM)
+				upgradeProgress.Status = "deployments_ready"
+				upgradeProgress.CurrentStep = "Deployments ready, verifying stability"
+				saveProgress(ctx, kubeClient)
+
+				go func(localBackupID string) {
+					time.Sleep(30 * time.Second)
+
+					ok := true
+					for _, cfg := range deploymentConfigs {
+						dep := &appsv1.Deployment{}
+						if err := kubeClient.Get(context.Background(),
+							client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, dep); err != nil {
+							ok = false
+							break
 						}
-						log.Println("Backup ConfigMaps cleaned up.")
+						if dep.Status.ReadyReplicas != *dep.Spec.Replicas {
+							ok = false
+							break
+						}
 					}
-				}()
+
+					if ok {
+						log.Println("Upgrade looks stable. Cleaning up backup ConfigMaps...")
+						if err := upgrade.CleanupBackupConfigMaps(context.Background(), kubeClient, localBackupID); err != nil {
+							log.Printf("Warning: Failed to cleanup backup ConfigMaps: %v", err)
+						} else {
+							log.Println("Backup ConfigMaps cleaned up.")
+						}
+						upgradeProgress.Status = "completed"
+						upgradeProgress.CurrentStep = "Upgrade completed and backups cleaned"
+						saveProgress(context.Background(), kubeClient)
+					} else {
+						log.Println("Post-upgrade stability checks failed; keeping backups for investigation.")
+						upgradeProgress.Status = "deployments_ready_but_unstable"
+						upgradeProgress.CurrentStep = "Deployments reported not stable; backups retained"
+						saveProgress(context.Background(), kubeClient)
+					}
+				}(backupID)
 
 				return nil
 			}()
@@ -393,41 +420,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	}, nil
 }
 
-func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-	scheme := runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
-	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create k8s client: %w", err)
-	}
-
-	_ = upgrade.CleanupResources(ctx, kubeClient, config)
-
-	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
-	if err != nil || !checks.PassedAll {
-		return &api.UpgradeResponse{
-			Checks: &api.ValidationResult{
-				NoMigrationPlans:        checks.NoMigrationPlans,
-				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
-				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
-				AgentsScaledDown:        checks.AgentsScaledDown,
-				NoCustomResources:       checks.NoCustomResources,
-				PassedAll:               false,
-			},
-			UpgradeStarted:  false,
-			CleanupRequired: false,
-		}, fmt.Errorf("checks failed after cleanup")
-	}
-
-	return s.InitiateUpgrade(ctx, in)
-}
-
 func (s *VpwnedVersion) RollbackUpgrade(ctx context.Context, in *api.VersionRequest) (*api.UpgradeProgressResponse, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -455,11 +447,49 @@ func (s *VpwnedVersion) RollbackUpgrade(ctx context.Context, in *api.VersionRequ
 	}
 	upgradeProgress.Status = "rolled_back"
 	upgradeProgress.Error = "Rollback completed successfully"
+	saveProgress(ctx, kubeClient)
 	return &api.UpgradeProgressResponse{
 		Status:      "rolled_back",
 		Error:       "",
 		CurrentStep: upgradeProgress.CurrentStep,
 	}, nil
+}
+
+func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create k8s client: %w", err)
+	}
+
+	if err := upgrade.CleanupAllOldBackups(ctx, kubeClient); err != nil {
+		log.Printf("Warning: failed to cleanup old backups: %v", err)
+	}
+
+	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
+	if err != nil || !checks.PassedAll {
+		return &api.UpgradeResponse{
+			Checks: &api.ValidationResult{
+				NoMigrationPlans:        checks.NoMigrationPlans,
+				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
+				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
+				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+				AgentsScaledDown:        checks.AgentsScaledDown,
+				NoCustomResources:       checks.NoCustomResources,
+				PassedAll:               false,
+			},
+			UpgradeStarted:  false,
+			CleanupRequired: false,
+		}, fmt.Errorf("checks failed after cleanup")
+	}
+
+	return s.InitiateUpgrade(ctx, in)
 }
 
 func (s *VpwnedVersion) GetUpgradeProgress(ctx context.Context, in *api.VersionRequest) (*api.UpgradeProgressResponse, error) {
@@ -526,11 +556,11 @@ func (s *VpwnedVersion) CleanupStep(ctx context.Context, in *api.CleanupStepRequ
 	var msg string
 	switch step {
 	case "no_migrationplans":
-		success, msg = checkAndDeleteMigrationPlans(ctx, kubeClient, config)
+		success, msg = checkAndDeleteMigrationPlans(ctx, config)
 	case "no_rollingmigrationplans":
-		success, msg = checkAndDeleteRollingMigrationPlans(ctx, kubeClient, config)
+		success, msg = checkAndDeleteRollingMigrationPlans(ctx, config)
 	case "agent_scaled_down":
-		success, msg = checkAndScaleDownAgent(ctx, kubeClient, config)
+		success, msg = checkAndScaleDownAgent(ctx, config)
 	case "vmware_creds_deleted":
 		success, msg = checkAndDeleteSecret(ctx, kubeClient, config, "vmwarecreds")
 	case "openstack_creds_deleted":
@@ -543,7 +573,7 @@ func (s *VpwnedVersion) CleanupStep(ctx context.Context, in *api.CleanupStepRequ
 	return &api.CleanupStepResponse{Step: step, Success: success, Message: msg}, nil
 }
 
-func checkAndDeleteMigrationPlans(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+func checkAndDeleteMigrationPlans(ctx context.Context, restConfig *rest.Config) (bool, string) {
 	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -570,7 +600,7 @@ func checkAndDeleteMigrationPlans(ctx context.Context, kubeClient client.Client,
 	return false, "MigrationPlans still exist"
 }
 
-func checkAndDeleteRollingMigrationPlans(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+func checkAndDeleteRollingMigrationPlans(ctx context.Context, restConfig *rest.Config) (bool, string) {
 	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -597,7 +627,7 @@ func checkAndDeleteRollingMigrationPlans(ctx context.Context, kubeClient client.
 	return false, "RollingMigrationPlans still exist"
 }
 
-func checkAndScaleDownAgent(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) (bool, string) {
+func checkAndScaleDownAgent(ctx context.Context, restConfig *rest.Config) (bool, string) {
 	gvr := schema.GroupVersionResource{
 		Group:    "vjailbreak.k8s.pf9.io",
 		Version:  "v1alpha1",

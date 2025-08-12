@@ -2,12 +2,14 @@ package upgrade
 
 import (
 	"context"
-
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+	"time"
+
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -191,9 +193,9 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 	return true, nil
 }
 
-func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
+func BackupResourcesWithID(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, backupID string) error {
 	log.Println("Starting backup of resources...")
-	backupLabel := map[string]string{"vjailbreak-backup": "true"}
+	backupLabel := map[string]string{"vjailbreak-backup": "true", "vjailbreak-backup-id": backupID}
 
 	s := json.NewYAMLSerializer(json.DefaultMetaFactory, scheme.Scheme, scheme.Scheme)
 
@@ -265,43 +267,287 @@ func RestoreResources(ctx context.Context, kubeClient client.Client) error {
 		return fmt.Errorf("failed to list backup ConfigMaps: %w", err)
 	}
 
-	resourceTypes := []string{"crd", "configmap", "deployment"}
-	for _, resourceType := range resourceTypes {
-		for _, backupCM := range backupCMList.Items {
-			if strings.HasPrefix(backupCM.Name, "backup-"+resourceType+"-") {
-				yamlData, ok := backupCM.Data["resource"]
-				if !ok {
-					continue
-				}
-				if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
-					log.Printf("Failed to restore resource from backup %s: %v", backupCM.Name, err)
-				} else {
-					log.Printf("Restored resource from backup %s", backupCM.Name)
-				}
-			}
+	crdBackups := map[string]corev1.ConfigMap{}
+	cmBackups := map[string]corev1.ConfigMap{}
+	deployBackups := map[string]corev1.ConfigMap{}
+	otherBackups := []corev1.ConfigMap{}
+
+	for _, cm := range backupCMList.Items {
+		switch {
+		case strings.HasPrefix(cm.Name, "backup-crd-"):
+			crdBackups[cm.Name] = cm
+		case strings.HasPrefix(cm.Name, "backup-cm-"):
+			cmBackups[cm.Name] = cm
+		case strings.HasPrefix(cm.Name, "backup-deploy-"):
+			deployBackups[cm.Name] = cm
+		default:
+			otherBackups = append(otherBackups, cm)
 		}
 	}
 
-	log.Println("Cleaning up backup ConfigMaps...")
-	for _, backupCM := range backupCMList.Items {
-		_ = kubeClient.Delete(ctx, &backupCM)
+	for _, cm := range crdBackups {
+		yamlData, ok := cm.Data["resource"]
+		if !ok {
+			log.Printf("backup %s missing resource key; skipping", cm.Name)
+			continue
+		}
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to restore CRD from backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Restored CRD from backup %s", cm.Name)
+		}
+	}
+
+	if err := waitForCRDEstablished(ctx, kubeClient, 2*time.Minute); err != nil {
+		log.Printf("Warning: CRDs not all established: %v", err)
+	}
+	for _, cm := range cmBackups {
+		yamlData, ok := cm.Data["resource"]
+		if !ok {
+			continue
+		}
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to restore ConfigMap from backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Restored ConfigMap from backup %s", cm.Name)
+		}
+	}
+
+	controllerName := "migration-controller-manager"
+	uiName := "vjailbreak-ui"
+	sdkName := "migration-vpwned-sdk"
+	ns := "migration-system"
+	findDeployBackup := func(name string) (corev1.ConfigMap, bool) {
+		key := "backup-deploy-" + name
+		cm, ok := deployBackups[key]
+		return cm, ok
+	}
+
+	if err := scaleDeploymentTo(ctx, kubeClient, controllerName, ns, 0); err != nil {
+		log.Printf("Warning: failed to scale down controller %s: %v", controllerName, err)
+	} else {
+		log.Printf("Scaled down controller %s", controllerName)
+		if err := waitForDeploymentScaledDownLocal(ctx, kubeClient, controllerName, ns, 60*time.Second); err != nil {
+			log.Printf("Controller %s did not fully scale down: %v", controllerName, err)
+		} else {
+			log.Printf("Controller %s fully scaled down", controllerName)
+		}
+	}
+
+	if cm, ok := findDeployBackup(controllerName); ok {
+		yamlData := cm.Data["resource"]
+		desired := parseReplicasFromDeploymentYAML([]byte(yamlData))
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to apply controller deployment backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Applied controller deployment backup %s", cm.Name)
+			if desired < 1 {
+				desired = 1
+			}
+			if err := scaleDeploymentTo(ctx, kubeClient, controllerName, ns, desired); err != nil {
+				log.Printf("Failed to scale up controller %s to %d: %v", controllerName, desired, err)
+			} else {
+				if err := waitForDeploymentReadyLocal(ctx, kubeClient, controllerName, ns, 5*time.Minute); err != nil {
+					log.Printf("Controller %s did not become ready: %v", controllerName, err)
+				} else {
+					log.Printf("Controller %s is ready", controllerName)
+				}
+			}
+		}
+	} else {
+		log.Printf("No controller backup found for %s", controllerName)
+	}
+
+	if cm, ok := findDeployBackup(uiName); ok {
+		yamlData := cm.Data["resource"]
+		desired := parseReplicasFromDeploymentYAML([]byte(yamlData))
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to apply UI deployment backup %s: %v", cm.Name, err)
+		} else {
+			if desired < 1 {
+				desired = 1
+			}
+			if err := scaleDeploymentTo(ctx, kubeClient, uiName, ns, desired); err != nil {
+				log.Printf("Failed to scale UI %s to %d: %v", uiName, desired, err)
+			} else {
+				if err := waitForDeploymentReadyLocal(ctx, kubeClient, uiName, ns, 5*time.Minute); err != nil {
+					log.Printf("UI %s did not become ready: %v", uiName, err)
+				} else {
+					log.Printf("UI %s is ready", uiName)
+				}
+			}
+		}
+	} else {
+		log.Printf("No UI backup found for %s", uiName)
+	}
+
+	if cm, ok := findDeployBackup(sdkName); ok {
+		yamlData := cm.Data["resource"]
+		desired := parseReplicasFromDeploymentYAML([]byte(yamlData))
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to apply SDK deployment backup %s: %v", cm.Name, err)
+		} else {
+			if desired < 1 {
+				desired = 1
+			}
+			if err := scaleDeploymentTo(ctx, kubeClient, sdkName, ns, desired); err != nil {
+				log.Printf("Failed to scale SDK %s to %d: %v", sdkName, desired, err)
+			} else {
+				if err := waitForDeploymentReadyLocal(ctx, kubeClient, sdkName, ns, 5*time.Minute); err != nil {
+					log.Printf("SDK %s did not become ready: %v", sdkName, err)
+				} else {
+					log.Printf("SDK %s is ready", sdkName)
+				}
+			}
+		}
+	} else {
+		log.Printf("No SDK backup found for %s", sdkName)
+	}
+
+	for _, cm := range otherBackups {
+		yamlData, ok := cm.Data["resource"]
+		if !ok {
+			continue
+		}
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to restore resource from backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Restored resource from backup %s", cm.Name)
+		}
 	}
 
 	log.Println("Restore completed.")
 	return nil
 }
 
-func applyRestoredObject(ctx context.Context, kubeClient client.Client, data []byte) error {
-	unstructuredObj := &unstructured.Unstructured{}
-	if err := yaml.Unmarshal(data, unstructuredObj); err != nil {
+func parseReplicasFromDeploymentYAML(data []byte) int32 {
+	var dep appsv1.Deployment
+	if err := yaml.Unmarshal(data, &dep); err != nil {
+		return 1
+	}
+	if dep.Spec.Replicas == nil {
+		return 1
+	}
+	return *dep.Spec.Replicas
+}
+
+func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
+	dep := &appsv1.Deployment{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
 		return err
+	}
+	dep.Spec.Replicas = &target
+	return kubeClient.Update(ctx, dep)
+}
+
+func waitForDeploymentReadyLocal(ctx context.Context, kubeClient client.Client, name, namespace string, timeout time.Duration) error {
+	interval := 10 * time.Second
+	for start := time.Now(); time.Since(start) < timeout; {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
+			if kerrors.IsNotFound(err) {
+				return fmt.Errorf("deployment %s not found", name)
+			}
+			return err
+		}
+		desired := int32(1)
+		if dep.Spec.Replicas != nil {
+			desired = *dep.Spec.Replicas
+		}
+		if dep.Status.ReadyReplicas == desired && dep.Status.UpdatedReplicas == desired {
+			return nil
+		}
+		time.Sleep(interval)
+	}
+	return fmt.Errorf("deployment %s not ready within timeout", name)
+}
+
+func waitForDeploymentScaledDownLocal(ctx context.Context, kubeClient client.Client, name, namespace string, timeout time.Duration) error {
+	interval := 5 * time.Second
+	for start := time.Now(); time.Since(start) < timeout; {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
+			if kerrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if dep.Status.Replicas == 0 {
+			return nil
+		}
+		time.Sleep(interval)
+	}
+	return fmt.Errorf("deployment %s not scaled down within timeout", name)
+}
+
+func waitForCRDEstablished(ctx context.Context, kubeClient client.Client, timeout time.Duration) error {
+	start := time.Now()
+	for {
+		if time.Since(start) > timeout {
+			return fmt.Errorf("timed out waiting for CRDs to become Established")
+		}
+		crdList := &apiextensionsv1.CustomResourceDefinitionList{}
+		if err := kubeClient.List(ctx, crdList); err != nil {
+			log.Printf("Error listing CRDs while waiting for Established: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		allEstablished := true
+		for _, crd := range crdList.Items {
+			if !strings.Contains(crd.Spec.Group, "vjailbreak") {
+				continue
+			}
+			established := false
+			for _, c := range crd.Status.Conditions {
+				if c.Type == apiextensionsv1.Established && c.Status == apiextensionsv1.ConditionTrue {
+					established = true
+					break
+				}
+			}
+			if !established {
+				allEstablished = false
+				break
+			}
+		}
+		if allEstablished {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func CleanupBackupConfigMaps(ctx context.Context, kubeClient client.Client, backupID string) error {
+	selector := client.MatchingLabels{"vjailbreak-backup": "true"}
+	if backupID != "" {
+		selector = client.MatchingLabels{"vjailbreak-backup": "true", "vjailbreak-backup-id": backupID}
+	}
+	backupCMList := &corev1.ConfigMapList{}
+	if err := kubeClient.List(ctx, backupCMList, client.InNamespace("migration-system"), selector); err != nil {
+		return fmt.Errorf("failed to list backup ConfigMaps for cleanup: %w", err)
+	}
+	for _, cm := range backupCMList.Items {
+		if err := kubeClient.Delete(ctx, &cm); err != nil && !kerrors.IsNotFound(err) {
+			log.Printf("Failed to delete backup ConfigMap %s: %v", cm.Name, err)
+		}
+	}
+	return nil
+}
+
+func applyRestoredObject(ctx context.Context, kubeClient client.Client, data []byte) error {
+	jsonData, err := sigsyaml.YAMLToJSON(data)
+	if err != nil {
+		return fmt.Errorf("failed to convert yaml to json: %w", err)
+	}
+	unstructuredObj := &unstructured.Unstructured{}
+	if err := unstructuredObj.UnmarshalJSON(jsonData); err != nil {
+		return fmt.Errorf("failed to unmarshal into unstructured: %w", err)
 	}
 
 	objKey := client.ObjectKey{Name: unstructuredObj.GetName(), Namespace: unstructuredObj.GetNamespace()}
 	existingObj := &unstructured.Unstructured{}
 	existingObj.SetGroupVersionKind(unstructuredObj.GroupVersionKind())
 
-	err := kubeClient.Get(ctx, objKey, existingObj)
+	err = kubeClient.Get(ctx, objKey, existingObj)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			unstructuredObj.SetResourceVersion("")
@@ -375,7 +621,7 @@ func deleteAllCustomResources(ctx context.Context, kubeClient client.Client, res
 	}
 
 	for _, crInfo := range currentCRs {
-		if err := deleteCRInstances(ctx, kubeClient, restConfig, crInfo); err != nil {
+		if err := deleteCRInstances(ctx, restConfig, crInfo); err != nil {
 			log.Printf("Warning: Failed to delete %s CRs: %v", crInfo.Kind, err)
 		}
 	}
@@ -383,7 +629,7 @@ func deleteAllCustomResources(ctx context.Context, kubeClient client.Client, res
 	return nil
 }
 
-func deleteCRInstances(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, crInfo CRInfo) error {
+func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRInfo) error {
 	gvr := schema.GroupVersionResource{
 		Group:    crInfo.Group,
 		Version:  crInfo.Version,
@@ -496,5 +742,25 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 		}
 		return err
 	}
+	return nil
+}
+
+func CleanupAllOldBackups(ctx context.Context, kubeClient client.Client) error {
+	log.Println("Cleaning up old backup ConfigMaps...")
+
+	backupCMList := &corev1.ConfigMapList{}
+	if err := kubeClient.List(ctx, backupCMList, client.MatchingLabels{"vjailbreak-backup": "true"}); err != nil {
+		return fmt.Errorf("failed to list backup ConfigMaps: %w", err)
+	}
+
+	for _, cm := range backupCMList.Items {
+		if err := kubeClient.Delete(ctx, &cm); err != nil {
+			log.Printf("Failed to delete old backup ConfigMap %s/%s: %v", cm.Namespace, cm.Name, err)
+		} else {
+			log.Printf("Deleted old backup ConfigMap %s/%s", cm.Namespace, cm.Name)
+		}
+	}
+
+	log.Println("Old backup ConfigMaps cleanup complete.")
 	return nil
 }
