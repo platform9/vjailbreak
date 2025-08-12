@@ -392,7 +392,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 				final = true
 			}
-
 		}
 
 		// Update old change id to the new base change id value
@@ -1102,9 +1101,29 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		vminfo.RDMDisks[idx].VolumeId = volumeID
 	}
+
+	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vcenter settings")
+	}
+
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
+		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
+			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
+			detachErr := migobj.DetachAllVolumes(vminfo)
+			if detachErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
+			}
+
+			cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
+			if cleanUpErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
+				return errors.Wrap(cleanUpErr, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
+			}
+			return errors.Wrap(err, "failed to convert disks")
+		}
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
