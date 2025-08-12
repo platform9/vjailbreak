@@ -114,7 +114,7 @@ const columns: GridColDef[] = [
             // Show admin cutover button if:
             // 1. initiateCutover is false (manual cutover)
             // 2. Phase is AwaitingAdminCutOver
-            
+
             const showAdminCutover = !initiateCutover && (phase === Phase.AwaitingAdminCutOver);
 
             return (
@@ -329,12 +329,12 @@ export default function MigrationsTable({
             <ConfirmationDialog
                 open={bulkCutoverDialogOpen}
                 onClose={handleCloseBulkCutoverDialog}
-                title="Confirm Bulk Admin Cutover"
+                title="Confirm Admin Cutover"
                 icon={<PlayArrowIcon color="primary" />}
                 message={
                     eligibleForCutover.length > 1
-                        ? "Are you sure you want to trigger admin cutover for these migrations? This will start the cutover process and cannot be undone."
-                        : "Are you sure you want to trigger admin cutover for this migration? This will start the cutover process and cannot be undone."
+                        ? `Are you sure you want to trigger admin cutover for these ${eligibleForCutover.length} migrations?\n\n${eligibleForCutover.map(m => `• ${m.metadata?.name}`).join('\n')}\n\nThis will start the cutover process and cannot be undone.`
+                        : `Are you sure you want to trigger admin cutover for migration "${eligibleForCutover[0]?.metadata?.name}"?\n\nThis will start the cutover process and cannot be undone.`
                 }
                 items={eligibleForCutover.map(migration => ({
                     id: migration.metadata?.name || '',
