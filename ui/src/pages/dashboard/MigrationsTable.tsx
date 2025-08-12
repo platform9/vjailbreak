@@ -114,7 +114,8 @@ const columns: GridColDef[] = [
             // Show admin cutover button if:
             // 1. initiateCutover is false (manual cutover)
             // 2. Phase is AwaitingAdminCutOver
-            const showAdminCutover = !initiateCutover && phase === Phase.AwaitingAdminCutOver;
+            
+            const showAdminCutover = !initiateCutover && (phase === Phase.AwaitingAdminCutOver);
 
             return (
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
