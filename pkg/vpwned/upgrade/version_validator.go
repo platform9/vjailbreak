@@ -17,7 +17,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -193,18 +195,23 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	log.Println("Starting backup of resources...")
 	backupLabel := map[string]string{"vjailbreak-backup": "true"}
 
+	s := json.NewYAMLSerializer(json.DefaultMetaFactory, scheme.Scheme, scheme.Scheme)
+
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 	if err := kubeClient.List(ctx, crdList); err == nil {
 		for _, crd := range crdList.Items {
 			if strings.Contains(crd.Spec.Group, "vjailbreak") {
-				crdYaml, _ := yaml.Marshal(crd)
-				backupCM := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: "backup-crd-" + strings.ReplaceAll(crd.Name, ".", "-"), Namespace: "migration-system", Labels: backupLabel},
+				var buffer strings.Builder
+				crd.GetObjectKind().SetGroupVersionKind(apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+				if err := s.Encode(&crd, &buffer); err == nil {
+					backupCM := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{Name: "backup-crd-" + strings.ReplaceAll(crd.Name, ".", "-"), Namespace: "migration-system", Labels: backupLabel},
+					}
+					_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+						backupCM.Data = map[string]string{"resource": buffer.String()}
+						return nil
+					})
 				}
-				_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
-					backupCM.Data = map[string]string{"resource": string(crdYaml)}
-					return nil
-				})
 			}
 		}
 	}
@@ -215,28 +222,34 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 			if _, ok := cm.Labels["vjailbreak-backup"]; ok {
 				continue
 			}
-			cmYaml, _ := yaml.Marshal(cm)
-			backupCM := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: "backup-cm-" + cm.Name, Namespace: "migration-system", Labels: backupLabel},
+			var buffer strings.Builder
+			cm.GetObjectKind().SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMap"))
+			if err := s.Encode(&cm, &buffer); err == nil {
+				backupCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "backup-cm-" + cm.Name, Namespace: "migration-system", Labels: backupLabel},
+				}
+				_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+					backupCM.Data = map[string]string{"resource": buffer.String()}
+					return nil
+				})
 			}
-			_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
-				backupCM.Data = map[string]string{"resource": string(cmYaml)}
-				return nil
-			})
 		}
 	}
 
 	depList := &appsv1.DeploymentList{}
 	if err := kubeClient.List(ctx, depList, client.InNamespace("migration-system")); err == nil {
 		for _, dep := range depList.Items {
-			depYaml, _ := yaml.Marshal(dep)
-			backupCM := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: "backup-deploy-" + dep.Name, Namespace: "migration-system", Labels: backupLabel},
+			var buffer strings.Builder
+			dep.GetObjectKind().SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+			if err := s.Encode(&dep, &buffer); err == nil {
+				backupCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "backup-deploy-" + dep.Name, Namespace: "migration-system", Labels: backupLabel},
+				}
+				_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+					backupCM.Data = map[string]string{"resource": buffer.String()}
+					return nil
+				})
 			}
-			_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
-				backupCM.Data = map[string]string{"resource": string(depYaml)}
-				return nil
-			})
 		}
 	}
 	log.Println("Backup completed.")
