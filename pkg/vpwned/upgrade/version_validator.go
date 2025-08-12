@@ -2,13 +2,12 @@ package upgrade
 
 import (
 	"context"
+
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
-
-	"encoding/base64"
 	"net/http"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +15,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -190,28 +190,21 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, r
 }
 
 func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
-	log.Println("Starting backup of CRDs, ConfigMaps, and Deployments")
-
-	backupData := make(map[string]string)
-	totalSize := 0
-	const maxConfigMapSize = 1000000
+	log.Println("Starting backup of resources...")
+	backupLabel := map[string]string{"vjailbreak-backup": "true"}
 
 	crdList := &apiextensionsv1.CustomResourceDefinitionList{}
 	if err := kubeClient.List(ctx, crdList); err == nil {
 		for _, crd := range crdList.Items {
 			if strings.Contains(crd.Spec.Group, "vjailbreak") {
-				crdYaml, err := yaml.Marshal(crd)
-				if err != nil {
-					continue
+				crdYaml, _ := yaml.Marshal(crd)
+				backupCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "backup-crd-" + strings.ReplaceAll(crd.Name, ".", "-"), Namespace: "migration-system", Labels: backupLabel},
 				}
-				key := "crd-" + crd.Name
-				value := base64.StdEncoding.EncodeToString(crdYaml)
-				if totalSize+len(key)+len(value) > maxConfigMapSize {
-					log.Printf("Warning: ConfigMap size limit reached, skipping remaining CRDs")
-					break
-				}
-				backupData[key] = value
-				totalSize += len(key) + len(value)
+				_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+					backupCM.Data = map[string]string{"resource": string(crdYaml)}
+					return nil
+				})
 			}
 		}
 	}
@@ -219,96 +212,93 @@ func BackupResources(ctx context.Context, kubeClient client.Client, restConfig *
 	cmList := &corev1.ConfigMapList{}
 	if err := kubeClient.List(ctx, cmList, client.InNamespace("migration-system")); err == nil {
 		for _, cm := range cmList.Items {
-			if cm.Name == "vjailbreak-upgrade-backup" {
+			if _, ok := cm.Labels["vjailbreak-backup"]; ok {
 				continue
 			}
-			cmYaml, err := yaml.Marshal(cm)
-			if err != nil {
-				continue
+			cmYaml, _ := yaml.Marshal(cm)
+			backupCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "backup-cm-" + cm.Name, Namespace: "migration-system", Labels: backupLabel},
 			}
-			key := "configmap-" + cm.Name
-			value := base64.StdEncoding.EncodeToString(cmYaml)
-			if totalSize+len(key)+len(value) > maxConfigMapSize {
-				log.Printf("Warning: ConfigMap size limit reached, skipping remaining ConfigMaps")
-				break
-			}
-			backupData[key] = value
-			totalSize += len(key) + len(value)
+			_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+				backupCM.Data = map[string]string{"resource": string(cmYaml)}
+				return nil
+			})
 		}
 	}
 
 	depList := &appsv1.DeploymentList{}
 	if err := kubeClient.List(ctx, depList, client.InNamespace("migration-system")); err == nil {
 		for _, dep := range depList.Items {
-			depYaml, err := yaml.Marshal(dep)
-			if err != nil {
-				continue
+			depYaml, _ := yaml.Marshal(dep)
+			backupCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "backup-deploy-" + dep.Name, Namespace: "migration-system", Labels: backupLabel},
 			}
-			key := "deployment-" + dep.Name
-			value := base64.StdEncoding.EncodeToString(depYaml)
-			if totalSize+len(key)+len(value) > maxConfigMapSize {
-				log.Printf("Warning: ConfigMap size limit reached, skipping remaining Deployments")
-				break
-			}
-			backupData[key] = value
-			totalSize += len(key) + len(value)
+			_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+				backupCM.Data = map[string]string{"resource": string(depYaml)}
+				return nil
+			})
 		}
 	}
-
-	backupCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "vjailbreak-upgrade-backup",
-			Namespace: "migration-system",
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
-		backupCM.Data = backupData
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to create or update backup ConfigMap: %w", err)
-	}
-
-	log.Printf("Backup %s and stored in ConfigMap. Total size: %d bytes", op, totalSize)
+	log.Println("Backup completed.")
 	return nil
 }
 
 func RestoreResources(ctx context.Context, kubeClient client.Client) error {
-	log.Println("Restoring resources from backup ConfigMap...")
-	backupCM := &corev1.ConfigMap{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: "vjailbreak-upgrade-backup", Namespace: "migration-system"}, backupCM); err != nil {
-		return fmt.Errorf("failed to get backup ConfigMap: %w", err)
+	log.Println("Restoring resources from backups...")
+
+	backupLabelSelector := client.MatchingLabels{"vjailbreak-backup": "true"}
+	backupCMList := &corev1.ConfigMapList{}
+	if err := kubeClient.List(ctx, backupCMList, client.InNamespace("migration-system"), backupLabelSelector); err != nil {
+		return fmt.Errorf("failed to list backup ConfigMaps: %w", err)
 	}
-	for key, b64 := range backupCM.Data {
-		data, err := base64.StdEncoding.DecodeString(b64)
-		if err != nil {
-			log.Printf("Failed to decode backup for %s: %v", key, err)
-			continue
-		}
-		if strings.HasPrefix(key, "crd-") {
-			crd := &apiextensionsv1.CustomResourceDefinition{}
-			if err := yaml.Unmarshal(data, crd); err == nil {
-				_ = kubeClient.Delete(ctx, crd)
-				_ = kubeClient.Create(ctx, crd)
-			}
-		} else if strings.HasPrefix(key, "configmap-") {
-			cm := &corev1.ConfigMap{}
-			if err := yaml.Unmarshal(data, cm); err == nil {
-				_ = kubeClient.Delete(ctx, cm)
-				_ = kubeClient.Create(ctx, cm)
-			}
-		} else if strings.HasPrefix(key, "deployment-") {
-			dep := &appsv1.Deployment{}
-			if err := yaml.Unmarshal(data, dep); err == nil {
-				_ = kubeClient.Delete(ctx, dep)
-				_ = kubeClient.Create(ctx, dep)
+
+	resourceTypes := []string{"crd", "configmap", "deployment"}
+	for _, resourceType := range resourceTypes {
+		for _, backupCM := range backupCMList.Items {
+			if strings.HasPrefix(backupCM.Name, "backup-"+resourceType+"-") {
+				yamlData, ok := backupCM.Data["resource"]
+				if !ok {
+					continue
+				}
+				if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+					log.Printf("Failed to restore resource from backup %s: %v", backupCM.Name, err)
+				} else {
+					log.Printf("Restored resource from backup %s", backupCM.Name)
+				}
 			}
 		}
 	}
-	log.Println("Restore completed from backup ConfigMap.")
+
+	log.Println("Cleaning up backup ConfigMaps...")
+	for _, backupCM := range backupCMList.Items {
+		_ = kubeClient.Delete(ctx, &backupCM)
+	}
+
+	log.Println("Restore completed.")
 	return nil
+}
+
+func applyRestoredObject(ctx context.Context, kubeClient client.Client, data []byte) error {
+	unstructuredObj := &unstructured.Unstructured{}
+	if err := yaml.Unmarshal(data, unstructuredObj); err != nil {
+		return err
+	}
+
+	objKey := client.ObjectKey{Name: unstructuredObj.GetName(), Namespace: unstructuredObj.GetNamespace()}
+	existingObj := &unstructured.Unstructured{}
+	existingObj.SetGroupVersionKind(unstructuredObj.GroupVersionKind())
+
+	err := kubeClient.Get(ctx, objKey, existingObj)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			unstructuredObj.SetResourceVersion("")
+			return kubeClient.Create(ctx, unstructuredObj)
+		}
+		return err
+	}
+
+	unstructuredObj.SetResourceVersion(existingObj.GetResourceVersion())
+	return kubeClient.Update(ctx, unstructuredObj)
 }
 
 func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {

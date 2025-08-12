@@ -323,6 +323,19 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					log.Printf("Error updating SDK in the background: %v", err)
 				}
 
+				go func() {
+					time.Sleep(15 * time.Second)
+					log.Println("Upgrade successful. Cleaning up backup ConfigMaps...")
+					backupLabelSelector := client.MatchingLabels{"vjailbreak-backup": "true"}
+					backupCMList := &corev1.ConfigMapList{}
+					if err := kubeClient.List(context.Background(), backupCMList, client.InNamespace("migration-system"), backupLabelSelector); err == nil {
+						for _, backupCM := range backupCMList.Items {
+							_ = kubeClient.Delete(context.Background(), &backupCM)
+						}
+						log.Println("Backup ConfigMaps cleaned up.")
+					}
+				}()
+
 				return nil
 			}()
 
@@ -332,20 +345,17 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				upgradeProgress.Error = err.Error()
 				upgradeProgress.CurrentStep = "Deployment failed, rolling back..."
 				saveProgress(ctx, kubeClient)
-
 				if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
 					log.Printf("CRITICAL: Rollback failed: %v", err)
 					upgradeProgress.Status = "rollback_failed"
-					upgradeProgress.Error = "Deployment failed and rollback also failed. Manual intervention required."
+					upgradeProgress.Error = "Deployment failed and rollback also failed."
 				} else {
 					log.Printf("Rollback completed successfully.")
 					upgradeProgress.Status = "rolled_back"
 				}
 				saveProgress(ctx, kubeClient)
-				_ = kubeClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: progressConfigMapName, Namespace: "migration-system"}})
 				return
 			}
-
 			log.Printf("Upgrade process handed off to UI for finalization.")
 		}()
 		return nil
@@ -358,18 +368,11 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		upgradeProgress.Error = err.Error()
 		upgradeProgress.CurrentStep = "Upgrade failed, rolling back..."
 		saveProgress(ctx, kubeClient)
-
-		if rollbackErr := upgrade.RestoreResources(ctx, kubeClient); rollbackErr != nil {
-			log.Printf("CRITICAL: Rollback failed: %v", rollbackErr)
-			upgradeProgress.Status = "rollback_failed"
-			upgradeProgress.Error = "Upgrade failed and rollback also failed."
+		if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
+			log.Printf("CRITICAL: Rollback failed: %v", err)
 		} else {
 			log.Printf("Rollback completed successfully.")
-			upgradeProgress.Status = "rolled_back"
 		}
-		saveProgress(ctx, kubeClient)
-		_ = kubeClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: progressConfigMapName, Namespace: "migration-system"}})
-
 		return nil, err
 	}
 
