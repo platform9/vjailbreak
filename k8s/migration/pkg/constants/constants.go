@@ -170,7 +170,7 @@ const (
 
 	// RDMDiskControllerName is the name of the RDM disk controller
 	RDMDiskControllerName = "rdmdisk-controller"
-  
+
 	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
 	VCenterVMScanConcurrencyLimit = 100
 
@@ -191,6 +191,9 @@ const (
 
 	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
 	VCenterScanConcurrencyLimit = 100
+
+	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
+	CleanupVolumesAfterConvertFailure = true
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
