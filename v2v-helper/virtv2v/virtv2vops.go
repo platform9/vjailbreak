@@ -230,7 +230,7 @@ func GetOsRelease(path string) (string, error) {
 
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return strings.ToLower(string(out)), nil
+			return strings.ToLower(string(out)), err
 		}
 		return strings.ToLower(string(out)), nil
 	}
