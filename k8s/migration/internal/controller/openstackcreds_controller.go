@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -262,38 +261,38 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to update OpenstackCreds status")
 	}
 
-	// Now with these creds we should populate the flavors as labels in vmwaremachine object.
-	// This will help us to create the vmwaremachine object with the correct flavor.
-	vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
-	if err := r.List(ctx, vmwaremachineList); err != nil {
-		return errors.Wrap(err, "failed to list vmwaremachine objects")
-	}
-	for i := range vmwaremachineList.Items {
-		vmwaremachine := &vmwaremachineList.Items[i]
-		// Get the cpu and memory of the vmwaremachine object
-		cpu := vmwaremachine.Spec.VMInfo.CPU
-		memory := vmwaremachine.Spec.VMInfo.Memory
-		computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack clients")
-		}
-		// Now get the closest flavor based on the cpu and memory
-		flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
-		if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
-			ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
-			return errors.Wrap(err, "failed to get closest flavor")
-		}
-		// Now label the vmwaremachine object with the flavor name
-		if flavor == nil {
-			if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
-				return errors.Wrap(err, "failed to update vmwaremachine object")
-			}
-		} else {
-			if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
-				return errors.Wrap(err, "failed to update vmwaremachine object")
-			}
-		}
-	}
+	// // Now with these creds we should populate the flavors as labels in vmwaremachine object.
+	// // This will help us to create the vmwaremachine object with the correct flavor.
+	// vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+	// if err := r.List(ctx, vmwaremachineList); err != nil {
+	// 	return errors.Wrap(err, "failed to list vmwaremachine objects")
+	// }
+	// for i := range vmwaremachineList.Items {
+	// 	vmwaremachine := &vmwaremachineList.Items[i]
+	// 	// Get the cpu and memory of the vmwaremachine object
+	// 	cpu := vmwaremachine.Spec.VMInfo.CPU
+	// 	memory := vmwaremachine.Spec.VMInfo.Memory
+	// 	computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
+	// 	if err != nil {
+	// 		return errors.Wrap(err, "failed to get OpenStack clients")
+	// 	}
+	// 	// Now get the closest flavor based on the cpu and memory
+	// 	flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
+	// 	if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+	// 		ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
+	// 		return errors.Wrap(err, "failed to get closest flavor")
+	// 	}
+	// 	// Now label the vmwaremachine object with the flavor name
+	// 	if flavor == nil {
+	// 		if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+	// 			return errors.Wrap(err, "failed to update vmwaremachine object")
+	// 		}
+	// 	} else {
+	// 		if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
+	// 			return errors.Wrap(err, "failed to update vmwaremachine object")
+	// 		}
+	// 	}
+	// }
 
 	if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
 		ctxlog.Info("Syncing PCD info because openstackcreds is PCD", "openstackcreds", scope.OpenstackCreds.Name)
