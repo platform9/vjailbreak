@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	probing "github.com/prometheus-community/pro-bing"
-	"github.com/vmware/govmomi/vim25/types"
 )
 
 type Migrate struct {
@@ -282,7 +281,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 	// sleep for 2 seconds to allow the NBD server to start
 	time.Sleep(2 * time.Second)
-	final := false
 
 	for idx, vmdisk := range vminfo.VMDisks {
 		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
@@ -297,126 +295,28 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
-	incrementalCopyCount := 0
-	for {
-		// If its the first copy, copy the entire disk
-		if incrementalCopyCount == 0 {
-			for idx := range vminfo.VMDisks {
-				startTime := time.Now()
-				migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
+	// If its the first copy, copy the entire disk
+	for idx := range vminfo.VMDisks {
+		startTime := time.Now()
+		migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
 
-				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to copy disk")
-				}
-				duration := time.Since(startTime)
-				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
-			}
-			// After first copy of all disks sleep for debug.
-			time.Sleep(300 * time.Minute)
-		} else {
-			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
-			if err != nil {
-				return vminfo, errors.Wrap(err, "failed to get snapshot")
-			}
-
-			var changedAreas types.DiskChangeInfo
-			done := true
-
-			for idx := range vminfo.VMDisks {
-				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to get changed disk areas")
-				}
-
-				if len(changedAreas.ChangedArea) == 0 {
-					migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
-				} else {
-					migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
-
-					utils.PrintLog("Restarting NBD server")
-					err = nbdops[idx].StopNBDServer()
-					if err != nil {
-						return vminfo, errors.Wrap(err, "failed to stop NBD server")
-					}
-
-					err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk, migobj.EventReporter)
-					if err != nil {
-						return vminfo, errors.Wrap(err, "failed to start NBD server")
-					}
-					// sleep for 2 seconds to allow the NBD server to start
-					time.Sleep(2 * time.Second)
-
-					// 11. Copy Changed Blocks over
-					done = false
-					changedBlockCopySuccess := true
-					migobj.logMessage("Copying changed blocks")
-
-					// incremental block copy
-
-					startTime := time.Now()
-					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
-
-					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-					if err != nil {
-						changedBlockCopySuccess = false
-					}
-
-					duration := time.Since(startTime)
-
-					migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
-
-					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
-					if err != nil {
-						return vminfo, errors.Wrap(err, "failed to update disk info")
-					}
-					if !changedBlockCopySuccess {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
-					}
-					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
-				}
-			}
-			if final {
-				break
-			}
-			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				utils.PrintLog("Shutting down source VM and performing final copy")
-				if err := migobj.WaitforCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
-				}
-				if err := migobj.WaitforAdminCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
-				}
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				final = true
-			}
-
-		}
-
-		// Update old change id to the new base change id value
-		// Only do this after you have gone through all disks with old change id.
-		// If you dont, only your first disk will have the updated changes
-
-		err = vmops.CleanUpSnapshots(false)
+		err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
 		if err != nil {
-			return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
+			return vminfo, errors.Wrap(err, "failed to copy disk")
 		}
-		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-		if err != nil {
-			return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")
-		}
-
-		incrementalCopyCount += 1
-
+		duration := time.Since(startTime)
+		migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
 	}
+	// After first copy of all disks sleep for debug.
+	time.Sleep(1800 * time.Minute)
 
-	err = migobj.DetachAllVolumes(vminfo)
+	// Update old change id to the new base change id value
+	// Only do this after you have gone through all disks with old change id.
+	// If you dont, only your first disk will have the updated changes
+
+	err = vmops.CleanUpSnapshots(false)
 	if err != nil {
-		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
+		return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
 	}
 
 	utils.PrintLog("Stopping NBD server")
@@ -425,13 +325,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to stop NBD server")
 		}
-	}
-
-	utils.PrintLog("Deleting migration snapshot")
-	err = vmops.CleanUpSnapshots(true)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf(`Failed to cleanup snapshot of source VM: %s, since copy is completed, 
-		continuing with the migration`, err))
 	}
 	return vminfo, nil
 }
@@ -1080,38 +973,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
-	// Import LUN and MigrateRDM disk
-	for idx, rdmDisk := range vminfo.RDMDisks {
-		volumeID, err := migobj.cinderManage(rdmDisk)
-		if err != nil {
-			migobj.cleanup(vminfo, fmt.Sprintf("failed to import LUN: %s", err))
-			return errors.Wrap(err, "failed to import LUN")
-		}
-		vminfo.RDMDisks[idx].VolumeId = volumeID
-	}
-	// Convert the Boot Disk to raw format
-	err = migobj.ConvertVolumes(ctx, vminfo)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to convert disks")
-	}
-
-	err = migobj.CreateTargetInstance(vminfo)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to create target instance")
-	}
-
-	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
-	}
-
 	return nil
 }
 
