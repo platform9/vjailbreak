@@ -330,10 +330,6 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					log.Printf("Error updating SDK in the background: %v", err)
 				}
 
-				upgradeProgress.Status = "deployments_ready"
-				upgradeProgress.CurrentStep = "Deployments ready, verifying stability"
-				saveProgress(ctx, kubeClient)
-
 				go func(localBackupID string) {
 					time.Sleep(30 * time.Second)
 
