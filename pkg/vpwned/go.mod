@@ -8,6 +8,7 @@ require (
 	github.com/google/go-github/v63 v63.0.0
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
+	github.com/juju/errors v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
@@ -26,6 +27,7 @@ require (
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.1
 	sigs.k8s.io/controller-runtime v0.21.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -48,7 +50,6 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/juju/collections v1.0.4 // indirect
-	github.com/juju/errors v1.0.0 // indirect
 	github.com/juju/gomaasapi/v2 v2.3.0 // indirect
 	github.com/juju/loggo v1.0.0 // indirect
 	github.com/juju/mgo/v2 v2.0.2 // indirect
@@ -89,7 +90,6 @@ require (
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace github.com/bougou/go-ipmi => github.com/bougou/go-ipmi v0.7.4

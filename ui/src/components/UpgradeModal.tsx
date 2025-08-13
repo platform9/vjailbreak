@@ -103,10 +103,14 @@ export const UpgradeModal = ({ show, onClose }) => {
             onClose();
             window.location.href = '/dashboard/migrations';
           }, 5000);
-        } else if (progress.status === 'failed') {
+        } else if (progress.status === 'failed' || progress.status === 'rolled_back' || progress.status === 'rollback_failed') {
           setUpgradeInProgress(false);
-          setErrorMsg(`Upgrade failed: ${progress.error}`);
+          setErrorMsg('Upgrade failed: Rolling back'); 
           clearInterval(interval);
+
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
         }
       } catch (err) {
         setUpgradeInProgress(false);
