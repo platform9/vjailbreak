@@ -153,6 +153,12 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 			return errors.New("pre-upgrade checks did not pass, halting upgrade")
 		}
 
+		upgradeProgress.CurrentStep = "Verifying release images"
+		saveProgress(ctx, kubeClient)
+		if ok, err := upgrade.CheckImagesExist(ctx, in.TargetVersion); !ok {
+			return fmt.Errorf("image validation failed: %w", err)
+		}
+
 		backupID := time.Now().UTC().Format("20060102T150405Z")
 		upgradeProgress.CurrentStep = "Backing up resources"
 		saveProgress(ctx, kubeClient)

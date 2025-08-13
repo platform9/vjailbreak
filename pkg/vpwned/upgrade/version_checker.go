@@ -3,8 +3,9 @@ package upgrade
 import (
 	"context"
 	"fmt"
-	"sort"
 	"log"
+	"os/exec"
+	"sort"
 
 	"github.com/google/go-github/v63/github"
 	"golang.org/x/mod/semver"
@@ -24,22 +25,22 @@ func getCurrentVersionFromConfigMap() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
-	
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return "", fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
-	
+
 	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(context.Background(), "version-config", metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get version-config ConfigMap: %w", err)
 	}
-	
+
 	version, exists := configMap.Data["version"]
 	if !exists {
 		return "", fmt.Errorf("version field not found in configmap")
 	}
-	
+
 	return version, nil
 }
 
@@ -50,9 +51,9 @@ func GetAllTags(ctx context.Context) ([]string, error) {
 		fmt.Printf("Warning: Could not get current version from configmap: %v. Showing all tags.\n", err)
 		return getAllTagsFromGitHub(ctx, owner, repo)
 	}
-	
+
 	isSemver := semver.IsValid(currentVersion)
-	
+
 	if isSemver {
 		fmt.Printf("Current version %s is semver format. Showing only newer versions.\n", currentVersion)
 		return getTagsGreaterThanVersion(ctx, owner, repo, currentVersion)
@@ -84,7 +85,7 @@ func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
-	
+
 	var newerTagNames []string
 	for _, tag := range tags {
 		tagName := tag.GetName()
@@ -92,11 +93,11 @@ func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion 
 			newerTagNames = append(newerTagNames, tagName)
 		}
 	}
-	
+
 	sort.Slice(newerTagNames, func(i, j int) bool {
 		return semver.Compare(newerTagNames[i], newerTagNames[j]) < 0
 	})
-	
+
 	return newerTagNames, nil
 }
 
@@ -109,26 +110,47 @@ func loadGitHubConfig(ctx context.Context) (string, string) {
 		log.Printf("Warning: Could not get in-cluster config. Using default GitHub repo. Error: %v", err)
 		return owner, repo
 	}
-	
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Printf("Warning: Could not create kubernetes client. Using default GitHub repo. Error: %v", err)
 		return owner, repo
 	}
-	
+
 	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(ctx, "version-config", metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Warning: Could not get version-config ConfigMap. Using default GitHub repo. Error: %v", err)
 		return owner, repo
 	}
-	
+
 	if val, ok := configMap.Data["githubOwner"]; ok && val != "" {
 		owner = val
 	}
 	if val, ok := configMap.Data["githubRepo"]; ok && val != "" {
 		repo = val
 	}
-	
+
 	log.Printf("Using GitHub repository: %s/%s", owner, repo)
 	return owner, repo
+}
+
+func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
+	log.Printf("Verifying images exist for tag: %s", tag)
+
+	images := []string{
+		"quay.io/platform9/vjailbreak-ui:" + tag,
+		"quay.io/platform9/vjailbreak-controller:" + tag,
+		"quay.io/platform9/vjailbreak-vpwned:" + tag,
+	}
+
+	for _, imageName := range images {
+		cmd := exec.CommandContext(ctx, "skopeo", "inspect", "docker://"+imageName)
+		if err := cmd.Run(); err != nil {
+			log.Printf("Image check failed for %s: %v", imageName, err)
+			return false, fmt.Errorf("required image not found: %s", imageName)
+		}
+		log.Printf("Image verified: %s", imageName)
+	}
+
+	return true, nil
 }
