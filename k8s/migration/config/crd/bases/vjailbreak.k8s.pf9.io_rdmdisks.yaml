@@ -145,7 +145,7 @@ spec:
                 type: array
               phase:
                 enum:
-                - Pending
+                - Available
                 - Managing
                 - Managed
                 - Error

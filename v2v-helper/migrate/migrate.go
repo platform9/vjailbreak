@@ -402,7 +402,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 		err = vmops.CleanUpSnapshots(false)
 		if err != nil {
-			return vminfo, errors.Wrap(err, "failed to delete snapshot of source VM")
+			return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
 		}
 		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
@@ -429,7 +429,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog("Deleting migration snapshot")
 	err = vmops.CleanUpSnapshots(true)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf(`Failed to delete snapshot of source VM: %s, since copy is completed, 
+		migobj.logMessage(fmt.Sprintf(`Failed to cleanup snapshot of source VM: %s, since copy is completed, 
 		continuing with the migration`, err))
 	}
 	return vminfo, nil
@@ -1038,6 +1038,8 @@ func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.Cancel
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -1082,7 +1084,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to live replicate disks: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
@@ -1100,7 +1102,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to convert disks: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
@@ -1109,7 +1111,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to create target instance: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
@@ -1118,7 +1120,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
 	}
 
-	cancel()
 	return nil
 }
 
@@ -1134,8 +1135,8 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	}
 	err = migobj.VMops.CleanUpSnapshots(true)
 	if err != nil {
-		utils.PrintLog(fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
-		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
+		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
+		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
 	return nil
 }
