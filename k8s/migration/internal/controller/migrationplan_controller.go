@@ -484,6 +484,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
 				InitiateCutover:         !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
+				UseFlavorless:           migrationplan.Spec.UseFlavorless,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -502,7 +503,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	vm string,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
-	openstackSecretRef string) error {
+	openstackSecretRef string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
@@ -533,7 +535,19 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},
+		{
+			Name:  "USE_FLAVORLESS",
+			Value: strconv.FormatBool(migrationobj.Spec.UseFlavorless),
+		},
 	}
+
+	if migrationobj.Spec.UseFlavorless {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "FLAVORLESS_FLAVOR_ID",
+			Value: vmMachine.Spec.TargetFlavorID,
+		})
+	}
+
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -1073,7 +1087,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
-			openstackcreds.Spec.SecretRef.Name)
+			openstackcreds.Spec.SecretRef.Name,
+			vmMachineObj)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}

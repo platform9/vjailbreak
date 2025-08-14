@@ -418,11 +418,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			MACAddress:     mac,
 			SecurityGroups: &securityGroups,
 		}).Extract()
-		
+
 		if dhcpErr != nil {
 			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-		
+
 		utils.PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
 		return dhcpPort, nil
 	}
@@ -431,7 +431,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -465,6 +465,15 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
+
+	if useFlavorless {
+		utils.PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
+		serverCreateOpts.Metadata = map[string]string{
+			constants.HotplugCPUKey:    fmt.Sprintf("%d", vminfo.CPU),
+			constants.HotplugMemoryKey: fmt.Sprintf("%d", vminfo.Memory),
+		}
+	}
+
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone

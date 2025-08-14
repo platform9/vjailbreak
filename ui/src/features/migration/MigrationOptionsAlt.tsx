@@ -424,7 +424,26 @@ export default function MigrationOptionsAlt({
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
                   Disconnect NICs on the source VM to prevent IP conflicts.
                 </Typography>
-              </Fields>        
+              </Fields>
+
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Use Flavorless Provisioning for PCD"
+                  control={
+                    <Checkbox
+                      checked={params?.useFlavorless || false}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        onChange("useFlavorless")(isChecked);
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  Enable flavorless VM creation for PCD environment. This will use the base flavor ID specified in the VM settings.
+                </Typography>
+              </Fields>
 
             {/*
             Pre and Post Web Hooks
