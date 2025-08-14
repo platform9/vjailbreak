@@ -54,7 +54,7 @@ add support for additional versions. Verified implies it has been tested and con
 | Ubuntu Linux 16 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 17 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 22.04 | linux/amd64 | Yes | Yes |
-| Ubuntu Linux 24.04 | linux/amd64 | Yes | Yes |
+| Ubuntu Linux 24.04 | linux/amd64 | No | Yes |
 | VMware Photon OS  | linux/amd64 | No | No |
 
 
