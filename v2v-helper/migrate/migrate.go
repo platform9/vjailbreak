@@ -430,7 +430,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	err = vmops.CleanUpSnapshots(true)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf(`Failed to cleanup snapshot of source VM: %s, since copy is completed, 
-		continuing with the migration`, err))
+        continuing with the migration`, err))
 	}
 	return vminfo, nil
 }
@@ -648,7 +648,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 					if err != nil {
 						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
-					    network might not come up post migration, please check the network configuration post migration`, err)
+                        network might not come up post migration, please check the network configuration post migration`, err)
 						log.Println("Continuing with migration")
 						err = nil
 					}
@@ -669,7 +669,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
 				if err != nil {
 					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
-					network might not come up post migration, please check the network configuration post migration`, err))
+                    network might not come up post migration, please check the network configuration post migration`, err))
 					err = nil
 				}
 			}
@@ -695,7 +695,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	}
 	if len(interfaces) == 0 {
 		utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
-			come up post migration, please check the network configuration post migration`)
+            come up post migration, please check the network configuration post migration`)
 		return nil
 	}
 	macs := []string{}
@@ -736,7 +736,8 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 
 	if migobj.UseFlavorless {
 		if migobj.TargetFlavorId == "" {
-			return errors.Wrap(fmt.Errorf("TargetFlavorId must be set to the base flavor ID for flavorless creation"), "failed to create target instance")
+			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')")
+			return errors.Wrap(err, "failed to create target instance")
 		}
 		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
 		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
