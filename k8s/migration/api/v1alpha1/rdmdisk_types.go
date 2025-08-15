@@ -71,7 +71,6 @@ type OpenstackVolumeRef struct {
 	VolumeType string `json:"volumeType,omitempty"`
 	// +optional
 	OpenstackCreds string `json:"openstackCreds,omitempty"` // Optional: OpenStack credentials to use for the volume
-
 }
 
 func init() {

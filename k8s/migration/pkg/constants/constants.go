@@ -170,7 +170,6 @@ const (
 
 	// RDMDiskControllerName is the name of the RDM disk controller
 	RDMDiskControllerName = "rdmdisk-controller"
-
 	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
 	VCenterVMScanConcurrencyLimit = 100
 
