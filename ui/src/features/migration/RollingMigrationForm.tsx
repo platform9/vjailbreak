@@ -1078,7 +1078,7 @@ export default function RollingMigrationFormDrawer({
                     healthCheckPort: "443",
                     performHealthChecks: false,
                     type: selectedMigrationOptions.dataCopyMethod ?
-                        (params.dataCopyMethod as string) : "hot",
+                        (params.dataCopyMethod as string) : "cold",
                     ...(selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime && {
                         dataCopyStart: params.dataCopyStartTime
                     }),
@@ -1113,7 +1113,7 @@ export default function RollingMigrationFormDrawer({
                 esxHostCount: orderedESXHosts?.length || 0,
                 networkMappingCount: networkMappings?.length || 0,
                 storageMappingCount: storageMappings?.length || 0,
-                migrationType: params.dataCopyMethod || "hot",
+                migrationType: params.dataCopyMethod || "cold",
                 hasAdminInitiatedCutover: selectedMigrationOptions.cutoverOption &&
                     params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
                 hasTimedCutover: selectedMigrationOptions.cutoverOption &&
