@@ -30,23 +30,25 @@ type VCenterClient struct {
 	VCClient            *vim25.Client
 	VCFinder            *find.Finder
 	VCPropertyCollector *property.Collector
+	Session             *cache.Session
 }
 
-func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
-	// add protocol to host if not present
-	if !strings.HasPrefix(host, "http") {
+func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
+	// Validate and add protocol to host if not present
+	if len(host) >= 4 && host[:4] != "http" {
+		host = "https://" + host
+	} else if len(host) < 4 {
 		host = "https://" + host
 	}
 
-	// add SDK path if not present
-	if len(host) < 4 || !strings.HasSuffix(host, "/sdk") {
-		// Length check ensures we don't crash on short hosts when checking suffix
+	// Add SDK endpoint if not present
+	if len(host) >= 4 && host[len(host)-4:] != "/sdk" {
 		host += "/sdk"
 	}
 
 	u, err := url.Parse(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %v", err)
+		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
 	u.User = url.UserPassword(username, password)
 
@@ -61,20 +63,21 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 	c := new(vim25.Client)
 	err = s.Login(ctx, c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to login: %v", err)
+		return nil, nil, fmt.Errorf("failed to login: %v", err)
 	}
 
-	return c, nil
+	// Return both the client and the session for persistent re-authentication
+	return c, s, nil
 }
 
 func VCenterClientBuilder(ctx context.Context, username, password, host string, disableSSLVerification bool) (*VCenterClient, error) {
-	client, err := validateVCenter(ctx, username, password, host, disableSSLVerification)
+	client, session, err := validateVCenter(ctx, username, password, host, disableSSLVerification)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %v", err)
 	}
 	finder := find.NewFinder(client, false)
 	pc := property.DefaultCollector(client)
-	return &VCenterClient{VCClient: client, VCFinder: finder, VCPropertyCollector: pc}, nil
+	return &VCenterClient{VCClient: client, VCFinder: finder, VCPropertyCollector: pc, Session: session}, nil
 }
 
 func GetThumbprint(host string) (string, error) {
@@ -109,12 +112,33 @@ func GetThumbprint(host string) (string, error) {
 	return thumbprint, nil
 }
 
-// Get all datacenters
+// Get all datacenters with retry and explicit authentication
 func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Datacenter, error) {
-	// Find all datacenters
+	// Create a new finder with the current client each time to ensure we're using the most up-to-date client
+	vcclient.VCFinder = find.NewFinder(vcclient.VCClient, false)
+
+	// Try to get datacenters
 	datacenters, err := vcclient.VCFinder.DatacenterList(ctx, "*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get datacenters: %v", err)
+		// If we encounter an authentication error, force an explicit re-login and retry once
+		if strings.Contains(err.Error(), "NotAuthenticated") && vcclient.Session != nil {
+			// Explicitly force re-login
+			login := vcclient.Session.Login
+			if err := login(ctx, vcclient.VCClient, nil); err != nil {
+				return nil, fmt.Errorf("failed to re-login during datacenter refresh: %v", err)
+			}
+			
+			// Create a new finder with the refreshed client
+			vcclient.VCFinder = find.NewFinder(vcclient.VCClient, false)
+			
+			// Try again
+			datacenters, err = vcclient.VCFinder.DatacenterList(ctx, "*")
+			if err != nil {
+				return nil, fmt.Errorf("failed to get datacenters after re-login: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to get datacenters: %v", err)
+		}
 	}
 
 	return datacenters, nil

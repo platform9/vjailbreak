@@ -59,6 +59,7 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -248,6 +249,13 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	if err != nil {
 		return err
 	}
+
+	// Get the pod to check startCutover label
+	pod, err := r.GetPod(ctx, scope)
+	if err != nil {
+		return err
+	}
+
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending}
@@ -265,8 +273,13 @@ loop:
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
-			break loop
+			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
+			if pod.Labels["startCutover"] != "yes" {
+				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
+				break loop
+			}
+			// If startCutover is "yes", continue to check for next phase
+			continue
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime
@@ -291,7 +304,6 @@ loop:
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
-			// If none of the above phases matched
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):
 			break loop
 		default:
