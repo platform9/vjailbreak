@@ -536,7 +536,10 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 		return nil, nil
 	}
 
-	projectID := osclient.NetworkingClient.ProviderClient.Token()
+	projectID := osclient.NetworkingClient.ProviderClient.AuthenticatedHeaders()["X-Project-Id"]
+	if projectID == "" {
+		return nil, errors.New("failed to get project ID from authenticated client")
+	}
 
 	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,

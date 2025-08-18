@@ -304,7 +304,10 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
-	projectID := openstackClients.BlockStorageClient.ProviderClient.Token()
+	projectID := openstackClients.BlockStorageClient.ProviderClient.AuthenticatedHeaders()["X-Project-Id"]
+	if projectID == "" {
+		return nil, errors.New("failed to get project ID from authenticated client")
+	}
 
 	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,
