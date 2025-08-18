@@ -304,10 +304,15 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
-	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
+	projectID := openstackClients.BlockStorageClient.ProviderClient.Token()
+
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
+		TenantID: projectID,
+	}).AllPages()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list security groups")
+		return nil, errors.Wrap(err, "failed to list security groups for project")
 	}
+
 	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all security groups")
@@ -315,15 +320,6 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	for i := 0; i < len(allSecGroups); i++ {
 		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
 	}
-	groupSet := make(map[string]struct{})
-	uniqueSecurityGroups := []string{}
-	for _, group := range openstacksecuritygroups {
-		if _, exists := groupSet[group]; !exists {
-			groupSet[group] = struct{}{}
-			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
-		}
-	}
-	openstacksecuritygroups = uniqueSecurityGroups
 
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,

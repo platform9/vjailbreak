@@ -418,11 +418,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			MACAddress:     mac,
 			SecurityGroups: &securityGroups,
 		}).Extract()
-		
+
 		if dhcpErr != nil {
 			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-		
+
 		utils.PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
 		return dhcpPort, nil
 	}
@@ -536,7 +536,11 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 		return nil, nil
 	}
 
-	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{}).AllPages()
+	projectID := osclient.NetworkingClient.ProviderClient.Token()
+
+	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{
+		TenantID: projectID,
+	}).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list security groups: %w", err)
 	}
