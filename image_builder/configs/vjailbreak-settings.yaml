@@ -9,5 +9,4 @@ data:
   VM_ACTIVE_WAIT_RETRY_LIMIT: "15" # number of retries to wait for vm to become active
   DEFAULT_MIGRATION_METHOD: "hot" # supported value hot/cold, (This setting is not used as of now. To be used by UI)
   VCENTER_SCAN_CONCURRENCY_LIMIT: "10" # max number of vms to scan at the same time
-  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "true" # cleanup volumes after disk convert failure
-  
+  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false" # cleanup volumes after disk convert failure
