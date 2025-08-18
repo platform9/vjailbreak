@@ -18,12 +18,14 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
@@ -536,12 +538,34 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 		return nil, nil
 	}
 
-	projectID := osclient.NetworkingClient.ProviderClient.AuthenticatedHeaders()["X-Project-Id"]
-	if projectID == "" {
-		return nil, errors.New("failed to get project ID from authenticated client")
+	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity client: %w", err)
 	}
 
-	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{
+	projectName := os.Getenv("OS_TENANT_NAME")
+	if projectName == "" {
+		projectName = os.Getenv("OS_PROJECT_NAME")
+	}
+	if projectName == "" {
+		return nil, fmt.Errorf("OS_TENANT_NAME or OS_PROJECT_NAME environment variable not set")
+	}
+
+	listOpts := projects.ListOpts{Name: projectName}
+	allPages, err := projects.List(identityClient, listOpts).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
+	}
+	allProjects, err := projects.ExtractProjects(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract projects: %w", err)
+	}
+	if len(allProjects) == 0 {
+		return nil, fmt.Errorf("no project found with name %s", projectName)
+	}
+	projectID := allProjects[0].ID
+
+	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,
 	}).AllPages()
 	if err != nil {

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -304,10 +305,30 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
-	projectID := openstackClients.BlockStorageClient.ProviderClient.AuthenticatedHeaders()["X-Project-Id"]
-	if projectID == "" {
-		return nil, errors.New("failed to get project ID from authenticated client")
+	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get openstack credentials for project lookup")
 	}
+
+	identityClient, err := openstack.NewIdentityV3(openstackClients.BlockStorageClient.ProviderClient, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create identity client")
+	}
+
+	listOpts := projects.ListOpts{Name: credsInfo.TenantName}
+	allPages, err := projects.List(identityClient, listOpts).AllPages()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to list projects with name %s", credsInfo.TenantName)
+	}
+
+	allProjects, err := projects.ExtractProjects(allPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract projects")
+	}
+	if len(allProjects) == 0 {
+		return nil, fmt.Errorf("no project found with name %s", credsInfo.TenantName)
+	}
+	projectID := allProjects[0].ID
 
 	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,
