@@ -563,6 +563,9 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 	if len(allProjects) == 0 {
 		return nil, fmt.Errorf("no project found with name %s", projectName)
 	}
+	if len(allProjects) > 1 {
+		return nil, fmt.Errorf("found multiple projects with name %s, please use a unique name or ID", projectName)
+	}
 	projectID := allProjects[0].ID
 
 	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
