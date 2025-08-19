@@ -579,11 +579,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, error) {
 	log := scope.Logger
 	vmErrors := []vmError{}
-	errMu := sync.Mutex{}
-	panicMu := sync.Mutex{}
-	panicErrors := []interface{}{}
-	vminfoMu := sync.Mutex{}
-	var wg sync.WaitGroup
 
 	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, scope.Client)
 	if err != nil {
@@ -600,38 +595,10 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
-
-	// Create a semaphore to limit concurrent goroutines
-	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
-
-	for i := range vms {
-		// Acquire semaphore (blocks if 100 goroutines are already running)
-		semaphore <- struct{}{}
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			// Release semaphore when done
-			defer func() { <-semaphore }()
-			// Don't panic on error
-			defer func() {
-				if r := recover(); r != nil {
-					panicMu.Lock()
-					panicErrors = append(panicErrors, r)
-					panicMu.Unlock()
-				}
-			}()
-
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c)
-		}(i)
+	vmData, err := getVMDetails(ctx, scope, vms, c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch vm data: %w", err)
 	}
-	// Wait for all VMs to be processed
-	wg.Wait()
-
-	// Close the semaphore channel after all goroutines have completed
-	close(semaphore)
-
 	if len(vmErrors) > 0 {
 		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
 		// Print individual VM errors for better debugging
@@ -640,7 +607,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 		}
 	}
 
-	return vminfo, nil
+	return vmData, nil
 }
 
 // ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
@@ -846,7 +813,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
 
 		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
-			syncRDMDisks(vminfo, vmwvm)
 			// update vminfo in case the VM has been moved by vMotion
 			assignedIP := ""
 			osType := ""
@@ -1220,7 +1186,6 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisks []vjail
 	// Process attributes for additional RDM information
 	for _, attr := range attributes {
 		if strings.Contains(attr, "VJB_RDM:") {
-			fmt.Println("Processing RDM attribute:", attr)
 			parts := strings.Split(attr, ":")
 			if len(parts) != 4 {
 				continue
@@ -1526,4 +1491,213 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
 	}
+}
+
+var hostSystemMap sync.Map
+
+type clusterDetails struct {
+	ClusterName string
+	ESXIName    string
+}
+
+func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*object.VirtualMachine, client *vim25.Client) ([]vjailbreakv1alpha1.VMInfo, error) {
+	const batchSize = 50
+	log := scope.Logger
+	collector := property.DefaultCollector(client)
+
+	// Build ObjectSet for VM retrieval
+	var objectSet []types.ObjectSpec
+	for _, vm := range vms {
+		objectSet = append(objectSet, types.ObjectSpec{
+			Obj:  vm.Reference(),
+			Skip: types.NewBool(false),
+		})
+	}
+
+	// Retrieve VM core properties
+	filterSpec := types.PropertyFilterSpec{
+		ObjectSet: objectSet,
+		PropSet: []types.PropertySpec{
+			{
+				Type: "VirtualMachine",
+				PathSet: []string{
+					"config.hardware.device", "config.name",
+					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
+					"config.hardware.numCPU", "config.hardware.memoryMB",
+					"datastore", "network", "runtime",
+				},
+			},
+		},
+	}
+
+	req := types.RetrieveProperties{
+		SpecSet: []types.PropertyFilterSpec{filterSpec},
+	}
+
+	res, err := collector.RetrieveProperties(ctx, req, batchSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve VM properties: %w", err)
+	}
+
+	// Decode into VMs
+	var fetchedVMs []mo.VirtualMachine
+	if err := mo.LoadObjectContent(res.Returnval, &fetchedVMs); err != nil {
+		return nil, fmt.Errorf("failed to decode ObjectContent into mo.VirtualMachine: %w", err)
+	}
+
+	// Step 1: Collect unique datastore & network MORs
+	dsRefs := make(map[types.ManagedObjectReference]struct{})
+	netRefs := make(map[types.ManagedObjectReference]struct{})
+	for _, moVM := range fetchedVMs {
+		for _, ref := range moVM.Datastore {
+			dsRefs[ref] = struct{}{}
+		}
+		for _, ref := range moVM.Network {
+			netRefs[ref] = struct{}{}
+		}
+	}
+
+	// Step 2: Bulk retrieve datastore names
+	dsMap := make(map[types.ManagedObjectReference]string)
+	if len(dsRefs) > 0 {
+		var dsList []mo.Datastore
+		refList := make([]types.ManagedObjectReference, 0, len(dsRefs))
+		for ref := range dsRefs {
+			refList = append(refList, ref)
+		}
+		if err := collector.Retrieve(ctx, refList, []string{"name"}, &dsList); err == nil {
+			for _, ds := range dsList {
+				dsMap[ds.Self] = ds.Name
+			}
+		} else {
+			log.Error(err, "failed to retrieve datastore names")
+		}
+	}
+
+	// Step 3: Bulk retrieve network names
+	netMap := make(map[types.ManagedObjectReference]string)
+	if len(netRefs) > 0 {
+		var netList []mo.Network
+		refList := make([]types.ManagedObjectReference, 0, len(netRefs))
+		for ref := range netRefs {
+			refList = append(refList, ref)
+		}
+		if err := collector.Retrieve(ctx, refList, []string{"name"}, &netList); err == nil {
+			for _, nw := range netList {
+				netMap[nw.Self] = nw.Name
+			}
+		} else {
+			log.Error(err, "failed to retrieve network names")
+		}
+	}
+
+	// Step 4: Build final VMInfo list
+	var batchInfos []vjailbreakv1alpha1.VMInfo
+	for _, moVM := range fetchedVMs {
+		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
+			continue
+		}
+
+		// Datastore names
+		var dsNames []string
+		for _, ref := range moVM.Datastore {
+			if name, ok := dsMap[ref]; ok {
+				dsNames = append(dsNames, name)
+			}
+		}
+
+		// Network names
+		var netNames []string
+		for _, ref := range moVM.Network {
+			if name, ok := netMap[ref]; ok {
+				netNames = append(netNames, name)
+			}
+		}
+		var diskLabels []string
+		var rdmDisks []vjailbreakv1alpha1.RDMDiskInfo
+		controllers := make(map[int32]types.BaseVirtualSCSIController)
+		for _, device := range moVM.Config.Hardware.Device {
+			if scsiCtrl, ok := device.(types.BaseVirtualSCSIController); ok {
+				controllers[device.GetVirtualDevice().Key] = scsiCtrl
+			}
+		}
+		for _, device := range moVM.Config.Hardware.Device {
+			disk, ok := device.(*types.VirtualDisk)
+			if !ok {
+				continue
+			}
+			if ctrl, ok := controllers[disk.ControllerKey]; ok && ctrl.GetVirtualSCSIController().SharedBus == types.VirtualSCSISharingPhysicalSharing {
+				log.Info("Skipping VM with shared SCSI controller", "VM", moVM.Config.Name)
+				continue
+			}
+			switch b := disk.Backing.(type) {
+			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
+				rdmDisks = append(rdmDisks, vjailbreakv1alpha1.RDMDiskInfo{
+					DiskName:    disk.DeviceInfo.GetDescription().Label,
+					DiskSize:    disk.CapacityInBytes,
+					UUID:        b.LunUuid,
+					DisplayName: "",
+				})
+			case *types.VirtualDiskFlatVer2BackingInfo, *types.VirtualDiskSparseVer2BackingInfo:
+				diskLabels = append(diskLabels, disk.DeviceInfo.GetDescription().Label)
+			}
+		}
+
+		// NIC & Guest Network extraction
+		nic, _ := ExtractVirtualNICs(&moVM)
+		guestNetwork, _ := ExtractGuestNetworkInfo(&moVM)
+
+		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
+			continue
+		}
+
+		// Determine cluster name
+		var clusterName string
+		var esxiName string
+		val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
+		if !ok {
+			// Get the host name and parent (cluster) information
+			host := mo.HostSystem{}
+			hostSystemMap.Store(host.Reference().Value, host)
+
+			err = property.DefaultCollector(client).RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
+			if err != nil {
+				log.Error(err, "failed to get host name", "VM NAME", moVM.Config.Name)
+				continue
+			}
+			clusterName = getClusterNameFromHost(ctx, client, host)
+			if strings.TrimSpace(moVM.Config.Name) == "" {
+				log.Info("Skipping VM with no name", "VM", moVM.Config.Name)
+				continue
+			}
+			esxiName = host.Name
+			clusterDetails := clusterDetails{
+				ESXIName:    esxiName,
+				ClusterName: clusterName,
+			}
+			hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
+		} else {
+			clusterName = val.(clusterDetails).ClusterName
+			esxiName = val.(clusterDetails).ESXIName
+		}
+
+		batchInfos = append(batchInfos, vjailbreakv1alpha1.VMInfo{
+			Name:              moVM.Config.Name,
+			Datastores:        dsNames,
+			Disks:             diskLabels,
+			Networks:          netNames,
+			IPAddress:         moVM.Guest.IpAddress,
+			VMState:           moVM.Guest.GuestState,
+			OSFamily:          moVM.Guest.GuestFamily,
+			CPU:               int(moVM.Config.Hardware.NumCPU),
+			Memory:            int(moVM.Config.Hardware.MemoryMB),
+			RDMDisks:          rdmDisks,
+			ESXiName:          esxiName,
+			ClusterName:       clusterName,
+			NetworkInterfaces: nic,
+			GuestNetworks:     guestNetwork,
+		})
+	}
+
+	return batchInfos, nil
 }
