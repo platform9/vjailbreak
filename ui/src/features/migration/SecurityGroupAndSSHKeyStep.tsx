@@ -10,13 +10,21 @@ interface SecurityGroupOption {
   requiresIdDisplay: boolean;
 }
 
+interface OpenstackCredentialsForStep {
+  status?: {
+    openstack?: {
+      securityGroups?: SecurityGroupOption[];
+    };
+  };
+}
+
 interface SecurityGroupAndSSHKeyStepProps {
   params: {
     vms?: any[];
-    securityGroups?: SecurityGroupOption[];
+    securityGroups?: string[];
   };
   onChange: (key: string) => (value: any) => void;
-  openstackCredentials?: any;
+  openstackCredentials?: OpenstackCredentialsForStep;
   stepNumber?: string;
 }
 
@@ -26,9 +34,8 @@ export default function SecurityGroupAndSSHKeyStep({
   openstackCredentials,
   stepNumber = "4",
 }: SecurityGroupAndSSHKeyStepProps) {
-  const securityGroupOptions = [
-    ...(openstackCredentials?.status?.openstack?.securityGroups || []) 
-  ];
+  const securityGroupOptions: SecurityGroupOption[] =
+    openstackCredentials?.status?.openstack?.securityGroups || [];
 
   return (
     <Box>
@@ -41,14 +48,14 @@ export default function SecurityGroupAndSSHKeyStep({
           <Autocomplete
             multiple
             options={securityGroupOptions}
-            getOptionLabel={(option) => 
-              option.requiresIdDisplay 
-                ? `${option.name} (${option.id.substring(0, 8)}...)` 
+            getOptionLabel={(option) =>
+              option.requiresIdDisplay
+                ? `${option.name} (${option.id.substring(0, 8)}...)`
                 : option.name
             }
             isOptionEqualToValue={(option, value) => option.id === value.id}
             value={
-              securityGroupOptions.filter(option => 
+              securityGroupOptions.filter(option =>
                 (params.securityGroups || []).includes(option.id)
               )
             }
@@ -80,15 +87,15 @@ export default function SecurityGroupAndSSHKeyStep({
                     padding: '0 8px',
                   }}
                 >
-                  {option.requiresIdDisplay 
-                    ? `${option.name} (${option.id.substring(0, 8)}...)` 
+                  {option.requiresIdDisplay
+                    ? `${option.name} (${option.id.substring(0, 8)}...)`
                     : option.name}
                   <span
                     style={{ marginLeft: 4, cursor: 'pointer' }}
                     onClick={() => {
-                      const newValue = [...value];
-                      newValue.splice(index, 1);
-                      onChange("securityGroups")(newValue);
+                      const currentIds = value.map(v => v.id);
+                      currentIds.splice(index, 1);
+                      onChange("securityGroups")(currentIds);
                     }}
                   >
                     ×
@@ -99,8 +106,8 @@ export default function SecurityGroupAndSSHKeyStep({
             renderOption={(props, option, { selected }) => (
               <li {...props}>
                 <Checkbox style={{ marginRight: 8 }} checked={selected} size="small" />
-                {option.requiresIdDisplay 
-                  ? `${option.name} (${option.id.substring(0, 8)}...)` 
+                {option.requiresIdDisplay
+                  ? `${option.name} (${option.id.substring(0, 8)}...)`
                   : option.name}
               </li>
             )}
@@ -112,4 +119,4 @@ export default function SecurityGroupAndSSHKeyStep({
       </Box>
     </Box>
   );
-} 
+}
