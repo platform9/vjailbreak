@@ -273,7 +273,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 	var openstackvoltypes []string
 	var openstacknetworks []string
-	var openstacksecuritygroups []string
+	var openstacksecuritygroups []vjailbreakv1alpha1.SecurityGroupInfo
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -341,8 +341,18 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all security groups")
 	}
-	for i := 0; i < len(allSecGroups); i++ {
-		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+
+	nameCounts := make(map[string]int)
+	for _, group := range allSecGroups {
+		nameCounts[group.Name]++
+	}
+
+	for _, group := range allSecGroups {
+		openstacksecuritygroups = append(openstacksecuritygroups, vjailbreakv1alpha1.SecurityGroupInfo{
+			Name:              group.Name,
+			ID:                group.ID,
+			RequiresIdDisplay: nameCounts[group.Name] > 1,
+		})
 	}
 
 	return &vjailbreakv1alpha1.OpenstackInfo{

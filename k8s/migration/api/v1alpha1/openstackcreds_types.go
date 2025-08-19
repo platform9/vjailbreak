@@ -53,12 +53,19 @@ type OpenStackCredsInfo struct {
 	DomainName string
 }
 
+// SecurityGroupInfo holds the security group name and ID
+type SecurityGroupInfo struct {
+	Name              string `json:"name"`
+	ID                string `json:"id"`
+	RequiresIdDisplay bool   `json:"requiresIdDisplay"`
+}
+
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
-	VolumeTypes    []string `json:"volumeTypes,omitempty"`
-	VolumeBackends []string `json:"volumeBackends,omitempty"`
-	Networks       []string `json:"networks,omitempty"`
-	SecurityGroups []string `json:"securityGroups,omitempty"`
+	VolumeTypes    []string            `json:"volumeTypes,omitempty"`
+	VolumeBackends []string            `json:"volumeBackends,omitempty"`
+	Networks       []string            `json:"networks,omitempty"`
+	SecurityGroups []SecurityGroupInfo `json:"securityGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
