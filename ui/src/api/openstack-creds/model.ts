@@ -61,12 +61,19 @@ export interface GetOpenstackCredsListMetadata {
   resourceVersion: string
 }
 
+export interface SecurityGroupOption {
+  name: string;
+  id: string;
+  requiresIdDisplay: boolean;
+}
+
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
   openstack?: {
     networks?: string[]
     volumeTypes?: string[]
+    securityGroups?: SecurityGroupOption[]
   }
 }
 

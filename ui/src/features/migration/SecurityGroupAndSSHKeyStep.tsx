@@ -3,20 +3,7 @@ import Step from "../../components/forms/Step";
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import Checkbox from '@mui/material/Checkbox';
-
-interface SecurityGroupOption {
-  name: string;
-  id: string;
-  requiresIdDisplay: boolean;
-}
-
-interface OpenstackCredentialsForStep {
-  status?: {
-    openstack?: {
-      securityGroups?: SecurityGroupOption[];
-    };
-  };
-}
+import { OpenstackCreds, SecurityGroupOption } from "src/api/openstack-creds/model";
 
 interface SecurityGroupAndSSHKeyStepProps {
   params: {
@@ -24,7 +11,7 @@ interface SecurityGroupAndSSHKeyStepProps {
     securityGroups?: string[];
   };
   onChange: (key: string) => (value: any) => void;
-  openstackCredentials?: OpenstackCredentialsForStep;
+  openstackCredentials?: OpenstackCreds;
   stepNumber?: string;
 }
 

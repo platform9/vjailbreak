@@ -57,7 +57,7 @@ type OpenStackCredsInfo struct {
 type SecurityGroupInfo struct {
 	Name              string `json:"name"`
 	ID                string `json:"id"`
-	RequiresIdDisplay bool   `json:"requiresIdDisplay"`
+	RequiresIDDisplay bool   `json:"requiresIdDisplay"`
 }
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
