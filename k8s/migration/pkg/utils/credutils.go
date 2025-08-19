@@ -685,51 +685,6 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 	return guestNetworks, nil
 }
 
-// processVMDisk processes a single virtual disk device and updates the disk information
-// it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
-// It checks if the disk is backed by a shared SCSI controller and skips the VM.
-func processVMDisk(ctx context.Context,
-	disk *types.VirtualDisk,
-	controllers map[int32]types.BaseVirtualSCSIController,
-	hostStorageInfo *types.HostStorageDeviceInfo,
-	vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDiskInfo, skipVM bool, err error) {
-	if controller, ok := controllers[disk.ControllerKey]; ok {
-		if controller.GetVirtualSCSIController().SharedBus == types.VirtualSCSISharingPhysicalSharing {
-			ctrllog.FromContext(ctx).Info("SKipping VM: VM has SCSI controller with shared bus, migration not supported",
-				"vm", vmName)
-			return nil, vjailbreakv1alpha1.RDMDiskInfo{}, true, nil
-		}
-	}
-	switch backing := disk.Backing.(type) {
-	case *types.VirtualDiskFlatVer2BackingInfo:
-		ref := backing.Datastore.Reference()
-		dsref = &ref
-	case *types.VirtualDiskSparseVer2BackingInfo:
-		ref := backing.Datastore.Reference()
-		dsref = &ref
-	case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-		ref := backing.Datastore.Reference()
-		dsref = &ref
-		if hostStorageInfo != nil {
-			rdmDiskInfos = vjailbreakv1alpha1.RDMDiskInfo{
-				DiskName: disk.DeviceInfo.GetDescription().Label,
-				DiskSize: disk.CapacityInBytes,
-			}
-			for _, scsiDisk := range hostStorageInfo.ScsiLun {
-				lunDetails := scsiDisk.GetScsiLun()
-				if backing.LunUuid == lunDetails.Uuid {
-					rdmDiskInfos.DisplayName = lunDetails.DisplayName
-					rdmDiskInfos.UUID = lunDetails.Uuid
-				}
-			}
-		}
-	default:
-		return nil, vjailbreakv1alpha1.RDMDiskInfo{}, false, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
-	}
-
-	return dsref, rdmDiskInfos, false, nil
-}
-
 // AppendUnique appends unique values to a slice
 func AppendUnique(slice []string, values ...string) []string {
 	for _, value := range values {
@@ -1282,18 +1237,6 @@ func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, 
 	return volBackendPools, nil
 }
 
-func appendToVMErrorsThreadSafe(errMu *sync.Mutex, vmErrors *[]vmError, vmName string, err error) {
-	errMu.Lock()
-	*vmErrors = append(*vmErrors, vmError{vmName: vmName, err: err})
-	errMu.Unlock()
-}
-
-func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, vmInfo vjailbreakv1alpha1.VMInfo) {
-	vminfoMu.Lock()
-	*vminfo = append(*vminfo, vmInfo)
-	vminfoMu.Unlock()
-}
-
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
@@ -1306,191 +1249,6 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	}
 	finder.SetDatacenter(dc)
 	return c, finder, nil
-}
-
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
-	var vmProps mo.VirtualMachine
-	var datastores []string
-	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
-	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
-	var clusterName string
-	log := scope.Logger
-	err := vm.Properties(ctx, vm.Reference(), []string{
-		"config",
-		"guest",
-		"runtime",
-		"network",
-		"summary.config.annotation",
-	}, &vmProps)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VM properties: %w", err))
-		return
-	}
-	if vmProps.Config == nil {
-		// VM is not powered on or is in creating state
-		log.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
-		return
-	}
-	// Fetch details required for RDM disks
-	hostStorageMap := sync.Map{}
-	controllers := make(map[int32]types.BaseVirtualSCSIController)
-	// Collect all SCSI controller to find shared RDM disks
-	for _, device := range vmProps.Config.Hardware.Device {
-		if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
-			controllers[device.GetVirtualDevice().Key] = scsiController
-		}
-	}
-	// Get basic RDM disk info from VM properties
-	rdmDiskInfos := make([]vjailbreakv1alpha1.RDMDiskInfo, 0)
-	hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get disk info for vm: %w", err))
-		return
-	}
-
-	attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
-	pc := property.DefaultCollector(c)
-	for _, netRef := range vmProps.Network {
-		var netObj mo.Network
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err))
-			return
-		}
-		networks = append(networks, netObj.Name)
-	}
-
-	var skipVM bool
-	for _, device := range vmProps.Config.Hardware.Device {
-		disk, ok := device.(*types.VirtualDisk)
-		if !ok {
-			continue
-		}
-		dsref, rdmInfos, skip, err := processVMDisk(ctx, disk, controllers, hostStorageInfo, vm.Name())
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to process VM disk: %w", err))
-			return
-		}
-		if skip {
-			skipVM = true
-			break
-		}
-		if !reflect.DeepEqual(rdmInfos, vjailbreakv1alpha1.RDMDiskInfo{}) {
-			rdmDiskInfos = append(rdmDiskInfos, rdmInfos)
-			continue
-		}
-
-		var ds mo.Datastore
-		err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get datastore: %w", err))
-			return
-		}
-
-		datastores = AppendUnique(datastores, ds.Name)
-		disks = append(disks, disk.DeviceInfo.GetDescription().Label)
-	}
-
-	// Get the host name and parent (cluster) information
-	host := mo.HostSystem{}
-	err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get host name: %w", err))
-		return
-	}
-
-	clusterName = getClusterNameFromHost(ctx, c, host)
-
-	if skipVM {
-		return
-	}
-	if len(rdmDiskInfos) >= 1 && len(disks) == 0 {
-		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
-		return
-	}
-	if len(rdmDiskInfos) > 0 {
-		log.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
-		rdmDiskInfos, err = populateRDMDiskInfoFromAttributes(ctx, rdmDiskInfos, attributes)
-		if err != nil {
-			log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
-			return
-		}
-	}
-
-	// Get the virtual NICs
-	nicList, err := ExtractVirtualNICs(&vmProps)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
-	}
-	// Get the guest network info
-	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
-	}
-
-	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
-	}
-
-	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
-	var guestNetworks []vjailbreakv1alpha1.GuestNetwork
-	var osFamily string
-	err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
-	switch {
-	case apierrors.IsNotFound(err):
-		// First time creation – use whatever vCenter gave us (could be nil)
-		guestNetworks = guestNetworksFromVmware
-		osFamily = vmProps.Guest.GuestFamily
-
-	case err != nil:
-		// Unexpected error
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
-		return
-
-	default:
-		// Object exists
-		if len(guestNetworksFromVmware) > 0 {
-			// Only update if we got fresh data from vCenter
-			guestNetworks = guestNetworksFromVmware
-		} else {
-			// Use existing data because VM is switched off and we can't get the info from vCenter
-			guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
-		}
-		if vmProps.Guest.GuestFamily != "" {
-			osFamily = vmProps.Guest.GuestFamily
-		} else {
-			osFamily = vmwvm.Spec.VMInfo.OSFamily
-		}
-	}
-
-	// exclude vCLS VMs
-	if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
-		return
-	}
-	currentVM := vjailbreakv1alpha1.VMInfo{
-		Name:              vmProps.Config.Name,
-		Datastores:        datastores,
-		Disks:             disks,
-		Networks:          networks,
-		IPAddress:         vmProps.Guest.IpAddress,
-		VMState:           vmProps.Guest.GuestState,
-		OSFamily:          osFamily,
-		CPU:               int(vmProps.Config.Hardware.NumCPU),
-		Memory:            int(vmProps.Config.Hardware.MemoryMB),
-		ESXiName:          host.Name,
-		ClusterName:       clusterName,
-		RDMDisks:          rdmDiskInfos,
-		NetworkInterfaces: nicList,
-		GuestNetworks:     guestNetworks,
-	}
-	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
-	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
-	}
 }
 
 var hostSystemMap sync.Map
@@ -1525,11 +1283,11 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
 					"config.hardware.numCPU", "config.hardware.memoryMB",
 					"datastore", "network", "runtime",
+					"summary.config.annotation",
 				},
 			},
 		},
 	}
-
 	req := types.RetrieveProperties{
 		SpecSet: []types.PropertyFilterSpec{filterSpec},
 	}
@@ -1544,7 +1302,8 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	if err := mo.LoadObjectContent(res.Returnval, &fetchedVMs); err != nil {
 		return nil, fmt.Errorf("failed to decode ObjectContent into mo.VirtualMachine: %w", err)
 	}
-
+	// Fetch all annotations
+	attributeMap := make(map[string][]string)
 	// Step 1: Collect unique datastore & network MORs
 	dsRefs := make(map[types.ManagedObjectReference]struct{})
 	netRefs := make(map[types.ManagedObjectReference]struct{})
@@ -1555,6 +1314,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 		for _, ref := range moVM.Network {
 			netRefs[ref] = struct{}{}
 		}
+		attributeMap[moVM.Reference().Value] = strings.Split(moVM.Summary.Config.Annotation, "\n")
 	}
 
 	// Step 2: Bulk retrieve datastore names
@@ -1638,6 +1398,11 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 					UUID:        b.LunUuid,
 					DisplayName: "",
 				})
+				rdmDisks, err = populateRDMDiskInfoFromAttributes(ctx, rdmDisks, attributeMap[moVM.Reference().Value])
+				if err != nil {
+					log.Error(err, "failed to populate RDM disk info from attributes", "VM", moVM.Config.Name)
+					continue
+				}
 			case *types.VirtualDiskFlatVer2BackingInfo, *types.VirtualDiskSparseVer2BackingInfo:
 				diskLabels = append(diskLabels, disk.DeviceInfo.GetDescription().Label)
 			}
