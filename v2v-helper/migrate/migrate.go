@@ -1120,7 +1120,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
 			if cleanUpErr != nil {
 				utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
-				return errors.Wrap(cleanUpErr, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
+				return errors.Wrap(cleanUpErr, "Failed to cleanup snapshot of source VM")
 			}
 			return errors.Wrap(err, "failed to convert disks")
 		}
