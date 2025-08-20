@@ -7,4 +7,5 @@ type VjailbreakSettings struct {
 	DefaultMigrationMethod              string
 	VCenterScanConcurrencyLimit         int
 	CleanupVolumesAfterConvertFailure   bool
+	PopulateVMwareMachineFlavors        bool
 }
