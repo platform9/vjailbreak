@@ -900,7 +900,12 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 }
 
 // GetClosestFlavour gets the closest flavor for the given CPU and memory
-func GetClosestFlavour(_ context.Context, cpu, memory int, computeClient *gophercloud.ServiceClient, allFlavors []flavors.Flavor) (*flavors.Flavor, error) {
+func GetClosestFlavour(cpu, memory int, allFlavors []flavors.Flavor) (*flavors.Flavor, error) {
+	// Check if the flavor slice is empty
+	if len(allFlavors) == 0 {
+		return nil, fmt.Errorf("no flavors available to select from")
+	}
+
 	bestFlavor := new(flavors.Flavor)
 	bestFlavor.VCPUs = constants.MaxVCPUs
 	bestFlavor.RAM = constants.MaxRAM

@@ -43,7 +43,7 @@ func atoi(s string) int {
 // GetVjailbreakSettings retrieves the vjailbreak settings from the configmap
 func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
 	log := ctxlog.FromContext(ctx)
-	
+
 	// Get the vjailbreak settings configmap
 	vjailbreakSettingsCM := &corev1.ConfigMap{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
@@ -87,7 +87,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	}
 
 	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
-		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = "true"
+		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = trueString
 	}
 
 	return &VjailbreakSettings{

@@ -284,10 +284,6 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		if err := r.List(ctx, vmwaremachineList); err != nil {
 			return errors.Wrap(err, "failed to list vmwaremachine objects")
 		}
-		computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack clients")
-		}
 
 		for i := range vmwaremachineList.Items {
 			vmwaremachine := &vmwaremachineList.Items[i]
@@ -296,7 +292,7 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 			memory := vmwaremachine.Spec.VMInfo.Memory
 
 			// Now get the closest flavor based on the cpu and memory
-			flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient, flavors)
+			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors)
 			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 				return errors.Wrap(err, "failed to get closest flavor")
