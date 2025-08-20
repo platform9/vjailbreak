@@ -64,10 +64,15 @@ spec:
                 
                 # Clean up logs older than 24 hours on master node
                 echo "Cleaning up logs older than 24 hours on master node"
-                # Clean master's own logs
-                find /var/log/pf9 -type f -mtime +1 -exec rm -f {} \;
-                # Clean worker logs stored on master
-                find /var/lib/rsync/worker-logs -type f -mtime +1 -exec rm -f {} \; 2>/dev/null || true
+                # Note: Not restarting services to avoid disruption
+                # Instead, properly closing files in the v2v-helper code
+                # Clean master's own logs and force delete any stuck files
+                find /var/log/pf9 -type f -mtime +1 -delete 2>/dev/null || true
+                # Clean worker logs stored on master and force delete any stuck files
+                find /var/lib/rsync/worker-logs -type f -mtime +1 -delete 2>/dev/null || true
+                # Clear deleted but open files (useful when processes still hold file handles)
+                echo "Clearing deleted but open files..."
+                lsof +L1 | grep "/var/log/pf9\|/var/lib/rsync/worker-logs" | awk '{print $2}' | xargs -r kill -HUP 2>/dev/null || true
                 
                 echo "Starting rsync daemon..."
                 rsync --daemon --config=/etc/pf9/rsyncd.conf --no-detach
@@ -84,7 +89,16 @@ spec:
                   
                   # Clean up logs older than 24 hours on worker node
                   echo "Cleaning up logs older than 24 hours on worker node"
-                  find /var/log/pf9 -type f -mtime +1 -exec rm -f {} \;
+                  # Note: Not restarting services to avoid disruption
+                  # Instead, properly closing files in the v2v-helper code
+                  # Force delete old log files
+                  find /var/log/pf9 -type f -mtime +1 -delete 2>/dev/null || true
+                  # Clear deleted but open files
+                  echo "Clearing deleted but open files..."
+                  lsof +L1 | grep "/var/log/pf9" | awk '{print $2}' | xargs -r kill -HUP 2>/dev/null || true
+                  # Free up disk space by clearing caches
+                  sync
+                  echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
                   
                   echo "Syncing from rsync://${MASTER_IP}"
                   rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
