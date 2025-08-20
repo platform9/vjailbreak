@@ -142,7 +142,22 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		ctxlog.Info("Successfully updated status to failed")
 	} else {
-		err := handleValidatedCreds(ctx, r, scope)
+		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
+		}
+		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
+		// Update the status of the OpenstackCreds object
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+		ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+			return ctrl.Result{}, err
+		}
+		ctxlog.Info("Successfully updated status to success")
+		err = handleValidatedCreds(ctx, r, scope)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -220,11 +235,6 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		}
 		ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 	}
-	openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
-	if err != nil {
-		ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
-		return errors.Wrap(err, "failed to get Openstack credentials from secret")
-	}
 
 	ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
 	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, r.Client, scope.OpenstackCreds)
@@ -242,11 +252,6 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		return errors.Wrap(err, "failed to update spec of OpenstackCreds")
 	}
-
-	ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
-	// Update the status of the OpenstackCreds object
-	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 
 	// update the status field openstackInfo
 	ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
@@ -268,17 +273,19 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	if err := r.List(ctx, vmwaremachineList); err != nil {
 		return errors.Wrap(err, "failed to list vmwaremachine objects")
 	}
+	computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to get OpenStack clients")
+	}
+
 	for i := range vmwaremachineList.Items {
 		vmwaremachine := &vmwaremachineList.Items[i]
 		// Get the cpu and memory of the vmwaremachine object
 		cpu := vmwaremachine.Spec.VMInfo.CPU
 		memory := vmwaremachine.Spec.VMInfo.Memory
-		computeClient, err := utils.GetOpenStackClients(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack clients")
-		}
+
 		// Now get the closest flavor based on the cpu and memory
-		flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
+		flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient, flavors)
 		if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 			ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 			return errors.Wrap(err, "failed to get closest flavor")
