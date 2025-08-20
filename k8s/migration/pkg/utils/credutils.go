@@ -575,8 +575,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 }
 
 // GetAllVMs gets all the VMs in a datacenter.
-//
-//nolint:gocyclo // GetAllVMs is complex but intentional due to VM discovery logic
 func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
 	vmErrors := []vmError{}
@@ -1177,6 +1175,14 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					!reflect.DeepEqual(rdmInfo[i].Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) {
 					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
 				}
+
+				// Add owner VMs if new reference is added
+				for _, ownerVM := range rdmInfo[i].Spec.OwnerVMs {
+					if !slices.Contains(existingDisk.Spec.OwnerVMs, ownerVM) {
+						existingDisk.Spec.OwnerVMs = AppendUnique(existingDisk.Spec.OwnerVMs, ownerVM)
+					}
+				}
+
 				err := k3sclient.Update(ctx, &existingDisk)
 				if err != nil {
 					return fmt.Errorf("failed to update existing RDM disk CR with new OpenStack volume reference: %w", err)
@@ -1476,10 +1482,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to process VM disk: %w", err))
 			return
 		}
-		/*if !reflect.DeepEqual(rdmInfos, vjailbreakv1alpha1.RDMDisk{}) {
-			rdmDiskInfos = append(rdmDiskInfos, rdmInfos)
-			continue
-		}*/
 		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
 			rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
 			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
@@ -1498,10 +1500,8 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 				}
 				// Add owner VMs if not exists already and sort OwnerVMs alphabetically
 				// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs
-				if !slices.Contains(savedRDMDetails.Spec.OwnerVMs, vm.Name()) {
-					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, vm.Name())
-					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
-				}
+				rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, vm.Name())
+				slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
 			}
 			listofRDMInVM = append(listofRDMInVM, rdmInfo)
 		}
