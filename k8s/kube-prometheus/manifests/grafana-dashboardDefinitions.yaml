@@ -86,7 +86,7 @@ items:
                 },
                 "disableTextWrap": false,
                 "editorMode": "builder",
-                "expr": "sum(group by(name) (migration_phase))",
+                "expr": "count(group by(name) (migration_conditions{type=\"Validated\"}))",
                 "fullMetaSearch": false,
                 "includeNullMetadata": true,
                 "instant": false,
@@ -789,7 +789,7 @@ items:
         },
         "timepicker": {},
         "timezone": "UTC",
-        "title": "Migration Dashboard",
+        "title": "Migration Overview",
         "uid": "edxirq247bdhca",
         "version": 1,
         "weekStart": ""

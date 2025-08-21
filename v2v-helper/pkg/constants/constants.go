@@ -115,6 +115,12 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
 	VCenterScanConcurrencyLimit = 100
 
+	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
+	CleanupVolumesAfterConvertFailure = true
+
+	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
+	PopulateVMwareMachineFlavors = true
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 )

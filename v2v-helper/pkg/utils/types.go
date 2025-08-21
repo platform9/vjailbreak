@@ -6,4 +6,6 @@ type VjailbreakSettings struct {
 	VMActiveWaitRetryLimit              int
 	DefaultMigrationMethod              string
 	VCenterScanConcurrencyLimit         int
+	CleanupVolumesAfterConvertFailure   bool
+	PopulateVMwareMachineFlavors        bool
 }

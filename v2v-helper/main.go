@@ -156,6 +156,8 @@ func main() {
 		}
 
 		handleError(msg)
+		utils.PrintLog(fmt.Sprintf("----- Migration completed with errors at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))
+		return
 	}
 
 	utils.PrintLog(fmt.Sprintf("----- Migration completed successfully at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))
