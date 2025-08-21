@@ -1527,3 +1527,34 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
 	}
 }
+
+// FindHotplugBaseFlavor connects to OpenStack and finds the suitable flavor
+func FindHotplugBaseFlavor(ctx context.Context, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flavors: %w", err)
+	}
+
+	allFlavors, err := flavors.ExtractFlavors(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract flavors: %w", err)
+	}
+
+	for _, flavor := range allFlavors {
+		if flavor.VCPUs == 0 && flavor.RAM == 0 {
+			allSpecs, err := flavors.ListExtraSpecs(computeClient, flavor.ID).Extract()
+			if err != nil {
+				ctrllog.FromContext(ctx).Error(err, "could not get extra specs for flavor", "flavorID", flavor.ID)
+				continue
+			}
+
+			if hints, ok := allSpecs["os:scheduler_hints"]; ok {
+				if strings.Contains(hints, `"hotplug": "true"`) {
+					return &flavor, nil
+				}
+			}
+		}
+	}
+
+	return nil, errors.New("no suitable hotplug-enabled base flavor (0 vCPU, 0 RAM) found")
+}

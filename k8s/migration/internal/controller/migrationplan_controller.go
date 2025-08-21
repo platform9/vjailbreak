@@ -1059,6 +1059,37 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if vmMachineObj == nil {
 			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vm)
 		}
+
+		if migrationplan.Spec.UseFlavorless {
+			ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
+
+			osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
+			}
+
+			baseFlavor, err := utils.FindHotplugBaseFlavor(ctx, osClients.ComputeClient)
+			if err != nil {
+				migrationplan.Status.MigrationStatus = corev1.PodFailed
+				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
+				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
+				}
+				return err
+			}
+
+			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
+
+			if vmMachineObj.Spec.TargetFlavorID != baseFlavor.ID {
+				patch := client.MergeFrom(vmMachineObj.DeepCopy())
+				vmMachineObj.Spec.TargetFlavorID = baseFlavor.ID
+				if err := r.Patch(ctx, vmMachineObj, patch); err != nil {
+					return errors.Wrap(err, "failed to automatically patch VMwareMachine with discovered base flavor ID")
+				}
+				ctxlog.Info("Patched VMwareMachine with base flavor ID", "vmwareMachine", vmMachineObj.Name, "flavorID", baseFlavor.ID)
+			}
+		}
+
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
