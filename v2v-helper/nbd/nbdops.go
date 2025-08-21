@@ -132,6 +132,8 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdstring))
 	err = cmd.Start()
 	if err != nil {
+		// Close log file if nbdkit failed to start
+		utils.CloseLogFile(cmd)
 		return fmt.Errorf("failed to start nbdkit: %v", err)
 	}
 	nbdserver.cmd = cmd
@@ -180,8 +182,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 		}
 	}()
-	utils.AddDebugOutputToFile(cmd)
-	err = cmd.Run()
+	// Use the helper function to ensure log file is closed after command execution
+	err = utils.RunCommandWithLogFile(cmd)
 	if err != nil {
 		// retry once with debug enabled, to get more details
 		cmd.Stdout = os.Stdout
@@ -309,10 +311,8 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 
 	err := punch(offset, length)
 	if err != nil {
-		return errors.Wrapf(err, "failed to punch hole at offset %d", offset)
-	}
-
-	if err != nil { // Fall back to regular pwrite
+		// Fall back to regular pwrite if punch fails
+		utils.PrintLog(fmt.Sprintf("Failed to punch hole at offset %d, falling back to pwrite: %v", offset, err))
 		utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, err))
 		count := int64(0)
 		const blocksize = 16 << 20
