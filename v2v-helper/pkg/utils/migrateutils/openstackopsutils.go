@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -538,17 +539,23 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 		return nil, nil
 	}
 
+	if projectName == "" {
+		return nil, fmt.Errorf("projectName is required for security group lookup")
+	}
+
+	//check if string is UUID
+	isUUID := func(s string) bool {
+		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+		return re.MatchString(s)
+	}
+
+	//build a map name -> ID
 	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create identity client: %w", err)
 	}
 
-	if projectName == "" {
-		return nil, fmt.Errorf("projectName is required for security group lookup")
-	}
-
 	listOpts := projects.ListOpts{Name: projectName}
-
 	allPages, err := projects.List(identityClient, listOpts).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
@@ -568,7 +575,6 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 	if err != nil {
 		return nil, fmt.Errorf("failed to list security groups: %w", err)
 	}
-
 	allGroups, err := groups.ExtractGroups(allPages)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract security groups: %w", err)
@@ -580,10 +586,15 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 	}
 
 	var groupIDs []string
-	for _, name := range groupNames {
-		id, found := nameToIDMap[name]
+	for _, g := range groupNames {
+		if isUUID(g) {
+			groupIDs = append(groupIDs, g)
+			continue
+		}
+
+		id, found := nameToIDMap[g]
 		if !found {
-			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", name, projectName)
+			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", g, projectName)
 		}
 		groupIDs = append(groupIDs, id)
 	}
