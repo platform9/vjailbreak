@@ -87,22 +87,13 @@ const columns: GridColDef[] = [
         flex: 0.8,
     },
     {
-        field: "completedAt",
-        headerName: "Completed At",
+        field: "createdAt",
+        headerName: "Created At",
         valueGetter: (_, row) => {
-            const status = row.status;
-            if (status?.phase === 'Succeeded' || status?.phase === 'Failed') {
-                const latestCondition = status.conditions
-                    ?.filter(condition => condition.reason === 'Migration')
-                    ?.sort((a, b) =>
-                        new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime()
-                    )[0];
-                
-                if (latestCondition?.lastTransitionTime) {
-                    return new Date(latestCondition.lastTransitionTime).toLocaleString();
-                }
+            if (row.metadata?.creationTimestamp) {
+                return new Date(row.metadata.creationTimestamp).toLocaleString();
             }
-            return 'In Progress';
+            return '-';
         },
         flex: 1,
     },
