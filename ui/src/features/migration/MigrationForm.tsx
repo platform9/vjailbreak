@@ -448,7 +448,7 @@ export default function MigrationFormDrawer({
       virtualMachines: vmsToMigrate,
       type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
         ? params.dataCopyMethod
-        : "hot",
+        : "cold",
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
         dataCopyStart: params.dataCopyStartTime,

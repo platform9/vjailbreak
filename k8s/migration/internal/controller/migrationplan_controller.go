@@ -834,14 +834,14 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
 		} else {
-			var computeClient *utils.OpenStackClients
 			// If target flavor is not set, use the closest matching flavor
-			computeClient, err = utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to get OpenStack clients")
+				return nil, errors.Wrap(err, "failed to list all flavors")
 			}
+
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, computeClient.ComputeClient)
+			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}

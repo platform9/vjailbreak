@@ -13,6 +13,7 @@ import {
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom"
+import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline"
 import { Phase, Condition } from "src/api/migrations/model"
 
 // Interfaces
@@ -112,14 +113,15 @@ export default function MigrationProgressWithPopover({
   const statusIcon = useMemo(() => {
     if (phase === Phase.Succeeded) {
       return <CheckCircleOutlineIcon style={{ color: "green" }} />
+    } else if (phase === Phase.AwaitingAdminCutOver) {
+      return <PauseCircleOutlineIcon style={{ color: "#1976d2" }} />
     } else if ([
       Phase.Validating,
       Phase.AwaitingDataCopyStart,
       Phase.CopyingBlocks,
       Phase.CopyingChangedBlocks,
       Phase.ConvertingDisk,
-      Phase.AwaitingCutOverStartTime,
-      Phase.AwaitingAdminCutOver
+      Phase.AwaitingCutOverStartTime
     ].includes(phase as Phase)) {
       return <CircularProgress size={20} style={{ marginRight: 3 }} />
     } else if (phase === Phase.Failed) {

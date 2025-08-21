@@ -79,7 +79,7 @@ export default function MigrationOptions({
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
-    onChange("dataCopyMethod")("hot")
+    onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
     onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
@@ -158,7 +158,7 @@ export default function MigrationOptions({
                 size="small"
                 disabled={!selectedMigrationOptions.dataCopyMethod}
                 labelId="source-item-label"
-                value={params?.dataCopyMethod || "hot"}
+                value={params?.dataCopyMethod || "cold"}
                 onChange={(e) => {
                   onChange("dataCopyMethod")(e.target.value)
                 }}
