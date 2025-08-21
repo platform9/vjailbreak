@@ -428,7 +428,7 @@ export default function MigrationOptionsAlt({
 
               <Fields sx={{ gridGap: "0" }}>
                 <FormControlLabel
-                  label="Use Flavorless Provisioning for PCD"
+                  label="Use Dynamic Hotplug-Enabled Flavors"
                   control={
                     <Checkbox
                       checked={params?.useFlavorless || false}
@@ -441,7 +441,7 @@ export default function MigrationOptionsAlt({
                   }
                 />
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  Enable flavorless VM creation for PCD environment. This will use the base flavor ID specified in the VM settings.
+                  This will use the base flavor ID specified in the Target Environment.
                 </Typography>
               </Fields>
 
