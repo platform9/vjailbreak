@@ -533,7 +533,7 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 	return true, nil
 }
 
-func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]string, error) {
+func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error) {
 	if len(groupNames) == 0 {
 		return nil, nil
 	}
@@ -543,15 +543,12 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 		return nil, fmt.Errorf("failed to create identity client: %w", err)
 	}
 
-	projectName := os.Getenv("OS_TENANT_NAME")
 	if projectName == "" {
-		projectName = os.Getenv("OS_PROJECT_NAME")
-	}
-	if projectName == "" {
-		return nil, fmt.Errorf("OS_TENANT_NAME or OS_PROJECT_NAME environment variable not set")
+		return nil, fmt.Errorf("projectName is required for security group lookup")
 	}
 
 	listOpts := projects.ListOpts{Name: projectName}
+
 	allPages, err := projects.List(identityClient, listOpts).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
@@ -562,9 +559,6 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 	}
 	if len(allProjects) == 0 {
 		return nil, fmt.Errorf("no project found with name %s", projectName)
-	}
-	if len(allProjects) > 1 {
-		return nil, fmt.Errorf("found multiple projects with name %s, please use a unique name or ID", projectName)
 	}
 	projectID := allProjects[0].ID
 
@@ -589,7 +583,7 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 	for _, name := range groupNames {
 		id, found := nameToIDMap[name]
 		if !found {
-			return nil, fmt.Errorf("security group with name '%s' not found", name)
+			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", name, projectName)
 		}
 		groupIDs = append(groupIDs, id)
 	}
