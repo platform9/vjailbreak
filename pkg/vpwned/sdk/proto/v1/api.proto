@@ -62,6 +62,38 @@ service Version {
             get: "/vpw/v1/version"
         };
     }
+    
+    rpc InitiateUpgrade(UpgradeRequest) returns (UpgradeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/upgrade"
+            body: "*"
+        };
+    }
+    
+    rpc GetUpgradeProgress(VersionRequest) returns (UpgradeProgressResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/upgrade/progress"
+        };
+    }
+    rpc GetAvailableTags(VersionRequest) returns (AvailableUpdatesResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/tags"
+        };
+    }
+
+    rpc ConfirmCleanupAndUpgrade(UpgradeRequest) returns (UpgradeResponse) {
+     option (google.api.http) = {
+       post: "/vpw/v1/upgrade/confirm_cleanup"
+       body: "*"
+     };
+   }
+
+    rpc CleanupStep(CleanupStepRequest) returns (CleanupStepResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/upgrade/cleanup_step"
+            body: "*"
+        };
+    }
 }
 
 message VersionRequest {
@@ -69,6 +101,46 @@ message VersionRequest {
 
 message VersionResponse {
     string version = 1;
+}
+
+message ReleaseInfo {
+  string version = 1;
+  string release_notes = 2;
+}
+
+message AvailableUpdatesResponse {
+  repeated ReleaseInfo updates = 1;
+}
+
+message ValidationResult {
+    bool agents_scaled_down = 1;
+    bool vmware_creds_deleted = 2;
+    bool openstack_creds_deleted = 3;
+    bool no_migration_plans = 4;
+    bool no_rolling_migration_plans = 5;
+    bool no_custom_resources = 6;
+    bool passed_all = 7;
+}
+
+message UpgradeRequest {
+  string target_version = 1;
+  bool auto_cleanup = 2;
+}
+
+message UpgradeResponse {
+  ValidationResult checks = 1;
+  bool upgrade_started = 2;
+  bool cleanup_required = 3;
+  repeated string custom_resource_list = 4;
+}
+
+message UpgradeProgressResponse {
+  string current_step = 1;
+  float progress = 2;
+  string status = 3;
+  string error = 4;
+  string start_time = 5;
+  string end_time = 6;
 }
 
 // VCENTER APIs
@@ -444,4 +516,14 @@ service VailbreakProxy {
             body: "*"
         };
     }
+}
+
+message CleanupStepRequest {
+    string step = 1;
+}
+
+message CleanupStepResponse {
+    string step = 1;
+    bool success = 2;
+    string message = 3;
 }

@@ -62,6 +62,7 @@ type Migrate struct {
 	AssignedIP              string
 	SecurityGroups          []string
 	UseFlavorless           bool
+	TenantName              string
 }
 
 type MigrationTimes struct {
@@ -758,11 +759,11 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	}
 
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups)
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
-		return fmt.Errorf("failed to resolve security group names to IDs: %w", err)
+		return errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
-	utils.PrintLog(fmt.Sprintf("Resolved security group names %v to IDs %v", migobj.SecurityGroups, securityGroupIDs))
+	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
 
 	networkids := []string{}
 	ipaddresses := []string{}

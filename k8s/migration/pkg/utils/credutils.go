@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -272,7 +273,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 	var openstackvoltypes []string
 	var openstacknetworks []string
-	var openstacksecuritygroups []string
+
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
@@ -304,26 +305,57 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
 	}
 
-	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages()
+	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list security groups")
+		return nil, errors.Wrap(err, "failed to get openstack credentials for project lookup")
 	}
+
+	identityClient, err := openstack.NewIdentityV3(openstackClients.BlockStorageClient.ProviderClient, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create identity client")
+	}
+
+	listOpts := projects.ListOpts{Name: credsInfo.TenantName}
+	allPages, err := projects.List(identityClient, listOpts).AllPages()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to list projects with name %s", credsInfo.TenantName)
+	}
+
+	allProjects, err := projects.ExtractProjects(allPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract projects")
+	}
+	if len(allProjects) == 0 {
+		return nil, fmt.Errorf("no project found with name %s", credsInfo.TenantName)
+	}
+	projectID := allProjects[0].ID
+
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
+		TenantID: projectID,
+	}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list security groups for project")
+	}
+
 	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all security groups")
 	}
-	for i := 0; i < len(allSecGroups); i++ {
-		openstacksecuritygroups = append(openstacksecuritygroups, allSecGroups[i].Name)
+
+	nameCounts := make(map[string]int)
+	for _, group := range allSecGroups {
+		nameCounts[group.Name]++
 	}
-	groupSet := make(map[string]struct{})
-	uniqueSecurityGroups := []string{}
-	for _, group := range openstacksecuritygroups {
-		if _, exists := groupSet[group]; !exists {
-			groupSet[group] = struct{}{}
-			uniqueSecurityGroups = append(uniqueSecurityGroups, group)
-		}
+
+	openstacksecuritygroups := make([]vjailbreakv1alpha1.SecurityGroupInfo, 0, len(allSecGroups))
+
+	for _, group := range allSecGroups {
+		openstacksecuritygroups = append(openstacksecuritygroups, vjailbreakv1alpha1.SecurityGroupInfo{
+			Name:              group.Name,
+			ID:                group.ID,
+			RequiresIDDisplay: nameCounts[group.Name] > 1,
+		})
 	}
-	openstacksecuritygroups = uniqueSecurityGroups
 
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
