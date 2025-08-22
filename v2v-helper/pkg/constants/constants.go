@@ -3,6 +3,8 @@ package constants
 import "time"
 
 const (
+	HotplugCPUKey       = "HOTPLUG_CPU"
+	HotplugMemoryKey    = "HOTPLUG_MEMORY"
 	RhelFirstBootScript = `#!/bin/bash
 set -e
 LOG_FILE="/var/log/network_fix.log"

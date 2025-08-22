@@ -141,6 +141,7 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 	}
 

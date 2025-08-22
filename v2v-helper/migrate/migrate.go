@@ -61,6 +61,7 @@ type Migrate struct {
 	TargetAvailabilityZone  string
 	AssignedIP              string
 	SecurityGroups          []string
+	UseFlavorless           bool
 	TenantName              string
 }
 
@@ -429,7 +430,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	err = vmops.CleanUpSnapshots(true)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf(`Failed to cleanup snapshot of source VM: %s, since copy is completed, 
-		continuing with the migration`, err))
+        continuing with the migration`, err))
 	}
 	return vminfo, nil
 }
@@ -649,7 +650,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 					if err != nil {
 						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
-					    network might not come up post migration, please check the network configuration post migration`, err)
+                        network might not come up post migration, please check the network configuration post migration`, err)
 						log.Println("Continuing with migration")
 						err = nil
 					}
@@ -670,7 +671,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
 				if err != nil {
 					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
-					network might not come up post migration, please check the network configuration post migration`, err))
+                    network might not come up post migration, please check the network configuration post migration`, err))
 					err = nil
 				}
 			}
@@ -696,7 +697,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	}
 	if len(interfaces) == 0 {
 		utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
-			come up post migration, please check the network configuration post migration`)
+            come up post migration, please check the network configuration post migration`)
 		return nil
 	}
 	macs := []string{}
@@ -735,17 +736,27 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	var flavor *flavors.Flavor
 	var err error
 
-	if migobj.TargetFlavorId == "" {
+	if migobj.UseFlavorless {
+		if migobj.TargetFlavorId == "" {
+			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", migobj.VmwaremachineName)
+			return errors.Wrap(err, "failed to create target instance")
+		}
+		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		if err != nil {
+			return errors.Wrap(err, "failed to get the specified base flavor for flavorless creation")
+		}
+	} else if migobj.TargetFlavorId != "" {
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		if err != nil {
+			return errors.Wrap(err, "failed to get OpenStack flavor")
+		}
+	} else {
 		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return errors.Wrap(err, "failed to get closest OpenStack flavor")
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
-	} else {
-		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack flavor")
-		}
 	}
 
 	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
@@ -814,7 +825,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings, migobj.UseFlavorless)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
