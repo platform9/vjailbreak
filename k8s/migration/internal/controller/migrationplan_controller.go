@@ -1075,7 +1075,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
 					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
 				}
-				return err
+				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
 			}
 
 			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)

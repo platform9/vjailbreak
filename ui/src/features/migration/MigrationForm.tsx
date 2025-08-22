@@ -115,7 +115,6 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
-  useFlavorless?: boolean
 }
 
 
@@ -127,7 +126,6 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
-  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -146,7 +144,6 @@ const defaultMigrationOptions = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osFamily: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -472,8 +469,7 @@ export default function MigrationFormDrawer({
       ...(params.securityGroups && params.securityGroups.length > 0 && {
         securityGroups: params.securityGroups,
       }),
-      disconnectSourceNetwork: params.disconnectSourceNetwork || false,
-      useFlavorless: params.useFlavorless || false,
+      disconnectSourceNetwork: params.disconnectSourceNetwork || false
     };
 
 
