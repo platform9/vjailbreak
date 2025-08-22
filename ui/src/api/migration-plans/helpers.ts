@@ -14,11 +14,13 @@ export const createMigrationPlanJson = (params) => {
     postMigrationAction,
     disconnectSourceNetwork = false,
     securityGroups,
+    useFlavorless = false,
   } = params || {}
   
   const spec: any = {  
     migrationTemplate: migrationTemplateName,
     retry,
+    useFlavorless,
     migrationStrategy: {
       type,
       dataCopyStart,
