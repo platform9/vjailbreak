@@ -254,7 +254,16 @@ export default function SourceDestinationClusterSelection({
                             renderValue={(selected) => {
                                 if (!selected) return <em>Select PCD Cluster</em>;
                                 const pcd = pcdData.find(p => p.id === selected);
-                                return pcd?.name || selected;
+                                return (
+                                    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                                        <Typography variant="body2" noWrap>{pcd?.name || selected}</Typography>
+                                        {pcd?.tenantName && (
+                                            <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 1 }}>
+                                                | Tenant: {pcd.tenantName}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                );
                             }}
                             endAdornment={loadingPCD ? <CircularProgress size={25} sx={{ mr: 3, display: "flex", alignItems: "center", justifyContent: "center" }} /> : null}
                             MenuProps={{
