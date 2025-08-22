@@ -1484,6 +1484,19 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
+
+	// Build networks list from NetworkInterfaces to match NIC count
+	for _, nic := range nicList {
+		var netObj mo.Network
+		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
+			return
+		}
+		networks = append(networks, netObj.Name)
+	}
+
 	// Get the guest network info
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 	if err != nil {
