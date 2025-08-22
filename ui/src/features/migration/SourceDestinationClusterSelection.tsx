@@ -1,3 +1,4 @@
+import React from "react"
 import {
     styled,
     Typography,
@@ -7,15 +8,17 @@ import {
     MenuItem,
     ListSubheader,
     CircularProgress,
+    TextField,
+    InputAdornment,
 } from "@mui/material"
 import Step from "../../components/forms/Step"
 import vmwareLogo from "src/assets/vmware.jpeg"
 import { useClusterData } from "./useClusterData"
 
 import "@cds/core/icon/register.js"
-import { ClarityIcons, buildingIcon, clusterIcon } from "@cds/core/icon"
+import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from "@cds/core/icon"
 
-ClarityIcons.addIcons(buildingIcon, clusterIcon)
+ClarityIcons.addIcons(buildingIcon, clusterIcon, searchIcon)
 
 const VMwareLogoImg = styled('img')({
     width: 24,
@@ -75,6 +78,17 @@ export default function SourceDestinationClusterSelection({
         loadingVMware: hookLoadingVMware,
         loadingPCD: hookLoadingPCD
     } = useClusterData();
+    
+    // State for PCD search
+    const [pcdSearchTerm, setPcdSearchTerm] = React.useState("");
+    
+    // Filter PCD data based on search term
+    const filteredPcdData = React.useMemo(() => {
+        if (!pcdSearchTerm) return pcdData;
+        return pcdData.filter(pcd => 
+            pcd.tenantName.toLowerCase().includes(pcdSearchTerm.toLowerCase())
+        );
+    }, [pcdData, pcdSearchTerm]);
 
     // Use external loading states if provided, otherwise use hook loading states
     const loadingVMware = externalLoadingVMware !== undefined ? externalLoadingVMware : hookLoadingVMware;
@@ -251,12 +265,33 @@ export default function SourceDestinationClusterSelection({
                                 }
                             }}
                         >
+                            <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                                <TextField
+                                    size="small"
+                                    placeholder="Search by tenant name"
+                                    fullWidth
+                                    value={pcdSearchTerm}
+                                    onChange={(e) => setPcdSearchTerm(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                {/* @ts-ignore */}
+                                                <cds-icon shape="search" size="sm"></cds-icon>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Box>
                             <MenuItem value="" disabled><em>Select PCD Cluster</em></MenuItem>
 
                             {pcdData.length === 0 ? (
                                 <MenuItem disabled>No PCD clusters found</MenuItem>
+                            ) : filteredPcdData.length === 0 ? (
+                                <MenuItem disabled>No matching clusters found</MenuItem>
                             ) : (
-                                pcdData.map((pcd) => (
+                                filteredPcdData.map((pcd) => (
                                     <MenuItem
                                         key={pcd.id}
                                         value={pcd.id}
