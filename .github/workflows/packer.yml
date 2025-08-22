@@ -478,16 +478,21 @@ jobs:
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
           S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+          BASE_IMAGE_PATH: "vjailbreak/base-images/ubuntu-base-prebaked.qcow2"
         run: |
-          # Create directory for the image if it doesn't exist
+          if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
+            echo "Base image found in S3. Proceeding to download."
+          else
+            echo "Base image not found in S3. Pulling from Quay and uploading..."
+            oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
+            aws s3 cp vjailbreak-image.qcow2 "s3://$S3_BUCKET/$BASE_IMAGE_PATH"
+            echo "Base image successfully uploaded to S3."
+          fi
+
+          echo "Downloading base image for build..."
           mkdir -p ./image_builder/images
+          aws s3 cp "s3://$S3_BUCKET/$BASE_IMAGE_PATH" ./image_builder/images/ubuntu-base-prebaked.qcow2
           
-          # Download the base image from S3
-          # The path should be adjusted based on where you store the base image in S3
-          aws s3 cp "s3://$S3_BUCKET/vjailbreak/base-images/ubuntu-base-prebaked.qcow2" \
-            ./image_builder/images/ubuntu-base-prebaked.qcow2
-            
-          # Verify the download was successful
           if [ ! -f "./image_builder/images/ubuntu-base-prebaked.qcow2" ]; then
             echo "Error: Failed to download base image from S3"
             exit 1
