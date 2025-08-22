@@ -42,7 +42,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -363,6 +363,53 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		false, openstackcreds); !ok {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
+
+	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
+	err := r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachines")
+	}
+	vmMachinesArr := make([]*vjailbreakv1alpha1.VMwareMachine, 0)
+	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, 0)
+	// List all VMs and gather its data
+	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
+		// List all VMs
+		for _, vm := range parallelvms {
+			for i := range vmMachines.Items {
+				if vmMachines.Items[i].Spec.VMInfo.Name == vm {
+					vmobj := vmMachines.Items[i]
+					vmMachinesArr = append(vmMachinesArr, &vmobj)
+					vmMachinesMap[vm] = &vmobj
+					break
+				}
+			}
+		}
+	}
+	// Migrate RDM disks if any
+	err = r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
+	if err != nil {
+		if err == verrors.ErrRDMDiskNotMigrated {
+			retries := migrationplan.Status.RetryCount
+			if retries <= 5 {
+				delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
+				r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
+				migrationplan.Status.RetryCount++
+				if err := r.Update(ctx, migrationplan); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
+				}
+				fmt.Println("RDM disk not migrated, requeuing MigrationPlan for retry. ", retries)
+				return ctrl.Result{RequeueAfter: delay}, nil
+			}
+		}
+		r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
+		migrationplan.Status.MigrationStatus = corev1.PodFailed
+		migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
+		if err := r.Update(ctx, migrationplan); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
+		}
+		return ctrl.Result{}, err
+	}
+
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
 		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress")
@@ -381,30 +428,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
-		err := r.migrateRDMdisks(ctx, migrationplan)
-		if err != nil {
-			if err == verrors.ErrRDMDiskNotMigrated {
-				retries := migrationplan.Status.RetryCount
-				if retries <= 5 {
-					delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
-					r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
-					migrationplan.Status.RetryCount++
-					if err := r.Update(ctx, migrationplan); err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
-					}
-					return ctrl.Result{RequeueAfter: delay}, nil
-				}
-			}
-			r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
-			migrationplan.Status.MigrationStatus = corev1.PodFailed
-			migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
-			if err := r.Update(ctx, migrationplan); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
-			}
-			return ctrl.Result{}, err
-		}
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
+		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -453,7 +478,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
 	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
-	err := r.Status().Update(ctx, migrationplan)
+	err = r.Status().Update(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
 	}
@@ -1038,7 +1063,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	parallelvms []string) error {
+	parallelvms []*vjailbreakv1alpha1.VMwareMachine) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var (
 		fbcm *corev1.ConfigMap
@@ -1050,24 +1075,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		return errors.Wrap(err, "failed to list nodes")
 	}
 	counter := len(nodeList.Items)
-
-	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
-
-	err = r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
-	if err != nil {
-		return errors.Wrap(err, "failed to list vmwaremachines")
-	}
-
-	var vmMachineObj *vjailbreakv1alpha1.VMwareMachine
-	for _, vm := range parallelvms {
-		vmMachineObj = nil
-		for i := range vmMachines.Items {
-			if vmMachines.Items[i].Spec.VMInfo.Name == vm {
-				vmMachineObj = &vmMachines.Items[i]
-				break
-			}
-		}
-
+	for _, vmMachineObj := range parallelvms {
+		vm := vmMachineObj.Spec.VMInfo.Name
 		if vmMachineObj == nil {
 			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vm)
 		}
@@ -1242,7 +1251,7 @@ func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.D
 	return folder, nil
 }
 
-func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) error {
+func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines map[string]*vjailbreakv1alpha1.VMwareMachine, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	parallelVMsMap := make(map[string]bool)
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
@@ -1256,10 +1265,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	}
 	for _, parallelVMs := range migrationplan.Spec.VirtualMachines {
 		for _, vmName := range parallelVMs {
-			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
-			if err := r.Get(ctx, types.NamespacedName{Name: vmName, Namespace: migrationplan.Namespace}, vmMachine); err != nil {
-				return fmt.Errorf("failed to get VMwareMachine %s: %w", vmName, err)
-			}
+			vmMachine := vmMachines[vmName]
 			// Check if VM is powered off
 			if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
 				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmName)
@@ -1291,6 +1297,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 						}
 						if !rdmDiskCR.Spec.ImportToCinder {
 							rdmDiskCR.Spec.ImportToCinder = true
+							rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
 							rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
 						}
 						allRDMDisks = append(allRDMDisks, rdmDiskCR)

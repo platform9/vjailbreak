@@ -727,8 +727,6 @@ func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo
 		ref := backing.Datastore.Reference()
 		dsref = &ref
 	case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-		ref := backing.Datastore.Reference()
-		dsref = &ref
 		if hostStorageInfo != nil {
 			rdmDiskInfos = vjailbreakv1alpha1.RDMDisk{
 				Spec: vjailbreakv1alpha1.RDMDiskSpec{
@@ -1505,16 +1503,17 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			}
 			listofRDMInVM = append(listofRDMInVM, rdmInfo)
 		}
+		if dsref != nil {
+			var ds mo.Datastore
+			err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
+			if err != nil {
+				appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get datastore: %w", err))
+				return
+			}
 
-		var ds mo.Datastore
-		err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get datastore: %w", err))
-			return
+			datastores = AppendUnique(datastores, ds.Name)
+			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 		}
-
-		datastores = AppendUnique(datastores, ds.Name)
-		disks = append(disks, disk.DeviceInfo.GetDescription().Label)
 	}
 
 	// Get the host name and parent (cluster) information
