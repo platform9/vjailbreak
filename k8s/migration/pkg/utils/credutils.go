@@ -547,16 +547,23 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
+	// Get the network interfaces
+	// Get the virtual NICs
+	nicList, err := ExtractVirtualNICs(&o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
+	}
+
 	pc := property.DefaultCollector(c)
-	for _, netRef := range o.Network {
+	for _, nic := range nicList {
 		var netObj mo.Network
+		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
 		}
 		networks = append(networks, netObj.Name)
 	}
-
 	return networks, nil
 }
 
@@ -1412,15 +1419,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
 	pc := property.DefaultCollector(c)
-	for _, netRef := range vmProps.Network {
-		var netObj mo.Network
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err))
-			return
-		}
-		networks = append(networks, netObj.Name)
-	}
 
 	var skipVM bool
 	for _, device := range vmProps.Config.Hardware.Device {
