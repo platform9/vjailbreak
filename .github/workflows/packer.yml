@@ -65,6 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
+          fetch-depth: 0
 
       - name: Check PR Title
         id: check_pr
@@ -109,44 +110,32 @@ jobs:
       - name: Set environment variables for images
         id: set_env
         run: |
-          # Get the branch name, remove 'refs/heads/' from github.ref
-          BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
-          GIT_SHA=$(echo "$(git rev-parse --short HEAD)")
-         
-          #check if workflow_dispatch is triggered and short sha is provided
+          GIT_SHA=$(git rev-parse --short HEAD)
+          BUILD_VERSION=${{ github.run_number }}
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             if [[ "${{ github.event.inputs.short_sha }}" != "" ]]; then
               echo "short_sha is provided as ${{ github.event.inputs.short_sha }}"
               GIT_SHA=${{ github.event.inputs.short_sha }}
             fi
-          fi
-
-          #check if workflow_dispatch is triggered and version is provided
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             if [[ "${{ github.event.inputs.version }}" != "" ]]; then
               echo "version is provided as ${{ github.event.inputs.version }}"
               BUILD_VERSION=${{ github.event.inputs.version }}
-            else 
-             BUILD_VERSION=${{ github.run_number }}
             fi
           fi
 
-          GIT_BRANCH=$(echo "$(git rev-parse --abbrev-ref HEAD)")
-          # if its a release event bump the version and use that as tag
+          # Release Event
           if [[ "${{ github.event_name }}" == "release" ]]; then
-            # In case of release event the tag will be the next version
-            # build version will be the same as tag
             TAG=${{ github.event.release.tag_name }}
-            BUILD_VERSION=${TAG}
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION=${BUILD_VERSION}-${GIT_SHA}
-            TAG=${VERSION}
+
+          # Nightly Build
+          elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            LAST_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            TAG="${LAST_VERSION}-${GIT_SHA}"
+          
+          # Push and Workflow dispatch
           else
-            # build release version as version-branch-sha
-            VERSION=${BUILD_VERSION}-${GIT_SHA}
-            # Since this is a merge or pull-request 
-            # use the TAG as the version
-            TAG=${VERSION}
+            TAG="${BUILD_VERSION}-${GIT_SHA}"
           fi
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
@@ -155,6 +144,7 @@ jobs:
           echo "v2v_img=${{ env.V2V_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "controller_img=${{ env.CONTROLLER_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "vpwned_img=${{ env.VPWNED_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "Final tag generated: ${TAG}"
 
   build-ui:
     runs-on: ubuntu-latest
