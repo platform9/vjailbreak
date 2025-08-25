@@ -468,7 +468,7 @@ jobs:
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
           S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
-          BASE_IMAGE_PATH: "vjailbreak/base-images/ubuntu-base-prebaked.qcow2"
+          BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
         run: |
           if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
             echo "Base image found in S3. Proceeding to download."
@@ -566,7 +566,7 @@ jobs:
           TAG: ${{ needs.determine-release.outputs.tag }}
         run: |
           set -e
-          DATE_FOLDER=$(date -u +"%Y-%m-%d")
+          DATE_FOLDER=$(date -u +"%d-%m-%Y")
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_PATH_PREFIX="releases/${DATE_FOLDER}"
