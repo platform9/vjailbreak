@@ -119,6 +119,8 @@ spec:
                           type: string
                         network:
                           type: string
+                        networkType:
+                          type: string
                         order:
                           type: integer
                       type: object

@@ -547,16 +547,23 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
 
+	// Get the network interfaces
+	// Get the virtual NICs
+	nicList, err := ExtractVirtualNICs(&o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
+	}
+
 	pc := property.DefaultCollector(c)
-	for _, netRef := range o.Network {
-		var netObj mo.Network
+	for _, nic := range nicList {
+		var netObj mo.ManagedEntity
+		netRef := types.ManagedObjectReference{Type: nic.NetworkType, Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
 		}
 		networks = append(networks, netObj.Name)
 	}
-
 	return networks, nil
 }
 
@@ -683,6 +690,7 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 
 	for _, device := range vmProps.Config.Hardware.Device {
 		var nic *types.VirtualEthernetCard
+		var networkType string
 
 		switch d := device.(type) {
 		case *types.VirtualE1000,
@@ -701,18 +709,22 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
 				if backing.Network != nil {
+					networkType = backing.Network.Type
 					network = backing.Network.Value
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
 				network = backing.Port.PortgroupKey
+				networkType = "DistributedVirtualPortGroup"
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
 				network = backing.OpaqueNetworkId
+				networkType = "OpaqueNetwork"
 			}
 
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:     strings.ToLower(nic.MacAddress),
-				Index:   nicsIndex,
-				Network: network,
+				MAC:         strings.ToLower(nic.MacAddress),
+				Index:       nicsIndex,
+				Network:     network,
+				NetworkType: networkType,
 			})
 			nicsIndex++
 		}
@@ -1412,15 +1424,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
 	pc := property.DefaultCollector(c)
-	for _, netRef := range vmProps.Network {
-		var netObj mo.Network
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err))
-			return
-		}
-		networks = append(networks, netObj.Name)
-	}
 
 	var skipVM bool
 	for _, device := range vmProps.Config.Hardware.Device {
@@ -1484,6 +1487,18 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
+
+	// Build networks list from NetworkInterfaces to match NIC count
+	for _, nic := range nicList {
+		var netObj mo.ManagedEntity
+		netRef := types.ManagedObjectReference{Type: nic.NetworkType, Value: nic.Network}
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s (type %s): %w", nic.Network, nic.NetworkType, err))
+		}
+		networks = append(networks, netObj.Name)
+	}
+
 	// Get the guest network info
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 	if err != nil {

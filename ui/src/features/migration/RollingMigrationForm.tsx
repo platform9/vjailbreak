@@ -734,7 +734,7 @@ export default function RollingMigrationFormDrawer({
             .flatMap(vm => vm.networks || []);
 
         if (extractedNetworks.length > 0) {
-            return Array.from(new Set(extractedNetworks)).sort();
+            return extractedNetworks.sort(); // Remove Array.from(new Set()) to keep duplicates
         }
         return [];
 

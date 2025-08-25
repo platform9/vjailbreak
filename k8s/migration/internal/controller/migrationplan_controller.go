@@ -952,10 +952,16 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 
 	openstacknws := []string{}
 	for _, vmnw := range vmnws {
+		found := false
 		for _, nwm := range networkmap.Spec.Networks {
 			if vmnw == nwm.Source {
 				openstacknws = append(openstacknws, nwm.Target)
+				found = true
+				break // avoid duplicate matches
 			}
+		}
+		if !found {
+			return nil, errors.Errorf("VMware network %q not found in NetworkMapping", vmnw)
 		}
 	}
 	if len(openstacknws) != len(vmnws) {
