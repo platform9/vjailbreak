@@ -50,52 +50,14 @@ export const triggerAdminCutover = async (
   migrationName: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    // First get the migration to find the podRef
-    const migration = await getMigration(migrationName, namespace);
-    const podRef = migration.spec?.podRef;
-    
-    if (!podRef) {
-      throw new Error("PodRef is empty in migration object");
-    }
-
-    // List all pods in the namespace
-    const podsEndpoint = `/api/v1/namespaces/${namespace}/pods`;
-    const podsResponse = await axios.get<{
-      items: Array<{
-        metadata: {
-          name: string;
-          namespace: string;
-        };
-      }>;
-    }>({
-      endpoint: podsEndpoint,
-    });
-
-    if (!podsResponse?.items || podsResponse.items.length === 0) {
-      throw new Error(`No pods found in namespace: ${namespace}`);
-    }
-
-    // Find pod that starts with podRef name
-    const matchingPod = podsResponse.items.find(pod => 
-      pod.metadata.name.startsWith(podRef)
-    );
-
-    if (!matchingPod) {
-      throw new Error(`No pod found with name starting with: ${podRef}`);
-    }
-
-    const podName = matchingPod.metadata.name;
-
-    // Patch the pod directly with the startCutover label
+    // Patch the Migration object's initiateCutover field to true
     const patchPayload = {
-      metadata: {
-        labels: {
-          startCutover: "yes"
-        }
+      spec: {
+        initiateCutover: true
       }
     };
 
-    const endpoint = `/api/v1/namespaces/${namespace}/pods/${podName}`;
+    const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrations/${migrationName}`;
     
     await axios.patch({
       endpoint,
