@@ -551,39 +551,58 @@ jobs:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
-      - name: Configure AWS credentials for S3 upload
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+      - name: Set AWS credentials based on build type
+        id: set-creds
+        run: |
+          if [[ "${{ github.event_name }}" == "release" || "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            echo "Using production AWS keys."
+            echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_OUTPUT
+            echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using development AWS keys."
+            echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID_DEV }}" >> $GITHUB_OUTPUT
+            echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ steps.set-creds.outputs.aws_access_key_id }}
+          aws-secret-access-key: ${{ steps.set-creds.outputs.aws_secret_access_key }}
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
 
       - name: Determine S3 path and upload artifacts
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+          S3_BUCKET_PROD: ${{ secrets.S3_BUCKET_NAME }}
+          S3_BUCKET_DEV: ${{ secrets.S3_BUCKET_NAME_DEV }}
           TAG: ${{ needs.determine-release.outputs.tag }}
         run: |
           set -e
           DATE_FOLDER=$(date -u +"%d-%m-%Y")
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
+            S3_BUCKET=${S3_BUCKET_PROD}
             S3_PATH_PREFIX="releases/${DATE_FOLDER}"
-            QCOW2_FILENAME="vjailbreak-image.qcow2"
+            S3_LATEST_PATH_PREFIX="releases/latest"
+            QCOW2_FILENAME="vjailbreak.qcow2"
             CREATE_TAG_FILE=true
+
           elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            S3_BUCKET=${S3_BUCKET_PROD}
             S3_PATH_PREFIX="nightly_builds/${DATE_FOLDER}"
-            QCOW2_FILENAME="vjailbreak-image.qcow2"
+            S3_LATEST_PATH_PREFIX="nightly_builds/latest"
+            QCOW2_FILENAME="vjailbreak.qcow2"
             CREATE_TAG_FILE=true
+
           else
+            S3_BUCKET=${S3_BUCKET_DEV}
             S3_PATH_PREFIX="dev/${DATE_FOLDER}"
-            QCOW2_FILENAME="${TAG}.qcow2"
+            QCOW2_FILENAME="${TAG}-vjailbreak.qcow2"
             CREATE_TAG_FILE=false
           fi
 
           echo "Uploading artifacts to s3://${S3_BUCKET}/${S3_PATH_PREFIX}/"
-
           aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
 
           if [[ "$CREATE_TAG_FILE" == "true" ]]; then
@@ -591,6 +610,10 @@ jobs:
             echo "${TAG}" > ${TAG_FILENAME}
             echo "Uploading tag file: ${TAG_FILENAME}"
             aws s3 cp ${TAG_FILENAME} "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${TAG_FILENAME}"
+
+            echo "Updating 'latest' folder..."
+            aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
+            aws s3 cp ${TAG_FILENAME} "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${TAG_FILENAME}"
           fi
 
       - name: Upload artifacts
