@@ -10,8 +10,11 @@ import {
     IconButton,
     Tooltip,
     CircularProgress,
+    InputAdornment,
 } from "@mui/material";
-import { useState, useCallback, useEffect } from "react";
+import React, {
+    useState, useCallback, useEffect 
+} from "react";
 import Step from "src/components/forms/Step";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import Header from "src/components/forms/Header";
@@ -23,6 +26,7 @@ import { OpenstackCreds } from "src/api/openstack-creds/model";
 import { createNodes } from "src/api/nodes/nodeMappings";
 import { ArrowDropDownIcon } from "@mui/x-date-pickers/icons";
 import { OpenstackFlavor } from "src/api/openstack-creds/model";
+import SearchIcon from '@mui/icons-material/Search';
 import { NodeItem } from "src/api/nodes/model";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
 import axios from "axios";
@@ -59,6 +63,17 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     const [selectedFlavor, setSelectedFlavor] = useState('');
     const [loadingFlavors, setLoadingFlavors] = useState(false);
     const [flavorsError, setFlavorsError] = useState<string | null>(null);
+    const [flavorSearchTerm, setFlavorSearchTerm] = useState('');
+    
+    // Filter flavors based on search term
+    const filteredFlavors = React.useMemo(() => {
+        return flavors.filter(flavor => 
+            flavor.name.toLowerCase().includes(flavorSearchTerm.toLowerCase()) || 
+            `${flavor.vcpus} vCPU`.toLowerCase().includes(flavorSearchTerm.toLowerCase()) || 
+            `${flavor.ram / 1024}GB RAM`.toLowerCase().includes(flavorSearchTerm.toLowerCase()) || 
+            `${flavor.disk}GB disk`.toLowerCase().includes(flavorSearchTerm.toLowerCase())
+        );
+    }, [flavors, flavorSearchTerm]);
 
     // Fetch credentials list
     const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } = useOpenstackCredentialsQuery();
@@ -75,6 +90,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setFlavors([]);
         setLoadingFlavors(false);
         setFlavorsError(null);
+        setFlavorSearchTerm('');
     }
 
     // Reset state when drawer closes
@@ -224,12 +240,47 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                                             ? () => <CircularProgress size={24} sx={{ marginRight: 2, display: 'flex', alignItems: 'center' }} />
                                             : ArrowDropDownIcon
                                     }
+                                    MenuProps={{
+                                        PaperProps: {
+                                            style: {
+                                                maxHeight: 300
+                                            }
+                                        }
+                                    }}
                                 >
-                                    {flavors.map((flavor) => (
-                                        <MenuItem key={flavor.id} value={flavor.id}>
-                                            {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
-                                        </MenuItem>
-                                    ))}
+                                    <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                                        <TextField
+                                            size="small"
+                                            placeholder="Search flavors"
+                                            fullWidth
+                                            value={flavorSearchTerm}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setFlavorSearchTerm(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onKeyDown={(e) => e.stopPropagation()}
+                                            autoFocus
+                                            InputProps={{
+                                                startAdornment: (
+                                                    <InputAdornment position="start">
+                                                        <SearchIcon fontSize="small" />
+                                                    </InputAdornment>
+                                                ),
+                                            }}
+                                        />
+                                    </Box>
+                                    {flavors.length === 0 ? (
+                                        <MenuItem disabled>No flavors available</MenuItem>
+                                    ) : filteredFlavors.length === 0 ? (
+                                        <MenuItem disabled>No matching flavors found</MenuItem>
+                                    ) : (
+                                        filteredFlavors.map((flavor) => (
+                                            <MenuItem key={flavor.id} value={flavor.id}>
+                                                {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
+                                            </MenuItem>
+                                        ))
+                                    )}
                                 </Select>
                                 {flavorsError && (
                                     <FormLabel error sx={{ mt: 1, fontSize: '0.75rem' }}>

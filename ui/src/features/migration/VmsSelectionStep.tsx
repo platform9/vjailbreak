@@ -548,6 +548,7 @@ export default function VmsSelectionStep({
                   return "";
                 }
               }}
+              keepNonExistentRowsSelected
             />
           </Paper>
         </FormControl>
