@@ -132,16 +132,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// If pod label changed to "yes" and migration spec is still false, update migration spec
-	if pod.Labels["startCutover"] == "yes" && !migration.Spec.InitiateCutover {
-		migration.Spec.InitiateCutover = true
-		if err := r.Update(ctx, migration); err != nil {
-			ctxlog.Error(err, fmt.Sprintf("Failed to update Migration spec '%s'", migration.Name))
-			return ctrl.Result{}, err
-		}
-		ctxlog.Info(fmt.Sprintf("Updated Migration '%s' initiateCutover to true", migration.Name))
-	}
-
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
