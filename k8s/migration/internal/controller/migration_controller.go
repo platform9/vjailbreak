@@ -282,8 +282,12 @@ loop:
 			if pod.Labels["startCutover"] != "yes" {
 				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
 				break loop
+			} else {
+				// Admin cutover was triggered, reset to a lower phase so it can progress normally
+				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
 			}
-			// If startCutover is "yes", continue to check for next phase
+			// If startCutover is "yes", don't set phase here - let it progress to next phase
+			// by continuing to check other events
 			continue
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
