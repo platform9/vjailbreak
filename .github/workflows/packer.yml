@@ -559,46 +559,39 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
 
-      - name: Upload to S3 (Nightly Build)
-        if: env.is_nightly == 'true'
+      - name: Determine S3 path and upload artifacts
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
           S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+          TAG: ${{ needs.determine-release.outputs.tag }}
         run: |
-          # Create timestamp for the nightly build path
-          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%S")
-          # Get the short SHA from inputs or generate from current commit
-          if [ -n "${{ github.event.inputs.short_sha }}" ]; then
-            SHORT_SHA="${{ github.event.inputs.short_sha }}"
-          else
-            SHORT_SHA=$(git rev-parse --short HEAD)
-          fi
-          
-          # Define S3 paths
-          S3_PATH="vjailbreak/nightly_build/$TIMESTAMP/$SHORT_SHA/vjailbreak-image.qcow2"
-          
-          echo "Uploading nightly build to s3://$S3_BUCKET/$S3_PATH"
-          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://$S3_BUCKET/$S3_PATH"
-          
-          # Output the S3 path for use in other jobs
-          echo "NIGHTLY_S3_PATH=$S3_PATH" >> $GITHUB_ENV
+          set -e
+          DATE_FOLDER=$(date -u +"%Y-%m-%d")
 
-      - name: Upload to S3 (Release)
-        if: env.release_found == 'true' && github.event_name == 'release'
-        env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
-        run: |
-          # Get the release tag without 'v' prefix if it exists
-          RELEASE_TAG="${GITHUB_REF#refs/tags/v}"
-          RELEASE_TAG="${RELEASE_TAG#v}"  # Remove 'v' prefix if it exists
-          
-          # Define S3 paths
-          S3_PATH="vjailbreak/releases/$RELEASE_TAG/vjailbreak-image.qcow2"
-          
-          echo "Uploading release to s3://$S3_BUCKET/$S3_PATH"
-          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://$S3_BUCKET/$S3_PATH"
-          
-          # Output the S3 path for use in other jobs
-          echo "RELEASE_S3_PATH=$S3_PATH" >> $GITHUB_ENV
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            S3_PATH_PREFIX="releases/${DATE_FOLDER}"
+            QCOW2_FILENAME="vjailbreak-image.qcow2"
+            CREATE_TAG_FILE=true
+          elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            S3_PATH_PREFIX="nightly_builds/${DATE_FOLDER}"
+            QCOW2_FILENAME="vjailbreak-image.qcow2"
+            CREATE_TAG_FILE=true
+          else
+            S3_PATH_PREFIX="dev/${DATE_FOLDER}"
+            QCOW2_FILENAME="${TAG}.qcow2"
+            CREATE_TAG_FILE=false
+          fi
+
+          echo "Uploading artifacts to s3://${S3_BUCKET}/${S3_PATH_PREFIX}/"
+
+          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+
+          if [[ "$CREATE_TAG_FILE" == "true" ]]; then
+            TAG_FILENAME="${TAG}.tag"
+            echo "${TAG}" > ${TAG_FILENAME}
+            echo "Uploading tag file: ${TAG_FILENAME}"
+            aws s3 cp ${TAG_FILENAME} "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${TAG_FILENAME}"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
