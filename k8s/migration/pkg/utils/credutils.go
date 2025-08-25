@@ -556,8 +556,8 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	pc := property.DefaultCollector(c)
 	for _, nic := range nicList {
-		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		var netObj mo.ManagedEntity
+		netRef := types.ManagedObjectReference{Type: nic.NetworkType, Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
@@ -690,6 +690,7 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 
 	for _, device := range vmProps.Config.Hardware.Device {
 		var nic *types.VirtualEthernetCard
+		var networkType string
 
 		switch d := device.(type) {
 		case *types.VirtualE1000,
@@ -708,18 +709,22 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
 				if backing.Network != nil {
+					networkType = backing.Network.Type
 					network = backing.Network.Value
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
 				network = backing.Port.PortgroupKey
+				networkType = "DistributedVirtualPortGroup"
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
 				network = backing.OpaqueNetworkId
+				networkType = "OpaqueNetwork"
 			}
 
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:     strings.ToLower(nic.MacAddress),
-				Index:   nicsIndex,
-				Network: network,
+				MAC:         strings.ToLower(nic.MacAddress),
+				Index:       nicsIndex,
+				Network:     network,
+				NetworkType: networkType,
 			})
 			nicsIndex++
 		}
@@ -1485,12 +1490,11 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
-		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		var netObj mo.ManagedEntity
+		netRef := types.ManagedObjectReference{Type: nic.NetworkType, Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
-			return
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s (type %s): %w", nic.Network, nic.NetworkType, err))
 		}
 		networks = append(networks, netObj.Name)
 	}

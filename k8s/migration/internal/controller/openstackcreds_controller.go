@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -25,6 +26,7 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -264,6 +266,50 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		return errors.Wrap(err, "failed to update OpenstackCreds status")
+	}
+
+	// Get vjailbreak settings to check if we should populate VMwareMachine flavors
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get vjailbreak settings")
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	// Only populate flavors if the setting is enabled
+	if vjailbreakSettings.PopulateVMwareMachineFlavors {
+		ctxlog.Info("Populating VMwareMachine objects with OpenStack flavors", "openstackcreds", scope.OpenstackCreds.Name)
+		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
+		// This will help us to create the vmwaremachine object with the correct flavor.
+		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+		if err := r.List(ctx, vmwaremachineList); err != nil {
+			return errors.Wrap(err, "failed to list vmwaremachine objects")
+		}
+
+		for i := range vmwaremachineList.Items {
+			vmwaremachine := &vmwaremachineList.Items[i]
+			// Get the cpu and memory of the vmwaremachine object
+			cpu := vmwaremachine.Spec.VMInfo.CPU
+			memory := vmwaremachine.Spec.VMInfo.Memory
+
+			// Now get the closest flavor based on the cpu and memory
+			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors)
+			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
+				return errors.Wrap(err, "failed to get closest flavor")
+			}
+			// Now label the vmwaremachine object with the flavor name
+			if flavor == nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+					return errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			} else {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
+					return errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			}
+		}
+	} else {
+		ctxlog.Info("Skipping VMwareMachine flavor population as it is disabled", "openstackcreds", scope.OpenstackCreds.Name)
 	}
 
 	if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
