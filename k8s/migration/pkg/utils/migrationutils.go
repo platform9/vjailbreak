@@ -150,15 +150,13 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 
 // SetCutoverLabel sets the cutover label for a migration
 func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
-	if initiateCutover {
-		if currentLabel != constants.StartCutOverYes {
-			currentLabel = constants.StartCutOverYes
+	if currentLabel == "" {
+		if initiateCutover {
+			return constants.StartCutOverYes
 		}
-	} else {
-		if currentLabel != constants.StartCutOverNo {
-			currentLabel = constants.StartCutOverNo
-		}
+		return constants.StartCutOverNo
 	}
+	// Don't override once label is already present
 	return currentLabel
 }
 

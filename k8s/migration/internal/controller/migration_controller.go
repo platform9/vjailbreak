@@ -132,6 +132,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if pod.Labels["startCutover"] == constants.StartCutOverYes {
+		migration.Spec.InitiateCutover = true
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
 		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidating
 	}
