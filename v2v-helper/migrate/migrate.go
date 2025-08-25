@@ -738,7 +738,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 
 	if migobj.UseFlavorless {
 		if migobj.TargetFlavorId == "" {
-			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", vminfo.Name)
+			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", migobj.VmwaremachineName)
 			return errors.Wrap(err, "failed to create target instance")
 		}
 		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
