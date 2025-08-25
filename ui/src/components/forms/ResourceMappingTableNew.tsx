@@ -79,34 +79,28 @@ export default function ResourceMappingTable({
   }, [])
 
   const handleDeleteMapping = useCallback(
-    (index: number) => {
-      const updatedMappings = values.filter((_, i) => i !== index)
+    (mapping: ResourceMap) => {
+      const updatedMappings = values.filter(
+        ({ source, target }) =>
+          mapping.source !== source || mapping.target !== target
+      )
+
       onChange(updatedMappings)
     },
     [values, onChange]
   )
 
   // Filter out already mapped source and target items
-  const availableSourceItems = useMemo(() => {
-    if (oneToManyMapping) {
-      // For one-to-many mapping, remove each mapped source item individually
-      let remainingItems = [...sourceItems];
-      values.forEach(mapping => {
-        const index = remainingItems.findIndex(item => item === mapping.source);
-        if (index !== -1) {
-          remainingItems.splice(index, 1);
-        }
-      });
-      return remainingItems;
-    }
-    return sourceItems.filter(
-      (item) => !values.some((mapping) => mapping.source === item)
-    )
-  }, [sourceItems, values, oneToManyMapping])
+  const availableSourceItems = useMemo(
+    () =>
+      sourceItems.filter(
+        (item) => !values.some((mapping) => mapping.source === item)
+      ),
+    [sourceItems, values]
+  )
 
   const availableTargetItems = useMemo(() => {
     if (oneToManyMapping) {
-      // For one-to-many mapping, allow all target items (don't filter)
       return targetItems
     }
     return targetItems.filter(
@@ -136,7 +130,7 @@ export default function ResourceMappingTable({
             <IconButton
               color="error"
               size="small"
-              onClick={() => handleDeleteMapping(index)}
+              onClick={() => handleDeleteMapping(mapping)}
               aria-label="delete-mapping"
             >
               <DeleteIcon />
