@@ -119,7 +119,16 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}
-
+	for _, vm := range vminfo {
+		if vm.Name == "" || vm.ESXiName == "" || vm.ClusterName == "" {
+			ctxlog.Info("Skipping VM with empty name, ESXi or cluster", "VM", vm.Name, "ESXi", vm.ESXiName, "Cluster", vm.ClusterName)
+			continue
+		}
+		err = utils.CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &vm)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "Error creating or updating VMwareMachine for VMwareCreds")
+		}
+	}
 	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
