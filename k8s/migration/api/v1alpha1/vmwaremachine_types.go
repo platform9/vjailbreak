@@ -58,10 +58,9 @@ type VMInfo struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network     string `json:"network,omitempty" `
-	MAC         string `json:"mac,omitempty"`
-	Index       int    `json:"order,omitempty"`
-	NetworkType string `json:"networkType,omitempty"`
+	Network string `json:"network,omitempty" `
+	MAC     string `json:"mac,omitempty"`
+	Index   int    `json:"order,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.
