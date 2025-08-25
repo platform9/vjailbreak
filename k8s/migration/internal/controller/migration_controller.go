@@ -282,10 +282,10 @@ loop:
 			if pod.Labels["startCutover"] != "yes" {
 				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
 				break loop
-			} else {
-				// Admin cutover was triggered, reset to a lower phase so it can progress normally
-				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
 			}
+			// Admin cutover was triggered, reset to a lower phase so it can progress normally
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
+
 			// If startCutover is "yes", don't set phase here - let it progress to next phase
 			// by continuing to check other events
 			continue
