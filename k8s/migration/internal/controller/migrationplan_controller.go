@@ -978,22 +978,6 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 		uniqueTargetList = append(uniqueTargetList, target)
 	}
 
-	// Get unique source networks for validation
-	uniqueSources := make(map[string]bool)
-	for _, source := range vmnws {
-		uniqueSources[source] = true
-	}
-	//nolint:prealloc // Preallocating the slice is not possible as the length is unknown
-	var uniqueSourceList []string
-	for source := range uniqueSources {
-		uniqueSourceList = append(uniqueSourceList, source)
-	}
-
-	// Verify that all source networks have a mapping
-	if len(uniqueSourceList) != len(uniqueTargetList) {
-		return nil, errors.Errorf("Not all source networks have a mapping. Source networks: %v, Target networks: %v", uniqueSourceList, uniqueTargetList)
-	}
-
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
 		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, uniqueTargetList)
 		if err != nil {
