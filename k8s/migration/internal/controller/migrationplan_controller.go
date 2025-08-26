@@ -972,6 +972,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	for _, target := range openstacknws {
 		uniqueTargets[target] = true
 	}
+	//nolint:prealloc // Preallocating the slice is not possible as the length is unknown
 	var uniqueTargetList []string
 	for target := range uniqueTargets {
 		uniqueTargetList = append(uniqueTargetList, target)
@@ -982,6 +983,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	for _, source := range vmnws {
 		uniqueSources[source] = true
 	}
+	//nolint:prealloc // Preallocating the slice is not possible as the length is unknown
 	var uniqueSourceList []string
 	for source := range uniqueSources {
 		uniqueSourceList = append(uniqueSourceList, source)
@@ -993,7 +995,6 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	}
 
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
-
 		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, uniqueTargetList)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to verify networks")
