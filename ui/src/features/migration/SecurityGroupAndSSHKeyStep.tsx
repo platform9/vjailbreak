@@ -3,6 +3,7 @@ import Step from "../../components/forms/Step";
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import Checkbox from '@mui/material/Checkbox';
+import { OpenstackCreds, SecurityGroupOption } from "src/api/openstack-creds/model";
 
 interface SecurityGroupAndSSHKeyStepProps {
   params: {
@@ -10,7 +11,7 @@ interface SecurityGroupAndSSHKeyStepProps {
     securityGroups?: string[];
   };
   onChange: (key: string) => (value: any) => void;
-  openstackCredentials?: any;
+  openstackCredentials?: OpenstackCreds;
   stepNumber?: string;
 }
 
@@ -20,9 +21,8 @@ export default function SecurityGroupAndSSHKeyStep({
   openstackCredentials,
   stepNumber = "4",
 }: SecurityGroupAndSSHKeyStepProps) {
-  const securityGroupOptions = [
-    ...(openstackCredentials?.status?.openstack?.securityGroups || []) 
-  ];
+  const securityGroupOptions: SecurityGroupOption[] =
+    openstackCredentials?.status?.openstack?.securityGroups || [];
 
   return (
     <Box>
@@ -31,13 +31,25 @@ export default function SecurityGroupAndSSHKeyStep({
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Assign security groups to the selected VMs.
         </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-          {/* Security Groups */}
+        <Box>
           <Autocomplete
             multiple
             options={securityGroupOptions}
-            value={params.securityGroups || []}
-            onChange={(_, value) => onChange("securityGroups")(value)}
+            getOptionLabel={(option) =>
+              option.requiresIdDisplay
+                ? `${option.name} (${option.id.substring(0, 8)}...)`
+                : option.name
+            }
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            value={
+              securityGroupOptions.filter(option =>
+                (params.securityGroups || []).includes(option.id)
+              )
+            }
+            onChange={(_, value) => {
+              const selectedIds = value.map(option => option.id);
+              onChange("securityGroups")(selectedIds);
+            }}
             renderInput={(inputParams) => (
               <TextField
                 {...inputParams}
@@ -62,13 +74,15 @@ export default function SecurityGroupAndSSHKeyStep({
                     padding: '0 8px',
                   }}
                 >
-                  {option}
+                  {option.requiresIdDisplay
+                    ? `${option.name} (${option.id.substring(0, 8)}...)`
+                    : option.name}
                   <span
                     style={{ marginLeft: 4, cursor: 'pointer' }}
                     onClick={() => {
-                      const newValue = [...value];
-                      newValue.splice(index, 1);
-                      onChange("securityGroups")(newValue);
+                      const currentIds = value.map(v => v.id);
+                      currentIds.splice(index, 1);
+                      onChange("securityGroups")(currentIds);
                     }}
                   >
                     ×
@@ -79,7 +93,9 @@ export default function SecurityGroupAndSSHKeyStep({
             renderOption={(props, option, { selected }) => (
               <li {...props}>
                 <Checkbox style={{ marginRight: 8 }} checked={selected} size="small" />
-                {option}
+                {option.requiresIdDisplay
+                  ? `${option.name} (${option.id.substring(0, 8)}...)`
+                  : option.name}
               </li>
             )}
             disableCloseOnSelect
@@ -90,4 +106,4 @@ export default function SecurityGroupAndSSHKeyStep({
       </Box>
     </Box>
   );
-} 
+}

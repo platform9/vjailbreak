@@ -150,16 +150,12 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 
 // SetCutoverLabel sets the cutover label for a migration
 func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
+	// If initiateCutover is true, return the current label
 	if initiateCutover {
-		if currentLabel != constants.StartCutOverYes {
-			currentLabel = constants.StartCutOverYes
-		}
-	} else {
-		if currentLabel != constants.StartCutOverNo {
-			currentLabel = constants.StartCutOverNo
-		}
+		return currentLabel
 	}
-	return currentLabel
+	// If initiateCutover is false, set the label to "yes" (User should not be able to change it)
+	return constants.StartCutOverYes
 }
 
 // SplitEventStringOnComma splits a string by comma and returns a slice of substrings.

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,12 +19,14 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
@@ -418,11 +421,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			MACAddress:     mac,
 			SecurityGroups: &securityGroups,
 		}).Extract()
-		
+
 		if dhcpErr != nil {
 			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-		
+
 		utils.PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
 		return dhcpPort, nil
 	}
@@ -431,7 +434,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -465,6 +468,15 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
+
+	if useFlavorless {
+		utils.PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
+		serverCreateOpts.Metadata = map[string]string{
+			constants.HotplugCPUKey:    fmt.Sprintf("%d", vminfo.CPU),
+			constants.HotplugMemoryKey: fmt.Sprintf("%d", vminfo.Memory),
+		}
+	}
+
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone
@@ -531,16 +543,47 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 	return true, nil
 }
 
-func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]string, error) {
+func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error) {
 	if len(groupNames) == 0 {
 		return nil, nil
 	}
 
-	allPages, err := groups.List(osclient.NetworkingClient, groups.ListOpts{}).AllPages()
+	if projectName == "" {
+		return nil, fmt.Errorf("projectName is required for security group lookup")
+	}
+
+	//check if string is UUID
+	isUUID := func(s string) bool {
+		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+		return re.MatchString(s)
+	}
+
+	//build a map name -> ID
+	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity client: %w", err)
+	}
+
+	listOpts := projects.ListOpts{Name: projectName}
+	allPages, err := projects.List(identityClient, listOpts).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
+	}
+	allProjects, err := projects.ExtractProjects(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract projects: %w", err)
+	}
+	if len(allProjects) == 0 {
+		return nil, fmt.Errorf("no project found with name %s", projectName)
+	}
+	projectID := allProjects[0].ID
+
+	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
+		TenantID: projectID,
+	}).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list security groups: %w", err)
 	}
-
 	allGroups, err := groups.ExtractGroups(allPages)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract security groups: %w", err)
@@ -552,10 +595,15 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string) ([]st
 	}
 
 	var groupIDs []string
-	for _, name := range groupNames {
-		id, found := nameToIDMap[name]
+	for _, g := range groupNames {
+		if isUUID(g) {
+			groupIDs = append(groupIDs, g)
+			continue
+		}
+
+		id, found := nameToIDMap[g]
 		if !found {
-			return nil, fmt.Errorf("security group with name '%s' not found", name)
+			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", g, projectName)
 		}
 		groupIDs = append(groupIDs, id)
 	}
