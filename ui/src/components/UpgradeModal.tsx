@@ -36,6 +36,7 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [upgradeInProgress, setUpgradeInProgress] = useState(false);
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null);
+  const [cleanUpInProgress, setCleanUpInProgress] = useState(false);
   const theme = useTheme();
 
   const stepKeys = [
@@ -123,6 +124,8 @@ export const UpgradeModal = ({ show, onClose }) => {
   }, [upgradeInProgress, onClose, selectedVersion]);
 
   const runStepwiseCleanup = async () => {
+    setCleanUpInProgress(true);
+    setErrorMsg('');
     let newStates = stepLabels.map(label => ({ label, state: 'pending' }));
     setStepStates(newStates);
 
@@ -139,6 +142,7 @@ export const UpgradeModal = ({ show, onClose }) => {
       setStepStates([...newStates]);
       if (newStates[i].state === 'error') break; 
     }
+    setCleanUpInProgress(false);
   };
 
   const allChecksPassed = checkResults
@@ -215,6 +219,12 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
 
+{(upgradeInProgress || cleanUpInProgress) && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Processing. Please do not close or refresh this page.
+            </Alert>
+          )}
+
           {errorMsg && (
             <Box display="flex" justifyContent="center" mb={2}>
               <Alert severity="error" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
@@ -261,7 +271,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         <DialogActions>
         <Button
           onClick={() => upgradeMutation.mutate()}
-          disabled={!selectedVersion || upgradeInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
+          disabled={!selectedVersion || upgradeInProgress || cleanUpInProgress || areVersionsLoading || upgradeMutation.isPending || !allChecksPassed}
           variant="contained"
           color="primary"
           fullWidth
@@ -277,12 +287,12 @@ export const UpgradeModal = ({ show, onClose }) => {
           arrow
         >
           <span>
-            <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress}>
+            <Button onClick={runStepwiseCleanup} variant="contained" color="primary" fullWidth disabled={upgradeInProgress || cleanUpInProgress}>
               Cleanup
             </Button>
           </span>
         </Tooltip>
-          <Button onClick={onClose} variant="outlined" fullWidth disabled={upgradeInProgress}>
+          <Button onClick={onClose} variant="outlined" fullWidth disabled={upgradeInProgress || cleanUpInProgress}>
             Cancel
           </Button>
         </DialogActions>

@@ -581,25 +581,30 @@ func checkAndDeleteMigrationPlans(ctx context.Context, restConfig *rest.Config) 
 	if err != nil {
 		return false, "Failed to create dynamic client"
 	}
+
 	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return false, "Failed to list MigrationPlans"
 	}
+
 	for _, item := range list.Items {
-		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		_ = dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+	}
+
+	timeout := 5 * time.Minute
+	interval := 5 * time.Second
+	for start := time.Now(); time.Since(start) < timeout; {
+		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return false, "Failed to delete MigrationPlan: " + item.GetName()
+			return false, "Failed to re-list MigrationPlans during polling"
 		}
+		if len(list.Items) == 0 {
+			return true, "No MigrationPlans remaining"
+		}
+		time.Sleep(interval)
 	}
-	time.Sleep(2 * time.Second)
-	list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return false, "Failed to re-list MigrationPlans"
-	}
-	if len(list.Items) == 0 {
-		return true, "No MigrationPlans remaining"
-	}
-	return false, "MigrationPlans still exist"
+
+	return false, "MigrationPlans still exist after 5 minute timeout"
 }
 
 func checkAndDeleteRollingMigrationPlans(ctx context.Context, restConfig *rest.Config) (bool, string) {
@@ -608,33 +613,34 @@ func checkAndDeleteRollingMigrationPlans(ctx context.Context, restConfig *rest.C
 	if err != nil {
 		return false, "Failed to create dynamic client"
 	}
+
 	list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return false, "Failed to list RollingMigrationPlans"
 	}
+
 	for _, item := range list.Items {
-		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+		_ = dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
+	}
+
+	timeout := 5 * time.Minute
+	interval := 5 * time.Second
+	for start := time.Now(); time.Since(start) < timeout; {
+		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return false, "Failed to delete RollingMigrationPlan: " + item.GetName()
+			return false, "Failed to re-list RollingMigrationPlans during polling"
 		}
+		if len(list.Items) == 0 {
+			return true, "No RollingMigrationPlans remaining"
+		}
+		time.Sleep(interval)
 	}
-	time.Sleep(2 * time.Second)
-	list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return false, "Failed to re-list RollingMigrationPlans"
-	}
-	if len(list.Items) == 0 {
-		return true, "No RollingMigrationPlans remaining"
-	}
-	return false, "RollingMigrationPlans still exist"
+
+	return false, "RollingMigrationPlans still exist after 5 minute timeout"
 }
 
 func checkAndScaleDownAgent(ctx context.Context, restConfig *rest.Config) (bool, string) {
-	gvr := schema.GroupVersionResource{
-		Group:    "vjailbreak.k8s.pf9.io",
-		Version:  "v1alpha1",
-		Resource: "vjailbreaknodes",
-	}
+	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "vjailbreaknodes"}
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return false, "Failed to create dynamic client"
@@ -646,22 +652,27 @@ func checkAndScaleDownAgent(ctx context.Context, restConfig *rest.Config) (bool,
 	}
 
 	for _, item := range list.Items {
-		err := dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
-		if err != nil {
-			return false, "Failed to delete VjailbreakNode: " + item.GetName()
+		if item.GetName() == "vjailbreak-master" {
+			continue
 		}
+		_ = dynamicClient.Resource(gvr).Namespace("migration-system").Delete(ctx, item.GetName(), metav1.DeleteOptions{})
 	}
 
-	time.Sleep(2 * time.Second)
-	list, err = dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return false, "Failed to re-list VjailbreakNodes"
-	}
-	if len(list.Items) == 0 || (len(list.Items) == 1 && list.Items[0].GetName() == "vjailbreak-master") {
-		return true, "Agents scaled down"
+	timeout := 5 * time.Minute
+	interval := 5 * time.Second
+	for start := time.Now(); time.Since(start) < timeout; {
+		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, "Failed to re-list VjailbreakNodes"
+		}
+
+		if len(list.Items) == 0 || (len(list.Items) == 1 && list.Items[0].GetName() == "vjailbreak-master") {
+			return true, "Agents scaled down"
+		}
+		time.Sleep(interval)
 	}
 
-	return false, "Non-master agents still exist"
+	return false, "Non-master agents still exist after 5 minute timeout"
 }
 
 func checkAndDeleteSecret(ctx context.Context, kubeClient client.Client, restConfig *rest.Config, credType string) (bool, string) {
