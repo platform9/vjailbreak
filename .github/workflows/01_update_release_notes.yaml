@@ -51,22 +51,24 @@ jobs:
         run: echo "tag=${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag }}" >> $GITHUB_OUTPUT
 
       - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install -y skopeo
+        run: |
+          curl -LO https://github.com/oras-project/oras/releases/download/v1.2.1/oras_1.2.1_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin/ -xzvf oras_1.2.1_linux_amd64.tar.gz oras
 
       - name: Wait and check for QCOW image (Max 45 mins)
         run: |
           RELEASE_TAG="${{ steps.get_tag.outputs.tag }}"
-          QCOW_IMAGE_URL="docker://${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
-          
-          echo "Waiting for QCOW image to be available at $QCOW_IMAGE_URL"
+          QCOW_IMAGE_URL="${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+
+          echo "Waiting for artifact to be available at $QCOW_IMAGE_URL"
 
           for i in $(seq 1 135); do
-            if skopeo inspect "$QCOW_IMAGE_URL" &>/dev/null; then
+            if oras manifest fetch "$QCOW_IMAGE_URL" &>/dev/null; then
               echo ""
-              echo "Success! Image found."
+              echo "Success! Artifact found."
               exit 0
             fi
-            
+
             if [[ $i -eq 135 ]]; then
               break
             fi
@@ -75,7 +77,7 @@ jobs:
           done
 
           echo ""
-          echo "Image not found after 45 minutes. Failing workflow."
+          echo "Artifact not found after 45 minutes. Failing workflow."
           exit 1
 
   update-release-notes:
