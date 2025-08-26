@@ -119,7 +119,7 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 
 func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
-	migobj.logMessage("Attaching volumes to VM")
+	migobj.logMessage(fmt.Sprintf("Attaching volumes to VM: %s", disk.Name))
 	if disk.OpenstackVol == nil {
 		return "", errors.Wrap(fmt.Errorf("OpenStack volume is nil"), "failed to attach volume to VM")
 	}
@@ -153,7 +153,7 @@ func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
-
+		migobj.logMessage(fmt.Sprintf("Detaching volume %s from VM", vmdisk.Name))
 		if err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
 		}
@@ -162,7 +162,7 @@ func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for volume to become available")
 		}
-		log.Printf("Volume %s detached from VM\n", vmdisk.Name)
+		migobj.logMessage(fmt.Sprintf("Volume %s detached from VM", vmdisk.Name))
 	}
 	time.Sleep(1 * time.Second)
 	return nil
@@ -175,7 +175,7 @@ func (migobj *Migrate) DeleteAllVolumes(vminfo vm.VMInfo) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to delete volume")
 		}
-		utils.PrintLog(fmt.Sprintf("Volume %s deleted\n", vmdisk.Name))
+		migobj.logMessage(fmt.Sprintf("Volume %s deleted", vmdisk.Name))
 	}
 	return nil
 }
