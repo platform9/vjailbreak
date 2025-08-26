@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -479,9 +480,24 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 
 	c := new(vim25.Client)
-	err = s.Login(context.Background(), c, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to login to vSphere: %w", err)
+
+	// Exponential retry logic
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond // Initial delay
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = s.Login(ctx, c, nil)
+		if err == nil {
+			// Login successful
+			return c, nil
+		}
+
+		// Log the error and retry after a delay
+		fmt.Printf("Login attempt %d failed: %v\n", attempt, err)
+		if attempt < maxRetries {
+			delayNum := math.Pow(2, float64(attempt)) * 500
+			baseDelay = time.Duration(delayNum) * time.Millisecond
+			time.Sleep(baseDelay * time.Duration(1<<uint(attempt-1))) // Exponential backoff
+		}
 	}
 
 	// Check if the datacenter exists
@@ -517,15 +533,27 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 	}
 
 	pc := property.DefaultCollector(c)
-	for _, netRef := range o.Network {
+	nicList, err := ExtractVirtualNICs(&o)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
+	}
+	for _, nic := range nicList {
+		var netObj mo.Network
+		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
+		}
+		networks = append(networks, netObj.Name)
+	}
+	/*for _, netRef := range o.Network {
 		var netObj mo.Network
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err)
 		}
 		networks = append(networks, netObj.Name)
-	}
-
+	}*/
 	return networks, nil
 }
 
@@ -559,7 +587,8 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 			case *types.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
 			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-				dsref = backing.Datastore.Reference()
+				//dsref = backing.Datastore.Reference()
+				continue
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
 			}
@@ -1461,15 +1490,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
 	pc := property.DefaultCollector(c)
-	for _, netRef := range vmProps.Network {
-		var netObj mo.Network
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", netRef.Value, err))
-			return
-		}
-		networks = append(networks, netObj.Name)
-	}
 	for _, device := range vmProps.Config.Hardware.Device {
 		disk, ok := device.(*types.VirtualDisk)
 		if !ok {
@@ -1548,6 +1568,17 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
+	for _, nic := range nicList {
+		var netObj mo.Network
+		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		if err != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
+			return
+		}
+		networks = append(networks, netObj.Name)
+	}
+
 	// Get the guest network info
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 	if err != nil {

@@ -1321,7 +1321,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		err := r.Get(ctx, types.NamespacedName{
 			Name:      strings.TrimSpace(rdmDiskCR.Name),
 			Namespace: migrationplan.Namespace,
-		}, rdmDiskCR)
+		}, reFetchedRDMDiskCR)
 		if err != nil {
 			return err
 		}

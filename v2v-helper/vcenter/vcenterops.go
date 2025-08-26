@@ -8,8 +8,10 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -59,9 +61,23 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 
 	// Create the client
 	c := new(vim25.Client)
-	err = s.Login(ctx, c, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to login: %v", err)
+	// Exponential retry logic
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond // Initial delay
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = s.Login(ctx, c, nil)
+		if err == nil {
+			// Login successful
+			return c, nil
+		}
+
+		// Log the error and retry after a delay
+		fmt.Printf("Login attempt %d failed: %v\n", attempt, err)
+		if attempt < maxRetries {
+			delayNum := math.Pow(2, float64(attempt)) * 500
+			baseDelay = time.Duration(delayNum) * time.Millisecond
+			time.Sleep(baseDelay * time.Duration(1<<uint(attempt-1))) // Exponential backoff
+		}
 	}
 
 	return c, nil

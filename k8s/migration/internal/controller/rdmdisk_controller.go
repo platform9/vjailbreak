@@ -60,7 +60,7 @@ const (
 	// MigrationFailed ConditionMigrationStarted is the condition type for migration to cinder
 	MigrationFailed = "RDMDiskMigrationFailed"
 	// blockStorageAPIVersion is the version of the OpenStack Block Storage API to use
-	blockStorageAPIVersion = "3.8"
+	blockStorageAPIVersion = "volume 3.8"
 	// RDMPhaseAvailable is the phase for RDMDisk when it is available to migrate
 	RDMPhaseAvailable = "Available"
 	// RDMPhaseManaging is the phase for RDMDisk when it is being managed

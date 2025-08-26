@@ -158,6 +158,9 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
 		if disk, ok := device.(*types.VirtualDisk); ok {
+			if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
+				continue
+			}
 			vmdisks = append(vmdisks, VMDisk{
 				Name: disk.DeviceInfo.GetDescription().Label,
 				Size: disk.CapacityInBytes,
