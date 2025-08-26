@@ -269,3 +269,14 @@ description: Archived Release Notes for vJailbreak
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.13...v0.1.14
+## v0.1.15
+
+### What's Changed
+* fix part-to-dev input by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/614
+* Fix RC file parsing to support special characters in OpenStack credentials. by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/619
+* Made changes to the desination cluster selection by showing cred name… by @patil-pratik-87 n https://github.com/platform9/vjailbreak/pull/634
+* pcdclusters and tenant in UI (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/633
+* Destination cluster dropdown changes for same id by @patil-pratik-87  in https://github.com/platform9/vjailbreak/pull/636
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.14...v0.1.15
