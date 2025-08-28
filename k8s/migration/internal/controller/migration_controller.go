@@ -132,8 +132,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
 	if migration.Spec.PodRef != pod.Name {
-		ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
 		migration.Spec.PodRef = pod.Name
 		if err := r.Update(ctx, migration); err != nil {
 			return ctrl.Result{}, err
