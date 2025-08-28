@@ -1254,58 +1254,47 @@ func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.D
 
 func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines map[string]*vjailbreakv1alpha1.VMwareMachine, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
-	parallelVMsMap := make(map[string]bool)
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
-	// create a map of all parallel VMs for quick lookup
-	// This is used to validate that all ownerVMs in RDM disks are present in the migration plan
-	// and to ensure that RDM disks are only processed once per VM.
-	for _, parallelVMs := range migrationplan.Spec.VirtualMachines {
-		for _, vmName := range parallelVMs {
-			parallelVMsMap[vmName] = true
+	for _, vmMachine := range vmMachines {
+		// Check if VM is powered off
+		if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
+			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
 		}
-	}
-	for _, parallelVMs := range migrationplan.Spec.VirtualMachines {
-		for _, vmName := range parallelVMs {
-			vmMachine := vmMachines[vmName]
-			// Check if VM is powered off
-			if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
-				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmName)
-			}
-			if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
-				for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {
-					// Get RDMDisk CR
-					rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}
-					err := r.Get(ctx, types.NamespacedName{
-						Name:      strings.TrimSpace(rdmDisk),
-						Namespace: migrationplan.Namespace,
-					}, rdmDiskCR)
+		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
+			for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {
+				// Get RDMDisk CR
+				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}
+				err := r.Get(ctx, types.NamespacedName{
+					Name:      strings.TrimSpace(rdmDisk),
+					Namespace: migrationplan.Namespace,
+				}, rdmDiskCR)
 
-					if err != nil {
-						if !apierrors.IsNotFound(err) {
-							return fmt.Errorf("failed to get RDMDisk CR: %w", err)
-						}
-					} else {
-						// Validate that all ownerVMs are present in parallelVMs
-						for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
-							if !parallelVMsMap[ownerVM] {
-								return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan ", ownerVM, rdmDisk)
-							}
-						}
-						// Update existing RDMDisk CR
-						err := ValidateRDMDiskFields(rdmDiskCR)
-						if err != nil {
-							return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
-						}
-						if !rdmDiskCR.Spec.ImportToCinder {
-							rdmDiskCR.Spec.ImportToCinder = true
-							rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
-							rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
-						}
-						allRDMDisks = append(allRDMDisks, rdmDiskCR)
+				if err != nil {
+					if !apierrors.IsNotFound(err) {
+						return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 					}
+				} else {
+					// Validate that all ownerVMs are present in parallelVMs
+					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+						if _, ok := vmMachines[ownerVM]; !ok {
+							return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan ", ownerVM, rdmDisk)
+						}
+					}
+					// Update existing RDMDisk CR
+					err := ValidateRDMDiskFields(rdmDiskCR)
+					if err != nil {
+						return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
+					}
+					if !rdmDiskCR.Spec.ImportToCinder {
+						rdmDiskCR.Spec.ImportToCinder = true
+						rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
+						rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
+					}
+					allRDMDisks = append(allRDMDisks, rdmDiskCR)
 				}
 			}
 		}
+
 	}
 
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
