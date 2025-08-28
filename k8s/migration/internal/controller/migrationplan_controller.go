@@ -951,19 +951,35 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	}
 
 	openstacknws := []string{}
+	// Process each VM network (including duplicates for multiple NICs)
+	// Map each NIC's network to the corresponding target network
 	for _, vmnw := range vmnws {
+		found := false
 		for _, nwm := range networkmap.Spec.Networks {
 			if vmnw == nwm.Source {
 				openstacknws = append(openstacknws, nwm.Target)
+				found = true
+				break // Use the first matching mapping
 			}
 		}
+		if !found {
+			return nil, errors.Errorf("VMware network %q not found in NetworkMapping", vmnw)
+		}
 	}
-	if len(openstacknws) != len(vmnws) {
-		return nil, errors.Errorf("VMware Network(s) not found in NetworkMapping vm(%d) openstack(%d)", len(vmnws), len(openstacknws))
+
+	// Get unique networks for validation
+	uniqueTargets := make(map[string]bool)
+	for _, target := range openstacknws {
+		uniqueTargets[target] = true
+	}
+	//nolint:prealloc // Preallocating the slice is not possible as the length is unknown
+	var uniqueTargetList []string
+	for target := range uniqueTargets {
+		uniqueTargetList = append(uniqueTargetList, target)
 	}
 
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
-		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, openstacknws)
+		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, uniqueTargetList)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to verify networks")
 		}

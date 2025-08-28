@@ -345,7 +345,7 @@ export default function MigrationFormDrawer({
     if (params.vms === undefined) return []
     return uniq(flatten(params.vms.map((vm) => vm.networks || []))).sort(
       stringsCompareFn
-    )
+    ) // Back to unique networks only
   }, [params.vms])
 
   const availableVmwareDatastores = useMemo(() => {
