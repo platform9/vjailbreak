@@ -447,7 +447,7 @@ export default function MigrationOptionsAlt({
                   }
                 />
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  This will use the base flavor ID specified in the Target Environment.
+                  This will use the base flavor ID specified in PCD.
                 </Typography>
               </Fields>
 

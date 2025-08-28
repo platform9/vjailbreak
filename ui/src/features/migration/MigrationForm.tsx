@@ -300,6 +300,7 @@ export default function MigrationFormDrawer({
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
     params.pcdCluster,
+    params.useFlavorless,
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
