@@ -21,6 +21,7 @@ export interface OpenstackCredsMetadata {
   namespace: string
   resourceVersion: string
   uid: string
+  labels?: Record<string, string>
 }
 
 export interface Annotations {

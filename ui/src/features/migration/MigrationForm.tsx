@@ -776,6 +776,7 @@ export default function MigrationFormDrawer({
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
+            openstackCredentials={openstackCredentials}
             selectedMigrationOptions={selectedMigrationOptions}
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}

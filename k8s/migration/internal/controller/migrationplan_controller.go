@@ -451,6 +451,7 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 // CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
 	ctxlog := r.ctxlog.WithValues("vm", vm)
 	ctxlog.Info("Creating Migration for VM")
@@ -484,7 +485,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
-				UseFlavorless:           migrationplan.Spec.UseFlavorless,
+				UseFlavorless:           migrationtemplate.Spec.UseFlavorless,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -1060,7 +1061,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vm)
 		}
 
-		if migrationplan.Spec.UseFlavorless {
+		if migrationtemplate.Spec.UseFlavorless {
 			ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
 
 			osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
@@ -1090,7 +1091,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 		}
 
-		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
+		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))

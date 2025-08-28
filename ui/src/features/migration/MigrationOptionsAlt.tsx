@@ -24,6 +24,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import Accordion from "@mui/material/Accordion"
 import AccordionDetails from "@mui/material/AccordionDetails"
 import AccordionSummary from "@mui/material/AccordionSummary"
+import { OpenstackCreds } from "src/api/openstack-creds/model";
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
@@ -56,6 +57,7 @@ const CustomTextField = styled(TextField)({
 interface MigrationOptionsPropsInterface {
   params: FormValues
   onChange: (key: string) => (value: unknown) => void
+  openstackCredentials?: OpenstackCreds;
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
   key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
@@ -78,6 +80,7 @@ export default function MigrationOptionsAlt({
   params,
   onChange,
   selectedMigrationOptions,
+  openstackCredentials,
   updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
@@ -105,6 +108,8 @@ export default function MigrationOptionsAlt({
 
     return dayjs(minDate).add(1, "minute")
   }, [params, selectedMigrationOptions])
+
+  const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -426,6 +431,7 @@ export default function MigrationOptionsAlt({
                 </Typography>
               </Fields>
 
+            {isPCD && (
               <Fields sx={{ gridGap: "0" }}>
                 <FormControlLabel
                   label="Use Dynamic Hotplug-Enabled Flavors"
@@ -445,6 +451,7 @@ export default function MigrationOptionsAlt({
                 </Typography>
               </Fields>
 
+            )}
             {/*
             Pre and Post Web Hooks
 // ...
