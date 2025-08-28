@@ -194,7 +194,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
 			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
 				// Every mac should have a corresponding IP, Ignore link layer ip
-				if guestNetwork.MAC == macAddresss && !strings.Contains(guestNetwork.IP, ":") {
+				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
 					ips = append(ips, guestNetwork.IP)
 				}
 			}
