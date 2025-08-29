@@ -251,11 +251,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	if migobj.MigrationType == "cold" {
-		if err := vmops.VMPowerOff(); err != nil {
-			return vminfo, errors.Wrap(err, "failed to power off VM")
-		}
-	}
+	// if migobj.MigrationType == "cold" {
+	// 	if err := vmops.VMPowerOff(); err != nil {
+	// 		return vminfo, errors.Wrap(err, "failed to power off VM")
+	// 	}
+	// }
 
 	// clean up snapshots
 	utils.PrintLog("Cleaning up snapshots before copy")
@@ -388,10 +388,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
 				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
+				// err = vmops.VMPowerOff()
+				// if err != nil {
+				// 	return vminfo, errors.Wrap(err, "failed to power off VM")
+				// }
 				final = true
 			}
 		}
@@ -548,7 +548,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		utils.PrintLog("operating system compatibility check passed")
 
 	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		utils.PrintLog("operating system compatibility check passed")
+		utils.PrintLog("operating system compatibility check passed for windows")
 		if !useSingleDisk {
 			utils.PrintLog("checking for bootable volume in case of LDM")
 			// check for bootable volume in case of LVM
@@ -564,6 +564,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if bootVolumeIndex == -1 {
 		return errors.Errorf("boot volume not found, cannot create target VM")
 	}
+	utils.PrintLog(fmt.Sprintf("Boot volume found: %s", vminfo.VMDisks[bootVolumeIndex].Name))
 
 	// save the index of bootVolume
 	utils.PrintLog(fmt.Sprintf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name))
@@ -1150,19 +1151,20 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
+	fmt.Println("Disk conversion completed successfully, debug complete, exiting migratiin")
 
-	err = migobj.CreateTargetInstance(vminfo)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to create target instance")
-	}
+	// err = migobj.CreateTargetInstance(vminfo)
+	// if err != nil {
+	// 	if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
+	// 		// combine both errors
+	// 		return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+	// 	}
+	// 	return errors.Wrap(err, "failed to create target instance")
+	// }
 
-	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
-	}
+	// if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
+	// 	migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
+	// }
 
 	return nil
 }
