@@ -854,6 +854,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
@@ -1257,6 +1258,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	for _, vmMachine := range vmMachines {
 		// Check if VM is powered off
+		// change this
 		if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
 			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
 		}

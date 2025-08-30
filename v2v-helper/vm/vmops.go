@@ -26,7 +26,7 @@ import (
 //go:generate mockgen -source=vmops.go -destination=vmops_mock.go -package=vm
 
 type VMOperations interface {
-	GetVMInfo(ostype string) (VMInfo, error)
+	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
 	UpdateDisksInfo(*VMInfo) error
@@ -116,7 +116,7 @@ func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
 
-func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
+func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) {
 	vm := vmops.VMObj
 
 	var o mo.VirtualMachine
@@ -183,7 +183,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	}
 	rdmDiskSlice := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	// Get RDM disks from vmware machine
-	for _, rdm := range vmwareMachine.Spec.VMInfo.RDMDisks {
+	for _, rdm := range rdmDisks {
 		rdmDisk, err := k8sutils.GetRDMDisk(vmops.ctx, rdm)
 		if err != nil {
 			return VMInfo{}, fmt.Errorf("failed to get RDM disk: %w", err)

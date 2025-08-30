@@ -129,7 +129,7 @@ func TestGetVMInfo(t *testing.T) {
 	// TODO: Add client  to VMOpsBuilder
 	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
 
-	vminfo, err := vmops.GetVMInfo("linux")
+	vminfo, err := vmops.GetVMInfo("linux", []string{""})
 	assert.NoError(t, err)
 	assert.Equal(t, expectedVMInfo, vminfo)
 }

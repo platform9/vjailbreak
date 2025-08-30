@@ -37,6 +37,7 @@ type MigrationParams struct {
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
 	SecurityGroups          string
+	RDMDisks                string
 }
 
 // GetMigrationParams is function that returns the migration parameters

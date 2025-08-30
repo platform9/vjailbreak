@@ -136,6 +136,7 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

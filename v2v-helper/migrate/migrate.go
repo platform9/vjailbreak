@@ -61,6 +61,7 @@ type Migrate struct {
 	TargetAvailabilityZone  string
 	AssignedIP              string
 	SecurityGroups          []string
+	RDMDisks                []string
 }
 
 type MigrationTimes struct {
@@ -101,7 +102,7 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 
 	for idx, vmdisk := range vminfo.VMDisks {
 		setRDMLabel := false
-		if vmdisk.Boot {
+		if vmdisk.Boot && len(vminfo.RDMDisks) > 0 {
 			setRDMLabel = true
 		}
 		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
@@ -1041,7 +1042,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.logMessage("Data copy start time reached")
 	}
 	// Get Info about VM
-	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
+	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype, migobj.RDMDisks)
+
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
