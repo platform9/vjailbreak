@@ -1041,6 +1041,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
 		migobj.logMessage("Data copy start time reached")
 	}
+	fmt.Println("Starting VM Migration with RDM disks : ", migobj.RDMDisks)
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype, migobj.RDMDisks)
 

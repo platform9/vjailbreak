@@ -183,6 +183,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	}
 	rdmDiskSlice := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	// Get RDM disks from vmware machine
+	fmt.Println("RDM disks from spec: ", rdmDisks)
 	for _, rdm := range rdmDisks {
 		rdmDisk, err := k8sutils.GetRDMDisk(vmops.ctx, rdm)
 		if err != nil {

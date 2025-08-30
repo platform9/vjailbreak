@@ -481,6 +481,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			"hw_scsi_reservations": "true",
 		}
 	}
+	fmt.Println("RDM disks : ", vminfo.RDMDisks)
 	for _, disk := range vminfo.RDMDisks {
 		blockDevice := bootfromvolume.BlockDevice{
 			DeleteOnTermination: false,
@@ -500,6 +501,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			return nil, fmt.Errorf("failed to wait for volume to become available: %s", err)
 		}
 	}
+
 	server, err := servers.Create(osclient.ComputeClient, createOpts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)

@@ -102,7 +102,7 @@ func main() {
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
-
+	fmt.Println("Migration Params : ", migrationparams.RDMDisks)
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
 		UserName:                vCenterUserName,
