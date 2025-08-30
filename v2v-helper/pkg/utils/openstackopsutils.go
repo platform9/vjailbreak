@@ -483,6 +483,8 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	}
 	fmt.Println("RDM disks : ", vminfo.RDMDisks)
 	for _, disk := range vminfo.RDMDisks {
+		// Set the Nova API version to 2.6
+		osclient.ComputeClient.Microversion = "2.6"
 		blockDevice := bootfromvolume.BlockDevice{
 			DeleteOnTermination: false,
 			DestinationType:     bootfromvolume.DestinationVolume,
@@ -490,6 +492,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			UUID:                disk.Status.CinderVolumeID,
 			DeviceType:          "lun",
 			DiskBus:             "scsi",
+			BootIndex:           -1,
 		}
 		createOpts.BlockDevice = append(createOpts.BlockDevice, blockDevice)
 	}
