@@ -413,7 +413,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
 		// Static IP assignment failed, fall back to DHCP
-		PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
+		PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port Error: %s", ip, err))
 		dhcpPort, dhcpErr := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 			Name:           "port-" + vmname,
 			NetworkID:      network.ID,

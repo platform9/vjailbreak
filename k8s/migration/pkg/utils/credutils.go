@@ -821,7 +821,21 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
-
+	// If RDM disk is deleted
+	if len(vminfo.RDMDisks) < len(vmwvm.Spec.VMInfo.RDMDisks) {
+		return fmt.Errorf("the number of RDM disks cannot be reduced for VM %s. Current: %d, New: %d", vminfo.Name, len(vmwvm.Spec.VMInfo.RDMDisks), len(vminfo.RDMDisks))
+	}
+	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
+		verifyRDMNotDeleted := true
+		for _, newData := range vminfo.RDMDisks {
+			if data == newData {
+				verifyRDMNotDeleted = false
+			}
+		}
+		if verifyRDMNotDeleted {
+			return fmt.Errorf("RDM disk %s cannot be removed from VM %s , delete vmware custom resource if wanted to exclude rdm disks after detachment", data, vminfo.Name)
+		}
+	}
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
