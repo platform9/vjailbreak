@@ -482,8 +482,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				VMName:        vm,
 				// PodRef will be set in the migration controller
 				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
-				InitiateCutover:         !migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
+				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
+				UseFlavorless:           migrationplan.Spec.UseFlavorless,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -502,7 +503,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	vm string,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
-	openstackSecretRef string) error {
+	openstackSecretRef string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
@@ -533,7 +535,19 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},
+		{
+			Name:  "USE_FLAVORLESS",
+			Value: strconv.FormatBool(migrationobj.Spec.UseFlavorless),
+		},
 	}
+
+	if migrationobj.Spec.UseFlavorless {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "FLAVORLESS_FLAVOR_ID",
+			Value: vmMachine.Spec.TargetFlavorID,
+		})
+	}
+
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -820,14 +834,14 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
 		} else {
-			var computeClient *utils.OpenStackClients
 			// If target flavor is not set, use the closest matching flavor
-			computeClient, err = utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to get OpenStack clients")
+				return nil, errors.Wrap(err, "failed to list all flavors")
 			}
+
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(ctx, vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, computeClient.ComputeClient)
+			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}
@@ -937,19 +951,35 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	}
 
 	openstacknws := []string{}
+	// Process each VM network (including duplicates for multiple NICs)
+	// Map each NIC's network to the corresponding target network
 	for _, vmnw := range vmnws {
+		found := false
 		for _, nwm := range networkmap.Spec.Networks {
 			if vmnw == nwm.Source {
 				openstacknws = append(openstacknws, nwm.Target)
+				found = true
+				break // Use the first matching mapping
 			}
 		}
+		if !found {
+			return nil, errors.Errorf("VMware network %q not found in NetworkMapping", vmnw)
+		}
 	}
-	if len(openstacknws) != len(vmnws) {
-		return nil, errors.Errorf("VMware Network(s) not found in NetworkMapping vm(%d) openstack(%d)", len(vmnws), len(openstacknws))
+
+	// Get unique networks for validation
+	uniqueTargets := make(map[string]bool)
+	for _, target := range openstacknws {
+		uniqueTargets[target] = true
+	}
+	//nolint:prealloc // Preallocating the slice is not possible as the length is unknown
+	var uniqueTargetList []string
+	for target := range uniqueTargets {
+		uniqueTargetList = append(uniqueTargetList, target)
 	}
 
 	if networkmap.Status.NetworkmappingValidationStatus != string(corev1.PodSucceeded) {
-		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, openstacknws)
+		err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, uniqueTargetList)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to verify networks")
 		}
@@ -1045,6 +1075,37 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if vmMachineObj == nil {
 			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vm)
 		}
+
+		if migrationplan.Spec.UseFlavorless {
+			ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
+
+			osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
+			}
+
+			baseFlavor, err := utils.FindHotplugBaseFlavor(ctx, osClients.ComputeClient)
+			if err != nil {
+				migrationplan.Status.MigrationStatus = corev1.PodFailed
+				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
+				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
+				}
+				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
+			}
+
+			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
+
+			if vmMachineObj.Spec.TargetFlavorID != baseFlavor.ID {
+				patch := client.MergeFrom(vmMachineObj.DeepCopy())
+				vmMachineObj.Spec.TargetFlavorID = baseFlavor.ID
+				if err := r.Patch(ctx, vmMachineObj, patch); err != nil {
+					return errors.Wrap(err, "failed to automatically patch VMwareMachine with discovered base flavor ID")
+				}
+				ctxlog.Info("Patched VMwareMachine with base flavor ID", "vmwareMachine", vmMachineObj.Name, "flavorID", baseFlavor.ID)
+			}
+		}
+
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
@@ -1073,7 +1134,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
-			openstackcreds.Spec.SecretRef.Name)
+			openstackcreds.Spec.SecretRef.Name,
+			vmMachineObj)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}

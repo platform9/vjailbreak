@@ -130,6 +130,11 @@ spec:
                 items:
                   type: string
                 type: array
+              useFlavorless:
+                description: |-
+                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
+                  When true, TargetFlavorId for the VM should be set to a base flavor (e.g., a 0-0-x flavor).
+                type: boolean
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:

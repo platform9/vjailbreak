@@ -61,6 +61,8 @@ type Migrate struct {
 	TargetAvailabilityZone  string
 	AssignedIP              string
 	SecurityGroups          []string
+	UseFlavorless           bool
+	TenantName              string
 }
 
 type MigrationTimes struct {
@@ -117,7 +119,7 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 
 func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
-	migobj.logMessage("Attaching volumes to VM")
+	migobj.logMessage(fmt.Sprintf("Attaching volumes to VM: %s", disk.Name))
 	if disk.OpenstackVol == nil {
 		return "", errors.Wrap(fmt.Errorf("OpenStack volume is nil"), "failed to attach volume to VM")
 	}
@@ -151,7 +153,7 @@ func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
-
+		migobj.logMessage(fmt.Sprintf("Detaching volume %s from VM", vmdisk.Name))
 		if err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
 		}
@@ -160,7 +162,7 @@ func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for volume to become available")
 		}
-		log.Printf("Volume %s detached from VM\n", vmdisk.Name)
+		migobj.logMessage(fmt.Sprintf("Volume %s detached from VM", vmdisk.Name))
 	}
 	time.Sleep(1 * time.Second)
 	return nil
@@ -173,7 +175,7 @@ func (migobj *Migrate) DeleteAllVolumes(vminfo vm.VMInfo) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to delete volume")
 		}
-		utils.PrintLog(fmt.Sprintf("Volume %s deleted\n", vmdisk.Name))
+		migobj.logMessage(fmt.Sprintf("Volume %s deleted", vmdisk.Name))
 	}
 	return nil
 }
@@ -229,7 +231,7 @@ func (migobj *Migrate) WaitforCutover() error {
 }
 
 func (migobj *Migrate) WaitforAdminCutover() error {
-	migobj.logMessage("Waiting for Cutover conditions to be met")
+	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 	for {
 		label := <-migobj.PodLabelWatcher
 		migobj.logMessage(fmt.Sprintf("Label: %s", label))
@@ -379,20 +381,19 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				utils.PrintLog("Shutting down source VM and performing final copy")
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
 				if err := migobj.WaitforAdminCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
 				}
+				utils.PrintLog("Shutting down source VM and performing final copy")
 				err = vmops.VMPowerOff()
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
 				final = true
 			}
-
 		}
 
 		// Update old change id to the new base change id value
@@ -401,7 +402,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 		err = vmops.CleanUpSnapshots(false)
 		if err != nil {
-			return vminfo, errors.Wrap(err, "failed to delete snapshot of source VM")
+			return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
 		}
 		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
@@ -428,8 +429,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog("Deleting migration snapshot")
 	err = vmops.CleanUpSnapshots(true)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf(`Failed to delete snapshot of source VM: %s, since copy is completed, 
-		continuing with the migration`, err))
+		migobj.logMessage(fmt.Sprintf(`Failed to cleanup snapshot of source VM: %s, since copy is completed, 
+        continuing with the migration`, err))
 	}
 	return vminfo, nil
 }
@@ -529,6 +530,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			"debian",
 			"ubuntu",
 			"rocky linux",
+			"suse linux enterprise server",
+			"alma linux",
 		}
 
 		supported := false
@@ -647,7 +650,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
 					if err != nil {
 						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
-					    network might not come up post migration, please check the network configuration post migration`, err)
+                        network might not come up post migration, please check the network configuration post migration`, err)
 						log.Println("Continuing with migration")
 						err = nil
 					}
@@ -668,7 +671,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
 				if err != nil {
 					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
-					network might not come up post migration, please check the network configuration post migration`, err))
+                    network might not come up post migration, please check the network configuration post migration`, err))
 					err = nil
 				}
 			}
@@ -694,7 +697,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	}
 	if len(interfaces) == 0 {
 		utils.PrintLog(`No network interfaces found, cannot add udev rules, network might not
-			come up post migration, please check the network configuration post migration`)
+            come up post migration, please check the network configuration post migration`)
 		return nil
 	}
 	macs := []string{}
@@ -733,24 +736,34 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	var flavor *flavors.Flavor
 	var err error
 
-	if migobj.TargetFlavorId == "" {
+	if migobj.UseFlavorless {
+		if migobj.TargetFlavorId == "" {
+			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", vminfo.Name)
+			return errors.Wrap(err, "failed to create target instance")
+		}
+		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		if err != nil {
+			return errors.Wrap(err, "failed to get the specified base flavor for flavorless creation")
+		}
+	} else if migobj.TargetFlavorId != "" {
+		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		if err != nil {
+			return errors.Wrap(err, "failed to get OpenStack flavor")
+		}
+	} else {
 		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return errors.Wrap(err, "failed to get closest OpenStack flavor")
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
-	} else {
-		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack flavor")
-		}
 	}
 
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups)
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
-		return fmt.Errorf("failed to resolve security group names to IDs: %w", err)
+		return errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
-	utils.PrintLog(fmt.Sprintf("Resolved security group names %v to IDs %v", migobj.SecurityGroups, securityGroupIDs))
+	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
 
 	networkids := []string{}
 	ipaddresses := []string{}
@@ -812,7 +825,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings, migobj.UseFlavorless)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
@@ -852,29 +865,42 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 func parseVersionID(osRelease string) string {
 	osRelease = strings.TrimSpace(osRelease)
 
-	// Check if it's /etc/os-release format (contains key-value pairs)
+	// Key-value style (os-release, SuSE-release, etc.)
 	if strings.Contains(osRelease, "=") {
+		var version, patchlevel string
 		for _, line := range strings.Split(osRelease, "\n") {
 			kv := strings.SplitN(line, "=", 2)
 			if len(kv) != 2 {
 				continue
 			}
 			key := strings.TrimSpace(strings.ToUpper(kv[0]))
-			val := strings.Trim(kv[1], `"`) // Remove any quotes
-			if key == "VERSION_ID" {
+			val := strings.TrimSpace(strings.Trim(kv[1], `"`)) // Remove quotes and spaces
+			switch key {
+			case "VERSION_ID":
 				return val
+			case "VERSION":
+				version = val
+			case "PATCHLEVEL":
+				patchlevel = val
 			}
 		}
+		// If it's SLES style, combine VERSION + PATCHLEVEL if available
+		if version != "" {
+			if patchlevel != "" {
+				return version + "." + patchlevel
+			}
+			return version
+		}
 	} else {
-		// Assume /etc/redhat-release format; extract version with regex
+		// /etc/redhat-release style
 		re := regexp.MustCompile(`release\s+([0-9]+(\.[0-9]+)?)`)
 		matches := re.FindStringSubmatch(strings.ToLower(osRelease))
 		if len(matches) > 1 {
-			return matches[1] // Return the version (e.g., "9.6" or "6.10")
+			return matches[1]
 		}
 	}
 
-	return "" // Return empty string if version not found
+	return ""
 }
 
 func isNetplanSupported(version string) bool {
@@ -1028,6 +1054,8 @@ func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.Cancel
 
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Wait until the data copy start time
 	var zerotime time.Time
 	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
@@ -1072,7 +1100,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to live replicate disks: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
@@ -1085,12 +1113,32 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		vminfo.RDMDisks[idx].VolumeId = volumeID
 	}
+
+	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vcenter settings")
+	}
+
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
+		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
+			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
+			detachErr := migobj.DetachAllVolumes(vminfo)
+			if detachErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
+			}
+
+			cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
+			if cleanUpErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
+				return errors.Wrap(cleanUpErr, "Failed to cleanup snapshot of source VM")
+			}
+			return errors.Wrap(err, "failed to convert disks")
+		}
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to convert disks: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
@@ -1099,7 +1147,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
-			return errors.Wrapf(err, "failed to create target instance: %s", cleanuperror)
+			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
@@ -1108,7 +1156,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
 	}
 
-	cancel()
 	return nil
 }
 
@@ -1124,8 +1171,8 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	}
 	err = migobj.VMops.CleanUpSnapshots(true)
 	if err != nil {
-		utils.PrintLog(fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
-		return errors.Wrap(err, fmt.Sprintf("Failed to delete snapshot of source VM: %s\n", err))
+		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
+		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
 	return nil
 }

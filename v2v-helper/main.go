@@ -72,6 +72,11 @@ func main() {
 		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
 	)
 
+	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
+	if openstackProjectName == "" {
+		openstackProjectName = strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
+	}
+
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
@@ -136,6 +141,8 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
+		TenantName:             openstackProjectName,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {
@@ -150,6 +157,8 @@ func main() {
 		}
 
 		handleError(msg)
+		utils.PrintLog(fmt.Sprintf("----- Migration completed with errors at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))
+		return
 	}
 
 	utils.PrintLog(fmt.Sprintf("----- Migration completed successfully at %s for VM %s -----", time.Now().Format(time.RFC3339), migrationparams.SourceVMName))

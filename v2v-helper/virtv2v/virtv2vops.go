@@ -21,6 +21,7 @@ import (
 	"unicode"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -99,7 +100,8 @@ func NTFSFix(path string) error {
 		cmd := exec.Command("ntfsfix", partition)
 		log.Printf("Executing %s", cmd.String())
 
-		err := cmd.Run()
+		// Use the debug logging with proper file cleanup
+		err := utils.RunCommandWithLogFile(cmd)
 		if err != nil {
 			log.Printf("Skipping NTFS fix on %s", partition)
 		}
@@ -201,10 +203,9 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// Step 5: Run virt-v2v-in-place
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
+	
+	// Use the debug logging with proper file cleanup
+	err := utils.RunCommandWithLogFile(cmd)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -217,35 +218,42 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 func GetOsRelease(path string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	// Attempt to cat /etc/os-release
-	cmd := exec.Command("guestfish", "--ro", "-a", path, "-i")
-	input := `cat /etc/os-release`
-	cmd.Stdin = strings.NewReader(input)
-	log.Printf("Executing %s with input: %s", cmd.String(), input)
-	out, err := cmd.CombinedOutput() // Use CombinedOutput to capture stderr for error parsing
-	if err == nil {
-		return strings.ToLower(string(out)), nil
+	releaseFiles := []string{
+		"/etc/os-release",
+		"/etc/redhat-release",
+		"/etc/SuSE-release", // SLES 11
 	}
 
-	// Check if the error is due to missing /etc/os-release
-	errorOutput := strings.TrimSpace(string(out))
-	log.Printf("Failed to get /etc/os-release: %v, error: %v", errorOutput, err)
-	err = nil
-	if strings.Contains(strings.ToLower(errorOutput), "no such file or directory") {
-		// Fallback to /etc/redhat-release
-		cmd = exec.Command("guestfish", "--ro", "-a", path, "-i")
-		input = `cat /etc/redhat-release`
-		cmd.Stdin = strings.NewReader(input)
-		log.Printf("Executing %s with input: %s", cmd.String(), input)
-		out, err = cmd.CombinedOutput()
+	runGuestfishCat := func(imgPath, file string) (string, error) {
+		cmd := exec.Command("guestfish", "--ro", "-a", imgPath, "-i")
+		cmd.Stdin = strings.NewReader(fmt.Sprintf("cat %s", file))
+		log.Printf("Executing %s with input: cat %s", cmd.String(), file)
+
+		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return "", fmt.Errorf("failed to get redhat-release: %s, %v", string(out), err)
+			return strings.ToLower(string(out)), err
 		}
 		return strings.ToLower(string(out)), nil
 	}
 
-	// If not a missing file error, return the original error
-	return "", fmt.Errorf("failed to get os-release: %s, %v", errorOutput, err)
+	var errs []string
+	for _, file := range releaseFiles {
+		out, err := runGuestfishCat(path, file)
+		if err == nil {
+			return out, nil
+		}
+
+		errStr := strings.TrimSpace(out)
+		errs = append(errs, errStr)
+
+		// If it's not a "no such file" error, stop immediately
+		if !strings.Contains(strings.ToLower(errStr), "no such file or directory") {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("failed to get OS release from %v: %v",
+		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
