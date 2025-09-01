@@ -625,11 +625,6 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
-              useFlavorless:
-                description: |-
-                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-                  When true, TargetFlavorId in the Migrate object should be set to the base flavor.
-                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack

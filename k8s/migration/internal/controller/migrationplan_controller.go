@@ -485,7 +485,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
-				UseFlavorless:           migrationtemplate.Spec.UseFlavorless,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -500,6 +499,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vm string,
 	firstbootconfigMapName string,
@@ -538,11 +538,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 		},
 		{
 			Name:  "USE_FLAVORLESS",
-			Value: strconv.FormatBool(migrationobj.Spec.UseFlavorless),
+			Value: strconv.FormatBool(migrationtemplate.Spec.UseFlavorless),
 		},
 	}
 
-	if migrationobj.Spec.UseFlavorless {
+	if migrationtemplate.Spec.UseFlavorless {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  "FLAVORLESS_FLAVOR_ID",
 			Value: vmMachine.Spec.TargetFlavorID,
@@ -1115,6 +1115,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		err = r.CreateJob(ctx,
 			migrationplan,
+			migrationtemplate,
 			migrationobj,
 			vm,
 			fbcm.Name,

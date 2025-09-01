@@ -54,14 +54,14 @@ const CustomTextField = styled(TextField)({
 })
 
 // Interfaces
-interface MigrationOptionsPropsInterface {
-  params: FormValues
+export interface MigrationOptionsPropsInterface {
+  params: FormValues & { useFlavorless?: boolean }
   onChange: (key: string) => (value: unknown) => void
   openstackCredentials?: OpenstackCreds;
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-  key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
-) => (value: unknown) => void
+    key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+  ) => (value: unknown) => void
 
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
@@ -441,7 +441,6 @@ export default function MigrationOptionsAlt({
                       onChange={(e) => {
                         const isChecked = e.target.checked;
                         onChange("useFlavorless")(isChecked);
-                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
                       }}
                     />
                   }
