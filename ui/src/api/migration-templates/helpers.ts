@@ -34,7 +34,7 @@ export const createMigrationTemplateJson = (params) => {
       ...(targetPCDClusterName && {
         targetPCDClusterName: targetPCDClusterName,
       }),
-      useFlavorless,
+      useFlavorless: useFlavorless,
     },
   }
 }
