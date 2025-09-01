@@ -1,12 +1,11 @@
 import { styled } from "@mui/material"
-import { useEffect, useState } from "react"
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom"
+import { useState } from "react"
+import { Route, Routes, useLocation, Navigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import RouteCompatibility from "./components/RouteCompatibility"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
 import RollingMigrationFormDrawer from "./features/migration/RollingMigrationForm"
-import { useMigrationsQuery } from "./hooks/api/useMigrationsQuery"
 import DashboardLayout from "./pages/dashboard/DashboardLayout"
 import MigrationsPage from "./pages/dashboard/MigrationsPage"
 import AgentsPage from "./pages/dashboard/AgentsPage"
@@ -14,7 +13,6 @@ import CredentialsPage from "./pages/dashboard/CredentialsPage"
 import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
-import { useNodesQuery } from "./hooks/api/useNodesQuery"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -37,24 +35,9 @@ const AppContent = styled("div")(({ theme }) => ({
 }))
 
 function App() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
-
-  const { data: migrations } = useMigrationsQuery()
-  const { data: nodes } = useNodesQuery()
-
-  useEffect(() => {
-    if (!migrations || !nodes) {
-      return
-    } else if (migrations.length === 0 && nodes.length === 0) {
-      navigate("/onboarding")
-    } else if (location.pathname === "/") {
-      navigate("/dashboard/migrations")
-    }
-  }, [migrations, nodes, navigate, location.pathname])
-
   const hideAppbar =
     location.pathname === "/onboarding" || location.pathname === "/"
 
@@ -81,7 +64,7 @@ function App() {
           />
         )}
         <Routes>
-          <Route path="/" element={<div></div>} />
+          <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />

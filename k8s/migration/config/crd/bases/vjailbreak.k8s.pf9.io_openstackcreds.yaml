@@ -184,7 +184,20 @@ spec:
                     type: array
                   securityGroups:
                     items:
-                      type: string
+                      description: SecurityGroupInfo holds the security group name
+                        and ID
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        requiresIdDisplay:
+                          type: boolean
+                      required:
+                      - id
+                      - name
+                      - requiresIdDisplay
+                      type: object
                     type: array
                   volumeBackends:
                     items:

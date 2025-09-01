@@ -76,6 +76,11 @@ type MigrationSpec struct {
 	// after a successful migration to prevent network conflicts. Defaults to false.
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+
+	// UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
+	// When true, TargetFlavorId in the Migrate object should be set to the base flavor.
+	// +optional
+	UseFlavorless bool `json:"useFlavorless,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration

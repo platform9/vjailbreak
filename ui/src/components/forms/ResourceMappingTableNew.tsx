@@ -6,6 +6,9 @@ import {
   MenuItem,
   Select,
   Typography,
+  TextField,
+  InputAdornment,
+  Box,
 } from "@mui/material"
 import { useCallback, useMemo, useState, useEffect } from "react"
 
@@ -52,6 +55,8 @@ export default function ResourceMappingTable({
   const [selectedSourceItem, setSelectedSourceItem] = useState("")
   const [selectedTargetItem, setSelectedTargetItem] = useState("")
   const [showEmptyRow, setShowEmptyRow] = useState(true)
+  const [sourceSearch, setSourceSearch] = useState("")
+  const [targetSearch, setTargetSearch] = useState("")
 
   // Automatically add mapping when both source and target are selected
   useEffect(() => {
@@ -107,6 +112,19 @@ export default function ResourceMappingTable({
       (item) => !values.some((mapping) => mapping.target === item)
     )
   }, [oneToManyMapping, targetItems, values])
+
+  // Filtered by search terms (case-insensitive)
+  const filteredSourceItems = useMemo(() => {
+    const term = sourceSearch.trim().toLowerCase()
+    if (!term) return availableSourceItems
+    return availableSourceItems.filter((i) => i.toLowerCase().includes(term))
+  }, [availableSourceItems, sourceSearch])
+
+  const filteredTargetItems = useMemo(() => {
+    const term = targetSearch.trim().toLowerCase()
+    if (!term) return availableTargetItems
+    return availableTargetItems.filter((i) => i.toLowerCase().includes(term))
+  }, [availableTargetItems, targetSearch])
 
   // Hide empty row only when there are no available items to map
   useEffect(() => {
@@ -174,12 +192,43 @@ export default function ResourceMappingTable({
                       onChange={(e) => setSelectedSourceItem(e.target.value)}
                       label={sourceLabel}
                       fullWidth
+                      MenuProps={{
+                        PaperProps: {
+                          style: { maxHeight: 300 },
+                        },
+                      }}
                     >
-                      {availableSourceItems.map((item) => (
-                        <MenuItem key={item} value={item}>
-                          {item}
-                        </MenuItem>
-                      ))}
+                      <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                        <TextField
+                          size="small"
+                          placeholder={`Search ${sourceLabel.toLowerCase()}`}
+                          fullWidth
+                          value={sourceSearch}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            setSourceSearch(e.target.value)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                {/* use a simple magnifier character to avoid extra icon deps */}
+                                <span role="img" aria-label="search">🔎</span>
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      </Box>
+                      {filteredSourceItems.length === 0 ? (
+                        <MenuItem disabled>No matching items</MenuItem>
+                      ) : (
+                        filteredSourceItems.map((item) => (
+                          <MenuItem key={item} value={item}>
+                            {item}
+                          </MenuItem>
+                        ))
+                      )}
                     </Select>
                   </FormControl>
                 </TableCell>
@@ -195,12 +244,42 @@ export default function ResourceMappingTable({
                       value={selectedTargetItem}
                       onChange={(e) => setSelectedTargetItem(e.target.value)}
                       label={targetLabel}
+                      MenuProps={{
+                        PaperProps: {
+                          style: { maxHeight: 300 },
+                        },
+                      }}
                     >
-                      {availableTargetItems.map((item) => (
-                        <MenuItem key={item} value={item}>
-                          {item}
-                        </MenuItem>
-                      ))}
+                      <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                        <TextField
+                          size="small"
+                          placeholder={`Search ${targetLabel.toLowerCase()}`}
+                          fullWidth
+                          value={targetSearch}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            setTargetSearch(e.target.value)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <span role="img" aria-label="search">🔎</span>
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      </Box>
+                      {filteredTargetItems.length === 0 ? (
+                        <MenuItem disabled>No matching items</MenuItem>
+                      ) : (
+                        filteredTargetItems.map((item) => (
+                          <MenuItem key={item} value={item}>
+                            {item}
+                          </MenuItem>
+                        ))
+                      )}
                     </Select>
                   </FormControl>
                 </TableCell>

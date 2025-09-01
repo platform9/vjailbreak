@@ -70,18 +70,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vm
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings)
+	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
 }
 
 // CreateVolume mocks base method.
@@ -217,18 +217,18 @@ func (mr *MockOpenstackOperationsMockRecorder) GetPort(portID interface{}) *gomo
 }
 
 // GetSecurityGroupIDs mocks base method.
-func (m *MockOpenstackOperations) GetSecurityGroupIDs(groupNames []string) ([]string, error) {
+func (m *MockOpenstackOperations) GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSecurityGroupIDs", groupNames)
+	ret := m.ctrl.Call(m, "GetSecurityGroupIDs", groupNames, projectName)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSecurityGroupIDs indicates an expected call of GetSecurityGroupIDs.
-func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(groupNames interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(groupNames, projectName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), groupNames)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), groupNames, projectName)
 }
 
 // SetVolumeBootable mocks base method.

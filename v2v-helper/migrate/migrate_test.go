@@ -453,7 +453,7 @@ func TestCreateTargetInstance(t *testing.T) {
 			{IPAddress: "ip-address"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -505,7 +505,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 			{IPAddress: "ip-address-2"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,

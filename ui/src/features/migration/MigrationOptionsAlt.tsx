@@ -85,7 +85,7 @@ export default function MigrationOptionsAlt({
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
-    onChange("dataCopyMethod")("hot")
+    onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
     onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
@@ -151,7 +151,7 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.dataCopyMethod}
                 labelId="source-item-label"
-                value={params?.dataCopyMethod || "hot"}
+                value={params?.dataCopyMethod || "cold"}
                 onChange={(e) => {
                   onChange("dataCopyMethod")(e.target.value)
                 }}
@@ -424,7 +424,26 @@ export default function MigrationOptionsAlt({
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
                   Disconnect NICs on the source VM to prevent IP conflicts.
                 </Typography>
-              </Fields>        
+              </Fields>
+
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Use Dynamic Hotplug-Enabled Flavors"
+                  control={
+                    <Checkbox
+                      checked={params?.useFlavorless || false}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        onChange("useFlavorless")(isChecked);
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  This will use the base flavor ID specified in the Target Environment.
+                </Typography>
+              </Fields>
 
             {/*
             Pre and Post Web Hooks
