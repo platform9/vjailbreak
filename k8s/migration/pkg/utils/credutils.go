@@ -718,10 +718,9 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			}
 
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:      strings.ToLower(nic.MacAddress),
-				Index:    nicsIndex,
-				Network:  network,
-				IpAdress: "", // IP will be populated from guest info if available
+				MAC:     strings.ToLower(nic.MacAddress),
+				Index:   nicsIndex,
+				Network: network,
 			})
 			nicsIndex++
 		}
@@ -1505,12 +1504,12 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	if guestNetworksFromVmware != nil {
 		// Extract IP addresses from guest networks and set it in network interfaces
-		for _, nic := range nicList {
+		for i, nic := range nicList {
 			for _, guestNet := range guestNetworksFromVmware {
 				if nic.MAC == guestNet.MAC {
 					// Check if IP is ipv4
 					if net.ParseIP(guestNet.IP).To4() == nil {
-						nic.IpAdress = guestNet.IP
+						nicList[i].IpAdress = guestNet.IP
 					}
 					break
 				}
