@@ -1540,7 +1540,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		}
 	}
 
-	if guestNetworksFromVmware != nil {
+	if len(guestNetworksFromVmware) > 0 {
 		// Extract IP addresses from guest networks and set it in network interfaces
 		for i, nic := range nicList {
 			for _, guestNet := range guestNetworksFromVmware {
