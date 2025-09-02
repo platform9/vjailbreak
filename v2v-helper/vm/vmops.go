@@ -198,6 +198,18 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 					ips = append(ips, guestNetwork.IP)
 				}
 			}
+		} else {
+			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
+				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
+					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
+						ips = append(ips, networkInterface.IPAddress)
+					}
+				}
+			}
+			if len(ips) == 0 {
+				return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off, 
+				please make sure to provide IP address in the vmwaremachine CR`)
+			}
 		}
 	}
 

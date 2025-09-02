@@ -1377,6 +1377,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
+//nolint:gocyclo
 func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
@@ -1499,6 +1500,21 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
+	}
+
+	if guestNetworksFromVmware != nil {
+		// Extract IP addresses from guest networks and set it in network interfaces
+		for i, nic := range nicList {
+			for _, guestNet := range guestNetworksFromVmware {
+				if nic.MAC == guestNet.MAC {
+					// Check if IP is ipv4
+					if !strings.Contains(guestNet.IP, ":") {
+						nicList[i].IPAddress = guestNet.IP
+					}
+					break
+				}
+			}
+		}
 	}
 
 	// Convert VM name to Kubernetes-safe name

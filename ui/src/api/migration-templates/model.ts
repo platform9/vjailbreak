@@ -61,6 +61,7 @@ export interface Openstack {
 
 export interface VmData {
   datastores: string[]
+  id: string
   name: string
   networks?: string[]
   isMigrated?: boolean
@@ -73,7 +74,15 @@ export interface VmData {
   disks?: string[]
   labels?: { [key: string]: string }
   vmWareMachineName?: string
+  networkInterfaces?: VmNetworkInterface[]
 }
+
+export interface VmNetworkInterface {
+  mac: string
+  network: string
+  ipAddress: string
+}
+
 export interface GetMigrationTemplatesMetadata {
   continue: string
   resourceVersion: string

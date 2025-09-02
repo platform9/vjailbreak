@@ -752,6 +752,7 @@ export default function MigrationFormDrawer({
             openstackFlavors={openstackCredentials?.spec?.flavors}
             vmwareCredName={params.vmwareCreds?.existingCredName}
             openstackCredName={params.openstackCreds?.existingCredName}
+            openstackCredentials={openstackCredentials}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep
@@ -771,7 +772,7 @@ export default function MigrationFormDrawer({
             openstackCredentials={openstackCredentials}
             stepNumber="4"
           />
-          {/* Step 5 */}          
+          {/* Step 5 */}
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
