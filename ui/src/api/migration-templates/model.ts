@@ -60,6 +60,7 @@ export interface Openstack {
 
 export interface VmData {
   datastores: string[]
+  id: string
   name: string
   networks?: string[]
   isMigrated?: boolean

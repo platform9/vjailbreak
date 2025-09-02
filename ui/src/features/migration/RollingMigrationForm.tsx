@@ -1,4 +1,4 @@
-import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel } from "@mui/material"
+import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel, Snackbar } from "@mui/material"
 import ClusterIcon from "@mui/icons-material/Hub"
 import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
@@ -149,7 +149,7 @@ export interface VmNetworkInterface {
 // ESX columns will be defined inside the component
 
 const CustomToolbarWithActions = (props) => {
-    const { rowSelectionModel, onEditIPs, onAssignFlavor, ...toolbarProps } = props;
+    const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
@@ -158,24 +158,14 @@ const CustomToolbarWithActions = (props) => {
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {rowSelectionModel && rowSelectionModel.length > 0 && (
-                    <>
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onEditIPs}
-                            size="small"
-                        >
-                            Assign/Edit IPs ({rowSelectionModel.length})
-                        </Button>
-                        <Button
-                            variant="text"
-                            color="primary"
-                            onClick={onAssignFlavor}
-                            size="small"
-                        >
-                            Assign Flavor ({rowSelectionModel.length})
-                        </Button>
-                    </>
+                    <Button
+                        variant="text"
+                        color="primary"
+                        onClick={onAssignFlavor}
+                        size="small"
+                    >
+                        Assign Flavor ({rowSelectionModel.length})
+                    </Button>
                 )}
                 <CustomSearchToolbar {...toolbarProps} />
             </Box>
@@ -350,7 +340,26 @@ export default function RollingMigrationFormDrawer({
     const [selectedFlavor, setSelectedFlavor] = useState("");
     const [updating, setUpdating] = useState(false);
 
+    // Toast notification state
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
+    const [toastSeverity, setToastSeverity] = useState<"success" | "error" | "warning" | "info">("success");
+
     const paginationModel = { page: 0, pageSize: 5 };
+
+    // Toast notification helper
+    const showToast = useCallback((message: string, severity: "success" | "error" | "warning" | "info" = "success") => {
+        setToastMessage(message);
+        setToastSeverity(severity);
+        setToastOpen(true);
+    }, []);
+
+    const handleCloseToast = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setToastOpen(false);
+    }, []);
 
     // Clear selection when component is closed
     useEffect(() => {
@@ -479,10 +488,18 @@ export default function RollingMigrationFormDrawer({
                     console.log(vm.spec.vms.networkInterfaces);
                 }
 
+                // Get all IP addresses from network interfaces in comma-separated format
+                const allIPs = vm.spec.vms.networkInterfaces && vm.spec.vms.networkInterfaces.length > 0
+                    ? vm.spec.vms.networkInterfaces
+                        .map(nic => nic.ipAddress)
+                        .filter(ip => ip && ip.trim() !== "") // Filter out empty/null IPs
+                        .join(", ")
+                    : vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || "—";
+
                 return {
                     id: vm.metadata.name,
                     name: vm.spec.vms.name || vm.metadata.name,
-                    ip: vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || "—",
+                    ip: allIPs || "—",
                     esxHost: esxiHost,
                     networks: vm.spec.vms.networks,
                     datastores: vm.spec.vms.datastores,
@@ -753,22 +770,39 @@ export default function RollingMigrationFormDrawer({
                 }
             }
 
-            // Update the VM's network interfaces with the new IP values
-            const updatedVMs = vmsWithAssignments.map(vmItem => {
-                if (vmItem.id === editingVm.id && vmItem.networkInterfaces) {
-                    const updatedInterfaces = vmItem.networkInterfaces.map((nic, index) => {
-                        const key = `interface-${index}`;
-                        const newIpValue = modalIpValues[key]?.trim();
+            // Prepare updated network interfaces
+            const updatedInterfaces = editingVm.networkInterfaces.map((nic, index) => {
+                const key = `interface-${index}`;
+                const newIpValue = modalIpValues[key]?.trim();
 
-                        return {
-                            ...nic,
-                            ipAddress: newIpValue || nic.ipAddress
-                        };
-                    });
+                return {
+                    ...nic,
+                    ipAddress: newIpValue || nic.ipAddress
+                };
+            });
+
+            // Patch the VM with updated network interfaces via API
+            await patchVMwareMachine(editingVm.id, {
+                spec: {
+                    vms: {
+                        networkInterfaces: updatedInterfaces
+                    }
+                }
+            }, VJAILBREAK_DEFAULT_NAMESPACE);
+
+            // Update local state after successful API call
+            const updatedVMs = vmsWithAssignments.map(vmItem => {
+                if (vmItem.id === editingVm.id) {
+                    // Recalculate comma-separated IP string
+                    const allIPs = updatedInterfaces
+                        .map(nic => nic.ipAddress)
+                        .filter(ip => ip && ip.trim() !== "")
+                        .join(", ");
 
                     return {
                         ...vmItem,
-                        networkInterfaces: updatedInterfaces
+                        networkInterfaces: updatedInterfaces,
+                        ip: allIPs || "—"
                     };
                 }
                 return vmItem;
@@ -785,6 +819,10 @@ export default function RollingMigrationFormDrawer({
                 action: 'modal_multi_ip_update'
             });
 
+            // Show success toast
+            const updatedIpsCount = Object.values(modalIpValues).filter(ip => ip && ip.trim() !== "").length;
+            showToast(`Successfully updated ${updatedIpsCount} IP address${updatedIpsCount === 1 ? '' : 'es'} for VM "${editingVm.name}"`);
+
         } catch (error) {
             console.error("Failed to update IPs:", error);
             reportError(error as Error, {
@@ -796,6 +834,7 @@ export default function RollingMigrationFormDrawer({
                     action: 'modal-multi-ip-update'
                 }
             });
+            showToast(`Failed to update IP addresses for VM "${editingVm?.name}": ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
         }
     };
 
@@ -846,20 +885,51 @@ export default function RollingMigrationFormDrawer({
                     }
                 }, VJAILBREAK_DEFAULT_NAMESPACE);
 
+                // Update local state - recalculate comma-separated IP string
+                const updatedVMs = vmsWithAssignments.map(v => {
+                    if (v.id === vmId) {
+                        const allIPs = updatedInterfaces
+                            .map(nic => nic.ipAddress)
+                            .filter(ip => ip && ip.trim() !== "")
+                            .join(", ");
+                        return {
+                            ...v,
+                            networkInterfaces: updatedInterfaces,
+                            ip: allIPs || "—"
+                        };
+                    }
+                    return v;
+                });
+                setVmsWithAssignments(updatedVMs);
+            } else {
+                // Fallback for single IP assignment
+                await patchVMwareMachine(vm.id, {
+                    spec: {
+                        vms: {
+                            assignedIp: tempIpValue.trim()
+                        }
+                    }
+                }, VJAILBREAK_DEFAULT_NAMESPACE);
+
                 // Update local state
                 const updatedVMs = vmsWithAssignments.map(v =>
-                    v.id === vmId ? { ...v, networkInterfaces: updatedInterfaces } : v
+                    v.id === vmId ? { ...v, ip: tempIpValue.trim() } : v
                 );
                 setVmsWithAssignments(updatedVMs);
             }
 
             handleCancelEditingIP();
+
+            // Show success toast
+            showToast(`IP address successfully updated for VM "${vm?.name}"`);
+
         } catch (error) {
             console.error("Failed to update IP:", error);
             reportError(error as Error, {
                 context: 'ip-assignment',
                 metadata: { vmId, interfaceIndex, action: 'ip-assignment' }
             });
+            showToast(`Failed to update IP address: ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
         }
     };
 
@@ -1512,31 +1582,30 @@ export default function RollingMigrationFormDrawer({
 
                 // For powered-off VMs with multiple network interfaces - Modal Design
                 if (powerState === "powered-off" && vm.networkInterfaces && vm.networkInterfaces.length > 1) {
-                    // Compact view - single line with tooltip and Edit button
                     const ipSummary = vm.networkInterfaces.map(nic => nic.ipAddress || "—").join(", ");
                     const tooltipContent = vm.networkInterfaces.map((nic) =>
-                        `${nic.network}: ${nic.ipAddress || "—"}`
+                        `${nic.network}: ${nic.ipAddress || "—"}, `
                     ).join("\n");
 
-                    return (
-                        <Tooltip title={tooltipContent} arrow placement="top">
-                            <Box sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                width: '100%',
-                                height: '100%',
-                                gap: 1
+                    const content = (
+                        <Box sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            height: '100%',
+                            gap: 1
+                        }}>
+                            <Typography variant="body2" sx={{
+                                fontSize: '0.875rem',
+                                flex: 1,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
                             }}>
-                                <Typography variant="body2" sx={{
-                                    fontSize: '0.875rem',
-                                    flex: 1,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                }}>
-                                    {vm.networkInterfaces.length} NICs: {ipSummary}
-                                </Typography>
+                                {ipSummary}
+                            </Typography>
+                            {isSelected && (
                                 <Button
                                     size="small"
                                     variant="outlined"
@@ -1551,16 +1620,23 @@ export default function RollingMigrationFormDrawer({
                                 >
                                     Edit
                                 </Button>
-                            </Box>
-                        </Tooltip>
+                            )}
+                        </Box>
                     );
+
+                    // Only show tooltip when row is selected
+                    return isSelected ? (
+                        <Tooltip title={tooltipContent} arrow placement="top">
+                            {content}
+                        </Tooltip>
+                    ) : content;
                 }
 
-                // Original single IP logic for powered-on VMs or VMs with single interface
-                const currentIp = vm.ip || (vm.networkInterfaces?.[0]?.ipAddress) || "—";
+                // For single interface or when not using multi-interface modal
+                const currentIp = vm.ip || "—";
                 const isEditing = editingIpFor === vmId && editingInterfaceIndex === null;
-
-                if (isSelected || isEditing) {
+                // Only allow editing if VM is powered off
+                if ((isSelected || isEditing) && powerState === "powered-off") {
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%' }}>
                             <TextField
@@ -1576,12 +1652,12 @@ export default function RollingMigrationFormDrawer({
                                 }}
                                 onBlur={() => {
                                     if (isEditing) {
-                                        handleSaveIP(vmId, 0);
+                                        handleSaveIP(vmId, vm.networkInterfaces ? 0 : undefined);
                                     }
                                 }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
-                                        handleSaveIP(vmId, 0);
+                                        handleSaveIP(vmId, vm.networkInterfaces ? 0 : undefined);
                                     } else if (e.key === 'Escape') {
                                         handleCancelEditingIP();
                                     }
@@ -1600,6 +1676,24 @@ export default function RollingMigrationFormDrawer({
                                 placeholder="Enter IP address"
                             />
                         </Box>
+                    );
+                }
+
+                // For powered-on VMs, show IP but indicate it's not editable
+                if ((isSelected || isEditing) && powerState === "powered-on") {
+                    return (
+                        <Tooltip title="IP assignment is only available for powered-off VMs" arrow>
+                            <Box sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                width: '100%',
+                                height: '100%',
+                            }}>
+                                <Typography variant="body2">
+                                    {currentIp}
+                                </Typography>
+                            </Box>
+                        </Tooltip>
                     );
                 }
 
@@ -1808,35 +1902,6 @@ export default function RollingMigrationFormDrawer({
         }
     ];
 
-    const handleOpenBulkEditDialog = () => {
-        if (selectedVMs.length === 0) return;
-
-        // Initialize bulk edit state for multiple interfaces
-        const selectedVMsData = vmsWithAssignments.filter(vm => selectedVMs.includes(vm.id));
-        const initialIPs: Record<string, Record<number, string>> = {};
-        const initialStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
-
-        selectedVMsData.forEach(vm => {
-            if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-                initialIPs[vm.id] = {};
-                initialStatus[vm.id] = {};
-
-                vm.networkInterfaces.forEach((nic, index) => {
-                    initialIPs[vm.id][index] = nic.ipAddress || "";
-                    initialStatus[vm.id][index] = nic.ipAddress ? 'valid' : 'empty';
-                });
-            } else {
-                // Fallback for VMs without networkInterfaces
-                initialIPs[vm.id] = { 0: vm.ip === "—" ? "" : vm.ip };
-                initialStatus[vm.id] = { 0: vm.ip === "—" ? 'empty' : 'valid' };
-            }
-        });
-
-        setBulkEditIPs(initialIPs);
-        setBulkValidationStatus(initialStatus);
-        setBulkValidationMessages({});
-        setBulkEditDialogOpen(true);
-    };
 
     const handleCloseBulkEditDialog = () => {
         setBulkEditDialogOpen(false);
@@ -2052,6 +2117,13 @@ export default function RollingMigrationFormDrawer({
                             }
                         });
                         updatedVM.networkInterfaces = updatedInterfaces;
+
+                        // Recalculate comma-separated IP string
+                        const allIPs = updatedInterfaces
+                            .map(nic => nic.ipAddress)
+                            .filter(ip => ip && ip.trim() !== "")
+                            .join(", ");
+                        updatedVM.ip = allIPs || "—";
                     } else {
                         // Fallback for single IP
                         const firstUpdate = vmUpdates[0];
@@ -2094,11 +2166,6 @@ export default function RollingMigrationFormDrawer({
         } finally {
             setAssigningIPs(false);
         }
-    };
-
-    // Update the toolbar handler
-    const handleEditIPs = () => {
-        handleOpenBulkEditDialog();
     };
 
     // Flavor assignment handlers
@@ -2442,7 +2509,6 @@ export default function RollingMigrationFormDrawer({
                                                     rowSelectionModel={selectedVMs.filter(vmId =>
                                                         vmsWithAssignments.some(vm => vm.id === vmId)
                                                     )}
-                                                    onEditIPs={handleEditIPs}
                                                     onAssignFlavor={handleOpenFlavorDialog}
                                                 />
                                             ),
@@ -2960,6 +3026,23 @@ export default function RollingMigrationFormDrawer({
                         </Button>
                     </DialogActions>
                 </Dialog>
+
+                {/* Toast Notification */}
+                <Snackbar
+                    open={toastOpen}
+                    autoHideDuration={4000}
+                    onClose={handleCloseToast}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                >
+                    <Alert
+                        onClose={handleCloseToast}
+                        severity={toastSeverity}
+                        sx={{ width: '100%' }}
+                        variant="standard"
+                    >
+                        {toastMessage}
+                    </Alert>
+                </Snackbar>
             </StyledDrawer>
         </>
     );

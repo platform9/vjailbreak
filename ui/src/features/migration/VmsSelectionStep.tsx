@@ -28,7 +28,7 @@ import { patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import * as React from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
@@ -75,7 +75,7 @@ const CdsIconWrapper = styled('div')({
 
 
 const CustomToolbarWithActions = (props) => {
-  const { rowSelectionModel, onAssignFlavor, onEditIPs, ...toolbarProps } = props;
+  const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
@@ -84,24 +84,14 @@ const CustomToolbarWithActions = (props) => {
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {rowSelectionModel && rowSelectionModel.length > 0 && (
-          <>
-            <Button
-              variant="text"
-              color="primary"
-              onClick={onEditIPs}
-              size="small"
-            >
-              Assign/Edit IPs ({rowSelectionModel.length})
-            </Button>
-            <Button
-              variant="text"
-              color="primary"
-              onClick={onAssignFlavor}
-              size="small"
-            >
-              Assign Flavor ({rowSelectionModel.length})
-            </Button>
-          </>
+          <Button
+            variant="text"
+            color="primary"
+            onClick={onAssignFlavor}
+            size="small"
+          >
+            Assign Flavor ({rowSelectionModel.length})
+          </Button>
         )}
         <CustomSearchToolbar {...toolbarProps} />
       </Box>
@@ -161,7 +151,26 @@ export default function VmsSelectionStep({
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
+
+  // Toast notification for IP assignments
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastSeverityIp, setToastSeverityIp] = useState<"success" | "error" | "warning" | "info">("success");
   const [updating, setUpdating] = useState(false);
+
+  // Toast notification helper
+  const showToast = useCallback((message: string, severity: "success" | "error" | "warning" | "info" = "success") => {
+    setToastMessage(message);
+    setToastSeverityIp(severity);
+    setToastOpen(true);
+  }, []);
+
+  const handleCloseToast = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setToastOpen(false);
+  }, []);
 
   // IP editing and validation state - similar to RollingMigrationForm
   const [editingIpFor, setEditingIpFor] = useState<string | null>(null);
@@ -175,7 +184,7 @@ export default function VmsSelectionStep({
   const [modalValidationStatus, setModalValidationStatus] = useState<Record<string, 'pending' | 'valid' | 'invalid' | 'validating'>>({});
   const [modalValidationMessages, setModalValidationMessages] = useState<Record<string, string>>({});
 
-  // Bulk IP editing state
+  // Bulk IP editing state (kept for potential future use but not accessible via UI)
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({});
   const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>>({});
@@ -223,37 +232,34 @@ export default function VmsSelectionStep({
       hideable: true,
       renderCell: (params) => {
         const vm = params.row as VmDataWithFlavor;
-        const vmName = vm.name;
-        const isSelected = selectedVMs.has(vmName);
+        const vmId = vm.name;
+        const isSelected = selectedVMs.has(vmId);
         const powerState = vm.powerState;
 
         // For powered-off VMs with multiple network interfaces - Modal Design
         if (powerState === "powered-off" && vm.networkInterfaces && vm.networkInterfaces.length > 1) {
           // Compact view - single line with tooltip and Edit button
           const ipSummary = vm.networkInterfaces.map(nic => nic.ipAddress || "—").join(", ");
-          const tooltipContent = vm.networkInterfaces.map((nic) =>
-            `${nic.network}: ${nic.ipAddress || "—"}`
-          ).join("\n");
 
-          return (
-            <Tooltip title={tooltipContent} arrow placement="top">
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                height: '100%',
-                gap: 1
+          const content = (
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              height: '100%',
+              gap: 1
+            }}>
+              <Typography variant="body2" sx={{
+                fontSize: '0.875rem',
+                flex: 1,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
               }}>
-                <Typography variant="body2" sx={{
-                  fontSize: '0.875rem',
-                  flex: 1,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {vm.networkInterfaces.length} NICs: {ipSummary}
-                </Typography>
+                {ipSummary}
+              </Typography>
+              {isSelected && (
                 <Button
                   size="small"
                   variant="outlined"
@@ -268,16 +274,23 @@ export default function VmsSelectionStep({
                 >
                   Edit
                 </Button>
-              </Box>
-            </Tooltip>
+              )}
+            </Box>
           );
+
+          return isSelected ? (
+            <Tooltip title="Edit IP addresses for multiple network interfaces" arrow placement="top">
+              {content}
+            </Tooltip>
+          ) : content;
         }
 
-        // Original single IP logic for powered-on VMs or VMs with single interface
-        const currentIp = vm.ipAddress || (vm.networkInterfaces?.[0]?.ipAddress) || "—";
-        const isEditing = editingIpFor === vmName && editingInterfaceIndex === null;
+        // For single interface or when not using multi-interface modal
+        const currentIp = vm.ipAddress || "—";
+        const isEditing = editingIpFor === vmId && editingInterfaceIndex === null;
 
-        if (isSelected || isEditing) {
+        // Only allow editing if VM is powered off
+        if ((isSelected || isEditing) && powerState === "powered-off") {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%' }}>
               <TextField
@@ -285,7 +298,7 @@ export default function VmsSelectionStep({
                 onChange={(e) => {
                   if (!isEditing) {
                     setTempIpValue(e.target.value);
-                    setEditingIpFor(vmName);
+                    setEditingIpFor(vmId);
                     setEditingInterfaceIndex(null);
                   } else {
                     setTempIpValue(e.target.value);
@@ -293,12 +306,12 @@ export default function VmsSelectionStep({
                 }}
                 onBlur={() => {
                   if (isEditing) {
-                    handleSaveIP(vmName, 0);
+                    handleSaveIP(vmId, vm.networkInterfaces ? 0 : undefined);
                   }
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    handleSaveIP(vmName, 0);
+                    handleSaveIP(vmId, vm.networkInterfaces ? 0 : undefined);
                   } else if (e.key === 'Escape') {
                     handleCancelEditingIP();
                   }
@@ -317,6 +330,23 @@ export default function VmsSelectionStep({
                 placeholder="Enter IP address"
               />
             </Box>
+          );
+        }
+
+        if (powerState === "powered-on") {
+          return (
+            <Tooltip title="IP assignment is only available for powered-off VMs" arrow>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                width: '100%',
+                height: '100%',
+              }}>
+                <Typography variant="body2">
+                  {currentIp}
+                </Typography>
+              </Box>
+            </Tooltip>
           );
         }
 
@@ -518,8 +548,17 @@ export default function VmsSelectionStep({
       // Map power state from vmState 
       const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
 
+      // Create comma-separated IP string from networkInterfaces
+      const allIPs = vm.networkInterfaces
+        ? vm.networkInterfaces
+          .map(nic => nic.ipAddress)
+          .filter(ip => ip && ip.trim() !== "")
+          .join(", ")
+        : vm.ipAddress || "";
+
       return {
         ...vm,
+        ipAddress: allIPs || "—", // Update the main IP field to contain comma-separated IPs
         isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
         flavor,
         flavorNotFound,
@@ -628,10 +667,21 @@ export default function VmsSelectionStep({
           });
         }
 
-        // Update local state
-        const updatedVMs = vmsWithFlavor.map(v =>
-          v.name === vmName ? { ...v, networkInterfaces: updatedInterfaces } : v
-        );
+        // Update local state - recalculate comma-separated IP string
+        const updatedVMs = vmsWithFlavor.map(v => {
+          if (v.name === vmName) {
+            const allIPs = updatedInterfaces
+              .map(nic => nic.ipAddress)
+              .filter(ip => ip && ip.trim() !== "")
+              .join(", ");
+            return {
+              ...v,
+              networkInterfaces: updatedInterfaces,
+              ipAddress: allIPs || "—"
+            };
+          }
+          return v;
+        });
         setVmsWithFlavor(updatedVMs);
       } else {
         // Fallback for single IP assignment
@@ -653,12 +703,17 @@ export default function VmsSelectionStep({
       }
 
       handleCancelEditingIP();
+
+      // Show success toast
+      showToast(`IP address successfully updated for VM "${vm?.name}"`);
+
     } catch (error) {
       console.error("Failed to update IP:", error);
       reportError(error as Error, {
         context: 'ip-assignment',
         metadata: { vmName, interfaceIndex, action: 'ip-assignment' }
       });
+      showToast(`Failed to update IP address for VM "${vm?.name}"`, "error");
     }
   };
 
@@ -797,16 +852,46 @@ export default function VmsSelectionStep({
             };
           });
 
+          // Recalculate comma-separated IP string
+          const allIPs = updatedInterfaces
+            .map(nic => nic.ipAddress)
+            .filter(ip => ip && ip.trim() !== "")
+            .join(", ");
+
           return {
             ...vmItem,
-            networkInterfaces: updatedInterfaces
+            networkInterfaces: updatedInterfaces,
+            ipAddress: allIPs || "—"
           };
         }
         return vmItem;
       });
 
+      // Update backend with patch call
+      if (editingVm.vmWareMachineName) {
+        const updatedInterfaces = editingVm.networkInterfaces?.map((nic, index) => {
+          const key = `interface-${index}`;
+          const newIpValue = modalIpValues[key]?.trim();
+          return {
+            ...nic,
+            ipAddress: newIpValue || nic.ipAddress
+          };
+        });
+
+        await patchVMwareMachine(editingVm.vmWareMachineName, {
+          spec: {
+            vms: {
+              networkInterfaces: updatedInterfaces
+            }
+          }
+        });
+      }
+
       setVmsWithFlavor(updatedVMs);
       handleCloseIpEditModal();
+
+      // Show success toast
+      showToast(`IP addresses successfully updated for VM "${editingVm.name}"`);
 
       // Track the analytics event
       track('ip_addresses_updated', {
@@ -825,39 +910,11 @@ export default function VmsSelectionStep({
           action: 'modal-multi-ip-update'
         }
       });
+      showToast(`Failed to update IP addresses for VM "${editingVm.name}"`, "error");
     }
   };
 
-  // Bulk IP editing functions
-  const handleOpenBulkEditDialog = () => {
-    if (selectedVMs.size === 0) return;
-
-    // Initialize bulk edit state for multiple interfaces
-    const selectedVMsData = vmsWithFlavor.filter(vm => selectedVMs.has(vm.name));
-    const initialIPs: Record<string, Record<number, string>> = {};
-    const initialStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
-
-    selectedVMsData.forEach(vm => {
-      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-        initialIPs[vm.name] = {};
-        initialStatus[vm.name] = {};
-
-        vm.networkInterfaces.forEach((nic, index) => {
-          initialIPs[vm.name][index] = nic.ipAddress || "";
-          initialStatus[vm.name][index] = nic.ipAddress ? 'valid' : 'empty';
-        });
-      } else {
-        // Fallback for VMs without networkInterfaces
-        initialIPs[vm.name] = { 0: vm.ipAddress === "—" ? "" : vm.ipAddress || "" };
-        initialStatus[vm.name] = { 0: vm.ipAddress === "—" ? 'empty' : 'valid' };
-      }
-    });
-
-    setBulkEditIPs(initialIPs);
-    setBulkValidationStatus(initialStatus);
-    setBulkValidationMessages({});
-    setBulkEditDialogOpen(true);
-  };
+  // Bulk IP editing functions (removed - not accessible via UI anymore)
 
   const handleCloseBulkEditDialog = () => {
     setBulkEditDialogOpen(false);
@@ -1077,6 +1134,13 @@ export default function VmsSelectionStep({
               }
             });
             updatedVM.networkInterfaces = updatedInterfaces;
+
+            // Recalculate comma-separated IP string
+            const allIPs = updatedInterfaces
+              .map(nic => nic.ipAddress)
+              .filter(ip => ip && ip.trim() !== "")
+              .join(", ");
+            updatedVM.ipAddress = allIPs || "—";
           } else {
             // Fallback for single IP
             const firstUpdate = vmUpdates[0];
@@ -1104,11 +1168,6 @@ export default function VmsSelectionStep({
     } finally {
       setAssigningIPs(false);
     }
-  };
-
-  // Update the toolbar handler
-  const handleEditIPs = () => {
-    handleOpenBulkEditDialog();
   };
 
   const handleOpenFlavorDialog = () => {
@@ -1252,7 +1311,6 @@ export default function VmsSelectionStep({
                     rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
                       vmsWithFlavor.some(vm => vm.name === vmName)
                     )}
-                    onEditIPs={handleEditIPs}
                     onAssignFlavor={handleOpenFlavorDialog}
                   />
                 ),
@@ -1285,7 +1343,6 @@ export default function VmsSelectionStep({
               loading={loadingVms || loadingMigratedVms}
               checkboxSelection
               disableColumnMenu
-              disableColumnResize
               getRowClassName={(params) => {
                 if (params.row.isMigrated) {
                   return "disabled-row";
@@ -1595,6 +1652,23 @@ export default function VmsSelectionStep({
           }
         }}
       />
+
+      {/* Toast Notification for IP assignments */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={4000}
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleCloseToast}
+          severity={toastSeverityIp}
+          sx={{ width: '100%' }}
+          variant="standard"
+        >
+          {toastMessage}
+        </Alert>
+      </Snackbar>
     </VmsSelectionStepContainer>
   );
 }

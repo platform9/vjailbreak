@@ -3,7 +3,7 @@ import { VmData } from "../migration-templates/model"
 import { VJAILBREAK_API_BASE_PATH } from "../constants"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "../constants"
 import axios from "../axios"
-import {VmNetworkInterface} from "./model"
+import { VmNetworkInterface } from "./model"
 export const getVMwareMachines = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
   vmwareCredName?: string
@@ -46,7 +46,6 @@ export const patchVMwareMachine = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<VMwareMachine> => {
-  
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines/${vmName}`
 
   return axios.patch<VMwareMachine>({
@@ -62,6 +61,7 @@ export const patchVMwareMachine = async (
 
 export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
   return machines.map((machine) => ({
+    id: machine.spec.vms.name,
     name: machine.spec.vms.name,
     vmState: machine.status.powerState === "running" ? "running" : "stopped",
     ipAddress: machine.spec.vms.ipAddress,
@@ -74,7 +74,8 @@ export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
     targetFlavorId: machine.spec.targetFlavorId,
     labels: machine.metadata.labels,
     osFamily: machine.spec.vms.osFamily,
-    esxHost: machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
+    esxHost:
+      machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
     vmWareMachineName: machine.metadata.name,
     networkInterfaces: machine.spec.vms.networkInterfaces?.map((nic) => ({
       mac: nic.mac,
