@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -717,9 +718,10 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 			}
 
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:     strings.ToLower(nic.MacAddress),
-				Index:   nicsIndex,
-				Network: network,
+				MAC:      strings.ToLower(nic.MacAddress),
+				Index:    nicsIndex,
+				Network:  network,
+				IpAdress: "", // IP will be populated from guest info if available
 			})
 			nicsIndex++
 		}
@@ -1499,6 +1501,21 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
+	}
+
+	if guestNetworksFromVmware != nil {
+		// Extract IP addresses from guest networks and set it in network interfaces
+		for _, nic := range nicList {
+			for _, guestNet := range guestNetworksFromVmware {
+				if nic.MAC == guestNet.MAC {
+					// Check if IP is ipv4
+					if net.ParseIP(guestNet.IP).To4() == nil {
+						nic.IpAdress = guestNet.IP
+					}
+					break
+				}
+			}
+		}
 	}
 
 	// Convert VM name to Kubernetes-safe name
