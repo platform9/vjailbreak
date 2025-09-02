@@ -451,7 +451,6 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 // CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
 	ctxlog := r.ctxlog.WithValues("vm", vm)
 	ctxlog.Info("Creating Migration for VM")
@@ -1069,7 +1068,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
 			}
 
-			baseFlavor, err := utils.FindHotplugBaseFlavor(ctx, osClients.ComputeClient)
+			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
 				migrationplan.Status.MigrationStatus = corev1.PodFailed
 				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
@@ -1091,7 +1090,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 		}
 
-		migrationobj, err := r.CreateMigration(ctx, migrationplan, migrationtemplate, vm, vmMachineObj)
+		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))

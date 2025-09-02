@@ -440,6 +440,7 @@ export default function MigrationOptionsAlt({
                       checked={params?.useFlavorless || false}
                       onChange={(e) => {
                         const isChecked = e.target.checked;
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
                         onChange("useFlavorless")(isChecked);
                       }}
                     />

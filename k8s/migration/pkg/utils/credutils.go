@@ -1555,8 +1555,8 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 }
 
-// FindHotplugBaseFlavor connects to OpenStack and finds the suitable flavor
-func FindHotplugBaseFlavor(ctx context.Context, computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
+// FindHotplugBaseFlavor connects to OpenStack and finds a flavor with 0 vCPUs and 0 RAM
+func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
 	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
