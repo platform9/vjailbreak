@@ -243,6 +243,17 @@ func (migobj *Migrate) WaitforAdminCutover() error {
 	return nil
 }
 
+func (migobj *Migrate) CheckIfAdminCutover() bool {
+	select {
+	case label := <-migobj.PodLabelWatcher:
+		migobj.logMessage(fmt.Sprintf("Label: %s", label))
+		if label == "yes" {
+			return true
+		}
+	}
+	return false
+}
+
 func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
@@ -380,7 +391,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			if final {
 				break
 			}
-			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
+			// Check if migration has admin cutover if so don't copy any more changed blocks
+			adminInitiatedCutover := migobj.CheckIfAdminCutover()
+			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold || adminInitiatedCutover {
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
