@@ -1569,19 +1569,9 @@ func FindHotplugBaseFlavor(ctx context.Context, computeClient *gophercloud.Servi
 
 	for _, flavor := range allFlavors {
 		if flavor.VCPUs == 0 && flavor.RAM == 0 {
-			allSpecs, err := flavors.ListExtraSpecs(computeClient, flavor.ID).Extract()
-			if err != nil {
-				ctrllog.FromContext(ctx).Error(err, "could not get extra specs for flavor", "flavorID", flavor.ID)
-				continue
-			}
-
-			if hints, ok := allSpecs["os:scheduler_hints"]; ok {
-				if strings.Contains(hints, `"hotplug": "true"`) {
-					return &flavor, nil
-				}
-			}
+			return &flavor, nil
 		}
 	}
 
-	return nil, errors.New("no suitable hotplug-enabled base flavor (0 vCPU, 0 RAM) found")
+	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
 }
