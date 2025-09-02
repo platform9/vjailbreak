@@ -481,7 +481,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				MigrationPlan: migrationplan.Name,
 				VMName:        vm,
 				// PodRef will be set in the migration controller
-				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				UseFlavorless:           migrationplan.Spec.UseFlavorless,
