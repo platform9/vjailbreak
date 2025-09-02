@@ -314,6 +314,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
+	// Check if migration has admin cutover if so don't copy any more changed blocks
+	adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
+
 	incrementalCopyCount := 0
 	for {
 		// If its the first copy, copy the entire disk
@@ -328,6 +331,18 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 				duration := time.Since(startTime)
 				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+			}
+			if adminInitiatedCutover {
+				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
+				if err := migobj.WaitforAdminCutover(); err != nil {
+					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+				}
+				utils.PrintLog("Shutting down source VM and performing final copy")
+				err = vmops.VMPowerOff()
+				if err != nil {
+					return vminfo, errors.Wrap(err, "failed to power off VM")
+				}
+				final = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -395,9 +410,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			if final {
 				break
 			}
-			// Check if migration has admin cutover if so don't copy any more changed blocks
-			adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
-			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold || adminInitiatedCutover {
+			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
