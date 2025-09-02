@@ -1377,6 +1377,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
+//nolint:gocyclo
 func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
