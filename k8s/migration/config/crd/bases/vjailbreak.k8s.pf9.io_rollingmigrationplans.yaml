@@ -215,11 +215,6 @@ spec:
               retry:
                 description: Retry the migration if it fails
                 type: boolean
-              useFlavorless:
-                description: |-
-                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-                  When true, TargetFlavorId for the VM should be set to a base flavor (e.g., a 0-0-x flavor).
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan

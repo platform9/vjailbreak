@@ -472,8 +472,10 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	if useFlavorless {
 		utils.PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey: fmt.Sprintf("%d", vminfo.Memory),
+			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
+			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
+			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
+			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
 		}
 	}
 
