@@ -17,10 +17,13 @@ import {
   Typography,
   Snackbar,
   Alert,
+  TextField,
+  CircularProgress,
+  GlobalStyles,
 } from "@mui/material";
-import { DataGrid, GridColDef, GridRow, GridRowSelectionModel } from "@mui/x-data-grid";
+import { DataGrid, GridColDef, GridRow, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid";
 import { VmData } from "src/api/migration-templates/model";
-import { OpenStackFlavor } from "src/api/openstack-creds/model";
+import { OpenStackFlavor, OpenstackCreds } from "src/api/openstack-creds/model";
 import { patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines";
 import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
@@ -31,9 +34,15 @@ import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
 import InfoIcon from "@mui/icons-material/Info";
 import WarningIcon from "@mui/icons-material/Warning";
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 import WindowsIcon from "src/assets/windows_icon.svg";
 import LinuxIcon from "src/assets/linux_icon.svg";
 import { useErrorHandler } from "src/hooks/useErrorHandler";
+import { validateOpenstackIPs } from "src/api/openstack-creds/openstackCreds";
+import { getSecret } from "src/api/secrets/secrets";
+import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants";
+import { useAmplitude } from "src/hooks/useAmplitude";
 
 const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -66,22 +75,36 @@ const CdsIconWrapper = styled('div')({
 
 
 const CustomToolbarWithActions = (props) => {
-  const { rowSelectionModel, onAssignFlavor, ...toolbarProps } = props;
+  const { rowSelectionModel, onAssignFlavor, onEditIPs, ...toolbarProps } = props;
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px  8px' }}>
-      {rowSelectionModel.length > 0 && (
-        <Button
-          variant="text"
-          color="primary"
-          onClick={onAssignFlavor}
-          size="small"
-          sx={{ ml: 1 }}
-        >
-          Assign Flavor ({rowSelectionModel.length})
-        </Button>
-      )}
-      <CustomSearchToolbar {...toolbarProps} />
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <GridToolbarColumnsButton />
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {rowSelectionModel && rowSelectionModel.length > 0 && (
+          <>
+            <Button
+              variant="text"
+              color="primary"
+              onClick={onEditIPs}
+              size="small"
+            >
+              Assign/Edit IPs ({rowSelectionModel.length})
+            </Button>
+            <Button
+              variant="text"
+              color="primary"
+              onClick={onAssignFlavor}
+              size="small"
+            >
+              Assign Flavor ({rowSelectionModel.length})
+            </Button>
+          </>
+        )}
+        <CustomSearchToolbar {...toolbarProps} />
+      </Box>
     </Box>
   );
 };
@@ -90,132 +113,16 @@ interface VmDataWithFlavor extends VmData {
   isMigrated?: boolean;
   flavorName?: string; // Add a field to store the flavor name
   flavorNotFound?: boolean; // Add a flag to indicate if a flavor wasn't found
+  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating';
+  ipValidationMessage?: string;
+  powerState?: string; // Add power state for IP editing logic
 }
 
-const columns: GridColDef[] = [
-  {
-    field: "name",
-    headerName: "VM Name",
-    flex: 2.5,
-    renderCell: (params) => (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
-            <CdsIconWrapper>
-              {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-              {/* @ts-ignore */}
-              <cds-icon shape="vm" size="md" badge={params.row.vmState === "running" ? "success" : "danger"}></cds-icon>
-            </CdsIconWrapper>
-          </Tooltip>
-          <Box>{params.value}</Box>
-        </Box>
-        {params.row.isMigrated && (
-          <Chip
-            variant="outlined"
-            label="Migrated"
-            color="info"
-            size="small"
-          />
-        )}
-        {params.row.flavorNotFound && (
-          <Box display="flex" alignItems="center" gap={0.5}>
-            <WarningIcon color="warning" fontSize="small" />
-          </Box>
-        )}
-      </Box>
-    ),
-  },
-  {
-    field: "ipAddress",
-    headerName: "Current IP",
-    flex: 1,
-    valueGetter: (value) => value || "- ",
-  },
-  {
-    field: "osFamily",
-    headerName: "OS",
-    flex: 1,
-    renderCell: (params) => {
-      const osFamily = params.row.osFamily || "Unknown";
-      let displayValue = osFamily;
-      let icon: React.ReactNode = null;
-
-      if (osFamily.includes("windows")) {
-        displayValue = "Windows";
-        icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-      } else if (osFamily.includes("linux")) {
-        displayValue = "Linux";
-        icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
-      } else {
-        displayValue = "Other";
-      }
-
-      return (
-        <Tooltip title={displayValue}>
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-            {icon}
-          </Box>
-        </Tooltip>
-      );
-    },
-  },
-  {
-    field: "networks",
-    headerName: "Network Interface(s)",
-    flex: 1.2,
-    valueGetter: (value: string[]) => value?.join(", ") || "- ",
-  },
-  {
-    field: "cpuCount",
-    headerName: "CPU",
-    flex: 0.7,
-    valueGetter: (value) => value || "- ",
-  },
-  {
-    field: "memory",
-    headerName: "Memory (MB)",
-    flex: 0.9,
-    valueGetter: (value) => value || "- ",
-  },
-  {
-    field: "esxHost",
-    headerName: "ESX Host",
-    flex: 1,
-    valueGetter: (value) => value || "—",
-  },
-  {
-    field: "flavor",
-    headerName: "Flavor",
-    flex: 1,
-    valueGetter: (value) => value || "auto-assign",
-    renderHeader: () => (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <div style={{ fontWeight: 500 }}>Flavor</div>
-        <Tooltip title="Target OpenStack flavor to be assigned to this VM after migration.">
-          <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
-        </Tooltip>
-      </Box>
-    ),
-  },
-  // Hidden column for sorting by vmState
-  {
-    field: "vmState",
-    headerName: "Status",
-    flex: 1,
-    headerClassName: 'hidden-column',
-    sortable: true,
-    sortComparator: (v1, v2) => {
-      if (v1 === "running" && v2 === "stopped") return -1;
-      if (v1 === "stopped" && v2 === "running") return 1;
-      return 0;
-    }
-  }
-];
+// Column definition moved inside component to access state
 
 const paginationModel = { page: 0, pageSize: 5 };
 
 const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or already has been migrated.";
-const DISABLED_TOOLTIP_MESSAGE = "Turn on the VM to enable migration.";
 const FLAVOR_NOT_FOUND_MESSAGE = "Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.";
 
 interface VmsSelectionStepProps {
@@ -228,6 +135,7 @@ interface VmsSelectionStepProps {
   openstackFlavors?: OpenStackFlavor[];
   vmwareCredName?: string;
   openstackCredName?: string;
+  openstackCredentials?: OpenstackCreds;
 }
 
 export default function VmsSelectionStep({
@@ -240,8 +148,10 @@ export default function VmsSelectionStep({
   openstackFlavors = [],
   vmwareCredName,
   openstackCredName,
+  openstackCredentials,
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
+  const { track } = useAmplitude({ component: "VmsSelectionStep" });
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
@@ -252,6 +162,299 @@ export default function VmsSelectionStep({
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
   const [updating, setUpdating] = useState(false);
+
+  // IP editing and validation state - similar to RollingMigrationForm
+  const [editingIpFor, setEditingIpFor] = useState<string | null>(null);
+  const [editingInterfaceIndex, setEditingInterfaceIndex] = useState<number | null>(null);
+  const [tempIpValue, setTempIpValue] = useState<string>("");
+
+  // Modal state for multi-NIC IP editing
+  const [ipEditModalOpen, setIpEditModalOpen] = useState(false);
+  const [editingVm, setEditingVm] = useState<VmDataWithFlavor | null>(null);
+  const [modalIpValues, setModalIpValues] = useState<Record<string, string>>({});
+  const [modalValidationStatus, setModalValidationStatus] = useState<Record<string, 'pending' | 'valid' | 'invalid' | 'validating'>>({});
+  const [modalValidationMessages, setModalValidationMessages] = useState<Record<string, string>>({});
+
+  // Bulk IP editing state
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
+  const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({});
+  const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>>({});
+  const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, Record<number, string>>>({});
+  const [assigningIPs, setAssigningIPs] = useState(false);
+
+  // Define columns inside component to access state and functions
+  const columns: GridColDef[] = [
+    {
+      field: "name",
+      headerName: "VM Name",
+      flex: 2.5,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
+              <CdsIconWrapper>
+                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                {/* @ts-ignore */}
+                <cds-icon shape="vm" size="md" badge={params.row.vmState === "running" ? "success" : "danger"}></cds-icon>
+              </CdsIconWrapper>
+            </Tooltip>
+            <Box>{params.value}</Box>
+          </Box>
+          {params.row.isMigrated && (
+            <Chip
+              variant="outlined"
+              label="Migrated"
+              color="info"
+              size="small"
+            />
+          )}
+          {params.row.flavorNotFound && (
+            <Box display="flex" alignItems="center" gap={0.5}>
+              <WarningIcon color="warning" fontSize="small" />
+            </Box>
+          )}
+        </Box>
+      ),
+    },
+    {
+      field: "ipAddress",
+      headerName: "IP Address(es)",
+      flex: 1,
+      hideable: true,
+      renderCell: (params) => {
+        const vm = params.row as VmDataWithFlavor;
+        const vmName = vm.name;
+        const isSelected = selectedVMs.has(vmName);
+        const powerState = vm.powerState;
+
+        // For powered-off VMs with multiple network interfaces - Modal Design
+        if (powerState === "powered-off" && vm.networkInterfaces && vm.networkInterfaces.length > 1) {
+          // Compact view - single line with tooltip and Edit button
+          const ipSummary = vm.networkInterfaces.map(nic => nic.ipAddress || "—").join(", ");
+          const tooltipContent = vm.networkInterfaces.map((nic) =>
+            `${nic.network}: ${nic.ipAddress || "—"}`
+          ).join("\n");
+
+          return (
+            <Tooltip title={tooltipContent} arrow placement="top">
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                height: '100%',
+                gap: 1
+              }}>
+                <Typography variant="body2" sx={{
+                  fontSize: '0.875rem',
+                  flex: 1,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {vm.networkInterfaces.length} NICs: {ipSummary}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleOpenIpEditModal(vm)}
+                  sx={{
+                    minWidth: 'auto',
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: '0.75rem',
+                    height: 28
+                  }}
+                >
+                  Edit
+                </Button>
+              </Box>
+            </Tooltip>
+          );
+        }
+
+        // Original single IP logic for powered-on VMs or VMs with single interface
+        const currentIp = vm.ipAddress || (vm.networkInterfaces?.[0]?.ipAddress) || "—";
+        const isEditing = editingIpFor === vmName && editingInterfaceIndex === null;
+
+        if (isSelected || isEditing) {
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%' }}>
+              <TextField
+                value={isEditing ? tempIpValue : currentIp === "—" ? "" : currentIp}
+                onChange={(e) => {
+                  if (!isEditing) {
+                    setTempIpValue(e.target.value);
+                    setEditingIpFor(vmName);
+                    setEditingInterfaceIndex(null);
+                  } else {
+                    setTempIpValue(e.target.value);
+                  }
+                }}
+                onBlur={() => {
+                  if (isEditing) {
+                    handleSaveIP(vmName, 0);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveIP(vmName, 0);
+                  } else if (e.key === 'Escape') {
+                    handleCancelEditingIP();
+                  }
+                }}
+                size="small"
+                sx={{
+                  minWidth: 100,
+                  '& .MuiInputBase-root': {
+                    height: '32px'
+                  },
+                  '& .MuiInputBase-input': {
+                    padding: '4px 8px',
+                    fontSize: '0.875rem'
+                  }
+                }}
+                placeholder="Enter IP address"
+              />
+            </Box>
+          );
+        }
+
+        return (
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            width: '100%',
+            height: '100%'
+          }}>
+            <Typography variant="body2">
+              {currentIp}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      field: "osFamily",
+      headerName: "OS",
+      flex: 1,
+      renderCell: (params) => {
+        const osFamily = params.row.osFamily || "Unknown";
+        let displayValue = osFamily;
+        let icon: React.ReactNode = null;
+
+        if (osFamily.includes("windows")) {
+          displayValue = "Windows";
+          icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
+        } else if (osFamily.includes("linux")) {
+          displayValue = "Linux";
+          icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
+        } else {
+          displayValue = "Other";
+        }
+
+        return (
+          <Tooltip title={displayValue}>
+            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+              {icon}
+            </Box>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      field: "networks",
+      headerName: "Network Interface(s)",
+      flex: 1.2,
+      valueGetter: (value: string[]) => value?.join(", ") || "- ",
+    },
+    {
+      field: "cpuCount",
+      headerName: "CPU",
+      flex: 0.7,
+      valueGetter: (value) => value || "- ",
+    },
+    {
+      field: "memory",
+      headerName: "Memory (MB)",
+      flex: 0.9,
+      valueGetter: (value) => value || "- ",
+    },
+    {
+      field: "esxHost",
+      headerName: "ESX Host",
+      flex: 1,
+      valueGetter: (value) => value || "—",
+    },
+    {
+      field: "flavor",
+      headerName: "Flavor",
+      flex: 1,
+      valueGetter: (value) => value || "auto-assign",
+      renderHeader: () => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <div style={{ fontWeight: 500 }}>Flavor</div>
+          <Tooltip title="Target OpenStack flavor to be assigned to this VM after migration.">
+            <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
+          </Tooltip>
+        </Box>
+      ),
+    },
+    // Hidden column for sorting by vmState
+    {
+      field: "vmState",
+      headerName: "Status",
+      flex: 1,
+      headerClassName: 'hidden-column',
+      sortable: true,
+      sortComparator: (v1, v2) => {
+        if (v1 === "running" && v2 === "stopped") return -1;
+        if (v1 === "stopped" && v2 === "running") return 1;
+        return 0;
+      }
+    }
+  ];
+
+  // IP validation and utility functions
+  const isValidIPAddress = (ip: string): boolean => {
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    return ipRegex.test(ip);
+  };
+
+  const getOpenstackAccessInfo = async (openstackCredData: OpenstackCreds) => {
+    const spec = openstackCredData.spec;
+
+    // If there's a secretRef, fetch the credentials from the secret
+    if (spec.secretRef?.name) {
+      try {
+        const secret = await getSecret(spec.secretRef.name, VJAILBREAK_DEFAULT_NAMESPACE);
+        if (secret && secret.data) {
+          return {
+            authUrl: secret.data.OS_AUTH_URL || '',
+            domainName: secret.data.OS_DOMAIN_NAME || 'default',
+            insecure: secret.data.OS_INSECURE === 'true' || true,
+            password: secret.data.OS_PASSWORD || '',
+            regionName: secret.data.OS_REGION_NAME || '',
+            tenantName: secret.data.OS_TENANT_NAME || '',
+            username: secret.data.OS_USERNAME || '',
+          };
+        }
+      } catch (error) {
+        console.error('Failed to fetch OpenStack credentials from secret:', error);
+        throw new Error('Failed to fetch OpenStack credentials from secret');
+      }
+    }
+
+    return {
+      authUrl: '',
+      domainName: 'default',
+      insecure: true,
+      password: '',
+      regionName: '',
+      tenantName: '',
+      username: '',
+    };
+  };
 
   useEffect(() => {
     if (!open) {
@@ -311,11 +514,18 @@ export default function VmsSelectionStep({
 
       // Check for NOT_FOUND label for OpenStack credentials
       const flavorNotFound = openstackCredName ? vm.labels?.[openstackCredName] === "NOT_FOUND" : false;
+
+      // Map power state from vmState 
+      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
+
       return {
         ...vm,
         isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
         flavor,
-        flavorNotFound
+        flavorNotFound,
+        powerState,
+        ipValidationStatus: 'pending' as const,
+        ipValidationMessage: '',
       };
     });
     setVmsWithFlavor(initialVmsWithFlavor);
@@ -324,7 +534,7 @@ export default function VmsSelectionStep({
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
     if (vmsWithFlavor.length === 0) return;
-    
+
     // Clean up selection - remove VMs that no longer exist
     const availableVmNames = new Set(vmsWithFlavor.map(vm => vm.name));
     const cleanedSelection = new Set(
@@ -362,6 +572,543 @@ export default function VmsSelectionStep({
     // Use persistent selection for onChange callback
     const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name));
     onChange("vms")(selectedVmData);
+  };
+
+  // IP editing handler functions
+  const handleCancelEditingIP = () => {
+    setEditingIpFor(null);
+    setEditingInterfaceIndex(null);
+    setTempIpValue("");
+  };
+
+  const handleSaveIP = async (vmName: string, interfaceIndex?: number) => {
+    const vm = vmsWithFlavor.find(v => v.name === vmName);
+    if (!vm || !tempIpValue.trim()) {
+      handleCancelEditingIP();
+      return;
+    }
+
+    if (!isValidIPAddress(tempIpValue.trim())) {
+      console.error('Invalid IP address format:', tempIpValue.trim());
+      return;
+    }
+
+    try {
+      if (openstackCredentials && interfaceIndex !== undefined) {
+        const accessInfo = await getOpenstackAccessInfo(openstackCredentials);
+        const validationResult = await validateOpenstackIPs({
+          ip: [tempIpValue.trim()],
+          accessInfo
+        });
+
+        const isValid = validationResult.isValid[0];
+        const reason = validationResult.reason[0];
+
+        if (!isValid) {
+          console.error('IP validation failed:', reason);
+          return;
+        }
+      }
+
+      // Update the VM with new IP for specific interface
+      if (interfaceIndex !== undefined && vm.networkInterfaces) {
+        const updatedInterfaces = [...vm.networkInterfaces];
+        updatedInterfaces[interfaceIndex] = {
+          ...updatedInterfaces[interfaceIndex],
+          ipAddress: tempIpValue.trim()
+        };
+
+        if (vm.vmWareMachineName) {
+          await patchVMwareMachine(vm.vmWareMachineName, {
+            spec: {
+              vms: {
+                networkInterfaces: updatedInterfaces
+              }
+            }
+          });
+        }
+
+        // Update local state
+        const updatedVMs = vmsWithFlavor.map(v =>
+          v.name === vmName ? { ...v, networkInterfaces: updatedInterfaces } : v
+        );
+        setVmsWithFlavor(updatedVMs);
+      } else {
+        // Fallback for single IP assignment
+        if (vm.vmWareMachineName) {
+          await patchVMwareMachine(vm.vmWareMachineName, {
+            spec: {
+              vms: {
+                assignedIp: tempIpValue.trim()
+              }
+            }
+          });
+        }
+
+        // Update local state
+        const updatedVMs = vmsWithFlavor.map(v =>
+          v.name === vmName ? { ...v, ipAddress: tempIpValue.trim() } : v
+        );
+        setVmsWithFlavor(updatedVMs);
+      }
+
+      handleCancelEditingIP();
+    } catch (error) {
+      console.error("Failed to update IP:", error);
+      reportError(error as Error, {
+        context: 'ip-assignment',
+        metadata: { vmName, interfaceIndex, action: 'ip-assignment' }
+      });
+    }
+  };
+
+  // Modal functions for multi-NIC IP editing
+  const handleOpenIpEditModal = (vm: VmDataWithFlavor) => {
+    setEditingVm(vm);
+    // Initialize modal values with current IP addresses
+    const ipValues: Record<string, string> = {};
+    const validationStatus: Record<string, 'pending' | 'valid' | 'invalid' | 'validating'> = {};
+
+    if (vm.networkInterfaces) {
+      vm.networkInterfaces.forEach((nic, index) => {
+        const key = `interface-${index}`;
+        ipValues[key] = nic.ipAddress || "";
+        validationStatus[key] = nic.ipAddress ? 'valid' : 'pending';
+      });
+    }
+
+    setModalIpValues(ipValues);
+    setModalValidationStatus(validationStatus);
+    setModalValidationMessages({});
+    setIpEditModalOpen(true);
+  };
+
+  const handleCloseIpEditModal = () => {
+    setIpEditModalOpen(false);
+    setEditingVm(null);
+    setModalIpValues({});
+    setModalValidationStatus({});
+    setModalValidationMessages({});
+  };
+
+  const handleModalIpChange = (interfaceIndex: number, value: string) => {
+    const key = `interface-${interfaceIndex}`;
+    setModalIpValues(prev => ({
+      ...prev,
+      [key]: value
+    }));
+
+    // Reset validation state for this field
+    setModalValidationStatus(prev => ({
+      ...prev,
+      [key]: 'pending'
+    }));
+    setModalValidationMessages(prev => ({
+      ...prev,
+      [key]: ""
+    }));
+  };
+
+  const handleSaveModalIPs = async () => {
+    if (!editingVm || !editingVm.networkInterfaces) {
+      handleCloseIpEditModal();
+      return;
+    }
+
+    try {
+      // Validate all IP addresses first
+      const ipsToValidate: string[] = [];
+      const validIpMap: Record<number, string> = {};
+      let hasValidationErrors = false;
+
+      for (let i = 0; i < editingVm.networkInterfaces.length; i++) {
+        const key = `interface-${i}`;
+        const ipValue = modalIpValues[key]?.trim();
+
+        if (ipValue && ipValue !== "—") {
+          if (!isValidIPAddress(ipValue)) {
+            setModalValidationMessages(prev => ({
+              ...prev,
+              [key]: "Invalid IP address format"
+            }));
+            setModalValidationStatus(prev => ({
+              ...prev,
+              [key]: 'invalid'
+            }));
+            hasValidationErrors = true;
+          } else {
+            validIpMap[i] = ipValue;
+            ipsToValidate.push(ipValue);
+            setModalValidationStatus(prev => ({
+              ...prev,
+              [key]: 'validating'
+            }));
+          }
+        }
+      }
+
+      if (hasValidationErrors) {
+        return;
+      }
+
+      // Validate IPs with backend if there are any to validate
+      if (ipsToValidate.length > 0 && openstackCredentials) {
+        try {
+          const accessInfo = await getOpenstackAccessInfo(openstackCredentials);
+          await validateOpenstackIPs({
+            ip: ipsToValidate,
+            accessInfo
+          });
+          // Mark all as valid if validation passes
+          Object.keys(validIpMap).forEach(interfaceIndex => {
+            const key = `interface-${interfaceIndex}`;
+            setModalValidationStatus(prev => ({
+              ...prev,
+              [key]: 'valid'
+            }));
+          });
+        } catch (error) {
+          console.error("IP validation failed:", error);
+          Object.keys(validIpMap).forEach(interfaceIndex => {
+            const key = `interface-${interfaceIndex}`;
+            setModalValidationMessages(prev => ({
+              ...prev,
+              [key]: "IP validation failed"
+            }));
+            setModalValidationStatus(prev => ({
+              ...prev,
+              [key]: 'invalid'
+            }));
+          });
+          return;
+        }
+      }
+
+      // Update the VM's network interfaces with the new IP values
+      const updatedVMs = vmsWithFlavor.map(vmItem => {
+        if (vmItem.name === editingVm.name && vmItem.networkInterfaces) {
+          const updatedInterfaces = vmItem.networkInterfaces.map((nic, index) => {
+            const key = `interface-${index}`;
+            const newIpValue = modalIpValues[key]?.trim();
+
+            return {
+              ...nic,
+              ipAddress: newIpValue || nic.ipAddress
+            };
+          });
+
+          return {
+            ...vmItem,
+            networkInterfaces: updatedInterfaces
+          };
+        }
+        return vmItem;
+      });
+
+      setVmsWithFlavor(updatedVMs);
+      handleCloseIpEditModal();
+
+      // Track the analytics event
+      track('ip_addresses_updated', {
+        vm_name: editingVm.name,
+        interface_count: editingVm.networkInterfaces.length,
+        action: 'modal_multi_ip_update'
+      });
+
+    } catch (error) {
+      console.error("Failed to update IPs:", error);
+      reportError(error as Error, {
+        context: 'modal-multi-ip-update',
+        metadata: {
+          vm_name: editingVm.name,
+          modalIpValues: modalIpValues,
+          action: 'modal-multi-ip-update'
+        }
+      });
+    }
+  };
+
+  // Bulk IP editing functions
+  const handleOpenBulkEditDialog = () => {
+    if (selectedVMs.size === 0) return;
+
+    // Initialize bulk edit state for multiple interfaces
+    const selectedVMsData = vmsWithFlavor.filter(vm => selectedVMs.has(vm.name));
+    const initialIPs: Record<string, Record<number, string>> = {};
+    const initialStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
+
+    selectedVMsData.forEach(vm => {
+      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+        initialIPs[vm.name] = {};
+        initialStatus[vm.name] = {};
+
+        vm.networkInterfaces.forEach((nic, index) => {
+          initialIPs[vm.name][index] = nic.ipAddress || "";
+          initialStatus[vm.name][index] = nic.ipAddress ? 'valid' : 'empty';
+        });
+      } else {
+        // Fallback for VMs without networkInterfaces
+        initialIPs[vm.name] = { 0: vm.ipAddress === "—" ? "" : vm.ipAddress || "" };
+        initialStatus[vm.name] = { 0: vm.ipAddress === "—" ? 'empty' : 'valid' };
+      }
+    });
+
+    setBulkEditIPs(initialIPs);
+    setBulkValidationStatus(initialStatus);
+    setBulkValidationMessages({});
+    setBulkEditDialogOpen(true);
+  };
+
+  const handleCloseBulkEditDialog = () => {
+    setBulkEditDialogOpen(false);
+    setBulkEditIPs({});
+    setBulkValidationStatus({});
+    setBulkValidationMessages({});
+  };
+
+  const handleBulkIpChange = (vmName: string, interfaceIndex: number, value: string) => {
+    setBulkEditIPs(prev => ({
+      ...prev,
+      [vmName]: { ...prev[vmName], [interfaceIndex]: value }
+    }));
+
+    if (!value.trim()) {
+      setBulkValidationStatus(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
+      }));
+      setBulkValidationMessages(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }));
+    } else if (!isValidIPAddress(value.trim())) {
+      setBulkValidationStatus(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+      }));
+      setBulkValidationMessages(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'Invalid IP format' }
+      }));
+    } else {
+      setBulkValidationStatus(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
+      }));
+      setBulkValidationMessages(prev => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }));
+    }
+  };
+
+  const handleClearAllIPs = () => {
+    const clearedIPs: Record<string, Record<number, string>> = {};
+    const clearedStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
+
+    Object.keys(bulkEditIPs).forEach(vmName => {
+      clearedIPs[vmName] = {};
+      clearedStatus[vmName] = {};
+
+      Object.keys(bulkEditIPs[vmName]).forEach(interfaceIndexStr => {
+        const interfaceIndex = parseInt(interfaceIndexStr);
+        clearedIPs[vmName][interfaceIndex] = "";
+        clearedStatus[vmName][interfaceIndex] = 'empty';
+      });
+    });
+
+    setBulkEditIPs(clearedIPs);
+    setBulkValidationStatus(clearedStatus);
+    setBulkValidationMessages({});
+  };
+
+  const handleApplyBulkIPs = async () => {
+    // Collect all IPs to apply with their VM and interface info
+    const ipsToApply: Array<{ vmName: string, interfaceIndex: number, ip: string }> = [];
+
+    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
+      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
+        if (ip.trim() !== "") {
+          ipsToApply.push({
+            vmName,
+            interfaceIndex: parseInt(interfaceIndexStr),
+            ip: ip.trim()
+          });
+        }
+      });
+    });
+
+    if (ipsToApply.length === 0) return;
+
+    setAssigningIPs(true);
+
+    try {
+      // Batch validation before applying any changes
+      if (openstackCredentials) {
+        const accessInfo = await getOpenstackAccessInfo(openstackCredentials);
+        const ipList = ipsToApply.map(item => item.ip);
+
+        // Set validating status for all IPs
+        setBulkValidationStatus(prev => {
+          const newStatus = { ...prev };
+          ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+            if (!newStatus[vmName]) newStatus[vmName] = {};
+            newStatus[vmName][interfaceIndex] = 'validating';
+          });
+          return newStatus;
+        });
+
+        const validationResult = await validateOpenstackIPs({
+          ip: ipList,
+          accessInfo
+        });
+
+        // Process validation results
+        const validIPs: Array<{ vmName: string, interfaceIndex: number, ip: string }> = [];
+        let hasInvalidIPs = false;
+
+        ipsToApply.forEach((item, index) => {
+          const isValid = validationResult.isValid[index];
+          const reason = validationResult.reason[index];
+
+          if (isValid) {
+            validIPs.push(item);
+            setBulkValidationStatus(prev => ({
+              ...prev,
+              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'valid' }
+            }));
+            setBulkValidationMessages(prev => ({
+              ...prev,
+              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'Valid' }
+            }));
+          } else {
+            hasInvalidIPs = true;
+            setBulkValidationStatus(prev => ({
+              ...prev,
+              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'invalid' }
+            }));
+            setBulkValidationMessages(prev => ({
+              ...prev,
+              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: reason }
+            }));
+          }
+        });
+
+        // Only proceed if ALL IPs are valid
+        if (hasInvalidIPs) {
+          setAssigningIPs(false);
+          return;
+        }
+
+        // Apply the valid IPs to VMs
+        const updatePromises = validIPs.map(async ({ vmName, interfaceIndex, ip }) => {
+          try {
+            const vm = vmsWithFlavor.find(v => v.name === vmName);
+            if (!vm) throw new Error('VM not found');
+
+            // Update network interfaces
+            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
+              const updatedInterfaces = [...vm.networkInterfaces];
+              updatedInterfaces[interfaceIndex] = {
+                ...updatedInterfaces[interfaceIndex],
+                ipAddress: ip
+              };
+
+              if (vm.vmWareMachineName) {
+                await patchVMwareMachine(vm.vmWareMachineName, {
+                  spec: {
+                    vms: {
+                      networkInterfaces: updatedInterfaces
+                    }
+                  }
+                });
+              }
+            } else {
+              // Fallback for single IP assignment
+              if (vm.vmWareMachineName) {
+                await patchVMwareMachine(vm.vmWareMachineName, {
+                  spec: {
+                    vms: {
+                      assignedIp: ip
+                    }
+                  }
+                });
+              }
+            }
+
+            return { success: true, vmName, interfaceIndex, ip };
+          } catch (error) {
+            setBulkValidationStatus(prev => ({
+              ...prev,
+              [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+            }));
+            setBulkValidationMessages(prev => ({
+              ...prev,
+              [vmName]: { ...prev[vmName], [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP' }
+            }));
+            return { success: false, vmName, interfaceIndex, error };
+          }
+        });
+
+        const results = await Promise.all(updatePromises);
+
+        // Check if any updates failed
+        const failedUpdates = results.filter(result => !result.success);
+        if (failedUpdates.length > 0) {
+          setAssigningIPs(false);
+          return; // Don't close modal if any updates failed
+        }
+
+        // Update local VM state
+        const updatedVMs = vmsWithFlavor.map(vm => {
+          const vmUpdates = validIPs.filter(item => item.vmName === vm.name);
+          if (vmUpdates.length === 0) return vm;
+
+          const updatedVM = { ...vm };
+
+          if (vm.networkInterfaces) {
+            const updatedInterfaces = [...vm.networkInterfaces];
+            vmUpdates.forEach(({ interfaceIndex, ip }) => {
+              if (updatedInterfaces[interfaceIndex]) {
+                updatedInterfaces[interfaceIndex] = {
+                  ...updatedInterfaces[interfaceIndex],
+                  ipAddress: ip
+                };
+              }
+            });
+            updatedVM.networkInterfaces = updatedInterfaces;
+          } else {
+            // Fallback for single IP
+            const firstUpdate = vmUpdates[0];
+            if (firstUpdate) {
+              updatedVM.ipAddress = firstUpdate.ip;
+            }
+          }
+
+          return updatedVM;
+        });
+        setVmsWithFlavor(updatedVMs);
+
+        handleCloseBulkEditDialog();
+      }
+
+    } catch (error) {
+      console.error("Error in bulk IP validation/assignment:", error);
+      reportError(error as Error, {
+        context: 'bulk-ip-validation-assignment',
+        metadata: {
+          bulkEditIPs: bulkEditIPs,
+          action: 'bulk-ip-validation-assignment'
+        }
+      });
+    } finally {
+      setAssigningIPs(false);
+    }
+  };
+
+  // Update the toolbar handler
+  const handleEditIPs = () => {
+    handleOpenBulkEditDialog();
   };
 
   const handleOpenFlavorDialog = () => {
@@ -456,9 +1203,9 @@ export default function VmsSelectionStep({
   };
 
   const isRowSelectable = (params) => {
-    // Allow selection even if flavorNotFound, just show warning 
-    // For the new API, we don't have IP address info, so we'll just use vmState
-    return params.row.vmState === "running";
+    // Allow selection for both running and stopped VMs for cold migration
+    // Only disable if VM is already migrated
+    return !params.row.isMigrated;
   };
 
   const getNoRowsLabel = () => {
@@ -505,6 +1252,7 @@ export default function VmsSelectionStep({
                     rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
                       vmsWithFlavor.some(vm => vm.name === vmName)
                     )}
+                    onEditIPs={handleEditIPs}
                     onAssignFlavor={handleOpenFlavorDialog}
                   />
                 ),
@@ -512,15 +1260,12 @@ export default function VmsSelectionStep({
                   <CustomLoadingOverlay loadingMessage="Loading VMs ..." />
                 ),
                 row: (props) => {
-                  const isVmStopped = props.row.vmState !== "running";
                   const isMigrated = props.row.isMigrated;
                   const hasFlavorNotFound = props.row.flavorNotFound;
 
                   let tooltipMessage = "";
                   if (isMigrated) {
                     tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
-                  } else if (isVmStopped) {
-                    tooltipMessage = DISABLED_TOOLTIP_MESSAGE;
                   } else if (hasFlavorNotFound) {
                     tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE;
                   }
@@ -542,7 +1287,7 @@ export default function VmsSelectionStep({
               disableColumnMenu
               disableColumnResize
               getRowClassName={(params) => {
-                if (params.row.vmState !== "running" || params.row.isMigrated) {
+                if (params.row.isMigrated) {
                   return "disabled-row";
                 } else {
                   return "";
@@ -623,6 +1368,233 @@ export default function VmsSelectionStep({
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Bulk IP Editor Dialog */}
+      <Dialog
+        open={bulkEditDialogOpen}
+        onClose={handleCloseBulkEditDialog}
+        maxWidth="md"
+      >
+        <DialogTitle>
+          Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ my: 2 }}>
+            {/* Quick Actions */}
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
+                Clear All
+              </Button>
+            </Box>
+
+            {/* IP Editor Fields */}
+            <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+              {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
+                const vm = vmsWithFlavor.find(v => v.name === vmName);
+                if (!vm) return null;
+
+                return (
+                  <Box key={vmName} sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                      {vm.name}
+                    </Typography>
+
+                    {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
+                      const interfaceIndex = parseInt(interfaceIndexStr);
+                      const networkInterface = vm.networkInterfaces?.[interfaceIndex];
+                      const status = bulkValidationStatus[vmName]?.[interfaceIndex];
+                      const message = bulkValidationMessages[vmName]?.[interfaceIndex];
+
+                      return (
+                        <Box key={interfaceIndex} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ width: 120, flexShrink: 0 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
+                            </Typography>
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              Current: {networkInterface?.ipAddress || vm.ipAddress || "—"}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <TextField
+                              value={ip}
+                              onChange={(e) => handleBulkIpChange(vmName, interfaceIndex, e.target.value)}
+                              placeholder="Enter IP address"
+                              size="small"
+                              sx={{ flex: 1 }}
+                              error={status === 'invalid'}
+                              helperText={message}
+                            />
+                            <Box sx={{ width: 24, display: 'flex' }}>
+                              {status === 'validating' && <CircularProgress size={20} />}
+                              {status === 'valid' && <CheckCircleIcon color="success" fontSize="small" />}
+                              {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
+                            </Box>
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
+          <Button
+            onClick={handleApplyBulkIPs}
+            variant="contained"
+            color="primary"
+            disabled={Object.values(bulkEditIPs).every(interfaces => Object.values(interfaces).every(ip => !ip.trim())) || assigningIPs}
+          >
+            {assigningIPs ? "Applying..." : "Apply Changes"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* IP Address Editor Modal */}
+      <Dialog
+        open={ipEditModalOpen}
+        onClose={handleCloseIpEditModal}
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            width: 'auto',
+            maxWidth: '500px'
+          }
+        }}
+      >
+        <DialogTitle>
+          <Typography variant="h6">
+            Edit IP Addresses for "{editingVm?.name}"
+          </Typography>
+          <Typography variant="body2">
+            ({editingVm?.networkInterfaces?.length || 0} Network Interfaces)
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            {editingVm?.networkInterfaces?.map((nic, index) => {
+              const key = `interface-${index}`;
+              const currentValue = modalIpValues[key] || "";
+              const validationStatus = modalValidationStatus[key] || 'pending';
+              const validationMessage = modalValidationMessages[key] || "";
+
+              return (
+                <Box key={index} sx={{ py: 2 }}>
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 3,
+                    flexDirection: { xs: 'column', sm: 'row' }
+                  }}>
+                    <Box sx={{
+                      minWidth: { sm: 200 },
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.5
+                    }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+                        Network Interface {index + 1}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Network:<strong>{nic.network}</strong>
+                      </Typography>
+                      {nic.mac && (
+                        <Typography variant="caption" color="text.secondary">
+                          MAC:<strong>{nic.mac}</strong>
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <TextField
+                        label="IP Address"
+                        value={currentValue}
+                        onChange={(e) => handleModalIpChange(index, e.target.value)}
+                        size="small"
+                        placeholder="192.168.1.100"
+                        sx={{
+                          width: '200px',
+                          '& .MuiInputBase-input': {
+                            fontFamily: 'monospace'
+                          }
+                        }}
+                        error={validationStatus === 'invalid'}
+                        helperText={validationMessage || ""}
+                        InputProps={{
+                          endAdornment: validationStatus === 'validating' ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Validating...
+                              </Typography>
+                            </Box>
+                          ) : validationStatus === 'valid' ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+                              <Typography variant="caption" color="success.main">
+                                ✓ Valid
+                              </Typography>
+                            </Box>
+                          ) : null
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleCloseIpEditModal} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveModalIPs}
+            variant="contained"
+            color="primary"
+            disabled={(() => {
+              // Check if any IPs are assigned and valid
+              const hasAnyIPs = Object.values(modalIpValues).some(ip => ip && ip.trim() !== "");
+              const hasInvalidIPs = Object.values(modalValidationStatus).some(status => status === 'invalid');
+              const isValidating = Object.values(modalValidationStatus).some(status => status === 'validating');
+
+              // Disable if: no IPs assigned OR any invalid IPs OR currently validating
+              return !hasAnyIPs || hasInvalidIPs || isValidating;
+            })()}
+          >
+            Save IP Addresses
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add GlobalStyles similar to RollingMigrationForm */}
+      <GlobalStyles
+        styles={{
+          '.MuiDataGrid-columnsManagement, .MuiDataGrid-columnsManagementPopover': {
+            '& .MuiFormControlLabel-label': {
+              fontSize: '0.875rem !important',
+            },
+            '& .MuiCheckbox-root': {
+              padding: '4px !important',
+            },
+            '& .MuiListItem-root': {
+              fontSize: '0.875rem !important',
+              minHeight: '32px !important',
+              padding: '2px 8px !important',
+            },
+            '& .MuiTypography-root': {
+              fontSize: '0.875rem !important',
+            },
+            '& .MuiInputBase-input': {
+              fontSize: '0.875rem !important',
+            },
+            '& .MuiTextField-root .MuiInputBase-input': {
+              fontSize: '0.875rem !important',
+            }
+          }
+        }}
+      />
     </VmsSelectionStepContainer>
   );
 }
