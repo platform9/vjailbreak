@@ -1502,21 +1502,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
 	}
 
-	if guestNetworksFromVmware != nil {
-		// Extract IP addresses from guest networks and set it in network interfaces
-		for i, nic := range nicList {
-			for _, guestNet := range guestNetworksFromVmware {
-				if nic.MAC == guestNet.MAC {
-					// Check if IP is ipv4
-					if !strings.Contains(guestNet.IP, ":") {
-						nicList[i].IPAddress = guestNet.IP
-					}
-					break
-				}
-			}
-		}
-	}
-
 	// Convert VM name to Kubernetes-safe name
 	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
 	if err != nil {
@@ -1552,6 +1537,32 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			osFamily = vmProps.Guest.GuestFamily
 		} else {
 			osFamily = vmwvm.Spec.VMInfo.OSFamily
+		}
+	}
+
+	if guestNetworksFromVmware != nil {
+		// Extract IP addresses from guest networks and set it in network interfaces
+		for i, nic := range nicList {
+			for _, guestNet := range guestNetworksFromVmware {
+				if nic.MAC == guestNet.MAC {
+					// Check if IP is ipv4
+					if !strings.Contains(guestNet.IP, ":") {
+						nicList[i].IPAddress = guestNet.IP
+					}
+					break
+				}
+			}
+		}
+	} else {
+		log.Info("No guest network info available from VMware for vm", "VM NAME", vm.Name())
+		// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
+		for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
+			for i, existingNic := range nicList {
+				if existingNic.MAC == nic.MAC {
+					nicList[i].IPAddress = nic.IPAddress
+					break
+				}
+			}
 		}
 	}
 
