@@ -515,7 +515,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 	// Exponential retry logic
 	maxRetries := 5
-	baseDelay := 500 * time.Millisecond // Initial delay
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = s.Login(ctx, c, nil)
 		if err == nil {
@@ -527,8 +526,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		fmt.Printf("Login attempt %d failed: %v\n", attempt, err)
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
-			baseDelay = time.Duration(delayNum) * time.Millisecond
-			time.Sleep(baseDelay * time.Duration(1<<uint(attempt-1))) // Exponential backoff
+			time.Sleep(time.Duration(delayNum) * time.Millisecond)
 		}
 	}
 
@@ -614,7 +612,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 			case *types.VirtualDiskSparseVer2BackingInfo:
 				dsref = backing.Datastore.Reference()
 			case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
-				//dsref = backing.Datastore.Reference()
 				continue
 			default:
 				return nil, fmt.Errorf("unsupported disk backing type: %T", device.GetVirtualDevice().Backing)
@@ -1214,7 +1211,7 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 	}
 
 	// Update VMInfo RDM disks while preserving OpenStack information
-	for i, _ := range rdmInfo {
+	for i := range rdmInfo {
 		if existingDisk, ok := existingDisks[rdmInfo[i].Name]; ok {
 			// Preserve OpenStack volume reference if new one is nil
 			if reflect.DeepEqual(rdmInfo[i].Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
@@ -1702,7 +1699,7 @@ func FindHotplugBaseFlavor(ctx context.Context, computeClient *gophercloud.Servi
 		if flavor.VCPUs == 0 && flavor.RAM == 0 {
 			allSpecs, err := flavors.ListExtraSpecs(computeClient, flavor.ID).Extract()
 			if err != nil {
-				ctrllog.FromContext(ctx).Error(err, "could not get extra specs for flavor", "flavorID", flavor.ID)
+				log.FromContext(ctx).Error(err, "could not get extra specs for flavor", "flavorID", flavor.ID)
 				continue
 			}
 

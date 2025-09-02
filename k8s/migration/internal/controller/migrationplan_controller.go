@@ -1108,11 +1108,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	}
 	counter := len(nodeList.Items)
 	for _, vmMachineObj := range parallelvms {
-		vm := vmMachineObj.Spec.VMInfo.Name
 		if vmMachineObj == nil {
-			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vm)
+			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vmMachineObj.Name)
 		}
-
+		vm := vmMachineObj.Spec.VMInfo.Name
 		if migrationplan.Spec.UseFlavorless {
 			ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
 
@@ -1321,7 +1320,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	for _, vmMachine := range vmMachines {
 		// Check if VM is powered off
 		// change this
-		if vmMachine.Status.PowerState == string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
+		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
 			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
 		}
 		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
@@ -1358,7 +1357,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				}
 			}
 		}
-
 	}
 
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
