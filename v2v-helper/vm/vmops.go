@@ -201,8 +201,8 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IpAdress, ":") {
-						ips = append(ips, networkInterface.IpAdress)
+					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IpAddress, ":") {
+						ips = append(ips, networkInterface.IpAddress)
 					}
 				}
 			}
