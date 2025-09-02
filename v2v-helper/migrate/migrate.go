@@ -23,6 +23,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
+	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -63,6 +64,7 @@ type Migrate struct {
 	SecurityGroups          []string
 	UseFlavorless           bool
 	TenantName              string
+	Reporter                *reporter.Reporter
 }
 
 type MigrationTimes struct {
@@ -243,13 +245,15 @@ func (migobj *Migrate) WaitforAdminCutover() error {
 	return nil
 }
 
-func (migobj *Migrate) CheckIfAdminCutover() bool {
-	select {
-	case label := <-migobj.PodLabelWatcher:
-		migobj.logMessage(fmt.Sprintf("Label: %s", label))
-		if label == "yes" {
-			return true
-		}
+func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
+	value, err := migobj.Reporter.GetCutoverLabel()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
+		return false
+	}
+	// If label is set to no, return true. because that time the admin has initiated cutover
+	if value == "no" {
+		return true
 	}
 	return false
 }
@@ -392,7 +396,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			// Check if migration has admin cutover if so don't copy any more changed blocks
-			adminInitiatedCutover := migobj.CheckIfAdminCutover()
+			adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold || adminInitiatedCutover {
 				if err := migobj.WaitforCutover(); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")

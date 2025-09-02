@@ -143,6 +143,7 @@ func main() {
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
+		Reporter:               eventReporter,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

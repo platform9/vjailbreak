@@ -26,6 +26,7 @@ type ReporterOps interface {
 	UpdatePodEvents(ch <-chan string)
 	GetCutoverLabel() (string, error)
 	WatchPodLabels(ctx context.Context, ch chan<- string) error
+	GetPodLabels() (map[string]string, error)
 }
 
 type Reporter struct {
