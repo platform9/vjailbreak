@@ -9,6 +9,13 @@ export interface VMwareVM {
   ipAddress?: string
   assignedIp?: string
   osFamily?: string
+  networkInterfaces?: VmNetworkInterface[]
+}
+
+export interface VmNetworkInterface {
+  mac: string
+  network: string
+  ipAddress: string
 }
 
 export interface VMwareMachine {

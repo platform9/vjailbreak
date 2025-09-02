@@ -84,6 +84,10 @@ spec:
                 description: TargetPCDClusterName is the name of the PCD cluster where
                   the virtual machine will be migrated
                 type: string
+              useFlavorless:
+                description: UseFlavorless indicates if the migration should use flavorless
+                  VM creation for PCD.
+                type: boolean
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine
