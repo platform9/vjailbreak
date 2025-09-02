@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -1508,7 +1507,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			for _, guestNet := range guestNetworksFromVmware {
 				if nic.MAC == guestNet.MAC {
 					// Check if IP is ipv4
-					if net.ParseIP(guestNet.IP).To4() == nil {
+					if !strings.Contains(guestNet.IP, ":") {
 						nicList[i].IpAdress = guestNet.IP
 					}
 					break
