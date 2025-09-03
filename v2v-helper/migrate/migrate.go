@@ -490,6 +490,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		break
 	}
 
+	if len(vminfo.VMDisks) == 1 {
+		// if there is only one disk, then it has to be bootable
+		useSingleDisk = true
+		bootVolumeIndex = 0
+	}
+
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		if useSingleDisk {
 			// skip checking LVM, because its a single disk

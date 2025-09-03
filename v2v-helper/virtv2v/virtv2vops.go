@@ -375,7 +375,51 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(string(out)), nil
 }
 
+// RunCommandInGuestManual runs guestfish commands without automatic inspection
+// This is useful for multi-boot VMs where -i option fails
+func RunCommandInGuestManual(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
+	
+	cmd := exec.Command("guestfish", option)
+	
+	// Add all disks
+	for _, disk := range disks {
+		cmd.Args = append(cmd.Args, "-a", disk.Path)
+	}
+	
+	// Don't use -i, instead use run and manual commands
+	cmd.Args = append(cmd.Args, "run")
+	cmd.Args = append(cmd.Args, ":", command)
+	cmd.Args = append(cmd.Args, args...)
+	
+	log.Printf("Executing %s", cmd.String())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
+	}
+	return strings.ToLower(string(out)), nil
+}
+
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
+	// First try the original approach with automatic inspection
+	index, err := getBootableVolumeIndexAutomatic(disks)
+	if err == nil {
+		return index, nil
+	}
+	
+	log.Printf("Automatic inspection failed (likely multi-boot VM): %v. Trying manual approach...", err)
+	
+	// Fallback to manual inspection for multi-boot VMs
+	return getBootableVolumeIndexManual(disks)
+}
+
+// getBootableVolumeIndexAutomatic uses guestfish -i (original implementation)
+func getBootableVolumeIndexAutomatic(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
 	if err != nil {
@@ -416,6 +460,44 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		}
 	}
 	return -1, errors.New("bootable volume not found")
+}
+
+// getBootableVolumeIndexManual uses manual disk inspection without -i option
+func getBootableVolumeIndexManual(disks []vm.VMDisk) (int, error) {
+	// Get list of devices without automatic inspection
+	devicesStr, err := RunCommandInGuestManual(disks, "list-devices", false)
+	if err != nil {
+		return -1, fmt.Errorf("failed to list devices: %v", err)
+	}
+	
+	devices := strings.Split(strings.TrimSpace(devicesStr), "\n")
+	
+	for deviceIndex, device := range devices {
+		device = strings.TrimSpace(device)
+		if device == "" {
+			continue
+		}
+		
+		// Check if device has a partition table
+		hasPartTable, err := RunCommandInGuestManual(disks, "part-disk-supported", false, device)
+		if err != nil || strings.TrimSpace(hasPartTable) != "true" {
+			continue
+		}
+		
+		// Check each partition for bootable flag
+		for partNum := 1; partNum <= 10; partNum++ { // Check up to 10 partitions
+			bootable, err := RunCommandInGuestManual(disks, "part-get-bootable", false, device, strconv.Itoa(partNum))
+			if err != nil {
+				continue // Partition doesn't exist or error occurred
+			}
+			
+			if strings.TrimSpace(bootable) == "true" {
+				return deviceIndex, nil
+			}
+		}
+	}
+	
+	return -1, errors.New("bootable volume not found using manual inspection")
 }
 
 func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error {
