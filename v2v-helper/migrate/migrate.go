@@ -23,6 +23,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
+	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -63,6 +64,7 @@ type Migrate struct {
 	SecurityGroups          []string
 	UseFlavorless           bool
 	TenantName              string
+	Reporter                *reporter.Reporter
 }
 
 type MigrationTimes struct {
@@ -243,6 +245,19 @@ func (migobj *Migrate) WaitforAdminCutover() error {
 	return nil
 }
 
+func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
+	value, err := migobj.Reporter.GetCutoverLabel()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
+		return false
+	}
+	// If label is set to no, return true. because that time the admin has initiated cutover
+	if value == "no" {
+		return true
+	}
+	return false
+}
+
 func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
@@ -299,6 +314,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	}
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
+	// Check if migration has admin cutover if so don't copy any more changed blocks
+	adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
+
 	incrementalCopyCount := 0
 	for {
 		// If its the first copy, copy the entire disk
@@ -313,6 +331,18 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 				duration := time.Since(startTime)
 				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+			}
+			if adminInitiatedCutover {
+				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
+				if err := migobj.WaitforAdminCutover(); err != nil {
+					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+				}
+				utils.PrintLog("Shutting down source VM and performing final copy")
+				err = vmops.VMPowerOff()
+				if err != nil {
+					return vminfo, errors.Wrap(err, "failed to power off VM")
+				}
+				final = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)

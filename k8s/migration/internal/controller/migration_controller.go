@@ -126,10 +126,18 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			ctxlog.Info("Migration pod not found yet, requeuing.")
+			ctxlog.Info("Migration pod not found yet, requeuing", "migration", migration.Name)
 			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
+	if migration.Spec.PodRef != pod.Name {
+		migration.Spec.PodRef = pod.Name
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
@@ -394,6 +402,5 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 	if len(podList.Items) == 0 {
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
-	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil
 }
