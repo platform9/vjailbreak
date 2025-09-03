@@ -464,39 +464,46 @@ func getBootableVolumeIndexAutomatic(disks []vm.VMDisk) (int, error) {
 
 // getBootableVolumeIndexManual uses manual disk inspection without -i option
 func getBootableVolumeIndexManual(disks []vm.VMDisk) (int, error) {
-	// Get list of devices without automatic inspection
-	devicesStr, err := RunCommandInGuestManual(disks, "list-devices", false)
+	// Use the same commands as automatic version, but with manual guestfish
+	command := "list-partitions"
+	partitionsStr, err := RunCommandInGuestManual(disks, command, false)
 	if err != nil {
-		return -1, fmt.Errorf("failed to list devices: %v", err)
+		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
 	}
-	
-	devices := strings.Split(strings.TrimSpace(devicesStr), "\n")
-	
-	for deviceIndex, device := range devices {
-		device = strings.TrimSpace(device)
-		if device == "" {
-			continue
+
+	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
+	for _, partition := range partitions {
+		command := "part-to-dev"
+		device, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(partition))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
+			continue // Continue to next partition instead of returning error
 		}
-		
-		// Check if device has a partition table
-		hasPartTable, err := RunCommandInGuestManual(disks, "part-disk-supported", false, device)
-		if err != nil || strings.TrimSpace(hasPartTable) != "true" {
-			continue
+
+		command = "part-to-partnum"
+		num, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(partition))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
+			continue // Continue to next partition instead of returning error
 		}
-		
-		// Check each partition for bootable flag
-		for partNum := 1; partNum <= 10; partNum++ { // Check up to 10 partitions
-			bootable, err := RunCommandInGuestManual(disks, "part-get-bootable", false, device, strconv.Itoa(partNum))
+
+		command = "part-get-bootable"
+		bootable, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
+			continue // Continue to next partition instead of returning error
+		}
+
+		if strings.TrimSpace(bootable) == "true" {
+			command = "device-index"
+			index, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(device))
 			if err != nil {
-				continue // Partition doesn't exist or error occurred
+				fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
+				continue // Continue to next partition instead of returning error
 			}
-			
-			if strings.TrimSpace(bootable) == "true" {
-				return deviceIndex, nil
-			}
+			return strconv.Atoi(strings.TrimSpace(index))
 		}
 	}
-	
 	return -1, errors.New("bootable volume not found using manual inspection")
 }
 
