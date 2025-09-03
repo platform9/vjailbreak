@@ -1,6 +1,6 @@
 # Stage 1: Build environment
 # Using Fedora 42 which includes Go 1.24 required by our go.mod
-FROM fedora:42 AS builder
+FROM fedora:42@sha256:af97cb7bcca6cbcc42ef41e7c917580c46a237f6e171f51425e8c6080d8d8859 AS builder
 
 # Build arguments for multi-platform support and versioning
 ARG TARGETOS
@@ -23,7 +23,7 @@ COPY manager manager
 
 # Stage 2: Runtime environment
 # Using same Fedora version for consistency and required runtime dependencies
-FROM fedora:42
+FROM fedora:42@sha256:af97cb7bcca6cbcc42ef41e7c917580c46a237f6e171f51425e8c6080d8d8859
 
 WORKDIR /tmp
 RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
