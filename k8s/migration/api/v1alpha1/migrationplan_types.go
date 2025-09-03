@@ -87,10 +87,6 @@ type MigrationPlanSpecPerVM struct {
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript     string               `json:"firstBootScript,omitempty"`
 	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
-	// UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-	// When true, TargetFlavorId for the VM should be set to a base flavor (e.g., a 0-0-x flavor).
-	// +optional
-	UseFlavorless bool `json:"useFlavorless,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan including

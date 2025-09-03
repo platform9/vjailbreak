@@ -535,7 +535,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				PodRef:                  fmt.Sprintf("v2v-helper-%s", vmk8sname),
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
-				UseFlavorless:           migrationplan.Spec.UseFlavorless,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -550,6 +549,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vm string,
 	firstbootconfigMapName string,
@@ -588,11 +588,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 		},
 		{
 			Name:  "USE_FLAVORLESS",
-			Value: strconv.FormatBool(migrationobj.Spec.UseFlavorless),
+			Value: strconv.FormatBool(migrationtemplate.Spec.UseFlavorless),
 		},
 	}
 
-	if migrationobj.Spec.UseFlavorless {
+	if migrationtemplate.Spec.UseFlavorless {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  "FLAVORLESS_FLAVOR_ID",
 			Value: vmMachine.Spec.TargetFlavorID,
@@ -1112,7 +1112,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vmMachineObj.Name)
 		}
 		vm := vmMachineObj.Spec.VMInfo.Name
-		if migrationplan.Spec.UseFlavorless {
+		if migrationtemplate.Spec.UseFlavorless {
 			ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
 
 			osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
@@ -1120,7 +1120,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 				return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
 			}
 
-			baseFlavor, err := utils.FindHotplugBaseFlavor(ctx, osClients.ComputeClient)
+			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
 				migrationplan.Status.MigrationStatus = corev1.PodFailed
 				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
@@ -1166,6 +1166,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		err = r.CreateJob(ctx,
 			migrationplan,
+			migrationtemplate,
 			migrationobj,
 			vm,
 			fbcm.Name,

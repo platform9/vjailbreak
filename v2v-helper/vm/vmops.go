@@ -167,9 +167,21 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
 			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
 				// Every mac should have a corresponding IP, Ignore link layer ip
-				if guestNetwork.MAC == macAddresss && !strings.Contains(guestNetwork.IP, ":") {
+				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
 					ips = append(ips, guestNetwork.IP)
 				}
+			}
+		} else {
+			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
+				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
+					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
+						ips = append(ips, networkInterface.IPAddress)
+					}
+				}
+			}
+			if len(ips) == 0 {
+				return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off, 
+				please make sure to provide IP address in the vmwaremachine CR`)
 			}
 		}
 	}

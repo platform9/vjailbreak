@@ -115,7 +115,6 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
-  useFlavorless?: boolean
 }
 
 
@@ -127,7 +126,6 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
-  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -146,7 +144,6 @@ const defaultMigrationOptions = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osFamily: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -286,6 +283,7 @@ export default function MigrationFormDrawer({
         vmwareRef: vmwareCredentials?.metadata.name,
         openstackRef: openstackCredentials?.metadata.name,
         targetPCDClusterName: targetPCDClusterName,
+        useFlavorless: params.useFlavorless || false,
       })
       const response = await postMigrationTemplate(body)
       setMigrationTemplate(response)
@@ -300,6 +298,8 @@ export default function MigrationFormDrawer({
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
     params.pcdCluster,
+    params.useFlavorless,
+    pcdData
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
@@ -473,7 +473,6 @@ export default function MigrationFormDrawer({
         securityGroups: params.securityGroups,
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
-      useFlavorless: params.useFlavorless || false,
     };
 
 
@@ -753,6 +752,7 @@ export default function MigrationFormDrawer({
             openstackFlavors={openstackCredentials?.spec?.flavors}
             vmwareCredName={params.vmwareCreds?.existingCredName}
             openstackCredName={params.openstackCreds?.existingCredName}
+            openstackCredentials={openstackCredentials}
           />
           {/* Step 3 */}
           <NetworkAndStorageMappingStep
@@ -772,10 +772,11 @@ export default function MigrationFormDrawer({
             openstackCredentials={openstackCredentials}
             stepNumber="4"
           />
-          {/* Step 5 */}          
+          {/* Step 5 */}
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
+            openstackCredentials={openstackCredentials}
             selectedMigrationOptions={selectedMigrationOptions}
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}

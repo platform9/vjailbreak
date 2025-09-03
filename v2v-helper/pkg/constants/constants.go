@@ -5,6 +5,8 @@ import "time"
 const (
 	HotplugCPUKey       = "HOTPLUG_CPU"
 	HotplugMemoryKey    = "HOTPLUG_MEMORY"
+	HotplugCPUMaxKey    = "HOTPLUG_CPU_MAX"
+	HotplugMemoryMaxKey = "HOTPLUG_MEMORY_MAX"
 	RhelFirstBootScript = `#!/bin/bash
 set -e
 LOG_FILE="/var/log/network_fix.log"

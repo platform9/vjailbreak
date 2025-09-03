@@ -551,10 +551,18 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		if !supported {
 			return errors.Errorf("unsupported OS detected by guestfish: %s", osDetected)
 		}
-		utils.PrintLog("OS compatibility check passed")
+		utils.PrintLog("operating system compatibility check passed")
 
 	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		utils.PrintLog("OS compatibility check passed")
+		utils.PrintLog("operating system compatibility check passed")
+		if !useSingleDisk {
+			utils.PrintLog("checking for bootable volume in case of LDM")
+			// check for bootable volume in case of LVM
+			bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+			if err != nil {
+				return errors.Wrap(err, "Failed to get bootable volume index")
+			}
+		}
 	} else {
 		return errors.Errorf("unsupported OS type: %s", vminfo.OSType)
 	}

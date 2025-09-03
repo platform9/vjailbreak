@@ -115,6 +115,8 @@ spec:
                       description: NIC represents a Virtual ethernet card in the virtual
                         machine.
                       properties:
+                        ipAddress:
+                          type: string
                         mac:
                           type: string
                         network:
