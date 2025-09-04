@@ -194,17 +194,16 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
 	if useSingleDisk {
-		args = append(args, "-i", "disk", diskPath, "--root", "first")
+		args = append(args, "-i", "disk", diskPath)
 	} else {
-		// For multi-boot systems, use --root first instead of specific path to avoid interactive prompts
-		args = append(args, "-i", "libvirtxml", xmlFile, "--root", "first")
+		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
 	}
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
-	
+
 	// Use the debug logging with proper file cleanup
 	err := utils.RunCommandWithLogFile(cmd)
 	duration := time.Since(start)
@@ -376,28 +375,28 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(string(out)), nil
 }
 
-// RunCommandInGuestManual runs guestfish commands without automatic inspection
+// RunCommandInGuestAllDisksManual runs guestfish commands without automatic inspection
 // This is useful for multi-boot VMs where -i option fails
-func RunCommandInGuestManual(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
+func RunCommandInGuestAllDisksManual(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	
+
 	option := "--ro"
 	if write {
 		option = "--rw"
 	}
-	
+
 	cmd := exec.Command("guestfish", option)
-	
+
 	// Add all disks
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
-	
+
 	// Don't use -i, instead use run and manual commands
 	cmd.Args = append(cmd.Args, "run")
 	cmd.Args = append(cmd.Args, ":", command)
 	cmd.Args = append(cmd.Args, args...)
-	
+
 	log.Printf("Executing %s", cmd.String())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -412,9 +411,9 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	if err == nil {
 		return index, nil
 	}
-	
+
 	log.Printf("Automatic inspection failed (likely multi-boot VM): %v. Trying manual approach...", err)
-	
+
 	// Fallback to manual inspection for multi-boot VMs
 	return getBootableVolumeIndexManual(disks)
 }
@@ -467,7 +466,7 @@ func getBootableVolumeIndexAutomatic(disks []vm.VMDisk) (int, error) {
 func getBootableVolumeIndexManual(disks []vm.VMDisk) (int, error) {
 	// Use the same commands as automatic version, but with manual guestfish
 	command := "list-partitions"
-	partitionsStr, err := RunCommandInGuestManual(disks, command, false)
+	partitionsStr, err := RunCommandInGuestAllDisksManual(disks, command, false)
 	if err != nil {
 		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
 	}
@@ -475,21 +474,21 @@ func getBootableVolumeIndexManual(disks []vm.VMDisk) (int, error) {
 	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
 	for _, partition := range partitions {
 		command := "part-to-dev"
-		device, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(partition))
+		device, err := RunCommandInGuestAllDisksManual(disks, command, false, strings.TrimSpace(partition))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
 			continue // Continue to next partition instead of returning error
 		}
 
 		command = "part-to-partnum"
-		num, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(partition))
+		num, err := RunCommandInGuestAllDisksManual(disks, command, false, strings.TrimSpace(partition))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
 			continue // Continue to next partition instead of returning error
 		}
 
 		command = "part-get-bootable"
-		bootable, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
+		bootable, err := RunCommandInGuestAllDisksManual(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
 		if err != nil {
 			fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
 			continue // Continue to next partition instead of returning error
@@ -497,7 +496,7 @@ func getBootableVolumeIndexManual(disks []vm.VMDisk) (int, error) {
 
 		if strings.TrimSpace(bootable) == "true" {
 			command = "device-index"
-			index, err := RunCommandInGuestManual(disks, command, false, strings.TrimSpace(device))
+			index, err := RunCommandInGuestAllDisksManual(disks, command, false, strings.TrimSpace(device))
 			if err != nil {
 				fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
 				continue // Continue to next partition instead of returning error
