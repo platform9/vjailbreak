@@ -1,4 +1,4 @@
-import { Box, Drawer, styled } from "@mui/material"
+import { Box, Drawer, styled, Alert } from "@mui/material"
 import MigrationIcon from "@mui/icons-material/SwapHoriz"
 import { useQueryClient } from "@tanstack/react-query"
 import axios from "axios"
@@ -641,6 +641,52 @@ export default function MigrationFormDrawer({
     });
   }, [selectedMigrationOptions, params, fieldErrors]);
 
+  // VM validation - ensure powered-off VMs have IP and OS assigned
+  const vmValidation = useMemo(() => {
+    if (!params.vms || params.vms.length === 0) {
+      return { hasError: false, errorMessage: "" };
+    }
+
+    const poweredOffVMs = params.vms.filter(vm => {
+      // Determine power state - check different possible property names
+      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
+      return powerState === "powered-off";
+    });
+
+    if (poweredOffVMs.length === 0) {
+      return { hasError: false, errorMessage: "" };
+    }
+
+    // Check for VMs without IP addresses
+    const vmsWithoutIPs = poweredOffVMs.filter(vm =>
+      !vm.ipAddress || vm.ipAddress === "—" || vm.ipAddress.trim() === ""
+    );
+
+    // Check for VMs without OS assignment
+    const vmsWithoutOS = poweredOffVMs.filter(vm =>
+      !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
+    );
+
+    if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
+      let errorMessage = "Cannot proceed with Migration: ";
+      const issues: string[] = [];
+
+      if (vmsWithoutIPs.length > 0) {
+        issues.push(`${vmsWithoutIPs.length} powered-off VM${vmsWithoutIPs.length === 1 ? '' : 's'} missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`);
+      }
+
+      if (vmsWithoutOS.length > 0) {
+        issues.push(`${vmsWithoutOS.length} powered-off VM${vmsWithoutOS.length === 1 ? '' : 's'} missing OS assignment`);
+      }
+
+      errorMessage += issues.join(" and ") + ". Please assign IP addresses and OS to all powered-off VMs before continuing.";
+
+      return { hasError: true, errorMessage };
+    }
+
+    return { hasError: false, errorMessage: "" };
+  }, [params.vms]);
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
@@ -655,7 +701,9 @@ export default function MigrationFormDrawer({
     // Check if all datastores are mapped
     availableVmwareDatastores.some(datastore =>
       !params.storageMappings?.some(mapping => mapping.source === datastore)) ||
-    !migrationOptionValidated
+    !migrationOptionValidated ||
+    // VM validation - ensure powered-off VMs have IP and OS assigned
+    vmValidation.hasError
 
   const sortedOpenstackNetworks = useMemo(
     () =>
@@ -754,6 +802,11 @@ export default function MigrationFormDrawer({
             openstackCredName={params.openstackCreds?.existingCredName}
             openstackCredentials={openstackCredentials}
           />
+          {vmValidation.hasError && (
+            <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
+              {vmValidation.errorMessage}
+            </Alert>
+          )}
           {/* Step 3 */}
           <NetworkAndStorageMappingStep
             vmwareNetworks={availableVmwareNetworks}

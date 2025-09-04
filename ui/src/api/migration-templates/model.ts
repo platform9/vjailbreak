@@ -75,6 +75,7 @@ export interface VmData {
   labels?: { [key: string]: string }
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]
+  osFamily?: string
 }
 
 export interface VmNetworkInterface {
