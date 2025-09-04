@@ -667,6 +667,13 @@ export default function VmsSelectionStep({
     }
   }, [vmsWithFlavor, selectedVMs, onChange]);
 
+  useEffect(() => {
+    if (vmsWithFlavor.length > 0 && selectedVMs.size > 0) {
+      const selectedVmData = vmsWithFlavor.filter(vm => selectedVMs.has(vm.name));
+      onChange("vms")(selectedVmData);
+    }
+  }, [vmsWithFlavor, selectedVMs, onChange]);
+
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
     // Update selection based on the difference
     const newSelection = new Set(selectedVMs);
@@ -1010,7 +1017,6 @@ export default function VmsSelectionStep({
         });
       }
 
-      // Note: vmsWithFlavor will be updated automatically by the useEffect when vmOSAssignments changes
 
       // Track the analytics event
       track('os_family_assigned', {
