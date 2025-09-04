@@ -71,9 +71,6 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to login: %v", err)
 		}
-
-		// Log the error and retry after a delay
-		fmt.Printf("Login attempt %d failed: %v\n", attempt, err)
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			baseDelay = time.Duration(delayNum) * time.Millisecond

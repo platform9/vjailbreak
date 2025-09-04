@@ -139,8 +139,8 @@ type Host struct {
 			} `json:"data"`
 		} `json:"volumes_present,omitempty"`
 	} `json:"extensions,omitempty"`
-	Message      string `json:"message,omitempty"`
-	HostconfigID string `json:"hostconfig_id,omitempty"`
+	Message      interface{} `json:"message,omitempty"`
+	HostconfigID string      `json:"hostconfig_id,omitempty"`
 }
 
 // Cluster represents a group of hosts managed as a single entity in Platform9,
