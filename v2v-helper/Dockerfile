@@ -1,6 +1,6 @@
 # Stage 1: Build environment
 # Using Fedora 42 which includes Go 1.24 required by our go.mod
-FROM fedora:42@sha256:af97cb7bcca6cbcc42ef41e7c917580c46a237f6e171f51425e8c6080d8d8859 AS builder
+FROM fedora:42 AS builder
 
 # Build arguments for multi-platform support and versioning
 ARG TARGETOS
@@ -23,25 +23,27 @@ COPY manager manager
 
 # Stage 2: Runtime environment
 # Using same Fedora version for consistency and required runtime dependencies
-FROM fedora:42@sha256:af97cb7bcca6cbcc42ef41e7c917580c46a237f6e171f51425e8c6080d8d8859
+FROM fedora:42
+
+WORKDIR /tmp/rpms
+
+RUN curl -L -o nbdkit.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/nbdkit-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-vddk.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o libnbd.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/libnbd-1.22.2-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-server.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/nbdkit-server-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-basic-plugins.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-basic-filters.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/private/main/nbd-version-lock/assets/rpms/nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm && \
+    dnf install -y ./*.rpm && \
+    dnf clean all && \
+    rm -rf /tmp/rpms
 
 WORKDIR /tmp
 RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
 
-# Install runtime dependencies:
-# - nbdkit: Network Block Device toolkit for accessing disk images
-# - nbdkit-vddk-plugin: VMware VDDK plugin for accessing VMware disks
-# - libnbd: Network Block Device client library
-# - virt-v2v: Convert VMs between platforms (e.g., VMware to OpenStack)
-# - virtio-win: VirtIO drivers for Windows guests
-RUN dnf install -y \
-    nbdkit-1.42.4-1.fc42 \
-    nbdkit-vddk-plugin-1.42.4-1.fc42 \
-    libnbd-1.22.2-1.fc42
-    
 RUN dnf install -y /tmp/virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
+
