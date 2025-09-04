@@ -194,9 +194,10 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
 	if useSingleDisk {
-		args = append(args, "-i", "disk", diskPath)
+		args = append(args, "-i", "disk", diskPath, "--root", "first")
 	} else {
-		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+		// For multi-boot systems, use --root first instead of specific path to avoid interactive prompts
+		args = append(args, "-i", "libvirtxml", xmlFile, "--root", "first")
 	}
 
 	start := time.Now()
