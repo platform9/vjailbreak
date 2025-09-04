@@ -172,6 +172,9 @@ export default function VmsSelectionStep({
     setToastOpen(false);
   }, []);
 
+  // OS assignment state
+  const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({});
+
   // IP editing and validation state - similar to RollingMigrationForm
   const [editingIpFor, setEditingIpFor] = useState<string | null>(null);
   const [editingInterfaceIndex, setEditingInterfaceIndex] = useState<number | null>(null);
@@ -366,27 +369,98 @@ export default function VmsSelectionStep({
     },
     {
       field: "osFamily",
-      headerName: "OS",
+      headerName: "Operating System",
       flex: 1,
+      hideable: true,
       renderCell: (params) => {
-        const osFamily = params.row.osFamily || "Unknown";
-        let displayValue = osFamily;
+        const vmId = params.row.id;
+        const isSelected = selectedVMs.has(vmId);
+        const powerState = params.row?.powerState;
+        const detectedOsFamily = params.row?.osFamily;
+        const assignedOsFamily = vmOSAssignments[vmId];
+        const currentOsFamily = assignedOsFamily || detectedOsFamily;
+
+
+        // Show dropdown for ALL powered-off VMs (allows changing selection)
+        if (isSelected && powerState === "powered-off") {
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+              <Select
+                size="small"
+                value={(() => {
+                  if (!currentOsFamily || currentOsFamily === "Unknown") return "";
+                  const osLower = currentOsFamily.toLowerCase();
+                  if (osLower.includes("windows")) return "windowsGuest";
+                  if (osLower.includes("linux")) return "linuxGuest";
+                  return "";
+                })()}
+                onChange={(e) => handleOSAssignment(vmId, e.target.value)}
+                displayEmpty
+                sx={{
+                  minWidth: 120,
+                  '& .MuiSelect-select': {
+                    padding: '4px 8px',
+                    fontSize: '0.875rem'
+                  }
+                }}
+              >
+                <MenuItem value="">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                    <WarningIcon sx={{ fontSize: 16 }} />
+                    <em>Select OS</em>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="windowsGuest">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <img src={WindowsIcon} alt="Windows" style={{ width: 16, height: 16 }} />
+                    Windows
+                  </Box>
+                </MenuItem>
+                <MenuItem value="linuxGuest">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <img src={LinuxIcon} alt="Linux" style={{ width: 16, height: 16 }} />
+                    Linux
+                  </Box>
+                </MenuItem>
+              </Select>
+            </Box>
+          );
+        }
+
+        let displayValue = currentOsFamily || "Unknown";
         let icon: React.ReactNode = null;
 
-        if (osFamily.includes("windows")) {
+        if (currentOsFamily && currentOsFamily.toLowerCase().includes("windows")) {
           displayValue = "Windows";
           icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-        } else if (osFamily.includes("linux")) {
+        } else if (currentOsFamily && currentOsFamily.toLowerCase().includes("linux")) {
           displayValue = "Linux";
-          icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20, }} />;
-        } else {
-          displayValue = "Other";
+          icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20 }} />;
+        } else if (currentOsFamily && currentOsFamily !== "Unknown") {
+          displayValue = "Unknown";
         }
 
         return (
-          <Tooltip title={displayValue}>
-            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <Tooltip title={powerState === "powered-off" ?
+            ((!currentOsFamily || currentOsFamily === "Unknown") ?
+              "OS assignment required for powered-off VMs" :
+              "Click to change OS selection") :
+            displayValue}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              height: '100%',
+              gap: 1
+            }}>
               {icon}
+              {(!currentOsFamily || currentOsFamily === "Unknown") && (
+                <WarningIcon sx={{ color: 'warning.main', fontSize: 16 }} />
+              )}
+              <Typography variant="body2" sx={{
+                color: (!currentOsFamily || currentOsFamily === "Unknown") ? 'text.secondary' : 'text.primary'
+              }}>
+                {displayValue}
+              </Typography>
             </Box>
           </Tooltip>
         );
@@ -556,6 +630,10 @@ export default function VmsSelectionStep({
           .join(", ")
         : vm.ipAddress || "";
 
+      // Use assigned OS family if available, otherwise use the VM's detected OS family
+      const assignedOsFamily = vmOSAssignments[vm.name];
+      const finalOsFamily = assignedOsFamily || vm.osFamily;
+
       return {
         ...vm,
         ipAddress: allIPs || "—", // Update the main IP field to contain comma-separated IPs
@@ -563,12 +641,13 @@ export default function VmsSelectionStep({
         flavor,
         flavorNotFound,
         powerState,
+        osFamily: finalOsFamily, // Use the assigned OS family or fallback to detected
         ipValidationStatus: 'pending' as const,
         ipValidationMessage: '',
       };
     });
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments]);
 
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
@@ -911,6 +990,54 @@ export default function VmsSelectionStep({
         }
       });
       showToast(`Failed to update IP addresses for VM "${editingVm.name}"`, "error");
+    }
+  };
+
+  // OS assignment handler
+  const handleOSAssignment = async (vmId: string, osFamily: string) => {
+    try {
+      // Update local state first for immediate UI feedback
+      setVmOSAssignments(prev => ({ ...prev, [vmId]: osFamily }));
+
+      const vm = vmsWithFlavor.find(v => v.name === vmId);
+      if (vm?.vmWareMachineName) {
+        await patchVMwareMachine(vm.vmWareMachineName, {
+          spec: {
+            vms: {
+              osFamily: osFamily
+            }
+          }
+        });
+      }
+
+      // Note: vmsWithFlavor will be updated automatically by the useEffect when vmOSAssignments changes
+
+      // Track the analytics event
+      track('os_family_assigned', {
+        vm_name: vmId,
+        os_family: osFamily,
+        action: 'os-family-assignment'
+      });
+
+      showToast(`OS family successfully assigned for VM "${vmId}"`);
+
+    } catch (error) {
+      console.error("Failed to assign OS family:", error);
+      reportError(error as Error, {
+        context: 'os-family-assignment',
+        metadata: {
+          vmId: vmId,
+          osFamily: osFamily,
+          action: 'os-family-assignment'
+        }
+      });
+      // Revert local state on error
+      setVmOSAssignments(prev => {
+        const newState = { ...prev };
+        delete newState[vmId];
+        return newState;
+      });
+      showToast(`Failed to assign OS family for VM "${vmId}": ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
     }
   };
 
