@@ -34,7 +34,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -511,7 +511,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 
 	c := new(vim25.Client)
-	settings, err := migrationutils.GetVjailbreakSettings(ctx, k3sclient)
+	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 	}
 	// Exponential retry logic
@@ -638,7 +638,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	vminfoMu := sync.Mutex{}
 	var wg sync.WaitGroup
 
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, scope.Client)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
