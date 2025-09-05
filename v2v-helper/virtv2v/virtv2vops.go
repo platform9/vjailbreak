@@ -372,7 +372,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
-	return strings.ToLower(string(out)), nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 // RunCommandInGuestAllDisksManual runs guestfish commands without automatic inspection
@@ -402,7 +402,7 @@ func RunCommandInGuestAllDisksManual(disks []vm.VMDisk, command string, write bo
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
-	return strings.ToLower(string(out)), nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
