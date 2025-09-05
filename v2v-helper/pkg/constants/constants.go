@@ -129,5 +129,5 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
-	VCenterLoginRetryLimit = 5
+	VCenterLoginRetryLimit = 1
 )
