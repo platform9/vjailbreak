@@ -13,7 +13,7 @@ import (
 	servers "github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	networks "github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
-	utils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -70,7 +70,7 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vm
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
 	ret0, _ := ret[0].(*servers.Server)

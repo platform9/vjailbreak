@@ -15,6 +15,7 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/gophercloud/gophercloud"
@@ -436,7 +437,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {

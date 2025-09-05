@@ -511,18 +511,20 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 
 	c := new(vim25.Client)
-
+	settings, err := migrationutils.GetVjailbreakSettings(ctx, k3sclient)
+	if err != nil {
+	}
 	// Exponential retry logic
-	maxRetries := 5
+	maxRetries := settings.VCenterLoginRetryLimit
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
 			return c, nil
 		}
-
+		ctxlog := log.FromContext(ctx)
 		// Log the error and retry after a delay
-		fmt.Printf("Login attempt %d failed: %v\n", attempt, err)
+		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)

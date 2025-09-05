@@ -21,6 +21,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -299,7 +300,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 	}
 
-	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
 	}
@@ -832,7 +833,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 	}
 
 	// Get vjailbreak settings
-	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
@@ -1120,7 +1121,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
-	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}

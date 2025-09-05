@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -64,7 +65,15 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 	// Create the client
 	c := new(vim25.Client)
 	// Exponential retry logic
-	maxRetries := 5
+	client, err := k8sutils.GetInclusterClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get in-cluster client: %v", err)
+	}
+	migrationSettings, err := k8sutils.GetVjailbreakSettings(ctx, client)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %v", err)
+	}
+	maxRetries := migrationSettings.VCenterLoginRetryLimit
 	baseDelay := 500 * time.Millisecond // Initial delay
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = s.Login(ctx, c, nil)
