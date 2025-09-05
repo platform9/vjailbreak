@@ -342,7 +342,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
-				final = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
