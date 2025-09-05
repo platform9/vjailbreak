@@ -2533,12 +2533,12 @@ export default function RollingMigrationFormDrawer({
                                     />
                                 </Paper>
                                 {vmIpValidationError && (
-                                    <Alert severity="warning" sx={{ mt: 2 }}>
+                                    <Alert severity="warning" >
                                         {vmIpValidationError}
                                     </Alert>
                                 )}
                                 {osValidationError && (
-                                    <Alert severity="warning" sx={{ mt: 2 }}>
+                                    <Alert severity="warning" >
                                         {osValidationError}
                                     </Alert>
                                 )}
