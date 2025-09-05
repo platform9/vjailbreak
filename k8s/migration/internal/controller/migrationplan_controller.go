@@ -377,6 +377,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachines")
 	}
+	// vmMachinesArr is created to maintain order in which VM migration is triggered
 	vmMachinesArr := make([]*vjailbreakv1alpha1.VMwareMachine, 0)
 	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, 0)
 	// List all VMs and gather its data
@@ -1320,7 +1321,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	for _, vmMachine := range vmMachines {
 		// Check if VM is powered off
-		// change this
 		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
 			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
 		}

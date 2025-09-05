@@ -565,12 +565,12 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network interfaces
 	// Get the virtual NICs
-	pc := property.DefaultCollector(c)
 	nicList, err := ExtractVirtualNICs(&o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
 	}
 
+	pc := property.DefaultCollector(c)
 	for _, nic := range nicList {
 		var netObj mo.Network
 		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
@@ -771,7 +771,7 @@ func ExtractGuestNetworkInfo(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.G
 // processVMDisk processes a single virtual disk device and updates the disk information
 // it returns the datastore reference, RDM disk info, a skip flag, and any error encountered
 // It checks if the disk is backed by a shared SCSI controller and skips the VM.
-func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo *types.HostStorageDeviceInfo, vmName string) (dsref *types.ManagedObjectReference, rdmDiskInfos vjailbreakv1alpha1.RDMDisk, err error) {
+func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo *types.HostStorageDeviceInfo, vmName string) (dsref *types.ManagedObjectReference, rdmDisk vjailbreakv1alpha1.RDMDisk, err error) {
 	ctxlog := log.FromContext(ctx)
 	switch backing := disk.Backing.(type) {
 	case *types.VirtualDiskFlatVer2BackingInfo:
@@ -782,7 +782,7 @@ func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo
 		dsref = &ref
 	case *types.VirtualDiskRawDiskMappingVer1BackingInfo:
 		if hostStorageInfo != nil {
-			rdmDiskInfos = vjailbreakv1alpha1.RDMDisk{
+			rdmDisk = vjailbreakv1alpha1.RDMDisk{
 				Spec: vjailbreakv1alpha1.RDMDiskSpec{
 					DiskSize: int(disk.CapacityInBytes),
 					DiskName: disk.DeviceInfo.GetDescription().Label,
@@ -791,10 +791,10 @@ func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo
 			for _, scsiDisk := range hostStorageInfo.ScsiLun {
 				lunDetails := scsiDisk.GetScsiLun()
 				if backing.LunUuid == lunDetails.Uuid {
-					rdmDiskInfos.Spec.DisplayName = lunDetails.DisplayName
-					rdmDiskInfos.Spec.UUID = lunDetails.Uuid
-					rdmDiskInfos.Spec.OwnerVMs = []string{vmName}
-					rdmDiskInfos.Name = fmt.Sprintf("vml.%s", lunDetails.Uuid)
+					rdmDisk.Spec.DisplayName = lunDetails.DisplayName
+					rdmDisk.Spec.UUID = lunDetails.Uuid
+					rdmDisk.Spec.OwnerVMs = []string{vmName}
+					rdmDisk.Name = fmt.Sprintf("vml.%s", lunDetails.Uuid)
 				}
 			}
 		}
@@ -803,7 +803,7 @@ func processVMDisk(ctx context.Context, disk *types.VirtualDisk, hostStorageInfo
 		return nil, vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("unsupported disk backing type: %T", disk.Backing)
 	}
 
-	return dsref, rdmDiskInfos, nil
+	return dsref, rdmDisk, nil
 }
 
 // AppendUnique appends unique values to a slice
@@ -851,16 +851,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		return fmt.Errorf("the number of RDM disks cannot be reduced for VM %s. Current: %d, New: %d", vminfo.Name, len(vmwvm.Spec.VMInfo.RDMDisks), len(vminfo.RDMDisks))
 	}
 	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
-		verifyRDMNotDeleted := true
-		for _, newData := range vminfo.RDMDisks {
-			if data == newData {
-				verifyRDMNotDeleted = false
-			}
-		}
-		if verifyRDMNotDeleted {
-			return fmt.Errorf("RDM disk %s cannot be removed from VM %s , delete vmware custom resource if wanted to exclude rdm disks after detachment", data, vminfo.Name)
+		if !slices.Contains(vminfo.RDMDisks, data) {
+			return fmt.Errorf("RDM disk %s cannot be removed from VM %s , delete vmware custom resource if wanted to exclude rdm disks after detachment from VM", data, vminfo.Name)
 		}
 	}
+
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if apierrors.IsNotFound(err) {
 		// If not found, create a new object
@@ -1488,7 +1483,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
 	var clusterName string
 	rdmForVM := make([]string, 0)
-	scopelog := scope.Logger
+	log := scope.Logger
 	err := vm.Properties(ctx, vm.Reference(), []string{
 		"config",
 		"guest",
@@ -1502,7 +1497,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 	if vmProps.Config == nil {
 		// VM is not powered on or is in creating state
-		scopelog.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
+		log.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
 		return
 	}
 	// Fetch details required for RDM disks
@@ -1534,20 +1529,20 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to process VM disk: %w", err))
 			return
 		}
-        // check if rdmInfo is empty
+		// check if rdmInfo is empty
 		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
 			rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
 			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
 				savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
 				if !ok {
-					scopelog.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
+					log.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
 					return
 				}
 				// Compare OpenstackVolumeRef details
 				if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
 					if savedRDMDetails.Spec.OpenstackVolumeRef.CinderBackendPool != rdmInfo.Spec.OpenstackVolumeRef.CinderBackendPool ||
 						savedRDMDetails.Spec.OpenstackVolumeRef.VolumeType != rdmInfo.Spec.OpenstackVolumeRef.VolumeType {
-						log.FromContext(ctx).Info("RDM VolumeType and CinderBackend doesn't match compared to previous value, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
+						log.Info("RDM VolumeType and CinderBackend doesn't match compared to previous value, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
 						continue
 					}
 				}
@@ -1581,19 +1576,19 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
-		scopelog.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
+		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return
 	}
 	if len(listofRDMInVM) > 0 {
-		scopelog.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
+		log.Info("VM has RDM disks, populating RDM disk info from attributes", "VM NAME", vm.Name())
 		rdmDiskArray := make([]vjailbreakv1alpha1.RDMDisk, 0)
 		rdmDiskArray = append(rdmDiskArray, listofRDMInVM...)
-		rdmDiskwithPopulatedAttributes, err := populateRDMDiskInfoFromAttributes(ctx, rdmDiskArray, attributes)
+		rdmDisks, err := populateRDMDiskInfoFromAttributes(ctx, rdmDiskArray, attributes)
 		if err != nil {
-			scopelog.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
+			log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
 			return
 		}
-		for _, rdm := range rdmDiskwithPopulatedAttributes {
+		for _, rdm := range rdmDisks {
 			rdmDiskMap.Store(strings.TrimSpace(rdm.Name), rdm)
 		}
 	}
@@ -1603,6 +1598,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
+	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
 		var netObj mo.Network
 		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
