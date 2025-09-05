@@ -8,4 +8,5 @@ type VjailbreakSettings struct {
 	VCenterScanConcurrencyLimit         int
 	CleanupVolumesAfterConvertFailure   bool
 	PopulateVMwareMachineFlavors        bool
+	VCenterLoginRetryLimit              int
 }

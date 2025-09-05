@@ -187,7 +187,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			log.Error(err, "Failed to get OpenstackCreds resource", "openstackcreds", openstackCredsName)
 			return ctrl.Result{}, err
 		}
-		log.V(1).Info("RDM controller: Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
+		log.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
 		openstackClient, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 		if err != nil {
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)

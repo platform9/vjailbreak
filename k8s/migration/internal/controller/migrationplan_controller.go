@@ -406,7 +406,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					r.ctxlog.Error(err, "Failed to update MigrationPlan retry count")
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
 				}
-				fmt.Println("RDM disk not migrated, requeuing MigrationPlan for retry. ", retries)
+				r.ctxlog.Info("RDM disk not migrated, requeuing MigrationPlan for retry. ", retries)
 				return ctrl.Result{RequeueAfter: delay}, nil
 			}
 		}
@@ -1321,7 +1321,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	for _, vmMachine := range vmMachines {
 		// Check if VM is powered off
 		// change this
-		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachinePowerStatePoweredOff) {
+		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
 			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
 		}
 		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
@@ -1334,9 +1334,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				}, rdmDiskCR)
 
 				if err != nil {
-					if !apierrors.IsNotFound(err) {
-						return fmt.Errorf("failed to get RDMDisk CR: %w", err)
-					}
+					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 				} else {
 					// Validate that all ownerVMs are present in parallelVMs
 					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {

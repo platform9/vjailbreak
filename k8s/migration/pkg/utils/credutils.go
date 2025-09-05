@@ -126,7 +126,6 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 		"Password":   string(secret.Data["OS_PASSWORD"]),
 		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
 		"RegionName": string(secret.Data["OS_REGION_NAME"]),
-		"OSInsecure": string(secret.Data["OS_INSECURE"]),
 	}
 
 	for key, value := range fields {
