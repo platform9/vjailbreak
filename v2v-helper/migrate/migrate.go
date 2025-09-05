@@ -266,7 +266,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	if migobj.MigrationType == "cold" {
+	if migobj.MigrationType == "cold" && !migobj.CheckIfAdminCutoverSelected() {
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
 		}
@@ -342,7 +342,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
-				final = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
