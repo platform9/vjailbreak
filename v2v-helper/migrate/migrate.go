@@ -566,7 +566,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			}
 			// Get the installed os info
 			command := "inspect-os"
-			osPath, err := virtv2v.RunCommandInGuestAllDisksManual(vminfo.VMDisks, command, false)
+			osPath, err = virtv2v.RunCommandInGuestAllDisksManual(vminfo.VMDisks, command, false)
 			if err != nil {
 				return errors.Wrap(err, "Failed to get os path")
 			}
