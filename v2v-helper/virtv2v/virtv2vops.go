@@ -367,7 +367,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
-	utils.AddDebugOutputToFile(cmd)
+	utils.PrintLog(fmt.Sprintf("Executing %s", cmd.String()))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
@@ -397,7 +397,7 @@ func RunCommandInGuestAllDisksManual(disks []vm.VMDisk, command string, write bo
 	cmd.Args = append(cmd.Args, ":", command)
 	cmd.Args = append(cmd.Args, args...)
 
-	utils.AddDebugOutputToFile(cmd)
+	utils.PrintLog(fmt.Sprintf("Executing %s", cmd.String()))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
