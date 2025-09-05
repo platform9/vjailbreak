@@ -138,6 +138,8 @@ func validateOpenStack(insecure bool) (*migrateutils.OpenStackClients, error) {
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
+		AuthURL:            opts.IdentityEndpoint,
+		Tenant:             opts.TenantName,
 	}, nil
 }
 
