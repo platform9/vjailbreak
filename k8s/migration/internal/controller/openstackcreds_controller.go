@@ -26,7 +26,7 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -269,7 +269,7 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	}
 
 	// Get vjailbreak settings to check if we should populate VMwareMachine flavors
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get vjailbreak settings")
 		return errors.Wrap(err, "failed to get vjailbreak settings")

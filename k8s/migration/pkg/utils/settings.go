@@ -29,6 +29,8 @@ type VjailbreakSettings struct {
 	CleanupVolumesAfterConvertFailure bool
 	// PopulateVMwareMachineFlavors is whether to automatically populate VMwareMachine objects with OpenStack flavors
 	PopulateVMwareMachineFlavors bool
+	// VCenterLoginRetryLimit is the number of retries for vcenter login
+	VCenterLoginRetryLimit int
 }
 
 // atoi is a helper function to convert string to int with a default value of 0
@@ -98,6 +100,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
 		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
+		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
 	}, nil
 }
 
