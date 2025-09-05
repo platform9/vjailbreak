@@ -570,6 +570,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if err != nil {
 				return errors.Wrap(err, "Failed to get os path")
 			}
+
+			// processing on the os path string to get the os install location
+			osPathArray := strings.Split(osPath, "\n")
+			// Assuming the first line is the os install location
+			osPath = osPathArray[0]
+
 			utils.PrintLog(fmt.Sprintf("OS path: %s", osPath))
 		}
 	} else {
