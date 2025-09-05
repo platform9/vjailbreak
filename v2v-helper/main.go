@@ -49,7 +49,6 @@ func main() {
 			<-ackChan
 		}
 		utils.PrintLog(msg)
-		return
 	}
 
 	client, err := utils.GetInclusterClient()
@@ -93,6 +92,7 @@ func main() {
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
+	openstackclients.K8sClient = client
 	utils.PrintLog("Connected to OpenStack")
 
 	// Get thumbprint
