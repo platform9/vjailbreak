@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
@@ -28,12 +29,6 @@ type VMInfo struct {
 }
 
 func validateVCenter(username, password, host string, disableSSLVerification bool) (*vim25.Client, error) {
-	if host[:4] != "https" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
-	}
 	u, err := url.Parse(host)
 	if err != nil {
 		return nil, err
@@ -105,6 +100,13 @@ func main() {
 	if *username == "" || *password == "" || *host == "" {
 		fmt.Println("Usage: vmmetadataexporter --username <user> --password <pass> --host <host>")
 		os.Exit(1)
+	}
+
+	if !strings.HasPrefix(*host, "https://") {
+		*host = "https://" + *host
+	}
+	if !strings.HasSuffix(*host, "/sdk") {
+		*host += "/sdk"
 	}
 
 	c, err := validateVCenter(*username, *password, *host, true)
