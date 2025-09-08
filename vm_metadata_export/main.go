@@ -102,6 +102,11 @@ func main() {
 
 	flag.Parse()
 
+	if *username == "" || *password == "" || *host == "" {
+		fmt.Println("Usage: vmmetadataexporter --username <user> --password <pass> --host <host>")
+		os.Exit(1)
+	}
+
 	c, err := validateVCenter(*username, *password, *host, true)
 	if err != nil {
 		fmt.Errorf("failed to validate vCenter: %w", err)
