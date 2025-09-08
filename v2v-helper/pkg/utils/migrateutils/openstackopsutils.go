@@ -1,6 +1,7 @@
 package migrateutils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -36,6 +38,7 @@ type OpenStackClients struct {
 	BlockStorageClient *gophercloud.ServiceClient
 	ComputeClient      *gophercloud.ServiceClient
 	NetworkingClient   *gophercloud.ServiceClient
+	K8sClient          client.Client
 }
 
 type OpenStackMetadata struct {
@@ -129,7 +132,12 @@ func (osclient *OpenStackClients) DeleteVolume(volumeID string) error {
 }
 
 func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	// Get vjailbreak settings
+	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
@@ -162,9 +170,9 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 			return nil
 		}
 		fmt.Printf("Volume %s is still attached to server retrying %d times\n", volumeID, i)
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for 5 seconds before checking again
 	}
-	return fmt.Errorf("volume did not become available within %d seconds", constants.MaxIntervalCount*5)
+	return fmt.Errorf("volume did not become available within %d seconds", vjailbreakSettings.VolumeAvailableWaitRetryLimit*vjailbreakSettings.VolumeAvailableWaitIntervalSeconds)
 }
 
 func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
@@ -173,7 +181,11 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
 
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
@@ -182,7 +194,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 			err = nil
 			break
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for 5 seconds before checking again
 	}
 	if err != nil {
 		return fmt.Errorf("failed to attach volume to VM: %s", err)
