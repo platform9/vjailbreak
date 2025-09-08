@@ -107,7 +107,7 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 
 	for idx, vmdisk := range vminfo.VMDisks {
 		setRDMLabel := false
-		if vmdisk.Boot && len(vminfo.RDMDisks) > 0 {
+		if len(vminfo.RDMDisks) > 0 {
 			setRDMLabel = true
 		}
 		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
