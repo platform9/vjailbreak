@@ -496,7 +496,6 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			"hw_scsi_reservations": "true",
 		}
 	}
-	fmt.Println("RDM disks : ", vminfo.RDMDisks)
 	for _, disk := range vminfo.RDMDisks {
 		// Set the Nova API version to 2.6
 		osclient.ComputeClient.Microversion = "2.60"

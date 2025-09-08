@@ -1315,7 +1315,6 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisk vjailbre
 	// Process attributes for additional RDM information
 	for _, attr := range attributes {
 		if strings.Contains(attr, "VJB_RDM:") {
-			fmt.Println("Processing RDM attribute:", attr)
 			parts := strings.Split(attr, ":")
 			if len(parts) != 4 {
 				continue
