@@ -478,7 +478,7 @@ func TestCreateTargetInstance(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -531,7 +531,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -565,6 +565,6 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.Contains(t, err.Error(), "number of network ports does not match number of network names")
 }
