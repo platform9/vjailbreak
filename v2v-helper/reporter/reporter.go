@@ -233,39 +233,47 @@ func (r *Reporter) GetCutoverLabel() (string, error) {
 
 func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 	go func() {
-		fmt.Printf("WatchPodLabels goroutine started for pod %s in namespace %s\n", r.PodName, r.PodNamespace)
+		fmt.Printf("Info: WatchPodLabels goroutine started for pod %s in namespace %s\n", r.PodName, r.PodNamespace)
+		timeoutSeconds := int64(86400) // Set to 24 hours
 		watch, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
-			FieldSelector: fmt.Sprintf("metadata.name=%s", r.PodName),
+			FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
+			TimeoutSeconds: &timeoutSeconds,
 		})
 		if err != nil {
-			fmt.Printf("ERROR: Failed to establish watch for pod %s: %v\n", r.PodName, err)
-			return // Exit goroutine on initial failure
+			fmt.Printf("Error: Failed to start watch for pod %s: %v\n", r.PodName, err)
+			return
 		}
-		fmt.Printf("Watch established successfully for pod %s\n", r.PodName)
+		fmt.Printf("Info: Watch established for pod %s with timeout %d seconds\n", r.PodName, timeoutSeconds)
 		defer watch.Stop()
 		originalStartCutover := "no"
-		fmt.Printf("Entering event loop for watch on pod %s\n", r.PodName)
+		fmt.Printf("Info: Entering event loop for pod %s\n", r.PodName)
 		for event := range watch.ResultChan() {
-			fmt.Printf("Event received in watch loop for pod %s: type=%v\n", r.PodName, event.Type)
+			fmt.Printf("Info: Received event for pod %s: type=%v\n", r.PodName, event.Type)
 			pod, ok := event.Object.(*corev1.Pod)
 			if !ok {
-				fmt.Printf("WARNING: Non-pod event received for pod %s: %v\n", r.PodName, event.Object)
+				fmt.Printf("Error: Received non-pod event for pod %s: %v\n", r.PodName, event.Object)
 				continue
 			}
 			if cutover, ok := pod.Labels["startCutover"]; ok {
 				if cutover != originalStartCutover {
-					fmt.Printf("Label change detected for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
-					ch <- cutover
-					fmt.Printf("Sent label '%s' to channel for pod %s\n", cutover, r.PodName)
+					fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
+					select {
+					case ch <- cutover:
+						fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+					default:
+						fmt.Printf("Error: Channel blocked when sending label %s for pod %s\n", cutover, r.PodName)
+					}
 					originalStartCutover = cutover
-				} else {
-					fmt.Printf("Label unchanged for pod %s: %s (ignoring)\n", r.PodName, cutover)
 				}
-			} else {
-				fmt.Printf("No 'startCutover' label found in pod %s event\n", r.PodName)
 			}
 		}
-		fmt.Printf("ERROR: Watch ResultChan closed unexpectedly for pod %s (likely timeout or disconnection after ~30-60 min)\n", r.PodName)
-		fmt.Printf("WatchPodLabels goroutine exiting for pod %s\n", r.PodName)
+		fmt.Printf("Info: Watch channel closed for pod %s after ~%d seconds\n", r.PodName, timeoutSeconds)
+		select {
+		case <-ctx.Done():
+			fmt.Printf("Error: Context canceled for pod %s: %v\n", r.PodName, ctx.Err())
+		default:
+			fmt.Printf("Info: Watch stopped for pod %s, no context cancellation\n", r.PodName)
+		}
+		fmt.Printf("Info: WatchPodLabels goroutine exiting for pod %s\n", r.PodName)
 	}()
 }
