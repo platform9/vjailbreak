@@ -95,10 +95,16 @@ func main() {
 	password := flag.String("password", "", "vCenter password")
 	host := flag.String("host", "", "vCenter host")
 
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+
 	flag.Parse()
 
 	if *username == "" || *password == "" || *host == "" {
-		fmt.Println("Usage: vmmetadataexporter --username <user> --password <pass> --host <host>")
+		fmt.Println("Error: missing required argument(s)")
+		flag.Usage()
 		os.Exit(1)
 	}
 
