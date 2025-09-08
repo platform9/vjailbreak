@@ -25,6 +25,22 @@ Or by describing the Openstack credentials:
 kubectl describe openstackcreds -n migration-system
 ```
 
+## On Vmware 
+
+- Add the following annotation to the VMware Notes field for the VM:
+  ```
+  VJB_RDM:Hard Disk:volumeRef:"source-name"="abac111"
+  ```
+  Replace `Hard Disk` with the RDM disk name and `abac111` with the actual source ID.
+
+- To obtain the `source-id`,`source-name` or source details, you can run the following command against SAN Array:
+
+  ```bash
+
+  os block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
+
+  ```
+
 ---
 
 ## Migration Steps
