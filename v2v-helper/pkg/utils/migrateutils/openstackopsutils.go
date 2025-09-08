@@ -172,7 +172,7 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 		fmt.Printf("Volume %s is still attached to server retrying %d times\n", volumeID, i)
 		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for 5 seconds before checking again
 	}
-	return fmt.Errorf("volume did not become available within %d seconds", constants.MaxIntervalCount*5)
+	return fmt.Errorf("volume did not become available within %d seconds", vjailbreakSettings.VolumeAvailableWaitRetryLimit*vjailbreakSettings.VolumeAvailableWaitIntervalSeconds)
 }
 
 func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
