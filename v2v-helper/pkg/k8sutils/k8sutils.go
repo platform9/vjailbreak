@@ -108,6 +108,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
 			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
 			PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
+			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
+			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
 			VCenterLoginRetryLimit:              constants.VCenterLoginRetryLimit,
 		}, nil
 	}
@@ -138,6 +140,14 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 
 	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
 		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VolumeAvailableWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VolumeAvailableWaitRetryLimit)
 	}
 
 	if vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"] == "" {
