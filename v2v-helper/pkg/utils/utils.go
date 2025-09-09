@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -112,4 +113,73 @@ func atoi(s string) int {
 		return 0
 	}
 	return i
+}
+
+func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+	vjailbreakSettingsCM := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
+		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
+	}
+
+	if vjailbreakSettingsCM.Data == nil {
+		return &VjailbreakSettings{
+			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
+			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
+			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
+			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
+			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
+			PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
+			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
+			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
+		}, nil
+	}
+
+	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
+		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
+	}
+
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VolumeAvailableWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VolumeAvailableWaitRetryLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
+		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
+	}
+
+	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "" {
+		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
+	}
+
+	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
+		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
+	}
+
+	return &VjailbreakSettings{
+		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
+		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
+		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
+		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
+		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
+		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
+		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
+	}, nil
 }

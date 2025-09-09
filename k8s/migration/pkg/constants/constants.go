@@ -185,6 +185,12 @@ const (
 	// VMActiveWaitRetryLimit is the number of retries to wait for vm to become active
 	VMActiveWaitRetryLimit = 15
 
+	// VolumeAvailableWaitIntervalSeconds is the interval to wait for volume to become available
+	VolumeAvailableWaitIntervalSeconds = 5
+
+	// VolumeAvailableWaitRetryLimit is the number of retries to wait for volume to become available
+	VolumeAvailableWaitRetryLimit = 15
+
 	// DefaultMigrationMethod is the default migration method
 	DefaultMigrationMethod = "hot"
 
@@ -193,6 +199,9 @@ const (
 
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
+
+	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
+	PopulateVMwareMachineFlavors = true
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"

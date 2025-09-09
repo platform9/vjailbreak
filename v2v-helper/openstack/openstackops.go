@@ -137,6 +137,9 @@ func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
+		K8sClient:          nil,
+		AuthURL:            opts.IdentityEndpoint,
+		Tenant:             opts.TenantName,
 	}, nil
 }
 

@@ -21,6 +21,10 @@ type VjailbreakSettings struct {
 	VMActiveWaitIntervalSeconds int
 	// VMActiveWaitRetryLimit is the number of retries to wait for VM to become active
 	VMActiveWaitRetryLimit int
+	// VolumeAvailableWaitIntervalSeconds is the interval to wait for volume to become available
+	VolumeAvailableWaitIntervalSeconds int
+	// VolumeAvailableWaitRetryLimit is the number of retries to wait for volume to become available
+	VolumeAvailableWaitRetryLimit int
 	// DefaultMigrationMethod is the default migration method (hot/cold)
 	DefaultMigrationMethod string
 	// VCenterScanConcurrencyLimit is the max number of vms to scan at the same time
@@ -65,37 +69,47 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	}
 
 	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
-		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = "20"
+		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
 	}
 
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
-		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = "20"
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
 
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
-		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = "15"
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VolumeAvailableWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VolumeAvailableWaitRetryLimit)
 	}
 
 	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
-		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = "hot"
+		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
 	}
 
 	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
-		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = "10"
+		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
 	}
 
 	if vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "" {
-		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = "false"
+		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
 	}
 
 	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
-		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = trueString
+		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
 	}
 
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
 		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
+		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
 		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
 		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
@@ -107,12 +121,14 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 // getDefaultSettings returns default vjailbreak settings
 func getDefaultSettings() *VjailbreakSettings {
 	return &VjailbreakSettings{
-		ChangedBlocksCopyIterationThreshold: 20,
-		VMActiveWaitIntervalSeconds:         20,
-		VMActiveWaitRetryLimit:              15,
-		DefaultMigrationMethod:              "hot",
-		VCenterScanConcurrencyLimit:         10,
-		CleanupVolumesAfterConvertFailure:   false,
-		PopulateVMwareMachineFlavors:        true,
+		ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+		VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
+		VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
+		VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
+		VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
+		DefaultMigrationMethod:              constants.DefaultMigrationMethod,
+		VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
+		CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
+		PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
 	}
 }
