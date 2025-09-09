@@ -21,7 +21,7 @@ import (
 type VMInfo struct {
 	Name             string
 	OSDetails        string
-	DiskSize         int // In Bytes
+	DiskSize         int64 // In Bytes
 	RDM              bool
 	IndependentDisks bool
 	VTPM             bool
@@ -73,7 +73,7 @@ func convertToCSV(vms []VMInfo, fileName string) error {
 		row := []string{
 			vm.Name,
 			vm.OSDetails,
-			strconv.Itoa(vm.DiskSize),
+			strconv.FormatInt(vm.DiskSize, 10),
 			strconv.FormatBool(vm.RDM),
 			strconv.FormatBool(vm.IndependentDisks),
 			strconv.FormatBool(vm.VTPM),
@@ -195,7 +195,7 @@ func main() {
 		vminfo := VMInfo{
 			Name:             vm.Name(),
 			OSDetails:        osDetails,
-			DiskSize:         int(diskSize),
+			DiskSize:         int64(diskSize),
 			RDM:              rdm,
 			IndependentDisks: independentdisks,
 			VTPM:             vtpm,
