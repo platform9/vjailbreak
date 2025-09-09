@@ -117,8 +117,10 @@ func main() {
 
 	c, err := validateVCenter(*username, *password, *host, true)
 	if err != nil {
-		fmt.Errorf("failed to validate vCenter: %w", err)
+		fmt.Printf("Error: failed to connect to vCenter: %v\n", err)
+		os.Exit(1)
 	}
+
 	defer cancel()
 	fmt.Println("Connected to vCenter")
 
@@ -126,7 +128,7 @@ func main() {
 	dc, err := finder.Datacenter(ctx, "PNAP BMC")
 	if err != nil {
 		fmt.Printf("failed to find datacenter: %v", err)
-		return
+		os.Exit(1)
 	}
 	finder.SetDatacenter(dc)
 
@@ -134,7 +136,7 @@ func main() {
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		fmt.Printf("failed to get vms: %v", err)
-		return
+		os.Exit(1)
 	}
 	fmt.Printf("Retrieved %d VMs\n", len(vms))
 
@@ -152,25 +154,27 @@ func main() {
 		err = vm.Properties(ctx, vm.Reference(), []string{}, &vmProps)
 		if err != nil {
 			fmt.Printf("failed to get VM properties: %v", err)
+			continue
 		}
-
-		for _, device := range vmProps.Config.Hardware.Device {
-			if disk, ok := device.(*types.VirtualDisk); ok {
-				if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
-					rdm = true
-				} else if _, ok := disk.Backing.(*types.VirtualDiskRawDiskVer2BackingInfo); ok {
-					rdm = true
-				} else if _, ok := disk.Backing.(*types.VirtualDiskPartitionedRawDiskVer2BackingInfo); ok {
-					rdm = true
-				}
-				if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
-					if backing.DiskMode == "independent_persistent" || backing.DiskMode == "independent_nonpersistent" {
-						independentdisks = true
+		if vmProps.Config != nil {
+			for _, device := range vmProps.Config.Hardware.Device {
+				if disk, ok := device.(*types.VirtualDisk); ok {
+					if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
+						rdm = true
+					} else if _, ok := disk.Backing.(*types.VirtualDiskRawDiskVer2BackingInfo); ok {
+						rdm = true
+					} else if _, ok := disk.Backing.(*types.VirtualDiskPartitionedRawDiskVer2BackingInfo); ok {
+						rdm = true
+					}
+					if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+						if backing.DiskMode == "independent_persistent" || backing.DiskMode == "independent_nonpersistent" {
+							independentdisks = true
+						}
 					}
 				}
 			}
 		}
-		if *vmProps.Summary.Config.TpmPresent {
+		if vmProps.Summary.Config.TpmPresent != nil && *vmProps.Summary.Config.TpmPresent {
 			vtpm = true
 		}
 		// Have not been able to test this
@@ -178,10 +182,20 @@ func main() {
 			encrypted = true
 		}
 
+		osDetails := ""
+		if vmProps.Guest != nil {
+			osDetails = vmProps.Guest.GuestFullName
+		}
+
+		diskSize := int64(0)
+		if vmProps.Summary.Storage != nil {
+			diskSize = vmProps.Summary.Storage.Committed
+		}
+
 		vminfo := VMInfo{
 			Name:             vm.Name(),
-			OSDetails:        vmProps.Guest.GuestFullName,
-			DiskSize:         int(vmProps.Summary.Storage.Committed),
+			OSDetails:        osDetails,
+			DiskSize:         int(diskSize),
 			RDM:              rdm,
 			IndependentDisks: independentdisks,
 			VTPM:             vtpm,
