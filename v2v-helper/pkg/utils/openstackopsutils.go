@@ -517,16 +517,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		// for PCD, this will be set to cluster name
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
+	if len((vminfo.RDMDisks)) > 0 {
+		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
+	}
 	createOpts := bootfromvolume.CreateOptsExt{
 		CreateOptsBuilder: serverCreateOpts,
 		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
 	}
 
-	if len((vminfo.RDMDisks)) > 0 {
-		serverCreateOpts.Metadata = map[string]string{
-			"hw_scsi_reservations": "true",
-		}
-	}
 	for _, disk := range vminfo.RDMDisks {
 		// Set the Nova API version to 2.6
 		osclient.ComputeClient.Microversion = "2.60"
