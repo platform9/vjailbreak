@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -103,7 +104,7 @@ func main() {
 	flag.Parse()
 
 	if *username == "" || *password == "" || *host == "" {
-		fmt.Println("Error: missing required argument(s)")
+		fmt.Printf("Error: missing required argument(s)")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -117,8 +118,7 @@ func main() {
 
 	c, err := validateVCenter(*username, *password, *host, true)
 	if err != nil {
-		fmt.Printf("Error: failed to connect to vCenter: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error: failed to connect to vCenter: %v\n", err)
 	}
 
 	defer cancel()
@@ -127,16 +127,14 @@ func main() {
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, "PNAP BMC")
 	if err != nil {
-		fmt.Printf("failed to find datacenter: %v", err)
-		os.Exit(1)
+		log.Fatalf("failed to find datacenter: %v", err)
 	}
 	finder.SetDatacenter(dc)
 
 	// Get all the vms
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
-		fmt.Printf("failed to get vms: %v", err)
-		os.Exit(1)
+		log.Fatalf("failed to get vms: %v", err)
 	}
 	fmt.Printf("Retrieved %d VMs\n", len(vms))
 
@@ -153,7 +151,7 @@ func main() {
 		var vmProps mo.VirtualMachine
 		err = vm.Properties(ctx, vm.Reference(), []string{}, &vmProps)
 		if err != nil {
-			fmt.Printf("failed to get VM properties: %v", err)
+			fmt.Printf("failed to get VM properties: %v\n", err)
 			continue
 		}
 		if vmProps.Config != nil {
@@ -195,7 +193,7 @@ func main() {
 		vminfo := VMInfo{
 			Name:             vm.Name(),
 			OSDetails:        osDetails,
-			DiskSize:         int64(diskSize),
+			DiskSize:         diskSize,
 			RDM:              rdm,
 			IndependentDisks: independentdisks,
 			VTPM:             vtpm,
@@ -206,7 +204,7 @@ func main() {
 	// convert to csv
 	err = convertToCSV(vminfolist, "vms.csv")
 	if err != nil {
-		fmt.Printf("failed to convert to csv: %v", err)
+		fmt.Printf("failed to convert to csv: %v\n", err)
 	}
 	fmt.Println("Converted to CSV")
 }
