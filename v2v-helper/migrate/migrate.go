@@ -799,6 +799,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
+	utils.PrintLog(fmt.Sprintf("Using security group IDs: %v", securityGroupIDs))
 
 	// Get vjailbreak settings
 	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
