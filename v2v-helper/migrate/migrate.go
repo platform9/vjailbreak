@@ -266,7 +266,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	if migobj.MigrationType == "cold" {
+	if migobj.MigrationType == "cold" && !migobj.CheckIfAdminCutoverSelected() {
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
 		}
@@ -342,7 +342,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
-				final = true
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -767,10 +766,9 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
+func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
-	networknames := migobj.Networknames
 	var flavor *flavors.Flavor
 	var err error
 
@@ -796,64 +794,12 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	}
-
+	// Get security group IDs
 	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
-	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
-
-	networkids := []string{}
-	ipaddresses := []string{}
-	portids := []string{}
-
-	if len(migobj.Networkports) != 0 {
-		if len(migobj.Networkports) != len(networknames) {
-			return errors.Errorf("number of network ports does not match number of network names")
-		}
-		for _, port := range migobj.Networkports {
-			retrPort, err := openstackops.GetPort(port)
-			if err != nil {
-				return errors.Wrap(err, "failed to get port")
-			}
-			networkids = append(networkids, retrPort.NetworkID)
-			portids = append(portids, retrPort.ID)
-			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
-		}
-	} else {
-		for idx, networkname := range networknames {
-			// Create Port Group with the same mac address as the source VM
-			// Find the network with the given ID
-			network, err := openstackops.GetNetwork(networkname)
-			if err != nil {
-				return errors.Wrap(err, "failed to get network")
-			}
-
-			if network == nil {
-				return errors.Errorf("network not found")
-			}
-
-			ip := ""
-			if len(vminfo.Mac) != len(vminfo.IPs) {
-				ip = ""
-			} else {
-				ip = vminfo.IPs[idx]
-			}
-
-			if migobj.AssignedIP != "" {
-				ip = migobj.AssignedIP
-			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
-			if err != nil {
-				return errors.Wrap(err, "failed to create port group")
-			}
-
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress))
-			networkids = append(networkids, network.ID)
-			portids = append(portids, port.ID)
-			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
-		}
-	}
+	utils.PrintLog(fmt.Sprintf("Using security group IDs: %v", securityGroupIDs))
 
 	// Get vjailbreak settings
 	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
@@ -1116,6 +1062,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Graceful Termination clean-up volumes and snapshots
 	go migobj.gracefulTerminate(vminfo, cancel)
 
+	// Reserve ports for VM
+	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(&vminfo)
+	if err != nil {
+		return errors.Wrap(err, "failed to reserve ports for VM")
+	}
+
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
@@ -1181,7 +1133,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(vminfo)
+	err = migobj.CreateTargetInstance(vminfo, networkids, portids, ipaddresses)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
@@ -1233,4 +1185,76 @@ func (migobj *Migrate) cinderManage(rdmDisk vm.RDMDisk) (string, error) {
 	}
 	migobj.logMessage(fmt.Sprintf("Volume %s is now available", volume.ID))
 	return volume.ID, nil
+}
+
+func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string, []string, error) {
+	networkids := []string{}
+	ipaddresses := []string{}
+	portids := []string{}
+	openstackops := migobj.Openstackclients
+	networknames := migobj.Networknames
+
+	// Get security group IDs
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to resolve security group names to IDs")
+	}
+	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
+
+	// Create ports
+	if len(migobj.Networkports) != 0 {
+		if len(migobj.Networkports) != len(networknames) {
+			return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
+		}
+		for _, port := range migobj.Networkports {
+			retrPort, err := openstackops.GetPort(port)
+			if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed to get port")
+			}
+			networkids = append(networkids, retrPort.NetworkID)
+			portids = append(portids, retrPort.ID)
+			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
+		}
+	} else {
+		for idx, networkname := range networknames {
+			// Create Port Group with the same mac address as the source VM
+			// Find the network with the given ID
+			network, err := openstackops.GetNetwork(networkname)
+			if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed to get network")
+			}
+
+			if network == nil {
+				return nil, nil, nil, errors.Errorf("network not found")
+			}
+
+			ip := ""
+			if len(vminfo.Mac) != len(vminfo.IPs) {
+				ip = ""
+			} else {
+				ip = vminfo.IPs[idx]
+			}
+			if ip == "" && vminfo.NetworkInterfaces != nil {
+				for _, nic := range vminfo.NetworkInterfaces {
+					if nic.MAC == vminfo.Mac[idx] {
+						ip = nic.IPAddress
+						break
+					}
+				}
+			}
+			if migobj.AssignedIP != "" {
+				ip = migobj.AssignedIP
+			}
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
+			if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
+			}
+
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress))
+			networkids = append(networkids, network.ID)
+			portids = append(portids, port.ID)
+			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
+		}
+	}
+	return networkids, portids, ipaddresses, nil
 }
