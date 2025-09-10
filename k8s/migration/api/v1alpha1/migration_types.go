@@ -40,6 +40,12 @@ const (
 	VMMigrationPhaseValidating VMMigrationPhase = "Validating"
 	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
+	// VMMigrationPhaseCreatingPorts indicates the ports are being created
+	VMMigrationPhaseCreatingPorts VMMigrationPhase = "CreatingPorts"
+	// VMMigrationPhaseCreatingVolumes indicates the volumes are being created
+	VMMigrationPhaseCreatingVolumes VMMigrationPhase = "CreatingVolumes"
+	// VMMigrationPhaseCreatingVM indicates the VM is being created
+	VMMigrationPhaseCreatingVM VMMigrationPhase = "CreatingVM"
 	// VMMigrationPhaseCopying indicates initial block copying is in progress
 	VMMigrationPhaseCopying VMMigrationPhase = "CopyingBlocks"
 	// VMMigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress

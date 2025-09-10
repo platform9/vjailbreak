@@ -94,6 +94,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
+	EventMessageCreatingVM                        = "Creating VM on openstack"
+	EventMessageCreatingVolumes                   = "Creating volumes on openstack"
+	EventMessageCreatingPorts                     = "Reserving port on openstack"
 	EventDisconnect                               = "Disconnected network interfaces"
 
 	OSFamilyWindows = "windowsguest"

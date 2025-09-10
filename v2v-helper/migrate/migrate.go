@@ -221,7 +221,7 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 func (migobj *Migrate) WaitforCutover() error {
 	var zerotime time.Time
 	if !migobj.MigrationTimes.VMCutoverStart.Equal(zerotime) && migobj.MigrationTimes.VMCutoverStart.After(time.Now()) {
-		migobj.logMessage("Waiting for VM Cutover start time")
+		migobj.logMessage(constants.EventMessageWaitingForCutOverStart)
 		time.Sleep(time.Until(migobj.MigrationTimes.VMCutoverStart))
 		migobj.logMessage("VM Cutover start time reached")
 	} else {
@@ -233,7 +233,7 @@ func (migobj *Migrate) WaitforCutover() error {
 }
 
 func (migobj *Migrate) WaitforAdminCutover() error {
-	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
+	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
 		label := <-migobj.PodLabelWatcher
 		migobj.logMessage(fmt.Sprintf("Label: %s", label))
@@ -830,7 +830,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
 	}
 
-	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))
+	migobj.logMessage(fmt.Sprintf("%s: %s", constants.EventMessageMigrationSucessful, newVM.ID))
 
 	if migobj.PerformHealthChecks {
 		err = migobj.HealthCheck(vminfo, ipaddresses)
@@ -1040,19 +1040,29 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Wait until the data copy start time
-	var zerotime time.Time
-	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
-		migobj.logMessage("Waiting for data copy start time")
-		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
-		migobj.logMessage("Data copy start time reached")
-	}
 	// Get Info about VM
 	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
+
+	// Reserve ports for VM
+	migobj.logMessage(fmt.Sprintf("%s: %s", constants.EventMessageCreatingPorts, vminfo.Name))
+	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(&vminfo)
+	if err != nil {
+		return errors.Wrap(err, "failed to reserve ports for VM")
+	}
+
+	// Wait until the data copy start time
+	var zerotime time.Time
+	if !migobj.MigrationTimes.DataCopyStart.Equal(zerotime) && migobj.MigrationTimes.DataCopyStart.After(time.Now()) {
+		migobj.logMessage(constants.EventMessageWaitingForDataCopyStart)
+		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
+		migobj.logMessage(constants.EventMessageDataCopyStart)
+	}
+
+	// Validate number of disks and networks
 	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
@@ -1062,13 +1072,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Graceful Termination clean-up volumes and snapshots
 	go migobj.gracefulTerminate(vminfo, cancel)
 
-	// Reserve ports for VM
-	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(&vminfo)
-	if err != nil {
-		return errors.Wrap(err, "failed to reserve ports for VM")
-	}
-
 	// Create and Add Volumes to Host
+	migobj.logMessage(fmt.Sprintf("%s: %s", constants.EventMessageCreatingVolumes, vminfo.Name))
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to add volumes to host")
@@ -1133,6 +1138,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
+	// Create the target instance
+	migobj.logMessage(fmt.Sprintf("%s: %s", constants.EventMessageCreatingVM, vminfo.Name))
 	err = migobj.CreateTargetInstance(vminfo, networkids, portids, ipaddresses)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
@@ -1150,7 +1157,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 }
 
 func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
-	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
+	migobj.logMessage(fmt.Sprintf("%s. %s", message, constants.EventMessageMigrationFailed))
 	err := migobj.DetachAllVolumes(vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))

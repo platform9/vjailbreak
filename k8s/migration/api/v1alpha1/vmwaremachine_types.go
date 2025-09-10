@@ -81,6 +81,12 @@ type VMwareMachineSpec struct {
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`
+
+	// ExistingPortIDs is the list of ports to be used to create the target VM on openstack
+	ExistingPortIDs []string `json:"existingPortIds,omitempty"`
+
+	// ExistingVolumeIDs is the list of volumes to be used to create the target VM on openstack
+	ExistingVolumeIDs []string `json:"existingVolumeIds,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine

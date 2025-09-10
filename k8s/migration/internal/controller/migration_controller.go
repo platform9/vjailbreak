@@ -284,6 +284,10 @@ loop:
 				return err
 			}
 			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCreatingVM) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVM]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVM
+			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
 			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
@@ -316,6 +320,14 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCreatingVolumes) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVolumes]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVolumes
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCreatingPorts) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingPorts]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingPorts
 			break loop
 		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
