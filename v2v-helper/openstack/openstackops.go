@@ -13,6 +13,7 @@ import (
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/gophercloud/gophercloud"
@@ -40,11 +41,13 @@ type OpenstackOperations interface {
 	GetFlavor(flavorId string) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
 	GetPort(portID string) (*ports.Port, error)
-	CreatePort(networkid *networks.Network, mac, ip, vmname string) (*ports.Port, error)
-	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string) (*servers.Server, error)
+	CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error)
+	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
 	WaitUntilVMActive(vmID string) (bool, error)
+	CinderManage(rdmDisk vm.RDMDisk, openstackAPIVersion string) (*volumes.Volume, error)
 }
 
 func getCert(endpoint string) (*x509.Certificate, error) {
@@ -65,7 +68,7 @@ func getCert(endpoint string) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
+func validateOpenStack(insecure bool) (*migrateutils.OpenStackClients, error) {
 	opts, err := openstack.AuthOptionsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
@@ -131,14 +134,17 @@ func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
 		return nil, fmt.Errorf("failed to create networking client: %s", err)
 	}
 
-	return &utils.OpenStackClients{
+	return &migrateutils.OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
+		K8sClient:          nil,
+		AuthURL:            opts.IdentityEndpoint,
+		Tenant:             opts.TenantName,
 	}, nil
 }
 
-func NewOpenStackClients(insecure bool) (*utils.OpenStackClients, error) {
+func NewOpenStackClients(insecure bool) (*migrateutils.OpenStackClients, error) {
 	ostackclients, err := validateOpenStack(insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)

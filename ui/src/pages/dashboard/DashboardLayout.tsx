@@ -1,7 +1,6 @@
 import { Paper, styled } from "@mui/material"
 import { Outlet, Navigate, useLocation } from "react-router-dom"
 import { useEffect } from "react"
-import { useNavigate } from "react-router-dom"
 import { useMigrationsQuery } from "src/hooks/api/useMigrationsQuery"
 import { useNodesQuery } from "src/hooks/api/useNodesQuery"
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery"
@@ -45,7 +44,6 @@ const StyledPaper = styled(Paper)({
 })
 
 export default function DashboardLayout() {
-  const navigate = useNavigate()
   const location = useLocation()
   const { data: migrations } = useMigrationsQuery()
   const { data: nodes } = useNodesQuery()

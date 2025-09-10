@@ -107,8 +107,8 @@ func TestLiveReplicateDisks(t *testing.T) {
 		OSType: "linux",
 		UEFI:   false,
 		VMDisks: []vm.VMDisk{
-			{Name: "disk1", Size: int64(1024), Disk: &types.VirtualDisk{}, OpenstackVol: &volumes.Volume{ID: "id1"}},
-			{Name: "disk2", Size: int64(2048), Disk: &types.VirtualDisk{}, OpenstackVol: &volumes.Volume{ID: "id2"}},
+			{Name: "disk1", Size: int64(1024), Disk: &types.VirtualDisk{}, OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+			{Name: "disk2", Size: int64(2048), Disk: &types.VirtualDisk{}, OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
 		},
 	}
 
@@ -137,9 +137,30 @@ func TestLiveReplicateDisks(t *testing.T) {
 	mockNBD := nbd.NewMockNBDOperations(ctrl)
 	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
 
+	// Set up expectations that can be called in any order
+	mockVMOps.EXPECT().CustomQueryChangedDiskAreas(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(types.DiskChangeInfo{
+		StartOffset: int64(0),
+		Length:      int64(1024),
+		ChangedArea: []types.DiskChangeExtent{
+			{
+				Start:  int64(0),
+				Length: int64(10),
+			},
+			{
+				Start:  int64(1000),
+				Length: int64(15),
+			},
+		},
+	}, nil).AnyTimes()
+	mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes()
+	mockVMOps.EXPECT().CleanUpSnapshots(false).Return(nil).AnyTimes()
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).AnyTimes()
+
 	gomock.InOrder(
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().UpdateDiskInfo(inputvminfo).Return(vm.VMInfo{
+		mockVMOps.EXPECT().UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().UpdateDisksInfo(gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -181,36 +202,25 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any()).Return(nil).AnyTimes(),
 
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id2").Return(nil).AnyTimes(),
-		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sda", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sda", 1).Return(nil).AnyTimes(),
+		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sdb", nil).AnyTimes(),
+		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sdb", 1).Return(nil).AnyTimes(),
 		// 1. Both Disks Change
 		mockVMOps.EXPECT().
-			UpdateDiskInfo(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "1"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "2"},
-				},
-			}).
-			Return(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "3"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
-				},
-			}, nil).
-			AnyTimes(),
+			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+			Name:   "test-vm",
+			OSType: "linux",
+			UEFI:   false,
+			VMDisks: []vm.VMDisk{
+				{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+				{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "5"},
+			},
+		}, nil).AnyTimes(),
+
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes(),
+
 		// Incremental Copy Disk 1
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("3", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(changedAreasexample, nil).AnyTimes(),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().GetVMObj().Return(&object.VirtualMachine{}).AnyTimes(),
 		mockNBD.EXPECT().
@@ -231,9 +241,6 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any()).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any()).Return(nil).AnyTimes(),
 		// Incremental Copy Disk 2
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(changedAreasexample, nil).AnyTimes(),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().GetVMObj().Return(&object.VirtualMachine{}).AnyTimes(),
 		mockNBD.EXPECT().
@@ -249,36 +256,26 @@ func TestLiveReplicateDisks(t *testing.T) {
 			Return(nil).
 			AnyTimes(),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM("id2").Return(nil).AnyTimes(),
-		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sda", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).AnyTimes(),
+		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sdb", nil).AnyTimes(),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sdb").Return(nil).AnyTimes(),
 		// 2. Only Disk 1 Changes
 		mockVMOps.EXPECT().
-			UpdateDiskInfo(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "3"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
-				},
-			}).
-			Return(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
-				},
-			}, nil).
+			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+			Name:   "test-vm",
+			OSType: "linux",
+			UEFI:   false,
+			VMDisks: []vm.VMDisk{
+				{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+				{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "5"},
+			},
+		}, nil).
 			AnyTimes(),
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes(),
+
 		// Incremental Copy Disk 1
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("5", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(changedAreasexample, nil).AnyTimes(),
+
 		mockNBD.EXPECT().StopNBDServer().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().GetVMObj().Return(&object.VirtualMachine{}).AnyTimes(),
 		mockNBD.EXPECT().StartNBDServer(&object.VirtualMachine{}, envURL, envUserName, envPassword, thumbprint, "migration-snap", "[ds1] test_vm/test_vm.vmdk", dummychan).Return(nil).AnyTimes(),
@@ -288,79 +285,64 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any()).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any()).Return(nil).AnyTimes(),
 		// No copy for Disk 2
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).AnyTimes(),
 		// 3. No disk changes
 		mockVMOps.EXPECT().
-			UpdateDiskInfo(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
-				},
-			}).
+			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+			Name:   "test-vm",
+			OSType: "linux",
+			UEFI:   false,
+			VMDisks: []vm.VMDisk{
+				{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+				{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "5"},
+			},
+		}, nil).
 			Return(vm.VMInfo{
 				Name:   "test-vm",
 				OSType: "linux",
 				UEFI:   false,
 				VMDisks: []vm.VMDisk{
 					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+					{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
 				},
 			}, nil).
 			AnyTimes(),
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes(),
+
 		// No copy for Disk 1
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("5", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).AnyTimes(),
 		// No copy for Disk 2
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).AnyTimes(),
 		// Final Copy
 		mockVMOps.EXPECT().VMPowerOff().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().
-			UpdateDiskInfo(vm.VMInfo{
-				Name:   "test-vm",
-				OSType: "linux",
-				UEFI:   false,
-				VMDisks: []vm.VMDisk{
-					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
-				},
-			}).
+			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+			Name:   "test-vm",
+			OSType: "linux",
+			UEFI:   false,
+			VMDisks: []vm.VMDisk{
+				{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
+				{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+			},
+		}, nil).
 			Return(vm.VMInfo{
 				Name:   "test-vm",
 				OSType: "linux",
 				UEFI:   false,
 				VMDisks: []vm.VMDisk{
 					{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-					{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+					{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
 				},
 			}, nil).
 			AnyTimes(),
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes(),
+
 		// No copy for Disk 1
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("5", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).AnyTimes(),
 		// No copy for Disk 2
-		mockVMOps.EXPECT().
-			CustomQueryChangedDiskAreas("4", &types.ManagedObjectReference{}, &types.VirtualDisk{}, int64(0)).
-			Return(types.DiskChangeInfo{ChangedArea: []types.DiskChangeExtent{}}, nil).AnyTimes(),
-		mockNBD.EXPECT().StopNBDServer().Return(nil).AnyTimes(),
 		mockNBD.EXPECT().StopNBDServer().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().DeleteSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().DeleteSnapshot(gomock.Any()).Return(nil).AnyTimes(),
 	)
 
 	migobj := Migrate{
@@ -387,7 +369,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		UEFI:   false,
 		VMDisks: []vm.VMDisk{
 			{Name: "disk1", Size: int64(1024), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id1"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm.vmdk", ChangeID: "5"},
-			{Name: "disk2", Size: int64(2048), Path: "/dev/sda", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
+			{Name: "disk2", Size: int64(2048), Path: "/dev/sdb", OpenstackVol: &volumes.Volume{ID: "id2"}, Snapname: "migration-snap", Disk: &types.VirtualDisk{}, SnapBackingDisk: "[ds1] test_vm/test_vm_1.vmdk", ChangeID: "4"},
 		},
 	}, updatedVMInfo)
 }
@@ -458,20 +440,20 @@ func TestCreateTargetInstance(t *testing.T) {
 		RAM:   2048,
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
 		},
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -496,7 +478,7 @@ func TestCreateTargetInstance(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -523,7 +505,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 			{IPAddress: "ip-address-2"},
 		},
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor("flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -549,7 +531,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -583,6 +565,6 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.Contains(t, err.Error(), "number of network ports does not match number of network names")
 }

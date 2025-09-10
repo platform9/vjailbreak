@@ -38,6 +38,7 @@ export interface MigrationTemplateSpec {
   source: Source
   storageMapping: string
   targetPCDClusterName?: string
+  useFlavorless?: boolean
 }
 
 export interface Destination {
@@ -60,6 +61,7 @@ export interface Openstack {
 
 export interface VmData {
   datastores: string[]
+  id: string
   name: string
   networks?: string[]
   isMigrated?: boolean
@@ -72,7 +74,16 @@ export interface VmData {
   disks?: string[]
   labels?: { [key: string]: string }
   vmWareMachineName?: string
+  networkInterfaces?: VmNetworkInterface[]
+  osFamily?: string
 }
+
+export interface VmNetworkInterface {
+  mac: string
+  network: string
+  ipAddress: string
+}
+
 export interface GetMigrationTemplatesMetadata {
   continue: string
   resourceVersion: string

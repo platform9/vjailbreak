@@ -30,7 +30,11 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	if len(ESXiSequence) == 0 {
 		return nil, errors.New("ESXi host sequence cannot be empty")
 	}
-	clusterK8sName, err := ConvertToK8sName(cluster.ClusterName)
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
+	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(cluster.ClusterName, vmwarecreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -70,14 +74,29 @@ func CreateClusterMigration(ctx context.Context, k8sClient client.Client, cluste
 	return clusterMigration, nil
 }
 
+// getMigrationObject is a helper function that retrieves a migration object for a given VMware object name and rolling migration plan
+func getMigrationObject(ctx context.Context, k8sClient client.Client, vmwareObjectName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan, obj client.Object, errorMsg string) error {
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, k8sClient, rollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials")
+	}
+	
+	k8sName, err := GetK8sCompatibleVMWareObjectName(vmwareObjectName, vmwarecreds.Name)
+	if err != nil {
+		return errors.Wrap(err, errorMsg)
+	}
+	
+	return k8sClient.Get(ctx, types.NamespacedName{
+		Name:      GenerateRollingMigrationObjectName(k8sName, rollingMigrationPlan),
+		Namespace: constants.NamespaceMigrationSystem,
+	}, obj)
+}
+
 // GetClusterMigration retrieves a ClusterMigration object for the given cluster name and rolling migration plan
 func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterName string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ClusterMigration, error) {
-	clusterK8sName, err := ConvertToK8sName(clusterName)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
-	}
 	clusterMigration := &vjailbreakv1alpha1.ClusterMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(clusterK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, clusterMigration); err != nil {
+	err := getMigrationObject(ctx, k8sClient, clusterName, rollingMigrationPlan, clusterMigration, "failed to convert cluster name to k8s name")
+	if err != nil {
 		return nil, err
 	}
 	return clusterMigration, nil
@@ -85,12 +104,9 @@ func GetClusterMigration(ctx context.Context, k8sClient client.Client, clusterNa
 
 // GetESXIMigration retrieves an ESXIMigration object for the given ESXi host name and rolling migration plan
 func GetESXIMigration(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.ESXIMigration, error) {
-	esxiK8sName, err := ConvertToK8sName(esxi)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
-	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+	err := getMigrationObject(ctx, k8sClient, esxi, rollingMigrationPlan, esxiMigration, "failed to convert ESXi name to k8s name")
+	if err != nil {
 		return nil, err
 	}
 	return esxiMigration, nil
@@ -116,7 +132,11 @@ func GetMigrationTemplate(ctx context.Context, k8sClient client.Client, vm strin
 
 // CreateESXIMigration creates a new ESXIMigration object for the given ESXi host using the cluster migration scope
 func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) (*vjailbreakv1alpha1.ESXIMigration, error) {
-	esxiK8sName, err := ConvertToK8sName(esxi)
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
+	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(esxi, vmwarecreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
@@ -160,19 +180,23 @@ func GetESXiSequenceFromVMSequence(_ context.Context, vmSequence []vjailbreakv1a
 }
 
 // AddVMsToESXIMigrationStatus adds the list of VM names to the ESXIMigration status for tracking
-func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, esxi string, rollingMigrationPlan *vjailbreakv1alpha1.RollingMigrationPlan) error {
-	esxiK8sName, err := ConvertToK8sName(esxi)
+func AddVMsToESXIMigrationStatus(ctx context.Context, scope *scope.ClusterMigrationScope, esxi string) error {
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials")
+	}
+	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(esxi, vmwarecreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
 	esxiMigration := &vjailbreakv1alpha1.ESXIMigration{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, rollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
+	if err := scope.Client.Get(ctx, types.NamespacedName{Name: GenerateRollingMigrationObjectName(esxiK8sName, scope.RollingMigrationPlan), Namespace: constants.NamespaceMigrationSystem}, esxiMigration); err != nil {
 		return errors.Wrap(err, "failed to get ESXi migration status")
 	}
 
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 
-	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.ESXiNameLabel: esxiK8sName, constants.VMwareCredsLabel: esxiMigration.Spec.VMwareCredsRef.Name}); err != nil {
+	if err := scope.Client.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.ESXiNameLabel: esxiK8sName, constants.VMwareCredsLabel: esxiMigration.Spec.VMwareCredsRef.Name}); err != nil {
 		return errors.Wrap(err, "failed to get ESXi migration status")
 	}
 
@@ -180,7 +204,7 @@ func AddVMsToESXIMigrationStatus(ctx context.Context, k8sClient client.Client, e
 		esxiMigration.Status.VMs = append(esxiMigration.Status.VMs, vmName.Name)
 	}
 
-	if err := k8sClient.Status().Update(ctx, esxiMigration); err != nil {
+	if err := scope.Client.Status().Update(ctx, esxiMigration); err != nil {
 		return errors.Wrap(err, "failed to update ESXi migration status")
 	}
 	return nil
@@ -234,7 +258,7 @@ func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scop
 		return errors.Wrap(err, "failed to initiate maintenance mode")
 	}
 
-	esxiK8sName, err := ConvertToK8sName(scope.ESXIMigration.Spec.ESXiName)
+	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
@@ -415,12 +439,16 @@ func GenerateVMwareCredsDependantObjectName(objectName string, vmwareCredsName s
 
 // UpdateESXiNamesInRollingMigrationPlan updates the ESXi host names in the rolling migration plan
 func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope) error {
+	vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials")
+	}
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for j := range cluster.VMSequence {
-			k8sVMName, err := ConvertToK8sName(cluster.VMSequence[j].VMName)
+			k8sVMName, err := GetK8sCompatibleVMWareObjectName(cluster.VMSequence[j].VMName, vmwarecreds.Name)
 			if err != nil {
-				return errors.Wrap(err, "failed to convert vm name to k8s name")
+				return errors.Wrap(err, "failed to get vm name")
 			}
 			vm := &vjailbreakv1alpha1.VMwareMachine{}
 			err = scope.Client.Get(ctx, client.ObjectKey{
@@ -548,7 +576,7 @@ func IsRollingMigrationPlanPaused(ctx context.Context, name string, client clien
 	if rollingMigrationPlan.Labels == nil {
 		return false
 	}
-	return rollingMigrationPlan.Labels[constants.PauseMigrationLabel] == constants.TrueString
+	return rollingMigrationPlan.Labels[constants.PauseMigrationLabel] == trueString
 }
 
 // IsClusterMigrationPaused checks if a cluster migration is currently paused
@@ -560,7 +588,7 @@ func IsClusterMigrationPaused(ctx context.Context, name string, client client.Cl
 	if clusterMigration.Labels == nil {
 		return false
 	}
-	return clusterMigration.Labels[constants.PauseMigrationLabel] == constants.TrueString
+	return clusterMigration.Labels[constants.PauseMigrationLabel] == trueString
 }
 
 // IsESXIMigrationPaused checks if an ESXi migration is currently paused
@@ -572,7 +600,7 @@ func IsESXIMigrationPaused(ctx context.Context, name string, client client.Clien
 	if esxiMigration.Labels == nil {
 		return false
 	}
-	return esxiMigration.Labels[constants.PauseMigrationLabel] == constants.TrueString
+	return esxiMigration.Labels[constants.PauseMigrationLabel] == trueString
 }
 
 // IsMigrationPlanPaused checks if a migration plan is currently paused
@@ -584,7 +612,7 @@ func IsMigrationPlanPaused(ctx context.Context, name string, client client.Clien
 	if migrationPlan.Labels == nil {
 		return false
 	}
-	return migrationPlan.Labels[constants.PauseMigrationLabel] == constants.TrueString
+	return migrationPlan.Labels[constants.PauseMigrationLabel] == trueString
 }
 
 // PauseRollingMigrationPlan pauses all migration operations for a rolling migration plan
@@ -596,7 +624,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 	}
 
 	// Set label on rolling migration plan
-	rollingMigrationPlan.Labels[constants.PauseMigrationLabel] = constants.TrueString
+	rollingMigrationPlan.Labels[constants.PauseMigrationLabel] = trueString
 
 	// Update all child ClusterMigrations
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
@@ -611,7 +639,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		if clusterMigration.Labels == nil {
 			clusterMigration.Labels = make(map[string]string)
 		}
-		clusterMigration.Labels[constants.PauseMigrationLabel] = constants.TrueString
+		clusterMigration.Labels[constants.PauseMigrationLabel] = trueString
 		err = scope.Client.Update(ctx, clusterMigration)
 		if err != nil {
 			log.Error(err, "failed to update cluster migration with pause label", "cluster", cluster.ClusterName)
@@ -637,7 +665,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 			if esxiMigration.Labels == nil {
 				esxiMigration.Labels = make(map[string]string)
 			}
-			esxiMigration.Labels[constants.PauseMigrationLabel] = constants.TrueString
+			esxiMigration.Labels[constants.PauseMigrationLabel] = trueString
 			err = scope.Client.Update(ctx, esxiMigration)
 			if err != nil {
 				log.Error(err, "failed to update ESXi migration with pause label", "esxi", esxi)
@@ -658,7 +686,7 @@ func PauseRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigratio
 		if migrationPlan.Labels == nil {
 			migrationPlan.Labels = make(map[string]string)
 		}
-		migrationPlan.Labels[constants.PauseMigrationLabel] = constants.TrueString
+		migrationPlan.Labels[constants.PauseMigrationLabel] = trueString
 		err = scope.Client.Update(ctx, migrationPlan)
 		if err != nil {
 			log.Error(err, "failed to update migration plan with pause label", "plan", planName)
@@ -774,7 +802,7 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("failed to get rolling migration plan validation config")
 	}
 
-	vmwareCreds, err := GetSourceVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to get vmware credentials")
 	}

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vjailbreak-settings
+  namespace: migration-system
+data:
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "20" # number of iterations to copy changed blocks
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "20" # interval to wait for vm to become active
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "15" # number of retries to wait for vm to become active
+  DEFAULT_MIGRATION_METHOD: "hot" # supported value hot/cold, (This setting is not used as of now. To be used by UI)
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "10" # max number of vms to scan at the same time
+  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false" # cleanup volumes after disk convert failure
+  POPULATE_VMWARE_MACHINE_FLAVORS: "true" # automatically populate VMwareMachine objects with OpenStack flavors

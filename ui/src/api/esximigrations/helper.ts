@@ -28,5 +28,6 @@ export const getESXHosts = (esxiMigrations: ESXIMigration[]): ESXHost[] => {
     vms: esxiMigration.status?.vms || [],
     state: esxiMigration.status?.phase || "Unknown",
     statusMessage: esxiMigration.status?.message || "",
+    creationTimestamp: esxiMigration.metadata?.creationTimestamp || "",
   }))
 }

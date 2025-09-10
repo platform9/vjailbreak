@@ -41,6 +41,8 @@ type MigrationPlanStrategy struct {
 	PerformHealthChecks bool `json:"performHealthChecks,omitempty"`
 	// +kubebuilder:default:="443"
 	HealthCheckPort string `json:"healthCheckPort,omitempty"`
+	// +kubebuilder:default:=false
+	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process
@@ -69,6 +71,7 @@ type MigrationPlanSpec struct {
 	MigrationPlanSpecPerVM `json:",inline"`
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
+	SecurityGroups  []string   `json:"securityGroups,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
@@ -94,9 +97,6 @@ type MigrationPlanStatus struct {
 	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
-	// Conditions represents the current state of the migration
-	// +optional
-	Conditions []corev1.PodCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

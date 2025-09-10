@@ -44,6 +44,30 @@ rules:
   - patch
   - update
 - apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -68,6 +92,7 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
+  - rdmdisks
   - rollingmigrationplans
   - storagemappings
   - vjailbreaknodes
@@ -95,6 +120,7 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
+  - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
@@ -114,6 +140,7 @@ rules:
   - openstackcreds/status
   - pcdclusters/status
   - pcdhosts/status
+  - rdmdisks/status
   - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status

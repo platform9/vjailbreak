@@ -24,8 +24,6 @@ import (
 // including resource allocation, network configuration, storage details, and host placement.
 // This comprehensive data is necessary for accurately recreating the VM in the target environment.
 type VMInfo struct {
-	// MacAddresses is the list of MAC addresses assigned to the VM's network interfaces
-	MacAddresses []string `json:"macAddresses,omitempty"`
 	// Name is the name of the virtual machine
 	Name string `json:"name"`
 	// Datastores is the list of datastores for the virtual machine
@@ -60,9 +58,10 @@ type VMInfo struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network string `json:"network,omitempty" `
-	MAC     string `json:"mac,omitempty"`
-	Index   int    `json:"order,omitempty"`
+	Network   string `json:"network,omitempty" `
+	MAC       string `json:"mac,omitempty"`
+	Index     int    `json:"order,omitempty"`
+	IPAddress string `json:"ipAddress,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.
@@ -78,7 +77,7 @@ type GuestNetwork struct {
 // VMwareMachineSpec defines the desired state of VMwareMachine
 type VMwareMachineSpec struct {
 	// VMInfo is the info of the VMs in the VMwareMachine
-	VMInfo VMInfo `json:"vms,omitempty"` // VM details including MAC addresses
+	VMInfo VMInfo `json:"vms,omitempty"`
 
 	// TargetFlavorId is the flavor to be used to create the target VM on openstack
 	TargetFlavorID string `json:"targetFlavorId,omitempty"`

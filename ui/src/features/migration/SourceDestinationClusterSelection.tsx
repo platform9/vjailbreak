@@ -1,3 +1,4 @@
+import React from "react"
 import {
     styled,
     Typography,
@@ -7,15 +8,17 @@ import {
     MenuItem,
     ListSubheader,
     CircularProgress,
+    TextField,
+    InputAdornment,
 } from "@mui/material"
 import Step from "../../components/forms/Step"
 import vmwareLogo from "src/assets/vmware.jpeg"
 import { useClusterData } from "./useClusterData"
 
 import "@cds/core/icon/register.js"
-import { ClarityIcons, buildingIcon, clusterIcon } from "@cds/core/icon"
+import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from "@cds/core/icon"
 
-ClarityIcons.addIcons(buildingIcon, clusterIcon)
+ClarityIcons.addIcons(buildingIcon, clusterIcon, searchIcon)
 
 const VMwareLogoImg = styled('img')({
     width: 24,
@@ -75,6 +78,19 @@ export default function SourceDestinationClusterSelection({
         loadingVMware: hookLoadingVMware,
         loadingPCD: hookLoadingPCD
     } = useClusterData();
+    
+    // State for PCD search
+    const [pcdSearchTerm, setPcdSearchTerm] = React.useState("");
+    // State for VMware search
+    const [vmwareSearchTerm, setVmwareSearchTerm] = React.useState("");
+    
+    // Filter PCD data based on search term
+    const filteredPcdData = React.useMemo(() => {
+        if (!pcdSearchTerm) return pcdData;
+        return pcdData.filter(pcd => 
+            pcd.tenantName.toLowerCase().includes(pcdSearchTerm.toLowerCase())
+        );
+    }, [pcdData, pcdSearchTerm]);
 
     // Use external loading states if provided, otherwise use hook loading states
     const loadingVMware = externalLoadingVMware !== undefined ? externalLoadingVMware : hookLoadingVMware;
@@ -155,7 +171,7 @@ export default function SourceDestinationClusterSelection({
                                 const sourceItem = sourceData.find(item => item.credName === credName);
                                 const vcenterName = sourceItem?.vcenterName || credName;
                                 const cluster = sourceItem?.clusters.find(c => c.id === selected);
-                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.name || ""}`;
+                                return `${vcenterName} - ${sourceItem?.datacenter || ""} - ${cluster?.displayName || ""}`;
                             }}
                             endAdornment={loadingVMware ? <CircularProgress size={25} sx={{ mr: 3, display: "flex", alignItems: "center", justifyContent: "center" }} /> : null}
                             MenuProps={{
@@ -166,58 +182,105 @@ export default function SourceDestinationClusterSelection({
                                 }
                             }}
                         >
+                            <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                                <TextField
+                                    size="small"
+                                    placeholder="Search clusters, vCenter, or datacenter"
+                                    fullWidth
+                                    value={vmwareSearchTerm}
+                                    onChange={(e) => {
+                                        e.stopPropagation();
+                                        setVmwareSearchTerm(e.target.value);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                {/* @ts-ignore */}
+                                                <cds-icon shape="search" size="sm"></cds-icon>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Box>
                             <MenuItem value="" disabled><em>Select VMware Cluster</em></MenuItem>
 
                             {sourceData.length === 0 ? (
                                 <MenuItem disabled>No clusters found</MenuItem>
                             ) : (
-                                Object.entries(
-                                    sourceData.reduce((acc, item) => {
+                                (() => {
+                                    const term = vmwareSearchTerm.trim().toLowerCase();
+                                    const grouped = sourceData.reduce((acc, item) => {
                                         if (!acc[item.vcenterName]) {
                                             acc[item.vcenterName] = {
                                                 credName: item.credName,
                                                 datacenters: {}
-                                            };
+                                            } as { credName: string, datacenters: Record<string, { id: string; name: string; displayName: string }[]> };
                                         }
                                         acc[item.vcenterName].datacenters[item.datacenter] = item.clusters;
                                         return acc;
-                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string }[]> }>)
-                                ).map(([vcenterName, { credName, datacenters }]) => [
-                                    <ListSubheader key={vcenterName} sx={{ fontWeight: 700 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                            <VMwareLogoImg src={vmwareLogo} alt="VMware" />
-                                            {vcenterName}
-                                        </Box>
-                                    </ListSubheader>,
-                                    ...Object.entries(datacenters).map(([datacenterName, clusters]) => [
-                                        <ListSubheader key={`${credName}-${datacenterName}`} sx={{ fontWeight: 600, pl: 4 }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                <CdsIconWrapper>
-                                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                                    {/* @ts-ignore */}
-                                                    <cds-icon shape="building" size="md" solid ></cds-icon>
-                                                </CdsIconWrapper>
-                                                {datacenterName}
-                                            </Box>
-                                        </ListSubheader>,
-                                        ...clusters.map((cluster) => (
-                                            <MenuItem
-                                                key={cluster.id}
-                                                value={cluster.id}
-                                                sx={{ pl: 7 }}
-                                            >
+                                    }, {} as Record<string, { credName: string, datacenters: Record<string, { id: string; name: string; displayName: string }[]> }>);
+
+                                    const items: JSX.Element[] = [];
+                                    Object.entries(grouped).forEach(([vcenterName, { credName, datacenters }]) => {
+                                        let vcenterHasMatches = false;
+                                        const vcenterHeader = (
+                                            <ListSubheader key={`vc-${vcenterName}`} sx={{ fontWeight: 700 }}>
                                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                    <CdsIconWrapper>
-                                                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                                        {/* @ts-ignore */}
-                                                        <cds-icon shape="cluster" size="md" ></cds-icon>
-                                                    </CdsIconWrapper>
-                                                    {cluster.name}
+                                                    <VMwareLogoImg src={vmwareLogo} alt="VMware" />
+                                                    {vcenterName}
                                                 </Box>
-                                            </MenuItem>
-                                        ))
-                                    ])
-                                ]).flat()
+                                            </ListSubheader>
+                                        );
+
+                                        Object.entries(datacenters).forEach(([datacenterName, clusters]) => {
+                                            const filteredClusters = term ? clusters.filter((cluster) => {
+                                                const clusterName = cluster.displayName?.toLowerCase() || "";
+                                                return clusterName.includes(term) || vcenterName.toLowerCase().includes(term) || datacenterName.toLowerCase().includes(term);
+                                            }) : clusters;
+
+                                            if (filteredClusters.length > 0) {
+                                                if (!vcenterHasMatches) {
+                                                    items.push(vcenterHeader);
+                                                    vcenterHasMatches = true;
+                                                }
+                                                items.push(
+                                                    <ListSubheader key={`dc-${credName}-${datacenterName}`} sx={{ fontWeight: 600, pl: 4 }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                            <CdsIconWrapper>
+                                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                                {/* @ts-ignore */}
+                                                                <cds-icon shape="building" size="md" solid ></cds-icon>
+                                                            </CdsIconWrapper>
+                                                            {datacenterName}
+                                                        </Box>
+                                                    </ListSubheader>
+                                                );
+                                                filteredClusters.forEach((cluster) => {
+                                                    items.push(
+                                                        <MenuItem key={cluster.id} value={cluster.id} sx={{ pl: 7 }}>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <CdsIconWrapper>
+                                                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                                    {/* @ts-ignore */}
+                                                                    <cds-icon shape="cluster" size="md" ></cds-icon>
+                                                                </CdsIconWrapper>
+                                                                {cluster.displayName}
+                                                            </Box>
+                                                        </MenuItem>
+                                                    );
+                                                });
+                                            }
+                                        });
+                                    });
+
+                                    if (items.length === 0) {
+                                        return <MenuItem disabled>No matching clusters found</MenuItem>;
+                                    }
+                                    return items;
+                                })()
                             )}
                         </Select>
                     </FormControl>
@@ -240,7 +303,16 @@ export default function SourceDestinationClusterSelection({
                             renderValue={(selected) => {
                                 if (!selected) return <em>Select PCD Cluster</em>;
                                 const pcd = pcdData.find(p => p.id === selected);
-                                return pcd?.name || selected;
+                                return (
+                                    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                                        <Typography variant="body2" noWrap>{pcd?.name || selected}</Typography>
+                                        {pcd?.tenantName && (
+                                            <Typography variant="caption" color="text.secondary" noWrap sx={{ ml: 1 }}>
+                                                | Tenant: {pcd.tenantName}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                );
                             }}
                             endAdornment={loadingPCD ? <CircularProgress size={25} sx={{ mr: 3, display: "flex", alignItems: "center", justifyContent: "center" }} /> : null}
                             MenuProps={{
@@ -251,12 +323,33 @@ export default function SourceDestinationClusterSelection({
                                 }
                             }}
                         >
+                            <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                                <TextField
+                                    size="small"
+                                    placeholder="Search by tenant name"
+                                    fullWidth
+                                    value={pcdSearchTerm}
+                                    onChange={(e) => setPcdSearchTerm(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                                {/* @ts-ignore */}
+                                                <cds-icon shape="search" size="sm"></cds-icon>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Box>
                             <MenuItem value="" disabled><em>Select PCD Cluster</em></MenuItem>
 
                             {pcdData.length === 0 ? (
                                 <MenuItem disabled>No PCD clusters found</MenuItem>
+                            ) : filteredPcdData.length === 0 ? (
+                                <MenuItem disabled>No matching clusters found</MenuItem>
                             ) : (
-                                pcdData.map((pcd) => (
+                                filteredPcdData.map((pcd) => (
                                     <MenuItem
                                         key={pcd.id}
                                         value={pcd.id}

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,27 +51,36 @@ type MigrationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
+
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
-	ctxlog.Info("Reconciling Migration object")
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
 		if apierrors.IsNotFound(err) {
+			// Object deleted successfully
 			return ctrl.Result{}, nil
 		}
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
+
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,
@@ -79,14 +89,57 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create scope: %w", err)
 	}
+
+	defer func() {
+		if err := migrationScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	// Handle deletion reconciliation
+	if !migration.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Adding finalizer if it doesn't exist
+	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+		controllerutil.AddFinalizer(migration, migrationFinalizer)
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	ctxlog.Info("Reconciling Migration object")
+
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			ctxlog.Info("Migration pod not found yet, requeuing", "migration", migration.Name)
 			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
+
+	ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
+	if migration.Spec.PodRef != pod.Name {
+		migration.Spec.PodRef = pod.Name
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
 	if err = r.Update(ctx, pod); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
@@ -120,24 +173,63 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
 	}
-	// Always close the scope when exiting this function such that we can persist any Migration changes.
-	defer func() {
-		if err := migrationScope.Close(); err != nil && reterr == nil {
-			reterr = err
-		}
-	}()
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
+
 	return ctrl.Result{}, nil
+}
+
+// reconcileDelete handles the cleanup logic when Migration object is deleted.
+func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) error {
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
+	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
+
+	if migration.Spec.VMName == "" {
+		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
+		return nil
+	}
+
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get VMware credentials name for migration")
+		return nil
+	}
+
+	// Then use it to get the k8s compatible name
+	vmwMachineName, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
+	if err != nil {
+		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
+		return nil
+	}
+
+	vmwMachine := &vjailbreakv1alpha1.VMwareMachine{}
+	err = r.Get(ctx, types.NamespacedName{Name: vmwMachineName, Namespace: migration.GetNamespace()}, vmwMachine)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("VMwareMachine not found during migration deletion, nothing to do.", "VMwareMachineName", vmwMachineName)
+			return nil
+		}
+		return errors.Wrap(err, "failed to get VMwareMachine for cleanup")
+	}
+
+	if vmwMachine.Status.Migrated {
+		ctxlog.Info("Setting VMwareMachine status.migrated to false", "VMwareMachineName", vmwMachineName)
+		vmwMachine.Status.Migrated = false
+		if err := r.Status().Update(ctx, vmwMachine); err != nil {
+			return errors.Wrap(err, "failed to update VMwareMachine status")
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&vjailbreakv1alpha1.Migration{}).
 		Owns(&corev1.Pod{}, builder.WithPredicates(
 			predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
@@ -170,6 +262,13 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	if err != nil {
 		return err
 	}
+
+	// Get the pod to check startCutover label
+	pod, err := r.GetPod(ctx, scope)
+	if err != nil {
+		return err
+	}
+
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending}
@@ -187,8 +286,17 @@ loop:
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
-			break loop
+			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
+			if pod.Labels["startCutover"] != "yes" {
+				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
+				break loop
+			}
+			// Admin cutover was triggered, reset to a lower phase so it can progress normally
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
+
+			// If startCutover is "yes", don't set phase here - let it progress to next phase
+			// by continuing to check other events
+			continue
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime
@@ -213,7 +321,6 @@ loop:
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
-			// If none of the above phases matched
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):
 			break loop
 		default:
@@ -226,14 +333,18 @@ loop:
 // Extracted function to handle successful migration updates
 func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope *scope.MigrationScope) error {
 	scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
-	name, err := utils.ConvertToK8sName(scope.Migration.Spec.VMName)
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, scope.Migration)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get vmware credentials name")
+	}
+	name, err := utils.GetK8sCompatibleVMWareObjectName(scope.Migration.Spec.VMName, vmwareCredsName)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware machine name")
 	}
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
-		return err
+		return errors.Wrap(err, "failed to get vmware machine")
 	}
 
 	vmwvm.Status.Migrated = true
@@ -275,18 +386,21 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 // GetPod retrieves the pod associated with a migration
 func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.MigrationScope) (*corev1.Pod, error) {
 	migration := scope.Migration
-	vmname, err := utils.ConvertToK8sName(migration.Spec.VMName)
+	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, scope.Migration)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert VM name to k8s name")
+		return nil, errors.Wrap(err, "failed to get vmware credentials name")
+	}
+	vmname, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vm name")
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList, client.InNamespace(migration.Namespace),
-		client.MatchingLabels(map[string]string{"vm-name": vmname})); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", "vm-name", vmname))
+		client.MatchingLabels(map[string]string{constants.VMNameLabel: vmname})); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to get pod with label '%s=%s'", constants.VMNameLabel, vmname))
 	}
 	if len(podList.Items) == 0 {
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
-	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil
 }

@@ -24,6 +24,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import Accordion from "@mui/material/Accordion"
 import AccordionDetails from "@mui/material/AccordionDetails"
 import AccordionSummary from "@mui/material/AccordionSummary"
+import { OpenstackCreds } from "src/api/openstack-creds/model";
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
@@ -53,13 +54,14 @@ const CustomTextField = styled(TextField)({
 })
 
 // Interfaces
-interface MigrationOptionsPropsInterface {
-  params: FormValues
+export interface MigrationOptionsPropsInterface {
+  params: FormValues & { useFlavorless?: boolean }
   onChange: (key: string) => (value: unknown) => void
+  openstackCredentials?: OpenstackCreds;
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-  key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
-) => (value: unknown) => void
+    key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+  ) => (value: unknown) => void
 
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
@@ -78,6 +80,7 @@ export default function MigrationOptionsAlt({
   params,
   onChange,
   selectedMigrationOptions,
+  openstackCredentials,
   updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
@@ -85,7 +88,7 @@ export default function MigrationOptionsAlt({
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
-    onChange("dataCopyMethod")("hot")
+    onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
     onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
@@ -105,6 +108,8 @@ export default function MigrationOptionsAlt({
 
     return dayjs(minDate).add(1, "minute")
   }, [params, selectedMigrationOptions])
+
+  const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -151,7 +156,7 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.dataCopyMethod}
                 labelId="source-item-label"
-                value={params?.dataCopyMethod || "hot"}
+                value={params?.dataCopyMethod || "cold"}
                 onChange={(e) => {
                   onChange("dataCopyMethod")(e.target.value)
                 }}
@@ -329,88 +334,126 @@ export default function MigrationOptionsAlt({
                 Select this option to retry the migration incase of failure
               </Typography>
             </Fields>
-<Fields>
-  <FormControlLabel
-    label="Rename VM"
-    control={
-      <Checkbox
-        checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
-        onChange={(e) => {
-          const isChecked = e.target.checked;
-          updateSelectedMigrationOptions("postMigrationAction")({
-            ...selectedMigrationOptions.postMigrationAction,
-            renameVm: isChecked,
-            suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
-          });
-          onChange("postMigrationAction")({
-            ...params.postMigrationAction,
-            renameVm: isChecked,
-            suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
-          });
-        }}
-      />
-    }
-  />
-  <Select
-    size="small"
-    disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-    value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-    onChange={(e) => {
-      onChange("postMigrationAction")({
-        ...params.postMigrationAction,
-        suffix: e.target.value
-      });
-    }}
-  >
-    <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-  </Select>
-  <Typography variant="caption">
-    This suffix will be appended to the source VM name after migration.
-  </Typography>
-</Fields>
+            <Fields>
+              <FormControlLabel
+                label="Rename VMware VM"
+                control={
+                  <Checkbox
+                    checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        renameVm: isChecked,
+                        suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
+                      });
+                      onChange("postMigrationAction")({
+                        ...params.postMigrationAction,
+                        renameVm: isChecked,
+                        suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
+                      });
+                    }}
+                  />
+                }
+              />
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
+                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+                onChange={(e) => {
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    suffix: e.target.value
+                  });
+                }}
+              >
+                <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
+              </Select>
+              <Typography variant="caption">
+                This suffix will be appended to the source VM name after migration.
+              </Typography>
+            </Fields>
 
-<Fields>
-  <FormControlLabel
-    label="Move to Folder"
-    control={
-      <Checkbox
-        checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-        onChange={(e) => {
-          const isChecked = e.target.checked;
-          updateSelectedMigrationOptions("postMigrationAction")({
-            ...selectedMigrationOptions.postMigrationAction,
-            moveToFolder: isChecked,
-            folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
-          });
-          onChange("postMigrationAction")({
-            ...params.postMigrationAction,
-            moveToFolder: isChecked,
-            folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
-          });
-        }}
-      />
-    }
-  />
-  <Select
-    size="small"
-    disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-    value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-    onChange={(e) => {
-      onChange("postMigrationAction")({
-        ...params.postMigrationAction,
-        folderName: e.target.value
-      });
-    }}
-  >
-    <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-  </Select>
-  <Typography variant="caption">
-    This folder name will be used to organize the migrated VMs in vCenter.
-  </Typography>
-</Fields>
+            <Fields>
+              <FormControlLabel
+                label="Move to Folder in VMware"
+                control={
+                  <Checkbox
+                    checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        moveToFolder: isChecked,
+                        folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
+                      });
+                      onChange("postMigrationAction")({
+                        ...params.postMigrationAction,
+                        moveToFolder: isChecked,
+                        folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
+                      });
+                    }}
+                  />
+                }
+              />
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+                onChange={(e) => {
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    folderName: e.target.value
+                  });
+                }}
+              >
+                <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
+              </Select>
+              <Typography variant="caption">
+                This folder name will be used to organize the migrated VMs in vCenter.
+              </Typography>
+              </Fields>
+        
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Disconnect Source VM Network"
+                  control={
+                    <Checkbox
+                      checked={params?.disconnectSourceNetwork || false}
+                      onChange={(e) => {
+                        onChange("disconnectSourceNetwork")(e.target.checked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  Disconnect NICs on the source VM to prevent IP conflicts.
+                </Typography>
+              </Fields>
 
-{/* 
-            Pre and Post Web Hooks 
+            {isPCD && (
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Use Dynamic Hotplug-Enabled Flavors"
+                  control={
+                    <Checkbox
+                      checked={params?.useFlavorless || false}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
+                        onChange("useFlavorless")(isChecked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  This will use the base flavor ID specified in PCD.
+                </Typography>
+              </Fields>
+
+            )}
+            {/*
+            Pre and Post Web Hooks
 // ...
               <Fields key={`${hook.label}-${hook.identifier}`}>
                 <PrePostWebHooks

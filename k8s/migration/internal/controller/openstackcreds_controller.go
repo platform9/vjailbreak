@@ -26,6 +26,7 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,6 +123,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// Update the status of the OpenstackCreds object
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
+			if r.Local {
+				// At this point creds are valid but controller is not able to fetch metadata
+				// that is why we are getting this above error
+				err := handleValidatedCreds(ctx, r, scope)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
 		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -134,98 +143,27 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		ctxlog.Info("Successfully updated status to failed")
 	} else {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
-		if err != nil {
-			if strings.Contains(err.Error(), "404") {
-				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-			} else {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update master node image id")
-			}
-			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
-		}
 		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
-
-		ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-		err = utils.CreateEntryForNoPCDCluster(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to create dummy PCD cluster")
-		}
-
-		flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil {
-			ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get flavors")
-		}
-		scope.OpenstackCreds.Spec.Flavors = flavors
-		if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
-		}
-
 		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-
-		// update the status field openstackInfo
-		ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
-		openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
-		if err != nil {
-			ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack info")
-		}
-		scope.OpenstackCreds.Status.Openstack = *openstackinfo
-		ctxlog.Info("Updating OpenstackCreds status with info", "openstackcreds", scope.OpenstackCreds.Name)
+		ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
-
-		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
-		// This will help us to create the vmwaremachine object with the correct flavor.
-		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
-		if err := r.List(ctx, vmwaremachineList); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachine objects")
-		}
-		for i := range vmwaremachineList.Items {
-			vmwaremachine := &vmwaremachineList.Items[i]
-			// Get the cpu and memory of the vmwaremachine object
-			cpu := vmwaremachine.Spec.VMInfo.CPU
-			memory := vmwaremachine.Spec.VMInfo.Memory
-			computeClient, err := utils.GetOpenStackClients(context.TODO(), r.Client, scope.OpenstackCreds)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get OpenStack clients")
-			}
-			// Now get the closest flavor based on the cpu and memory
-			flavor, err := utils.GetClosestFlavour(ctx, cpu, memory, computeClient.ComputeClient)
-			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
-				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
-				return ctrl.Result{}, errors.Wrap(err, "failed to get closest flavor")
-			}
-			// Now label the vmwaremachine object with the flavor name
-			if flavor == nil {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
-				}
-			} else {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update vmwaremachine object")
-				}
-			}
-		}
-
-		if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
-			ctxlog.Info("Syncing PCD info because openstackcreds is PCD", "openstackcreds", scope.OpenstackCreds.Name)
-			err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to sync PCD info")
-			}
+		ctxlog.Info("Successfully updated status to success")
+		err = handleValidatedCreds(ctx, r, scope)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 	}
+
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
 	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil
 }
@@ -285,4 +223,101 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
+}
+
+func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	ctxlog := scope.Logger
+	err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
+		} else {
+			return errors.Wrap(err, "failed to update master node image id")
+		}
+		ctxlog.Error(err, "Failed to update master node image ID and flavor list")
+	}
+
+	ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
+	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, r.Client, scope.OpenstackCreds)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return errors.Wrap(err, "failed to create dummy PCD cluster")
+	}
+
+	flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
+		return errors.Wrap(err, "failed to get flavors")
+	}
+	scope.OpenstackCreds.Spec.Flavors = flavors
+	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		return errors.Wrap(err, "failed to update spec of OpenstackCreds")
+	}
+
+	// update the status field openstackInfo
+	ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
+	openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
+		return errors.Wrap(err, "failed to get Openstack info")
+	}
+	scope.OpenstackCreds.Status.Openstack = *openstackinfo
+	ctxlog.Info("Updating OpenstackCreds status with info", "openstackcreds", scope.OpenstackCreds.Name)
+	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		return errors.Wrap(err, "failed to update OpenstackCreds status")
+	}
+
+	// Get vjailbreak settings to check if we should populate VMwareMachine flavors
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get vjailbreak settings")
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	// Only populate flavors if the setting is enabled
+	if vjailbreakSettings.PopulateVMwareMachineFlavors {
+		ctxlog.Info("Populating VMwareMachine objects with OpenStack flavors", "openstackcreds", scope.OpenstackCreds.Name)
+		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
+		// This will help us to create the vmwaremachine object with the correct flavor.
+		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+		if err := r.List(ctx, vmwaremachineList); err != nil {
+			return errors.Wrap(err, "failed to list vmwaremachine objects")
+		}
+
+		for i := range vmwaremachineList.Items {
+			vmwaremachine := &vmwaremachineList.Items[i]
+			// Get the cpu and memory of the vmwaremachine object
+			cpu := vmwaremachine.Spec.VMInfo.CPU
+			memory := vmwaremachine.Spec.VMInfo.Memory
+
+			// Now get the closest flavor based on the cpu and memory
+			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors)
+			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
+				return errors.Wrap(err, "failed to get closest flavor")
+			}
+			// Now label the vmwaremachine object with the flavor name
+			if flavor == nil {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
+					return errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			} else {
+				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
+					return errors.Wrap(err, "failed to update vmwaremachine object")
+				}
+			}
+		}
+	} else {
+		ctxlog.Info("Skipping VMwareMachine flavor population as it is disabled", "openstackcreds", scope.OpenstackCreds.Name)
+	}
+
+	if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+		ctxlog.Info("Syncing PCD info because openstackcreds is PCD", "openstackcreds", scope.OpenstackCreds.Name)
+		err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
+		if err != nil {
+			return errors.Wrap(err, "failed to sync PCD info")
+		}
+	}
+	return nil
 }

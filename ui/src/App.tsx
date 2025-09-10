@@ -1,6 +1,6 @@
 import { styled } from "@mui/material"
-import { useEffect, useState } from "react"
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom"
+import { useState } from "react"
+import { Route, Routes, useLocation, Navigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import RouteCompatibility from "./components/RouteCompatibility"
@@ -16,7 +16,6 @@ import CredentialsPage from "./pages/dashboard/CredentialsPage"
 import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
-import { useNodesQuery } from "./hooks/api/useNodesQuery"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -39,7 +38,6 @@ const AppContent = styled("div")(({ theme }) => ({
 }))
 
 function App() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
@@ -89,7 +87,7 @@ function App() {
           />
         )}
         <Routes>
-          <Route path="/" element={<div></div>} />
+          <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />

@@ -13,7 +13,16 @@ const (
 	TerminationPeriod = int64(120)
 
 	// NameMaxLength defines the maximum length of a name
-	NameMaxLength = 242
+	K8sNameMaxLength = 63
+
+	// HashSuffixLength defines the length of the hash suffix
+	HashSuffixLength = 5
+
+	// VMNameMaxLength defines the maximum length of a VM name excluding the hash suffix
+	VMNameMaxLength = 57
+
+	// MaxJobNameLength defines the maximum length of a job name
+	MaxJobNameLength = 46 // 63 - 11 (prefix v2v-helper-) - 1 (hyphen) - 5 (hash)
 
 	// VjailbreakNodeControllerName is the name of the vjailbreak node controller
 	VjailbreakNodeControllerName = "vjailbreaknode-controller"
@@ -51,6 +60,9 @@ const (
 	// IsPCDCredsLabel is the label for pcd credentials
 	IsPCDCredsLabel = "vjailbreak.k8s.pf9.io/is-pcd" //nolint:gosec // not a password string
 
+	// VMNameLabel is the label for vm name
+	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
+
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
 
@@ -71,9 +83,6 @@ const (
 
 	// PauseMigrationLabel is the label for pausing rolling migration plan
 	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
-
-	// TrueString is the string representation of boolean true
-	TrueString = "true"
 
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
@@ -158,6 +167,45 @@ const (
 
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
+
+	// RDMDiskControllerName is the name of the RDM disk controller
+	RDMDiskControllerName = "rdmdisk-controller"
+
+	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
+	VCenterVMScanConcurrencyLimit = 100
+
+	// VMwareClusterNameStandAloneESX is the name of the VMware cluster when there is no cluster
+	VMwareClusterNameStandAloneESX = "NO CLUSTER"
+
+	// ConfigMap default values
+	ChangedBlocksCopyIterationThreshold = 20
+
+	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
+	VMActiveWaitIntervalSeconds = 20
+
+	// VMActiveWaitRetryLimit is the number of retries to wait for vm to become active
+	VMActiveWaitRetryLimit = 15
+
+	// VolumeAvailableWaitIntervalSeconds is the interval to wait for volume to become available
+	VolumeAvailableWaitIntervalSeconds = 5
+
+	// VolumeAvailableWaitRetryLimit is the number of retries to wait for volume to become available
+	VolumeAvailableWaitRetryLimit = 15
+
+	// DefaultMigrationMethod is the default migration method
+	DefaultMigrationMethod = "hot"
+
+	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
+	VCenterScanConcurrencyLimit = 100
+
+	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
+	CleanupVolumesAfterConvertFailure = true
+
+	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
+	PopulateVMwareMachineFlavors = true
+
+	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
+	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization

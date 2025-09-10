@@ -1,0 +1,89 @@
+name: Nightly Build Trigger
+
+on:
+  schedule:
+    # Run at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  check-commits-and-trigger:
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # We need the full git history
+
+      - name: Get latest commit timestamp
+        id: latest-commit
+        run: |
+          # Get the timestamp of the latest commit on main
+          LATEST_COMMIT_TIMESTAMP=$(git log -1 --format=%ct origin/main)
+          echo "latest_commit_timestamp=$LATEST_COMMIT_TIMESTAMP" >> $GITHUB_OUTPUT
+          
+          # Get the short SHA of the latest commit
+          SHORT_SHA=$(git rev-parse --short origin/main)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          
+          # Get the current timestamp (24 hours ago in seconds since epoch)
+          TWENTY_FOUR_HOURS_AGO=$(date -d '24 hours ago' +%s)
+          echo "twenty_four_hours_ago=$TWENTY_FOUR_HOURS_AGO" >> $GITHUB_OUTPUT
+          
+          if [ $LATEST_COMMIT_TIMESTAMP -gt $TWENTY_FOUR_HOURS_AGO ]; then
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Get last release tag
+        id: last-release
+        run: |
+          # Get the latest release tag
+          LATEST_RELEASE=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+          echo "latest_release=${LATEST_RELEASE#v}" >> $GITHUB_OUTPUT
+          echo "Found latest release: ${LATEST_RELEASE#v}"
+
+      - name: Debug info
+        if: steps.latest-commit.outputs.has_new_commits == 'true'
+        run: |
+          echo "Using pre-installed tools:"
+          curl --version
+          jq --version || echo "jq not available"
+
+      - name: Trigger packer workflow if needed
+        if: steps.latest-commit.outputs.has_new_commits == 'true' && !env.ACT
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const version = '${{ steps.last-release.outputs.latest_release }}';
+            const shortSha = '${{ steps.latest-commit.outputs.short_sha }}';            
+            console.log(`Triggering packer workflow with version: ${version}-${shortSha}`);
+            
+            // Trigger the workflow
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: 'packer.yml',  
+              ref: 'main',
+              inputs: {
+                branch: 'main',
+                version: version,
+                short_sha: shortSha,
+                is_nightly: 'true',  // Pass as string to avoid type issues
+              }
+            });
+            
+            console.log('Successfully triggered packer workflow');
+
+      - name: Skip build (no new commits)
+        if: steps.latest-commit.outputs.has_new_commits != 'true'
+        run: |
+          echo "No new commits in the last 24 hours. Skipping build."
+          echo "Last commit was at $(date -d @${{ steps.latest-commit.outputs.latest_commit_timestamp }})"
+          echo "Current time is $(date)"

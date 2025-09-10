@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
+	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 )
@@ -17,47 +19,167 @@ func ParseFraction(text string) (int, int, error) {
 	return numerator, denominator, nil
 }
 
+// migrationLogInfo tracks log files by migration name to ensure one file per migration attempt
+type migrationLogInfo struct {
+	filePath string
+	file     *os.File
+	refCount int
+}
+
+// We use a map to track migration log files
+var migrationLogs = make(map[string]*migrationLogInfo)
+
+// commandLogs maps commands to their migration name for cleanup
+var commandLogs = make(map[*exec.Cmd]string)
+var logMutex sync.Mutex
+
+// CloseLogFile decreases reference count for a migration log file and closes it if no longer needed
+func CloseLogFile(cmd *exec.Cmd) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	// Get the migration name associated with this command
+	migrationName, exists := commandLogs[cmd]
+	if !exists {
+		return // No log file associated with this command
+	}
+
+	// Remove command tracking
+	delete(commandLogs, cmd)
+
+	// Update reference count for the migration log
+	if logInfo, ok := migrationLogs[migrationName]; ok {
+		logInfo.refCount--
+		if logInfo.refCount <= 0 {
+			// Last command using this log file, close it
+			PrintLog(fmt.Sprintf("Closing migration log file: %s", logInfo.filePath))
+			logInfo.file.Sync()
+			logInfo.file.Close()
+			delete(migrationLogs, migrationName)
+		}
+	}
+}
+
+// CleanupMigrationLogs forcibly closes a migration's log file regardless of reference count
+// Call this when a migration is complete to clean up resources
+func CleanupMigrationLogs(migrationName string) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	// If there's an open log file for this migration, close it
+	if logInfo, exists := migrationLogs[migrationName]; exists {
+		PrintLog(fmt.Sprintf("Force closing migration log file: %s", logInfo.filePath))
+		logInfo.file.Sync()
+		logInfo.file.Close()
+		delete(migrationLogs, migrationName)
+	}
+
+	// Clean up any commands associated with this migration
+	for cmd, name := range commandLogs {
+		if name == migrationName {
+			delete(commandLogs, cmd)
+		}
+	}
+}
+
+// RunCommandWithLogFile runs a command with output redirected to a log file
+// and ensures the log file is properly closed after execution
+func RunCommandWithLogFile(cmd *exec.Cmd) error {
+	// First ensure output is directed to a log file
+	AddDebugOutputToFile(cmd)
+
+	// Run the command
+	err := cmd.Run()
+
+	// Close the log file
+	CloseLogFile(cmd)
+
+	return err
+}
+
 func AddDebugOutputToFile(cmd *exec.Cmd) {
 	migrationName, err := GetMigrationObjectName()
-	if err == nil {
-		// Ensure logs directory exists
-		if err := os.MkdirAll(constants.LogsDir, 0755); err == nil {
-			// Create log file with the migration object name
-			baseLogPath := fmt.Sprintf("%s/%s.log", constants.LogsDir, migrationName)
-			logFilePath := baseLogPath
-			
-			// Check if file already exists, if so, create a new file with suffix
-			if _, err := os.Stat(logFilePath); err == nil {
-				// File exists, find an available suffix
-				suffix := 1
-				maxSuffix := 20 // Maximum suffix allowed
-				
-				for suffix <= maxSuffix {
-					logFilePath = fmt.Sprintf("%s/%s.%d.log", constants.LogsDir, migrationName, suffix)
-					if _, err := os.Stat(logFilePath); os.IsNotExist(err) {
-						// Found an available filename
-						break
-					}
-					suffix++
-				}
-				
-				// If we've reached the limit, overwrite the last numbered file
-				if suffix > maxSuffix {
-					// Use the max suffix (20) when the limit is reached
-					logFilePath = fmt.Sprintf("%s/%s.%d.log", constants.LogsDir, migrationName, maxSuffix)
-					// We'll overwrite this file
-				}
-			}
-			
-			// Create the log file (with a suffix if needed)
-			logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY, 0644)
-			if err == nil {
-				PrintLog(fmt.Sprintf("Debug mode enabled. Command output will be logged to %s", logFilePath))
+	if err != nil {
+		return
+	}
 
-				// Set stdout/stderr to only write to the log file, not to kubectl logs
-				cmd.Stdout = logFile
-				cmd.Stderr = logFile
+	// Ensure logs directory exists
+	if err := os.MkdirAll(constants.LogsDir, 0755); err != nil {
+		return
+	}
+
+	// Create a directory for this specific migration
+	attemptDir := fmt.Sprintf("%s/%s", constants.LogsDir, migrationName)
+	if err := os.MkdirAll(attemptDir, 0755); err != nil {
+		return
+	}
+
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	// First close any existing log file for this command
+	// (do this within lock to avoid race conditions)
+	if oldMigrationName, exists := commandLogs[cmd]; exists {
+		// Remove command tracking
+		delete(commandLogs, cmd)
+
+		// Update reference count for the migration log
+		if logInfo, ok := migrationLogs[oldMigrationName]; ok {
+			logInfo.refCount--
+			if logInfo.refCount <= 0 {
+				// Last command using this log file, close it
+				PrintLog(fmt.Sprintf("Closing migration log file: %s", logInfo.filePath))
+				logInfo.file.Sync()
+				logInfo.file.Close()
+				delete(migrationLogs, oldMigrationName)
 			}
 		}
 	}
+
+	// Check if we already have an open log file for this migration
+	var logFile *os.File
+	logInfo, exists := migrationLogs[migrationName]
+	if exists {
+		// Reuse existing log file
+		logFile = logInfo.file
+		logInfo.refCount++ // Increment reference count
+	} else {
+		// Create a new log file with timestamp in name (only done once per migration)
+		timestamp := time.Now().Format("2006-01-02-15:04:05")
+		logFilePath := fmt.Sprintf("%s/migration.%s.log", attemptDir, timestamp)
+
+		// Create/open the log file
+		var err error
+		logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return
+		}
+
+		// Store new log info
+		migrationLogs[migrationName] = &migrationLogInfo{
+			filePath: logFilePath,
+			file:     logFile,
+			refCount: 1,
+		}
+
+		// Write header to log file
+		headerTime := time.Now().Format("2006-01-02 15:04:05")
+		logFile.WriteString(fmt.Sprintf("==== MIGRATION LOG: %s - Started at %s ====\n\n",
+			migrationName, headerTime))
+	}
+
+	// Associate this command with the migration name for later tracking
+	commandLogs[cmd] = migrationName
+
+	// Write a separator for this command to make logs more readable
+	timePrefix := time.Now().Format("2006-01-02 15:04:05")
+	cmdString := cmd.String()
+	logFile.WriteString(fmt.Sprintf("\n\n==== %s: COMMAND: %s ====\n\n", timePrefix, cmdString))
+
+	// Redirect command output to this file
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	// NOTE: The log file will NOT be automatically closed when the command completes.
+	// Either call CloseLogFile(cmd) manually after the command completes,
+	// or use RunCommandWithLogFile() which handles the cleanup automatically.
 }

@@ -218,12 +218,17 @@ func (r *ESXIMigrationReconciler) handleESXiCordoned(ctx context.Context, scope 
 func (r *ESXIMigrationReconciler) handleESXiWaitingForPCDHost(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("ESXi is waiting for PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-	destOpenstackCreds, err := utils.GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
 	}
-	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName)
+	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		log.Error(err, "Failed to get source vmware credentials", "vmwareCreds", sourceVMwareCreds)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
+	}
+	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, sourceVMwareCreds.Name)
 	if err != nil {
 		log.Error(err, "Failed to get VMware host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
@@ -252,19 +257,24 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	log.Info("ESXi is configuring PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	var pcdClusterName string
 
-	destOpenstackCreds, err := utils.GetDestinationOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
 	}
-	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName)
+	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		log.Error(err, "Failed to get source vmware credentials", "vmwareCreds", sourceVMwareCreds)
+		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
+	}
+	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, sourceVMwareCreds.Name)
 	if err != nil {
 		log.Error(err, "Failed to get VMware host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
 	}
 	if vmwareHost.Spec.HostConfigID == "" {
 		log.Info("Host config ID is empty, pausing ESXi migration. please assign host config to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = constants.TrueString
+		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = "true"
 		err = r.Update(ctx, scope.RollingMigrationPlan)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")

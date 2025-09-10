@@ -5,20 +5,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	migrationconstants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,58 +50,33 @@ func GetInclusterClient() (client.Client, error) {
 	return clientset, err
 }
 
-func ConvertToK8sName(name string) (string, error) {
-	// Convert to lowercase
-	name = strings.ToLower(name)
-	// Replace separators with hyphens
-	re := regexp.MustCompile(`[_\s]`)
-	name = re.ReplaceAllString(name, "-")
-	// Remove all characters that are not lowercase alphanumeric, hyphens, or periods
-	re = regexp.MustCompile(`[^a-z0-9\-.]`)
-	name = re.ReplaceAllString(name, "")
-	// Remove leading and trailing hyphens
-	name = strings.Trim(name, "-")
-	// Truncate to 242 characters, as we prepend v2v-helper- to the name
-	if len(name) > migrationconstants.NameMaxLength {
-		name = name[:migrationconstants.NameMaxLength]
-	}
-	nameerrors := validation.IsQualifiedName(name)
-	if len(nameerrors) == 0 {
-		return name, nil
-	}
-	return name, fmt.Errorf("name '%s' is not a valid K8s name: %v", name, nameerrors)
-}
-
-func IsDebug(ctx context.Context, client client.Client) (bool, error) {
-	// get the configmap
-	configMapName, err := GetMigrationConfigMapName(os.Getenv("SOURCE_VM_NAME"))
-	if err != nil {
-		return false, err
-	}
-	configMap := &v1.ConfigMap{}
-	err = client.Get(ctx, types.NamespacedName{
-		Name:      configMapName,
-		Namespace: constants.MigrationSystemNamespace,
-	}, configMap)
-	if err != nil {
-		return false, errors.Wrap(err, "Failed to get configmap")
-	}
-	debug := strings.TrimSpace(string(configMap.Data["DEBUG"]))
-	return debug == constants.TrueString, nil
-}
-
 func PrintLog(logMessage string) error {
 	log.Println(logMessage)
 	return WriteToLogFile(logMessage)
 }
 
 func GetMigrationObjectName() (string, error) {
-	vmname := os.Getenv("SOURCE_VM_NAME")
-	vmK8sName, err := ConvertToK8sName(vmname)
+	vmK8sName, err := GetVMwareMachineName()
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("migration-%s", vmK8sName), nil
+}
+
+// GetMigrationConfigMapName is function that returns the name of the secret
+func GetMigrationConfigMapName() (string, error) {
+	vmK8sName, err := GetVMwareMachineName()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("migration-config-%s", vmK8sName), nil
+}
+func GetVMwareMachineName() (string, error) {
+	vmK8sName := os.Getenv("VMWARE_MACHINE_OBJECT_NAME")
+	if vmK8sName == "" {
+		return "", errors.New("VMWARE_MACHINE_OBJECT_NAME environment variable is not set")
+	}
+	return vmK8sName, nil
 }
 
 func WriteToLogFile(message string) error {
@@ -134,4 +106,81 @@ func WriteToLogFile(message string) error {
 		return errors.Wrap(err, "failed to write log message to log file")
 	}
 	return nil
+}
+
+func atoi(s string) int {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+	vjailbreakSettingsCM := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
+		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
+	}
+
+	if vjailbreakSettingsCM.Data == nil {
+		return &VjailbreakSettings{
+			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
+			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
+			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
+			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
+			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
+			PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
+			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
+			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
+		}, nil
+	}
+
+	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
+		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
+	}
+
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VolumeAvailableWaitIntervalSeconds)
+	}
+
+	if vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VolumeAvailableWaitRetryLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
+		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
+	}
+
+	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
+		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
+	}
+
+	if vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "" {
+		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
+	}
+
+	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
+		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
+	}
+
+	return &VjailbreakSettings{
+		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
+		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
+		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
+		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
+		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
+		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
+		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
+	}, nil
 }

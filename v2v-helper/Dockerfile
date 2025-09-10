@@ -25,27 +25,25 @@ COPY manager manager
 # Using same Fedora version for consistency and required runtime dependencies
 FROM fedora:42
 
-# Add virtio-win repository for Windows drivers
-# Required for VM migration and conversion support
-# This provides Windows VirtIO drivers needed during VM conversion
-ADD https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo /etc/yum.repos.d/virtio-win.repo
+WORKDIR /tmp/rpms
+
+RUN curl -L -o nbdkit.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-vddk.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o libnbd.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/libnbd-1.22.2-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-server.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-server-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-basic-plugins.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm && \
+    curl -L -o nbdkit-basic-filters.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm && \
+    dnf install -y ./*.rpm && \
+    dnf clean all && \
+    rm -rf /tmp/rpms
+
 WORKDIR /tmp
 RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
 
-# Install runtime dependencies:
-# - nbdkit: Network Block Device toolkit for accessing disk images
-# - nbdkit-vddk-plugin: VMware VDDK plugin for accessing VMware disks
-# - libnbd: Network Block Device client library
-# - virt-v2v: Convert VMs between platforms (e.g., VMware to OpenStack)
-# - virtio-win: VirtIO drivers for Windows guests
-RUN dnf install -y \
-    nbdkit \
-    nbdkit-vddk-plugin \
-    libnbd 
-    
 RUN dnf install -y /tmp/virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
+
