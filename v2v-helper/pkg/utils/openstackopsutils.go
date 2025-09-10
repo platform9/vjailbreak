@@ -518,6 +518,9 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		serverCreateOpts.AvailabilityZone = availabilityZone
 	}
 	if len((vminfo.RDMDisks)) > 0 {
+		if serverCreateOpts.Metadata == nil {
+			serverCreateOpts.Metadata = map[string]string{}
+		}
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 	createOpts := bootfromvolume.CreateOptsExt{

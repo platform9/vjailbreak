@@ -413,8 +413,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 		r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
 		migrationplan.Status.MigrationStatus = corev1.PodFailed
-		migrationplan.Status.MigrationMessage = "RDM disk not migrated after maximum retries."
-		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "RDM disk not migrated after maximum retries."); err != nil {
+		migrationplan.Status.MigrationMessage = fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
 		}
 		return ctrl.Result{}, err
