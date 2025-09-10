@@ -7,6 +7,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import customTypography from "../../theme/typography"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
@@ -47,11 +48,11 @@ const Fields = styled("div")(() => ({
   gridGap: "12px",
 }))
 
-const CustomTextField = styled(TextField)({
+const CustomTextField = styled(TextField)(() => ({
   "& .MuiOutlinedInput-root": {
-    fontFamily: "Monospace",
+    ...customTypography.monospace,
   },
-})
+}))
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
@@ -412,24 +413,24 @@ export default function MigrationOptionsAlt({
               <Typography variant="caption">
                 This folder name will be used to organize the migrated VMs in vCenter.
               </Typography>
-              </Fields>
-        
-              <Fields sx={{ gridGap: "0" }}>
-                <FormControlLabel
-                  label="Disconnect Source VM Network"
-                  control={
-                    <Checkbox
-                      checked={params?.disconnectSourceNetwork || false}
-                      onChange={(e) => {
-                        onChange("disconnectSourceNetwork")(e.target.checked);
-                      }}
-                    />
-                  }
-                />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  Disconnect NICs on the source VM to prevent IP conflicts.
-                </Typography>
-              </Fields>
+            </Fields>
+
+            <Fields sx={{ gridGap: "0" }}>
+              <FormControlLabel
+                label="Disconnect Source VM Network"
+                control={
+                  <Checkbox
+                    checked={params?.disconnectSourceNetwork || false}
+                    onChange={(e) => {
+                      onChange("disconnectSourceNetwork")(e.target.checked);
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                Disconnect NICs on the source VM to prevent IP conflicts.
+              </Typography>
+            </Fields>
 
             {isPCD && (
               <Fields sx={{ gridGap: "0" }}>
