@@ -1338,7 +1338,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					// Validate that all ownerVMs are present in parallelVMs
 					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
 						if _, ok := vmMachines[ownerVM]; !ok {
-							return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan ", ownerVM, rdmDisk)
+							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
 						}
 					}
 					// Update existing RDMDisk CR

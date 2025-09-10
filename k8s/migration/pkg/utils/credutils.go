@@ -850,7 +850,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
 		if !slices.Contains(vminfo.RDMDisks, data) {
 			vminfo.RDMDisks = append(vminfo.RDMDisks, data)
-			log.FromContext(ctx).Info("RDM disk cannot be removed from VM, delete vmware custom resource if wanted to exclude rdm disks after detachment from VM", "Disk: ", data, " VM: ", vminfo.Name)
+			log.FromContext(ctx).Info("RDM disk cannot be removed from VM, delete vmware custom resource if wanted to exclude rdm disks after detachment from VM and remove owner VM's reference from RDM disk.", "Disk: ", data, " VM: ", vminfo.Name)
 		}
 	}
 
