@@ -845,7 +845,14 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo) error {
 			} else {
 				ip = vminfo.IPs[idx]
 			}
-
+			if ip == "" && vminfo.NetworkInterfaces != nil {
+				for _, nic := range vminfo.NetworkInterfaces {
+					if nic.MAC == vminfo.Mac[idx] {
+						ip = nic.IPAddress
+						break
+					}
+				}
+			}
 			if migobj.AssignedIP != "" {
 				ip = migobj.AssignedIP
 			}
