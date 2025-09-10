@@ -624,4 +624,5 @@ jobs:
             image_builder/deploy/00controller.yaml
             image_builder/deploy/01ui.yaml
             image_builder/deploy/version-config.yaml
+            image_builder/deploy/version-checker.yaml
             image_builder/deploy/vjailbreak-settings.yaml
