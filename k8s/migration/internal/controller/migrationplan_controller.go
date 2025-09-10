@@ -1346,6 +1346,9 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					if err != nil {
 						return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
 					}
+					// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
+					// Another RDM disk controller will handle the rest of the migration,
+					// Will ensure that RDM disk is managed and imported to Cinder
 					if !rdmDiskCR.Spec.ImportToCinder {
 						rdmDiskCR.Spec.ImportToCinder = true
 						rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()

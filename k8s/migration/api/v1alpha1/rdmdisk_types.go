@@ -24,7 +24,7 @@ type RDMDiskSpec struct {
 	DiskSize    int      `json:"diskSize"`
 	UUID        string   `json:"uuid"`
 	DisplayName string   `json:"displayName"`
-	OwnerVMs    []string `json:"ownerVMs"`
+	OwnerVMs    []string `json:"ownerVMs"` // includes OwnerVMNames
 	// +optional
 	OpenstackVolumeRef OpenstackVolumeRef `json:"openstackVolumeRef,omitempty"` // OpenStack volume reference information
 	ImportToCinder     bool               `json:"importToCinder,omitempty"`     // Indicates whether the RDM disk should be imported to Cinder and is set by MigrationPlan Controller
