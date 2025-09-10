@@ -256,7 +256,6 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 				originalStartCutover := "no"
 				fmt.Printf("Info: Entering event loop for pod %s\n", r.PodName)
 				for event := range watch.ResultChan() {
-					fmt.Printf("Info: Received event for pod %s: type=%v\n", r.PodName, event.Type)
 					pod, ok := event.Object.(*corev1.Pod)
 					if !ok {
 						fmt.Printf("Error: Received non-pod event for pod %s: %v\n", r.PodName, event.Object)
