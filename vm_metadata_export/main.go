@@ -104,7 +104,7 @@ func main() {
 	flag.Parse()
 
 	if *username == "" || *password == "" || *host == "" {
-		fmt.Printf("Error: missing required argument(s)")
+		fmt.Printf("Error: missing required argument(s)\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -204,7 +204,7 @@ func main() {
 	// convert to csv
 	err = convertToCSV(vminfolist, "vms.csv")
 	if err != nil {
-		fmt.Printf("failed to convert to csv: %v\n", err)
+		log.Fatalf("failed to convert to csv: %v\n", err)
 	}
-	fmt.Println("Converted to CSV")
+	fmt.Printf("Converted to CSV")
 }
