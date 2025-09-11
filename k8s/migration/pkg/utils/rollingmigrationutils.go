@@ -80,12 +80,12 @@ func getMigrationObject(ctx context.Context, k8sClient client.Client, vmwareObje
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
-	
+
 	k8sName, err := GetK8sCompatibleVMWareObjectName(vmwareObjectName, vmwarecreds.Name)
 	if err != nil {
 		return errors.Wrap(err, errorMsg)
 	}
-	
+
 	return k8sClient.Get(ctx, types.NamespacedName{
 		Name:      GenerateRollingMigrationObjectName(k8sName, rollingMigrationPlan),
 		Namespace: constants.NamespaceMigrationSystem,
@@ -523,8 +523,6 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrat
 			MigrationPlanSpecPerVM: vjailbreakv1alpha1.MigrationPlanSpecPerVM{
 				MigrationTemplate: rollingMigrationPlan.Spec.MigrationTemplate,
 				MigrationStrategy: rollingMigrationPlan.Spec.MigrationStrategy,
-				// Copy advanced options if needed
-				AdvancedOptions: rollingMigrationPlan.Spec.AdvancedOptions,
 			},
 			// Include VM batch as a single group for migration
 			VirtualMachines: [][]string{batch},

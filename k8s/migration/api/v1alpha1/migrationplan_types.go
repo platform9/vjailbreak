@@ -45,17 +45,6 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 }
 
-// AdvancedOptions defines advanced configuration options for the migration process
-// including granular selection of volumes, networks, and ports
-type AdvancedOptions struct {
-	// GranularVolumeTypes is a list of volume types to be migrated
-	GranularVolumeTypes []string `json:"granularVolumeTypes,omitempty"`
-	// GranularNetworks is a list of networks to be migrated
-	GranularNetworks []string `json:"granularNetworks,omitempty"`
-	// GranularPorts is a list of ports to be migrated
-	GranularPorts []string `json:"granularPorts,omitempty"`
-}
-
 // PostMigrationAction defines the post migration action for the virtual machine
 type PostMigrationAction struct {
 	RenameVM     *bool  `json:"renameVm,omitempty"`
@@ -82,8 +71,6 @@ type MigrationPlanSpecPerVM struct {
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
 	// Retry the migration if it fails
 	Retry bool `json:"retry,omitempty"`
-	// AdvancedOptions is a list of advanced options for the migration
-	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript     string               `json:"firstBootScript,omitempty"`
 	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`

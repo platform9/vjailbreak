@@ -768,29 +768,6 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		return nil, errors.Wrap(err, "failed to reconcile mapping")
 	}
 
-	openstackports := []string{}
-	// If advanced options are set, replace the networks and/or volume types with the ones in the advanced options
-	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
-		if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
-			if err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
-				return nil, errors.Wrap(err, "failed to verify networks in advanced mapping")
-			}
-			openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
-		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
-			if err = utils.VerifyStorage(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
-				return nil, errors.Wrap(err, "failed to verify volume types in advanced mapping")
-			}
-			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
-		}
-		if len(vmMachine.Spec.ExistingPortIDs) > 0 {
-			if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, vmMachine.Spec.ExistingPortIDs); err != nil {
-				return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
-			}
-			openstackports = vmMachine.Spec.ExistingPortIDs
-		}
-	}
-
 	// Create MigrationConfigMap
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
@@ -809,7 +786,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"CUTOVERSTART":               migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
 				"CUTOVEREND":                 migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
 				"NEUTRON_NETWORK_NAMES":      strings.Join(openstacknws, ","),
-				"NEUTRON_PORT_IDS":           strings.Join(openstackports, ","),
+				"NEUTRON_PORT_IDS":           strings.Join(vmMachine.Spec.ExistingPortIDs, ","),
 				"CINDER_VOLUME_TYPES":        strings.Join(openstackvolumetypes, ","),
 				"VIRTIO_WIN_DRIVER":          virtiodrivers,
 				"PERFORM_HEALTH_CHECKS":      strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),

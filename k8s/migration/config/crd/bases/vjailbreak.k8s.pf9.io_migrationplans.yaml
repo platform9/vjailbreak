@@ -49,27 +49,6 @@ spec:
               MigrationPlanSpec defines the desired state of MigrationPlan including
               the migration template, strategy, and the list of virtual machines to migrate
             properties:
-              advancedOptions:
-                description: AdvancedOptions is a list of advanced options for the
-                  migration
-                properties:
-                  granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularVolumeTypes:
-                    description: GranularVolumeTypes is a list of volume types to
-                      be migrated
-                    items:
-                      type: string
-                    type: array
-                type: object
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string

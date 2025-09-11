@@ -439,27 +439,6 @@ spec:
               MigrationPlanSpec defines the desired state of MigrationPlan including
               the migration template, strategy, and the list of virtual machines to migrate
             properties:
-              advancedOptions:
-                description: AdvancedOptions is a list of advanced options for the
-                  migration
-                properties:
-                  granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularVolumeTypes:
-                    description: GranularVolumeTypes is a list of volume types to
-                      be migrated
-                    items:
-                      type: string
-                    type: array
-                type: object
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -1524,27 +1503,6 @@ spec:
           spec:
             description: RollingMigrationPlanSpec defines the desired state of RollingMigrationPlan
             properties:
-              advancedOptions:
-                description: AdvancedOptions is a list of advanced options for the
-                  migration
-                properties:
-                  granularNetworks:
-                    description: GranularNetworks is a list of networks to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularPorts:
-                    description: GranularPorts is a list of ports to be migrated
-                    items:
-                      type: string
-                    type: array
-                  granularVolumeTypes:
-                    description: GranularVolumeTypes is a list of volume types to
-                      be migrated
-                    items:
-                      type: string
-                    type: array
-                type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
                 properties:
@@ -2306,6 +2264,24 @@ spec:
           spec:
             description: VMwareMachineSpec defines the desired state of VMwareMachine
             properties:
+              convertedVolumeIds:
+                description: ConvertedVolumeIDs is the list of volumes to be used
+                  to create the target VM on openstack
+                items:
+                  type: string
+                type: array
+              copiedVolumeIds:
+                description: CopiedVolumeIDs is the list of volumes to be used to
+                  create the target VM on openstack
+                items:
+                  type: string
+                type: array
+              existingPortIds:
+                description: ExistingPortIDs is the list of ports to be used to create
+                  the target VM on openstack
+                items:
+                  type: string
+                type: array
               targetFlavorId:
                 description: TargetFlavorId is the flavor to be used to create the
                   target VM on openstack
