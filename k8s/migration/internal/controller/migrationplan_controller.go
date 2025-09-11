@@ -407,7 +407,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					r.ctxlog.Error(err, "Failed to update MigrationPlan retry count")
 					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
 				}
-				r.ctxlog.Info("RDM disk not migrated, requeuing MigrationPlan for retry. ", retries)
+				r.ctxlog.Info("RDM disk not migrated, requeuing MigrationPlan for retry. ", "Retry Count: ", retries)
 				return ctrl.Result{RequeueAfter: delay}, nil
 			}
 		}
