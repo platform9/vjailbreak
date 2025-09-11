@@ -144,6 +144,8 @@ func main() {
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
+		CopiedVolumeIDs:        utils.RemoveEmptyStrings(strings.Split(migrationparams.CopiedVolumeIDs, ",")),
+		ConvertedVolumeIDs:     utils.RemoveEmptyStrings(strings.Split(migrationparams.ConvertedVolumeIDs, ",")),
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

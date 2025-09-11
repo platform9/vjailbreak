@@ -74,6 +74,15 @@ func GetCurrentInstanceUUID() (string, error) {
 	return metadata.UUID, nil
 }
 
+func (osclient *OpenStackClients) GetVolume(volumeID string) (*volumes.Volume, error) {
+	blockStorageClient := osclient.BlockStorageClient
+	volume, err := volumes.Get(blockStorageClient, volumeID).Extract()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get volume")
+	}
+	return volume, nil
+}
+
 // create a new volume
 func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
@@ -97,7 +106,7 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for volume: %s", err)
 	}
-	volume, err = volumes.Get(osclient.BlockStorageClient, volume.ID).Extract()
+	volume, err = osclient.GetVolume(volume.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get volume: %s", err)
 	}
@@ -142,7 +151,7 @@ func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 	}
 	utils.PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume %s to become available, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
 	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
-		volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
+		volume, err := osclient.GetVolume(volumeID)
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
 		}

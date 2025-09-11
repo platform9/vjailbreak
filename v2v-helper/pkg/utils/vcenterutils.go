@@ -37,6 +37,8 @@ type MigrationParams struct {
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
 	SecurityGroups          string
+	CopiedVolumeIDs         string
+	ConvertedVolumeIDs      string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -75,5 +77,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		VMwareMachineName:       string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork: string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
 		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
+		CopiedVolumeIDs:         string(configMap.Data["COPIED_VOLUME_IDS"]),
+		ConvertedVolumeIDs:      string(configMap.Data["CONVERTED_VOLUME_IDS"]),
 	}, nil
 }

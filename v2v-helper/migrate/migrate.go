@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
@@ -64,6 +65,8 @@ type Migrate struct {
 	SecurityGroups          []string
 	UseFlavorless           bool
 	TenantName              string
+	CopiedVolumeIDs         []string
+	ConvertedVolumeIDs      []string
 	Reporter                *reporter.Reporter
 }
 
@@ -101,17 +104,43 @@ func (migobj *Migrate) logMessage(message string) {
 // This function creates volumes in OpenStack and attaches them to the helper vm
 func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
-	migobj.logMessage("Creating volumes in OpenStack")
-	for idx, vmdisk := range vminfo.VMDisks {
-		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx])
-		if err != nil {
-			return vminfo, errors.Wrap(err, "failed to create volume")
-		}
-		vminfo.VMDisks[idx].OpenstackVol = volume
-		if vminfo.VMDisks[idx].Boot {
-			err = openstackops.SetVolumeBootable(volume)
+	if len(migobj.CopiedVolumeIDs) == 0 && len(migobj.ConvertedVolumeIDs) == 0 {
+		// No existing copied or converted volumes provided
+		migobj.logMessage("Creating volumes in OpenStack")
+		for idx, vmdisk := range vminfo.VMDisks {
+			volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx])
 			if err != nil {
-				return vminfo, errors.Wrap(err, "failed to set volume as bootable")
+				return vminfo, errors.Wrap(err, "failed to create volume")
+			}
+			vminfo.VMDisks[idx].OpenstackVol = volume
+			if vminfo.VMDisks[idx].Boot {
+				err = openstackops.SetVolumeBootable(volume)
+				if err != nil {
+					return vminfo, errors.Wrap(err, "failed to set volume as bootable")
+				}
+			}
+		}
+	} else {
+		// Existing copied or converted volumes provided, not caring about the order since they are already copied
+		// first preference to converted volumes
+		converted := false
+		for idx := range migobj.ConvertedVolumeIDs {
+			// IMPORTANT: Expecting "Bootable" is already set for the bootable volume, since conversion is already done
+			volume, err := openstackops.GetVolume(migobj.ConvertedVolumeIDs[idx])
+			if err != nil {
+				return vminfo, errors.Wrap(err, "failed to get volume")
+			}
+			vminfo.VMDisks[idx].OpenstackVol = volume
+			converted = true
+		}
+		if !converted {
+			// second preference to copied volumes
+			for idx := range migobj.CopiedVolumeIDs {
+				volume, err := openstackops.GetVolume(migobj.CopiedVolumeIDs[idx])
+				if err != nil {
+					return vminfo, errors.Wrap(err, "failed to get volume")
+				}
+				vminfo.VMDisks[idx].OpenstackVol = volume
 			}
 		}
 	}
@@ -1118,28 +1147,31 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
 
-	// Convert the Boot Disk to raw format
-	err = migobj.ConvertVolumes(ctx, vminfo)
-	if err != nil {
-		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
-			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
-			detachErr := migobj.DetachAllVolumes(vminfo)
-			if detachErr != nil {
-				utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
-			}
+	// If converted volumes are provided, skip conversion
+	if len(migobj.ConvertedVolumeIDs) != 0 {
+		// Convert the Boot Disk to raw format
+		err = migobj.ConvertVolumes(ctx, vminfo)
+		if err != nil {
+			if !vcenterSettings.CleanupVolumesAfterConvertFailure {
+				migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
+				detachErr := migobj.DetachAllVolumes(vminfo)
+				if detachErr != nil {
+					utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
+				}
 
-			cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
-			if cleanUpErr != nil {
-				utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
-				return errors.Wrap(cleanUpErr, "Failed to cleanup snapshot of source VM")
+				cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
+				if cleanUpErr != nil {
+					utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
+					return errors.Wrap(cleanUpErr, "Failed to cleanup snapshot of source VM")
+				}
+				return errors.Wrap(err, "failed to convert disks")
+			}
+			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
+				// combine both errors
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
 			return errors.Wrap(err, "failed to convert disks")
 		}
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to convert disks")
 	}
 
 	// Create the target instance

@@ -246,6 +246,21 @@ func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(groupNames, p
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), groupNames, projectName)
 }
 
+// GetVolume mocks base method.
+func (m *MockOpenstackOperations) GetVolume(volumeID string) (*volumes.Volume, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVolume", volumeID)
+	ret0, _ := ret[0].(*volumes.Volume)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVolume indicates an expected call of GetVolume.
+func (mr *MockOpenstackOperationsMockRecorder) GetVolume(volumeID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).GetVolume), volumeID)
+}
+
 // SetVolumeBootable mocks base method.
 func (m *MockOpenstackOperations) SetVolumeBootable(volume *volumes.Volume) error {
 	m.ctrl.T.Helper()

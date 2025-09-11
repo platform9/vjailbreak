@@ -28,6 +28,7 @@ import (
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
 
 type OpenstackOperations interface {
+	GetVolume(volumeID string) (*volumes.Volume, error)
 	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string) (*volumes.Volume, error)
 	WaitForVolume(volumeID string) error
 	AttachVolumeToVM(volumeID string) error
