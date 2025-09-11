@@ -139,7 +139,7 @@ const (
 	K3sTokenFileLocation = "/etc/pf9/k3s/token" //nolint:gosec // not a password string
 
 	// CredsRequeueAfter is the time to requeue after
-	CredsRequeueAfter = 1 * time.Minute
+	CredsRequeueAfter = 5 * time.Minute
 
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"

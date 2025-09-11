@@ -131,6 +131,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
 	PopulateVMwareMachineFlavors = true
 
+	// MaxConcurrentReconciles is the default value for max concurrent reconciles for controllers
+	MaxConcurrentReconciles = 5
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 )

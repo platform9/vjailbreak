@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -17,10 +18,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // SyncPCDInfo syncs PCD info from resmgr
 func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+	ctxLog := log.FromContext(ctx)
+
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials")
@@ -40,51 +44,112 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 	if err := k8sClient.Update(ctx, &openstackCreds); err != nil {
 		return errors.Wrap(err, "failed to update openstack creds")
 	}
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var allErrors []error
 
-	clusterList, err := resmgrClient.ListClusters(ctx)
-	if err != nil && !strings.Contains(err.Error(), "404") {
-		return errors.Wrap(err, "failed to list clusters")
+	// Helper function to append errors to the slice in a thread-safe manner.
+	appendError := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		allErrors = append(allErrors, err)
+		errMu.Unlock()
 	}
 
-	for _, cluster := range clusterList {
-		err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				updateErr := UpdatePCDClusterFromResmgrCluster(ctx, k8sClient, cluster, &openstackCreds)
-				if updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update PCD cluster")
-				}
-				continue
-			}
-			return errors.Wrap(err, "failed to create PCD cluster")
+	wg.Add(2)
+
+	// Goroutine to process clusters
+	go func() {
+		defer wg.Done()
+		clusterList, err := resmgrClient.ListClusters(ctx)
+		if err != nil && !strings.Contains(err.Error(), "404") {
+			appendError(errors.Wrap(err, "failed to list clusters"))
+			return
 		}
-	}
-	hostList, err := resmgrClient.ListHosts(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to list hosts")
-	}
-	for _, host := range hostList {
-		err := CreatePCDHostFromResmgrHost(ctx, k8sClient, host, &openstackCreds)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				updateErr := UpdatePCDHostFromResmgrHost(ctx, k8sClient, host, &openstackCreds)
-				if updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update PCD host")
+
+		var clusterWg sync.WaitGroup
+		for _, cluster := range clusterList {
+			clusterWg.Add(1)
+			// Create a new variable for the closure to avoid capturing the loop variable.
+			currentCluster := cluster
+			go func() {
+				defer clusterWg.Done()
+				err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, currentCluster, &openstackCreds)
+				if err != nil {
+					if apierrors.IsAlreadyExists(err) {
+						updateErr := UpdatePCDClusterFromResmgrCluster(ctx, k8sClient, currentCluster, &openstackCreds)
+						// We wrap the error to provide more context.
+						appendError(errors.Wrapf(updateErr, "failed to update PCD cluster %s", currentCluster.Name))
+					} else {
+						appendError(errors.Wrapf(err, "failed to create PCD cluster %s", currentCluster.Name))
+					}
 				}
-				continue
-			}
-			return errors.Wrap(err, "failed to create PCD host")
+			}()
 		}
+		clusterWg.Wait()
+	}()
+
+	// Goroutine to process hosts
+	go func() {
+		defer wg.Done()
+		hostList, err := resmgrClient.ListHosts(ctx)
+		if err != nil {
+			appendError(errors.Wrap(err, "failed to list hosts"))
+			return
+		}
+		var hostWg sync.WaitGroup
+		for _, host := range hostList {
+			hostWg.Add(1)
+			// Create a new variable for the closure.
+			currentHost := host
+			go func() {
+				defer hostWg.Done()
+				err := CreatePCDHostFromResmgrHost(ctx, k8sClient, currentHost, &openstackCreds)
+				if err != nil {
+					if apierrors.IsAlreadyExists(err) {
+						updateErr := UpdatePCDHostFromResmgrHost(ctx, k8sClient, currentHost, &openstackCreds)
+						appendError(errors.Wrapf(updateErr, "failed to update PCD host %s", currentHost.ID))
+					} else {
+						appendError(errors.Wrapf(err, "failed to create PCD host %s", currentHost.ID))
+					}
+				}
+			}()
+		}
+		hostWg.Wait()
+	}()
+
+	// Wait for cluster and host processing to complete.
+	wg.Wait()
+
+	// STEP 2: Concurrently delete stale hosts and clusters
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		appendError(DeleteStalePCDHosts(ctx, k8sClient, openstackCreds))
+	}()
+
+	go func() {
+		defer wg.Done()
+		appendError(DeleteStalePCDClusters(ctx, k8sClient, openstackCreds))
+	}()
+
+	// Wait for stale resource deletion to complete.
+	wg.Wait()
+
+	if len(allErrors) > 0 {
+		var errStrings []string
+		for _, e := range allErrors {
+			ctxLog.Error(e, "An error occurred during concurrent PCD sync")
+			errStrings = append(errStrings, e.Error())
+		}
+		return fmt.Errorf("encountered %d error(s) during PCD sync: %s", len(errStrings), strings.Join(errStrings, "; "))
 	}
-	err = DeleteStalePCDHosts(ctx, k8sClient, openstackCreds)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete stale PCD hosts")
-	}
-	err = DeleteStalePCDClusters(ctx, k8sClient, openstackCreds)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete stale PCD clusters")
-	}
+
 	return nil
+
 }
 
 // CreatePCDHostFromResmgrHost creates a PCDHost from resmgr Host
@@ -284,6 +349,7 @@ func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.Open
 
 // DeleteStalePCDHosts removes PCDHost resources that no longer exist in the upstream resmgr
 func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+	ctxLog := log.FromContext(ctx)
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials")
@@ -304,23 +370,47 @@ func DeleteStalePCDHosts(ctx context.Context, k8sClient client.Client, openstack
 	if err != nil {
 		return errors.Wrap(err, "failed to filter PCD hosts")
 	}
+
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var allErrors []error
+
 	for _, host := range downstreamHostList {
 		if !containsString(upstreamHostNames, host.Spec.HostID) {
-			if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDHost{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      host.Name,
-					Namespace: constants.NamespaceMigrationSystem,
-				},
-			}); err != nil {
-				return errors.Wrap(err, "failed to delete stale PCD host")
-			}
+			wg.Add(1)
+			hostToDelete := host // Create a new variable for the closure
+			go func(hostToDelete vjailbreakv1alpha1.PCDHost) {
+				defer wg.Done()
+				if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDHost{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      hostToDelete.Name,
+						Namespace: constants.NamespaceMigrationSystem,
+					},
+				}); err != nil && !apierrors.IsNotFound(err) {
+					errMu.Lock()
+					allErrors = append(allErrors, errors.Wrapf(err, "failed to delete stale PCD host %s", hostToDelete.Name))
+					errMu.Unlock()
+				}
+			}(hostToDelete)
 		}
+	}
+
+	wg.Wait()
+
+	if len(allErrors) > 0 {
+		var errStrings []string
+		for _, e := range allErrors {
+			ctxLog.Error(e, "Failed to delete a stale PCD host")
+			errStrings = append(errStrings, e.Error())
+		}
+		return fmt.Errorf("failed to delete %d stale PCD hosts: %s", len(errStrings), strings.Join(errStrings, "; "))
 	}
 	return nil
 }
 
 // DeleteStalePCDClusters removes PCDCluster resources that no longer exist in the upstream resmgr
 func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openstackCreds vjailbreakv1alpha1.OpenstackCreds) error {
+	ctxLog := log.FromContext(ctx)
 	OpenStackCredentials, err := GetOpenstackCredsInfo(ctx, k8sClient, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack credentials")
@@ -345,17 +435,39 @@ func DeleteStalePCDClusters(ctx context.Context, k8sClient client.Client, openst
 	if err != nil {
 		return errors.Wrap(err, "failed to filter PCD clusters")
 	}
+
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var allErrors []error
+
 	for _, cluster := range downstreamClusterList {
 		if !containsString(upstreamClusterNames, cluster.Spec.ClusterName) {
-			if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cluster.Name,
-					Namespace: constants.NamespaceMigrationSystem,
-				},
-			}); err != nil && !apierrors.IsNotFound(err) {
-				return errors.Wrap(err, "failed to delete stale PCD cluster")
-			}
+			wg.Add(1)
+			clusterToDelete := cluster // Create a new variable for the closure
+			go func(clusterToDelete vjailbreakv1alpha1.PCDCluster) {
+				defer wg.Done()
+				if err := k8sClient.Delete(ctx, &vjailbreakv1alpha1.PCDCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterToDelete.Name,
+						Namespace: constants.NamespaceMigrationSystem,
+					},
+				}); err != nil && !apierrors.IsNotFound(err) {
+					errMu.Lock()
+					allErrors = append(allErrors, errors.Wrapf(err, "failed to delete stale PCD cluster %s", clusterToDelete.Name))
+					errMu.Unlock()
+				}
+			}(clusterToDelete)
 		}
+	}
+	wg.Wait()
+
+	if len(allErrors) > 0 {
+		var errStrings []string
+		for _, e := range allErrors {
+			ctxLog.Error(e, "Failed to delete a stale PCD cluster")
+			errStrings = append(errStrings, e.Error())
+		}
+		return fmt.Errorf("failed to delete %d stale PCD clusters: %s", len(errStrings), strings.Join(errStrings, "; "))
 	}
 	return nil
 }
