@@ -403,7 +403,7 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	utils.PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
@@ -430,6 +430,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	if len(network.Subnets) == 0 {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
+
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
 		NetworkID:      network.ID,
@@ -445,7 +446,12 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
-		// Static IP assignment failed, fall back to DHCP
+		// If static IP assignment fails, check the fallback flag
+		if !fallbackToDHCP {
+			// If fallback is disabled, return the error immediately
+			return nil, errors.Wrapf(err, "failed to create port with static IP %s, and fallback to DHCP is disabled", ip)
+		}
+		// If fallback is enabled, proceed with the DHCP attempt
 		utils.PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
 		dhcpPort, dhcpErr := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
 			Name:           "port-" + vmname,

@@ -41,7 +41,7 @@ type OpenstackOperations interface {
 	GetFlavor(flavorId string) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
 	GetPort(portID string) (*ports.Port, error)
-	CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error)
+	CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings utils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
 	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(volumeID string) error

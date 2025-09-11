@@ -431,6 +431,23 @@ export default function MigrationOptionsAlt({
                 </Typography>
               </Fields>
 
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Fallback to DHCP if IP can't be preserved"
+                  control={
+                    <Checkbox
+                      checked={params?.fallbackToDHCP || false}
+                      onChange={(e) => {
+                        onChange("fallbackToDHCP")(e.target.checked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  Migration will fail if the original IP cannot be reserved.  
+                </Typography>
+              </Fields>
+
             {isPCD && (
               <Fields sx={{ gridGap: "0" }}>
                 <FormControlLabel
