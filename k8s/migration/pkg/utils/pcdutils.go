@@ -74,7 +74,7 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 			clusterWg.Add(1)
 			// Create a new variable for the closure to avoid capturing the loop variable.
 			currentCluster := cluster
-			go func() {
+			go func(currentCluster resmgr.Cluster) {
 				defer clusterWg.Done()
 				err := CreatePCDClusterFromResmgrCluster(ctx, k8sClient, currentCluster, &openstackCreds)
 				if err != nil {
@@ -86,7 +86,7 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 						appendError(errors.Wrapf(err, "failed to create PCD cluster %s", currentCluster.Name))
 					}
 				}
-			}()
+			}(currentCluster)
 		}
 		clusterWg.Wait()
 	}()
@@ -104,7 +104,7 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 			hostWg.Add(1)
 			// Create a new variable for the closure.
 			currentHost := host
-			go func() {
+			go func(currentHost resmgr.Host) {
 				defer hostWg.Done()
 				err := CreatePCDHostFromResmgrHost(ctx, k8sClient, currentHost, &openstackCreds)
 				if err != nil {
@@ -115,7 +115,7 @@ func SyncPCDInfo(ctx context.Context, k8sClient client.Client, openstackCreds vj
 						appendError(errors.Wrapf(err, "failed to create PCD host %s", currentHost.ID))
 					}
 				}
-			}()
+			}(currentHost)
 		}
 		hostWg.Wait()
 	}()
