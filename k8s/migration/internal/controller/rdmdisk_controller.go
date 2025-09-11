@@ -196,6 +196,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			BlockStorageClient: openstackClient.BlockStorageClient,
 			ComputeClient:      openstackClient.ComputeClient,
 			NetworkingClient:   openstackClient.NetworkingClient,
+			K8sClient:          r.Client,
 		}
 		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, *rdmDisk, blockStorageAPIVersion)
 		if err != nil {
