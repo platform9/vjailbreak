@@ -783,11 +783,11 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			}
 			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
 		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
-			if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
+		if len(vmMachine.Spec.ExistingPortIDs) > 0 {
+			if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, vmMachine.Spec.ExistingPortIDs); err != nil {
 				return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
 			}
-			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
+			openstackports = vmMachine.Spec.ExistingPortIDs
 		}
 	}
 
@@ -816,6 +816,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"COPIED_VOLUME_IDS":          strings.Join(vmMachine.Spec.CopiedVolumeIDs, ","),
+				"CONVERTED_VOLUME_IDS":       strings.Join(vmMachine.Spec.ConvertedVolumeIDs, ","),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {

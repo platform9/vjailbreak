@@ -85,8 +85,11 @@ type VMwareMachineSpec struct {
 	// ExistingPortIDs is the list of ports to be used to create the target VM on openstack
 	ExistingPortIDs []string `json:"existingPortIds,omitempty"`
 
-	// ExistingVolumeIDs is the list of volumes to be used to create the target VM on openstack
-	ExistingVolumeIDs []string `json:"existingVolumeIds,omitempty"`
+	// CopiedVolumeIDs is the list of volumes to be used to create the target VM on openstack
+	CopiedVolumeIDs []string `json:"copiedVolumeIds,omitempty"`
+
+	// ConvertedVolumeIDs is the list of volumes to be used to create the target VM on openstack
+	ConvertedVolumeIDs []string `json:"convertedVolumeIds,omitempty"`
 }
 
 // VMwareMachineStatus defines the observed state of VMwareMachine
