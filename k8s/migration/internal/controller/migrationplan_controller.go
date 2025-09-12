@@ -465,6 +465,10 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
+	if len(vmMachine.Spec.CopiedVolumeIDs) != 0 && len(vmMachine.Spec.ConvertedVolumeIDs) != 0 {
+		return nil, errors.New(fmt.Sprintf("migration for vm %s cannot be created as both copiedVolumeIDs and convertedVolumeIDs are provided, please provide only one", vm))
+	}
+
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
