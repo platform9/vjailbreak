@@ -420,10 +420,17 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	for _, port := range portList {
 		if port.MACAddress == mac {
+			if len(port.FixedIPs) > 0 {
+				foundPortIP := port.FixedIPs[0].IPAddress
+				if ip != "" && foundPortIP != ip {
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
+				}
+			}
 			utils.PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
 			return &port, nil
 		}
 	}
+
 	utils.PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %s", mac, ip))
 
 	// Check if subnet is valid to avoid panic.
@@ -436,12 +443,15 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 		NetworkID:      network.ID,
 		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
-		FixedIPs: []ports.IP{
+	}
+
+	if ip != "" {
+		createOpts.FixedIPs = []ports.IP{
 			{
 				SubnetID:  network.Subnets[0],
 				IPAddress: ip,
 			},
-		},
+		}
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
