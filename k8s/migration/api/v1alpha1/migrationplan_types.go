@@ -72,6 +72,7 @@ type MigrationPlanSpec struct {
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
+	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan

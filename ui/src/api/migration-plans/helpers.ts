@@ -14,6 +14,7 @@ export const createMigrationPlanJson = (params) => {
     postMigrationAction,
     disconnectSourceNetwork = false,
     securityGroups,
+    fallbackToDHCP = false,
   } = params || {}
   
   const spec: any = {  
@@ -28,6 +29,7 @@ export const createMigrationPlanJson = (params) => {
       disconnectSourceNetwork,
     },
     virtualMachines: [virtualMachines],
+    fallbackToDHCP,
   }
 
  

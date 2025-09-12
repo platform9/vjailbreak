@@ -65,6 +65,7 @@ type Migrate struct {
 	UseFlavorless           bool
 	TenantName              string
 	Reporter                *reporter.Reporter
+	FallbackToDHCP          bool
 }
 
 type MigrationTimes struct {
@@ -1245,7 +1246,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if migobj.AssignedIP != "" {
 				ip = migobj.AssignedIP
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
