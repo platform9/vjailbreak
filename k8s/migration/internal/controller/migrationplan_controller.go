@@ -1334,32 +1334,31 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 
 				if err != nil {
 					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
-				} else {
-					// Validate that all ownerVMs are present in parallelVMs
-					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
-						if _, ok := vmMachines[ownerVM]; !ok {
-							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
-						}
-					}
-					// Update existing RDMDisk CR
-					err := ValidateRDMDiskFields(rdmDiskCR)
-					if err != nil {
-						return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
-					}
-					// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
-					// Another RDM disk controller will handle the rest of the migration,
-					// Will ensure that RDM disk is managed and imported to Cinder
-					if !rdmDiskCR.Spec.ImportToCinder {
-						rdmDiskCR.Spec.ImportToCinder = true
-						rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
-						rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
-					}
-					allRDMDisks = append(allRDMDisks, rdmDiskCR)
 				}
+				// Validate that all ownerVMs are present in parallelVMs
+				for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+					if _, ok := vmMachines[ownerVM]; !ok {
+						log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+					}
+				}
+				// Update existing RDMDisk CR
+				err = ValidateRDMDiskFields(rdmDiskCR)
+				if err != nil {
+					return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
+				}
+				// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
+				// Another RDM disk controller will handle the rest of the migration,
+				// Will ensure that RDM disk is managed and imported to Cinder
+				if !rdmDiskCR.Spec.ImportToCinder {
+					rdmDiskCR.Spec.ImportToCinder = true
+					rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
+					rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
+				}
+				allRDMDisks = append(allRDMDisks, rdmDiskCR)
 			}
 		}
 	}
-
+	// Update all RDMDisk CRs that need to be updated
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
 		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged {
 			continue

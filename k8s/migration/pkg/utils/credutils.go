@@ -513,6 +513,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	c := new(vim25.Client)
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
+		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
