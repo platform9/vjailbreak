@@ -67,6 +67,7 @@ type Migrate struct {
 	UseFlavorless           bool
 	TenantName              string
 	Reporter                *reporter.Reporter
+	FallbackToDHCP          bool
 }
 
 type MigrationTimes struct {
@@ -350,6 +351,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
 			}
+			if err := migobj.WaitforCutover(); err != nil {
+				return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 			if err != nil {
@@ -417,12 +421,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				if err := migobj.WaitforCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
-				}
-				if err := migobj.WaitforAdminCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
-				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
 				err = vmops.VMPowerOff()
 				if err != nil {
@@ -1223,7 +1221,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if migobj.AssignedIP != "" {
 				ip = migobj.AssignedIP
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

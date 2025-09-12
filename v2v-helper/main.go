@@ -144,6 +144,7 @@ func main() {
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
+		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {
