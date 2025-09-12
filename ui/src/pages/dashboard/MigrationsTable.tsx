@@ -1,5 +1,5 @@
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } from "@mui/x-data-grid";
-import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
+import { Button, Typography, Box, IconButton, Tooltip, CircularProgress } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -243,12 +243,14 @@ export default function MigrationsTable({
                                     <IconButton
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (planName) retryPlan(planName);
+                                            if (planName && planName.trim() !== '') {
+                                                retryPlan(planName);
+                                            }
                                         }}
                                         disabled={isRetrying}
                                         size="small"
                                     >
-                                        <ReplayIcon />
+                                        {isRetrying ? <CircularProgress size={20} /> : <ReplayIcon />}
                                     </IconButton>
                                 </span>
                             </Tooltip>
