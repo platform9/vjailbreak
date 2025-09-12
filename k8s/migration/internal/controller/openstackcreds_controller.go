@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -220,16 +219,9 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Get max concurrent reconciles from vjailbreak settings configmap
-	ctx := context.TODO()
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
