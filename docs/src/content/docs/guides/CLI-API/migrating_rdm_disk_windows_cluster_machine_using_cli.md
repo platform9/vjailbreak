@@ -76,7 +76,14 @@ Edit the RDM disk to add `cinderBackendPool` and `volumeType`. Example:
 kubectl patch rdmdisk vml.020072000060002ac000000000000144002838a5656202020 -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
 ```
 
-### 5. Wait For Disk To Become Available
+### 5. Create MigrationPlan
+Finally, create a migration plan using the CLI.  
+Follow the detailed CLI steps here:  
+
+[Migrating Using CLI and Kubectl](https://platform9.github.io/vjailbreak/guides/cli-api/migrating_using_cli_and_kubectl/)  
+
+
+### 6. Wait For Disk To Become Available
 Confirm that the disk is in **Available** state:  
 
 ```bash
@@ -89,9 +96,3 @@ Look for:
 status:
   phase: Available
 ```
-
-### 6. Create MigrationPlan
-Finally, create a migration plan using the CLI.  
-Follow the detailed CLI steps here:  
-
-[Migrating Using CLI and Kubectl](https://platform9.github.io/vjailbreak/guides/cli-api/migrating_using_cli_and_kubectl/)  
