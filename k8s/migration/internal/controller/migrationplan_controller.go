@@ -33,6 +33,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -46,6 +47,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -1153,9 +1155,29 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// This client reads directly from the API server, bypassing the cache.
+	apiReader, err := client.New(mgr.GetConfig(), client.Options{
+		Scheme: mgr.GetScheme(),
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create non-cached client during setup")
+	}
+
+	// Use the direct API reader to fetch the settings ConfigMap.
+	ctx := context.Background()
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, apiReader)
+
+	if err != nil {
+		// If this fails, it's a critical setup error. The controller can't start.
+		return errors.Wrap(err, "failed to get vjailbreak settings using non-cached client")
+	}
+	ctxlog := log.FromContext(ctx).WithName("migrationplan-controller-setup")
+	ctxlog.Info("Setting up controller with manager", "maxConcurrentReconciles", vjailbreakSettings.MaxConcurrentReconciles)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

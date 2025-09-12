@@ -10,4 +10,5 @@ type VjailbreakSettings struct {
 	PopulateVMwareMachineFlavors        bool
 	VolumeAvailableWaitIntervalSeconds  int
 	VolumeAvailableWaitRetryLimit       int
+	MaxConcurrentReconciles             int
 }
