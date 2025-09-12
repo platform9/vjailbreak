@@ -237,7 +237,7 @@ export default function MigrationsTable({
                         )}
 
                         {showRetry && (
-                            <Tooltip title="Retry Migration Plan">
+                            <Tooltip title="Retry Migration">
                                 <span>
                                     <IconButton
                                         onClick={(e) => {

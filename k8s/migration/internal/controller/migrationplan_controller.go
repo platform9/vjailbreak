@@ -377,6 +377,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	allMigrationsSucceeded := true
+	anyMigrationFailed := false
+
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
 		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, parallelvms)
@@ -391,28 +394,26 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			migration := &migrationobjs.Items[i]
 			switch migrationobjs.Items[i].Status.Phase {
 			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migration.Spec.VMName))
+				anyMigrationFailed = true
+				allMigrationsSucceeded = false
 				if migration.Spec.Retry {
 					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migration.Spec.VMName))
 
 					if err := r.Delete(ctx, migration); err != nil {
 						return ctrl.Result{}, errors.Wrap(err, "failed to delete failed migration for retry")
 					}
-
+					if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, fmt.Sprintf("Retrying migration for VM '%s'", migration.Spec.VMName)); err != nil {
+						return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status for retry")
+					}
 					if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, fmt.Sprintf("Retrying migration for VM '%s'", migration.Spec.VMName)); err != nil {
 						return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status for retry")
 					}
 					return ctrl.Result{Requeue: true}, nil
 				}
-
-				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration for VM '%s' failed", migration.Spec.VMName)); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-				}
-				return ctrl.Result{}, nil
 			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
+				err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
 				if err != nil {
-					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
+					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migration.Spec.VMName))
 					return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
 				}
 				continue
@@ -422,14 +423,24 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			}
 		}
 	}
-	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
-	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
-	err := r.Status().Update(ctx, migrationplan)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
+
+	if anyMigrationFailed {
+		r.ctxlog.Info(fmt.Sprintf("One or more migrations in MigrationPlan '%s' failed", migrationplan.Name))
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "One or more migrations failed. Ready for manual retry."); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
-	return ctrl.Result{}, nil
+	if allMigrationsSucceeded {
+		r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodSucceeded, "All migrations completed successfully."); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	r.ctxlog.Info(fmt.Sprintf("Waiting for migrations in MigrationPlan '%s' to complete", migrationplan.Name))
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
