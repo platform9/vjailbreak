@@ -2,17 +2,20 @@ import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } fro
 import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
 import MigrationProgress from "./MigrationProgress";
-import { QueryObserverResult } from "@tanstack/react-query";
+import { QueryObserverResult, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
 import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover } from "src/api/migrations/migrations";
+import { triggerAdminCutover, retryMigrationPlan } from "src/api/migrations/migrations";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
+import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery";
+import { MIGRATION_PLANS_QUERY_KEY } from "src/hooks/api/useMigrationPlansQuery";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
 const STATUS_ORDER = {
@@ -55,113 +58,6 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
 
     return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`;
 }
-
-const columns: GridColDef[] = [
-    {
-        field: "name",
-        headerName: "Name",
-        valueGetter: (_, row) => row.spec?.vmName,
-        flex: 0.7,
-    },
-    {
-        field: "status",
-        headerName: "Status",
-        valueGetter: (_, row) => row?.status?.phase || "Pending",
-        flex: 0.5,
-        sortComparator: (v1, v2) => {
-            const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
-            const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
-            return order1 - order2;
-        }
-    },
-    {
-        field: "agent",
-        headerName: "Agent",
-        valueGetter: (_, row) => row.status?.agentName,
-        flex: 1,
-    },
-    {
-        field: "timeElapsed",
-        headerName: "Time Elapsed",
-        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
-        flex: 0.8,
-    },
-    {
-        field: "createdAt",
-        headerName: "Created At",
-        valueGetter: (_, row) => {
-            if (row.metadata?.creationTimestamp) {
-                return new Date(row.metadata.creationTimestamp).toLocaleString();
-            }
-            return '-';
-        },
-        flex: 1,
-    },
-    {
-        field: "status.conditions",
-        headerName: "Progress",
-        valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
-        flex: 2,
-        renderCell: (params) => {
-            const phase = params.row?.status?.phase
-            const conditions = params.row?.status?.conditions
-            return conditions ? (
-                <MigrationProgress
-                    phase={phase}
-                    progressText={getProgressText(phase, conditions)}
-                />
-            ) : null
-        },
-    },
-    {
-        field: "actions",
-        headerName: "Actions",
-        flex: 1,
-        renderCell: (params) => {
-            const phase = params.row?.status?.phase;
-            const initiateCutover = params.row?.spec?.initiateCutover;
-            const migrationName = params.row?.metadata?.name;
-            
-            // Show admin cutover button if:
-            // 1. initiateCutover is false (manual cutover)
-            // 2. Phase is AwaitingAdminCutOver
-
-            const showAdminCutover = initiateCutover && (phase === Phase.AwaitingAdminCutOver);
-
-            return (
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    {showAdminCutover && (
-                        <TriggerAdminCutoverButton
-                            migrationName={migrationName}
-                            onSuccess={() => {
-                                params.row.refetchMigrations?.();
-                            }}
-                            onError={(error) => {
-                                console.error("Failed to trigger cutover:", error);
-                            }}
-                        />
-                    )}
-                    
-                    <Tooltip title={"Delete migration"}>
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                params.row.onDelete(params.row.metadata?.name);
-                            }}
-                            size="small"
-                            sx={{
-                                cursor: 'pointer',
-                                position: 'relative'
-                            }}
-                        >
-                            <DeleteIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            );
-        },
-    },
-]
 
 interface CustomToolbarProps {
     numSelected: number;
@@ -240,6 +136,144 @@ export default function MigrationsTable({
     const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false);
     const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false);
     const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const { mutate: retryPlan, isPending: isRetrying } = useMutation({
+        mutationFn: (planName: string) => retryMigrationPlan(planName, "migration-system"),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: MIGRATION_PLANS_QUERY_KEY });
+        },
+        onError: (error) => {
+            console.error("Failed to retry migration plan:", error);
+        },
+    });
+
+    const columns: GridColDef[] = [
+        {
+            field: "name",
+            headerName: "Name",
+            valueGetter: (_, row) => row.spec?.vmName,
+            flex: 0.7,
+        },
+        {
+            field: "status",
+            headerName: "Status",
+            valueGetter: (_, row) => row?.status?.phase || "Pending",
+            flex: 0.5,
+            sortComparator: (v1, v2) => {
+                const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER;
+                const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER;
+                return order1 - order2;
+            }
+        },
+        {
+            field: "agent",
+            headerName: "Agent",
+            valueGetter: (_, row) => row.status?.agentName,
+            flex: 1,
+        },
+        {
+            field: "timeElapsed",
+            headerName: "Time Elapsed",
+            valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
+            flex: 0.8,
+        },
+        {
+            field: "createdAt",
+            headerName: "Created At",
+            valueGetter: (_, row) => {
+                if (row.metadata?.creationTimestamp) {
+                    return new Date(row.metadata.creationTimestamp).toLocaleString();
+                }
+                return '-';
+            },
+            flex: 1,
+        },
+        {
+            field: "status.conditions",
+            headerName: "Progress",
+            valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+            flex: 2,
+            renderCell: (params) => {
+                const phase = params.row?.status?.phase
+                const conditions = params.row?.status?.conditions
+                return conditions ? (
+                    <MigrationProgress
+                        phase={phase}
+                        progressText={getProgressText(phase, conditions)}
+                    />
+                ) : null
+            },
+        },
+        {
+            field: "actions",
+            headerName: "Actions",
+            flex: 1,
+            renderCell: (params) => {
+                const phase = params.row?.status?.phase;
+                const initiateCutover = params.row?.spec?.initiateCutover;
+                const migrationName = params.row?.metadata?.name;
+                const planName = params.row?.metadata?.labels?.migrationplan;
+                
+                // Show admin cutover button if:
+                // 1. initiateCutover is false (manual cutover)
+                // 2. Phase is AwaitingAdminCutOver
+    
+                const showAdminCutover = initiateCutover && (phase === Phase.AwaitingAdminCutOver);
+                const showRetry = phase === Phase.Failed && planName;
+    
+                return (
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        {showAdminCutover && (
+                            <TriggerAdminCutoverButton
+                                migrationName={migrationName}
+                                onSuccess={() => {
+                                    params.row.refetchMigrations?.();
+                                }}
+                                onError={(error) => {
+                                    console.error("Failed to trigger cutover:", error);
+                                }}
+                            />
+                        )}
+
+                        {showRetry && (
+                            <Tooltip title="Retry Migration Plan">
+                                <span>
+                                    <IconButton
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (planName) retryPlan(planName);
+                                        }}
+                                        disabled={isRetrying}
+                                        size="small"
+                                    >
+                                        <ReplayIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        )}
+                        
+                        <Tooltip title={"Delete migration"}>
+                            <IconButton
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    params.row.onDelete(params.row.metadata?.name);
+                                }}
+                                size="small"
+                                sx={{
+                                    cursor: 'pointer',
+                                    position: 'relative'
+                                }}
+                            >
+                                <DeleteIcon />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
+                );
+            },
+        },
+    ]
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);

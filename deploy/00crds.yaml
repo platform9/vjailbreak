@@ -460,6 +460,8 @@ spec:
                       type: string
                     type: array
                 type: object
+              fallbackToDHCP:
+                type: boolean
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -3666,7 +3668,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.3.3
+        image: quay.io/platform9/vjailbreak-controller:v0.3.4
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3746,7 +3748,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.3
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.4
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
