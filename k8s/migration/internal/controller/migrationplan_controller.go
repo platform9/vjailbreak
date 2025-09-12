@@ -33,6 +33,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -46,6 +47,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -1152,9 +1154,15 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.TODO()
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
