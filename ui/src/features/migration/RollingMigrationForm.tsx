@@ -1,6 +1,7 @@
 import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel, Snackbar } from "@mui/material"
 import ClusterIcon from "@mui/icons-material/Hub"
 import React, { useState, useMemo, useEffect, useCallback } from "react"
+import { getTypographyStyles } from "../../theme/typography-utils"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
 import Footer from "../../components/forms/Footer"
@@ -2533,12 +2534,12 @@ export default function RollingMigrationFormDrawer({
                                     />
                                 </Paper>
                                 {vmIpValidationError && (
-                                    <Alert severity="warning" >
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
                                         {vmIpValidationError}
                                     </Alert>
                                 )}
                                 {osValidationError && (
-                                    <Alert severity="warning" >
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
                                         {osValidationError}
                                     </Alert>
                                 )}
@@ -2976,7 +2977,8 @@ export default function RollingMigrationFormDrawer({
                                                     sx={{
                                                         width: '200px',
                                                         '& .MuiInputBase-input': {
-                                                            fontFamily: 'monospace'
+                                                            // Use monospace variant for IP input fields (larger, more readable)
+                                                            ...getTypographyStyles.monospace,
                                                         }
                                                     }}
                                                     error={validationStatus === 'invalid'}
