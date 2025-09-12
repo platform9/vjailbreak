@@ -69,6 +69,9 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
+              retry:
+                description: Retry is the flag to trigger a retry for a failed migration.
+                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack

@@ -76,6 +76,9 @@ type MigrationSpec struct {
 	// after a successful migration to prevent network conflicts. Defaults to false.
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+
+	// Retry is the flag to trigger a retry for a failed migration.
+	Retry bool `json:"retry,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration

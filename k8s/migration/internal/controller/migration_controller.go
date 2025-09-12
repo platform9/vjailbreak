@@ -81,6 +81,15 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if migration.Spec.Retry && migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+		ctxlog.Info("Retry requested for failed migration. Deleting Migration object.", "MigrationName", migration.Name)
+		if err := r.Delete(ctx, migration); err != nil {
+			ctxlog.Error(err, "Failed to delete Migration object for retry")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,

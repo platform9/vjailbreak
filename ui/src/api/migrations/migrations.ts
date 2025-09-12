@@ -119,3 +119,26 @@ export const triggerAdminCutover = async (
     };
   }
 };
+
+export const retryMigration = async (
+  migrationName: string,
+  namespace: string = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<Migration> => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrations/${migrationName}`;
+  const patchPayload = {
+    spec: {
+      retry: true,
+    },
+  };
+
+  const response = await axios.patch<Migration>({
+    endpoint,
+    data: patchPayload,
+    config: {
+      headers: {
+        "Content-Type": "application/merge-patch+json",
+      },
+    },
+  });
+  return response;
+};

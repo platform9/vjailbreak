@@ -63,6 +63,7 @@ export interface Spec {
   migrationPlan: MigrationPlan
   podRef: PodRef
   vmName: VMName
+  retry?: boolean
 }
 
 export enum MigrationPlan {
