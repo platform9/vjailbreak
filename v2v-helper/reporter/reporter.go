@@ -241,7 +241,7 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 				return
 			default:
 				fmt.Printf("Info: Starting watch for pod %s in namespace %s\n", r.PodName, r.PodNamespace)
-				timeoutSeconds := int64(172800)
+				timeoutSeconds := int64(300)
 				watch, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
 					FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
 					TimeoutSeconds: &timeoutSeconds,
