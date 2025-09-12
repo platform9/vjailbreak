@@ -133,4 +133,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
+
+	// MaxConcurrentReconciles is the default value for max concurrent reconciles for controllers
+	MaxConcurrentReconciles = 5
 )

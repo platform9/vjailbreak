@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -228,6 +230,26 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// This client reads directly from the API server, bypassing the cache.
+	apiReader, err := client.New(mgr.GetConfig(), client.Options{
+		Scheme: mgr.GetScheme(),
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create non-cached client during setup")
+	}
+
+	// Use the direct API reader to fetch the settings ConfigMap.
+	ctx := context.Background()
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, apiReader)
+
+	if err != nil {
+		// If this fails, it's a critical setup error. The controller can't start.
+		return errors.Wrap(err, "failed to get vjailbreak settings using non-cached client")
+	}
+
+	ctxlog := log.FromContext(ctx).WithName("migration-controller-setup")
+	ctxlog.Info("Setting up controller with manager", "maxConcurrentReconciles", vjailbreakSettings.MaxConcurrentReconciles)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.Migration{}).
 		Owns(&corev1.Pod{}, builder.WithPredicates(
@@ -251,6 +273,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		)).
+		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

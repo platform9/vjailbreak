@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	controller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -219,9 +220,31 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	// This client reads directly from the API server, bypassing the cache.
+	apiReader, err := client.New(mgr.GetConfig(), client.Options{
+		Scheme: mgr.GetScheme(),
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create non-cached client during setup")
+	}
+
+	// Use the direct API reader to fetch the settings ConfigMap.
+	ctx := context.Background()
+	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, apiReader)
+
+	if err != nil {
+		// If this fails, it's a critical setup error. The controller can't start.
+		return errors.Wrap(err, "failed to get vjailbreak settings using non-cached client")
+	}
+
+	ctxlog := log.FromContext(ctx).WithName("openstackcreds-controller-setup")
+	ctxlog.Info("Setting up controller with manager", "maxConcurrentReconciles", vjailbreakSettings.MaxConcurrentReconciles)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

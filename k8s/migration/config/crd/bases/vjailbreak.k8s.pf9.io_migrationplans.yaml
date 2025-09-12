@@ -70,6 +70,8 @@ spec:
                       type: string
                     type: array
                 type: object
+              fallbackToDHCP:
+                type: boolean
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
