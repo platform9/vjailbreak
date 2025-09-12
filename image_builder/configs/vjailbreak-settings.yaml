@@ -11,4 +11,3 @@ data:
   VCENTER_SCAN_CONCURRENCY_LIMIT: "10" # max number of vms to scan at the same time
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false" # cleanup volumes after disk convert failure
   POPULATE_VMWARE_MACHINE_FLAVORS: "true" # automatically populate VMwareMachine objects with OpenStack flavors
-  MAX_CONCURRENT_RECONCILES: "5" # max number of concurrent reconciles for controllers

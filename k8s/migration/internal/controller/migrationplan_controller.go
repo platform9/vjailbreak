@@ -62,8 +62,9 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	ctxlog logr.Logger
+	Scheme                  *runtime.Scheme
+	ctxlog                  logr.Logger
+	MaxConcurrentReconciles int
 }
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
@@ -1154,15 +1155,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ctx := context.TODO()
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -97,6 +98,17 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
+	maxConcurrentReconcilesStr := os.Getenv("MAX_CONCURRENT_RECONCILES")
+	if maxConcurrentReconcilesStr == "" {
+		maxConcurrentReconcilesStr = "1" // Default to 1 if not set
+	}
+
+	maxConcurrentReconciles, err := strconv.Atoi(maxConcurrentReconcilesStr)
+	if err != nil {
+		setupLog.Error(err, "unable to parse MAX_CONCURRENT_RECONCILES environment variable")
+		os.Exit(1)
+	}
+
 	// create manager
 	mgr, err := GetManager(metricsAddr, secureMetrics, tlsOpts, webhookServer, probeAddr, enableLeaderElection)
 	if err != nil {
@@ -104,7 +116,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = SetupControllers(mgr, local); err != nil {
+	if err = SetupControllers(mgr, local, maxConcurrentReconciles); err != nil {
 		setupLog.Error(err, "unable to set up controllers")
 		os.Exit(1)
 	}
@@ -203,18 +215,20 @@ func GetManager(metricsAddr string,
 }
 
 // SetupControllers initializes and sets up all controllers with the manager
-func SetupControllers(mgr ctrl.Manager, local bool) error {
+func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int) error {
 	if err := (&controller.MigrationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Migration")
 		return err
 	}
 	if err := (&controller.OpenstackCredsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Local:  local,
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		Local:                   local,
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenstackCreds")
 		return err
@@ -245,8 +259,9 @@ func SetupControllers(mgr ctrl.Manager, local bool) error {
 		return err
 	}
 	if err := (&controller.MigrationPlanReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
 		return err

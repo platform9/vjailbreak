@@ -25,7 +25,6 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
-	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -50,7 +49,8 @@ import (
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
@@ -230,12 +230,6 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Get max concurrent reconciles from vjailbreak settings configmap
-	ctx := context.TODO()
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.Migration{}).
 		Owns(&corev1.Pod{}, builder.WithPredicates(
@@ -259,7 +253,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		)).
-		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

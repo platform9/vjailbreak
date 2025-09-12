@@ -172,10 +172,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
 	}
 
-	if vjailbreakSettingsCM.Data["MAX_CONCURRENT_RECONCILES"] == "" {
-		vjailbreakSettingsCM.Data["MAX_CONCURRENT_RECONCILES"] = strconv.Itoa(constants.MaxConcurrentReconciles)
-	}
-
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
@@ -186,6 +182,5 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
 		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
-		MaxConcurrentReconciles:             atoi(vjailbreakSettingsCM.Data["MAX_CONCURRENT_RECONCILES"]),
 	}, nil
 }

@@ -42,8 +42,9 @@ import (
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
 type OpenstackCredsReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Local  bool
+	Scheme                  *runtime.Scheme
+	Local                   bool
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
@@ -221,15 +222,10 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Get max concurrent reconciles from vjailbreak settings configmap
-	ctx := context.TODO()
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: vjailbreakSettings.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
