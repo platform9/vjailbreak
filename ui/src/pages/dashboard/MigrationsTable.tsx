@@ -12,7 +12,7 @@ import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
 import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover, retryMigrationPlan } from "src/api/migrations/migrations";
+import { triggerAdminCutover, retryMigration } from "src/api/migrations/migrations";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery";
 import { MIGRATION_PLANS_QUERY_KEY } from "src/hooks/api/useMigrationPlansQuery";
@@ -138,14 +138,14 @@ export default function MigrationsTable({
     const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null);
     const queryClient = useQueryClient();
 
-    const { mutate: retryPlan, isPending: isRetrying } = useMutation({
-        mutationFn: (planName: string) => retryMigrationPlan(planName, "migration-system"),
+    const { mutate: retryVM, isPending: isRetrying } = useMutation({
+        mutationFn: (migrationName: string) => retryMigration(migrationName, "migration-system"),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY });
             queryClient.invalidateQueries({ queryKey: MIGRATION_PLANS_QUERY_KEY });
         },
         onError: (error) => {
-            console.error("Failed to retry migration plan:", error);
+            console.error("Failed to retry migration:", error);
         },
     });
 
@@ -214,14 +214,13 @@ export default function MigrationsTable({
                 const phase = params.row?.status?.phase;
                 const initiateCutover = params.row?.spec?.initiateCutover;
                 const migrationName = params.row?.metadata?.name;
-                const planName = params.row?.metadata?.labels?.migrationplan;
                 
                 // Show admin cutover button if:
                 // 1. initiateCutover is false (manual cutover)
                 // 2. Phase is AwaitingAdminCutOver
     
                 const showAdminCutover = initiateCutover && (phase === Phase.AwaitingAdminCutOver);
-                const showRetry = phase === Phase.Failed && planName;
+                const showRetry = phase === Phase.Failed && migrationName;
     
                 return (
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -243,8 +242,8 @@ export default function MigrationsTable({
                                     <IconButton
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (planName && planName.trim() !== '') {
-                                                retryPlan(planName);
+                                            if (migrationName && migrationName.trim() !== '') {
+                                                retryVM(migrationName);
                                             }
                                         }}
                                         disabled={isRetrying}

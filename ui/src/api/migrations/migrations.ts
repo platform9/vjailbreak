@@ -4,7 +4,6 @@ import {
   VJAILBREAK_DEFAULT_NAMESPACE,
 } from "../constants"
 import { GetMigrationsList, Migration } from "./model"
-import { MigrationPlan } from "../migration-plans/model"
 
 export const getMigrations = async (
   migrationPlanName = "",
@@ -45,17 +44,17 @@ export const deleteMigration = async (
   return response
 }
 
-export const retryMigrationPlan = async (
-  planName: string,
+export const retryMigration = async (
+  migrationName: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
-): Promise<MigrationPlan> => {
-  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
+): Promise<Migration> => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrations/${migrationName}`;
   const payload = {
     spec: {
       retry: true,
     },
   }
-  const response = await axios.patch<MigrationPlan>({
+  const response = await axios.patch<Migration>({
     endpoint,
     data: payload,
     config: {

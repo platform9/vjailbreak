@@ -76,6 +76,10 @@ type MigrationSpec struct {
 	// after a successful migration to prevent network conflicts. Defaults to false.
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+
+	// Retry the migration if it fails for this specific VM.
+	// +optional
+	Retry bool `json:"retry,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
