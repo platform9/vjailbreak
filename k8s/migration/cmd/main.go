@@ -104,6 +104,7 @@ func main() {
 	}
 
 	maxConcurrentReconciles, err := strconv.Atoi(maxConcurrentReconcilesStr)
+	setupLog.Info("max concurrent reconciles", "value", maxConcurrentReconciles)
 	if err != nil {
 		setupLog.Error(err, "unable to parse MAX_CONCURRENT_RECONCILES environment variable")
 		os.Exit(1)
