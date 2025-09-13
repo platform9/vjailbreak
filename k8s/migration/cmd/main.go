@@ -100,7 +100,7 @@ func main() {
 
 	maxConcurrentReconcilesStr := os.Getenv("MAX_CONCURRENT_RECONCILES")
 	if maxConcurrentReconcilesStr == "" {
-		maxConcurrentReconcilesStr = "1" // Default to 1 if not set
+		maxConcurrentReconcilesStr = "5" // Default to 5 if not set
 	}
 
 	maxConcurrentReconciles, err := strconv.Atoi(maxConcurrentReconcilesStr)
