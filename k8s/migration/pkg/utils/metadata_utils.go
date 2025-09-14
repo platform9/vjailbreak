@@ -39,7 +39,6 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
 		// If cached, return it immediately.
-		log.Printf("[DEBUG] Returning cached instance metadata: %+v", cachedMetadata)
 		defer metadataMutex.RUnlock()
 		return cachedMetadata, nil
 	}
@@ -93,7 +92,6 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 	if metadata.UUID == "" {
 		return nil, errors.New("instance UUID not found in metadata")
 	}
-	log.Printf("[DEBUG] Fetched instance metadata: %+v", metadata)
 	cachedMetadata = &metadata
 	// Step 5: Return the fetched metadata
 
