@@ -31,7 +31,6 @@ var (
 
 // GetCurrentInstanceMetadata retrieves metadata about the current instance from the OpenStack metadata service
 func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
-
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This readlocky allows multiple
 	// Goroutines to read the cached data concurrently.

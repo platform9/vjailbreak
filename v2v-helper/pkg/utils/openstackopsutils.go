@@ -55,7 +55,7 @@ var (
 func GetCurrentInstanceUUID() (string, error) {
 
 	// Step 1. Path with a read lock
-	// First Check if the data is already cached. This readlocky allows multiple
+	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
 
 	metadataMutex.RLock()
