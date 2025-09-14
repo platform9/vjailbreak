@@ -351,6 +351,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
 			}
+			if err := migobj.WaitforCutover(); err != nil {
+				return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 			if err != nil {
