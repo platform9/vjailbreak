@@ -2614,7 +2614,7 @@ export default function RollingMigrationFormDrawer({
                                             <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
                                         </ConfigField>
                                         <ConfigField>
-                                            <FieldLabel>MAAS URL:</FieldLabel>
+                                            <FieldLabel>Bare Metal Provider URL:</FieldLabel>
                                             <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
                                         </ConfigField>
                                         <ConfigField>

@@ -294,7 +294,7 @@ runcmd:
         if (urlError) {
             setNotification({
                 open: true,
-                message: 'Please fix the MAAS URL format',
+                message: 'Please fix the Bare Metal Provider URL format',
                 severity: 'error'
             });
             return;
@@ -396,10 +396,10 @@ runcmd:
                 <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid' }}>
                     <Section sx={{ mb: 2 }}>
                         <Grid container columnSpacing={4} rowSpacing={2}>
-                            {/* First row - MAAS URL and Insecure*/}
+                            {/* First row - Bare Metal Provider URL and Insecure*/}
                             <Grid item xs={12} md={6}>
                                 <FormField>
-                                    <Typography variant="subtitle2" gutterBottom>MAAS URL</Typography>
+                                    <Typography variant="subtitle2" gutterBottom>Bare Metal Provider URL</Typography>
                                     <TextField
                                         fullWidth
                                         name="maasUrl"
