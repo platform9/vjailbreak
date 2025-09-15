@@ -190,7 +190,7 @@ runcmd:
                 }
             }
         } catch (error) {
-            console.error('Error fetching existing MaasConfig:', error);
+            console.error('Error fetching existing Bare Metal Config:', error);
         } finally {
             setInitialLoading(false);
 
@@ -347,7 +347,7 @@ runcmd:
 
             setNotification({
                 open: true,
-                message: 'MaasConfig saved successfully',
+                message: 'Bare Metal Config saved successfully',
                 severity: 'success'
             });
         } catch (error) {
@@ -364,7 +364,7 @@ runcmd:
             });
             setNotification({
                 open: true,
-                message: 'Failed to save MaasConfig',
+                message: 'Failed to save Bare Metal Config',
                 severity: 'error'
             });
         } finally {
