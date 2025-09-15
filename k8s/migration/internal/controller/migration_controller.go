@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,7 +49,8 @@ import (
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
@@ -262,6 +264,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		)).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

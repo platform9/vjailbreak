@@ -3635,6 +3635,9 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
+        env:
+        - name: MAX_CONCURRENT_RECONCILES
+          value: "5"
         image: quay.io/platform9/vjailbreak-controller:v0.3.4
         imagePullPolicy: IfNotPresent
         lifecycle:

@@ -264,7 +264,7 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					if cutover, ok := pod.Labels["startCutover"]; ok {
 						if cutover != originalStartCutover {
 							fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
-							ch <- cutover // Blocks briefly if needed, but ensures delivery
+							ch <- cutover
 							fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
 							originalStartCutover = cutover
 						}
