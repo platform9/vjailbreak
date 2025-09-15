@@ -141,6 +141,9 @@ const (
 	// CredsRequeueAfter is the time to requeue after
 	CredsRequeueAfter = 1 * time.Minute
 
+	// OpenstackCredsRequeueAfter is the time to requeue after.
+	OpenstackCredsRequeueAfter = 60 * time.Minute
+
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
 

@@ -264,8 +264,12 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					if cutover, ok := pod.Labels["startCutover"]; ok {
 						if cutover != originalStartCutover {
 							fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
-							ch <- cutover // Blocks briefly if needed, but ensures delivery
-							fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+							select {
+							case ch <- cutover:
+								fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+							default:
+								fmt.Printf("Error: Channel blocked when sending label %s for pod %s\n", cutover, r.PodName)
+							}
 							originalStartCutover = cutover
 						}
 					}

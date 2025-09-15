@@ -48,6 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -63,8 +64,9 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	ctxlog logr.Logger
+	Scheme                  *runtime.Scheme
+	ctxlog                  logr.Logger
+	MaxConcurrentReconciles int
 }
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
@@ -1193,6 +1195,7 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
