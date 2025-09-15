@@ -50,7 +50,7 @@ import (
 type MigrationReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
-	MaxConcurrentReconciles int
+	MaxConcurrentReconciles uint64
 }
 
 const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
@@ -253,7 +253,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		)).
-		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
 		Complete(r)
 }
 

@@ -100,15 +100,16 @@ func main() {
 
 	maxConcurrentReconcilesStr := os.Getenv("MAX_CONCURRENT_RECONCILES")
 	if maxConcurrentReconcilesStr == "" {
+		setupLog.Info("MAX_CONCURRENT_RECONCILES environment variable not set, defaulting to 5")
 		maxConcurrentReconcilesStr = "5" // Default to 5 if not set
 	}
 
-	maxConcurrentReconciles, err := strconv.Atoi(maxConcurrentReconcilesStr)
-	setupLog.Info("max concurrent reconciles", "value", maxConcurrentReconciles)
+	maxConcurrentReconciles, err := strconv.ParseUint(maxConcurrentReconcilesStr, 10, 64)
 	if err != nil {
 		setupLog.Error(err, "unable to parse MAX_CONCURRENT_RECONCILES environment variable")
 		os.Exit(1)
 	}
+	setupLog.Info("max concurrent reconciles", "value", maxConcurrentReconciles)
 
 	// create manager
 	mgr, err := GetManager(metricsAddr, secureMetrics, tlsOpts, webhookServer, probeAddr, enableLeaderElection)
@@ -216,7 +217,7 @@ func GetManager(metricsAddr string,
 }
 
 // SetupControllers initializes and sets up all controllers with the manager
-func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int) error {
+func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles uint64) error {
 	if err := (&controller.MigrationReconciler{
 		Client:                  mgr.GetClient(),
 		Scheme:                  mgr.GetScheme(),
