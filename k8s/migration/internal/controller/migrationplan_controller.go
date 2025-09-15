@@ -429,63 +429,77 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
-		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
-		if err != nil {
-			if strings.Contains(err.Error(), "VDDK_MISSING") {
-				r.ctxlog.Info("Requeuing due to missing VDDK files.")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-			}
-			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
-		}
-		for i := 0; i < len(migrationobjs.Items); i++ {
-			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if migrationplan.Spec.Retry {
-					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					// Delete the migration so that it can be recreated
-					err := r.Delete(ctx, &migrationobjs.Items[i])
-					if err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "failed to delete migration")
-					}
-					migrationplan.Status.MigrationStatus = "Retrying"
-					migrationplan.Status.MigrationMessage = fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName)
-					migrationplan.Spec.Retry = false
-					err = r.Update(ctx, migrationplan)
-					if err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-					}
-					return ctrl.Result{}, nil
-				}
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-				}
-				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
-				if err != nil {
-					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
-				}
-				continue
-			default:
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
-				return ctrl.Result{}, nil
-			}
-		}
-	}
-	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
-	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
-	err = r.Status().Update(ctx, migrationplan)
+	// This function ensures child resources are created
+	err = r.TriggerMigration(ctx, migrationplan, &vjailbreakv1alpha1.MigrationList{}, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
+		if strings.Contains(err.Error(), "VDDK_MISSING") {
+			r.ctxlog.Info("Requeuing due to missing VDDK files.")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 	}
 
-	return ctrl.Result{}, nil
+	// get a fresh list of all child Migration objects.
+	allMigrations := &vjailbreakv1alpha1.MigrationList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(migrationplan.Namespace),
+		client.MatchingLabels{"migrationplan": migrationplan.Name},
+	}
+	if err := r.List(ctx, allMigrations, listOpts...); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to list migration objects for status check")
+	}
+
+	// check if a migration was deleted for retry. If so, requeue.
+	if len(allMigrations.Items) != len(vmMachinesArr) {
+		r.ctxlog.Info("A migration object may have been deleted for retry. Requeuing to allow for recreation.", "planVMs", len(vmMachinesArr), "foundMigrations", len(allMigrations.Items))
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	anyFailed := false
+	allSucceeded := true
+	var firstFailureMessage string
+
+	for _, migration := range allMigrations.Items {
+		if !migration.DeletionTimestamp.IsZero() {
+			allSucceeded = false
+			continue
+		}
+
+		switch migration.Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			if err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName); err != nil {
+				r.ctxlog.Error(err, "Post-migration action failed", "vm", migration.Spec.VMName)
+				anyFailed = true
+				if firstFailureMessage == "" {
+					firstFailureMessage = fmt.Sprintf("Post-migration for VM '%s' failed", migration.Spec.VMName)
+				}
+			}
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
+			anyFailed = true
+			if firstFailureMessage == "" {
+				firstFailureMessage = fmt.Sprintf("Migration for VM '%s' failed", migration.Spec.VMName)
+			}
+		default:
+			allSucceeded = false
+		}
+	}
+
+	if anyFailed {
+		allSucceeded = false
+		r.ctxlog.Info("One or more migrations have failed. Marking MigrationPlan as Failed.", "reason", firstFailureMessage)
+		return ctrl.Result{}, r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, firstFailureMessage)
+	}
+
+	if allSucceeded {
+		r.ctxlog.Info("All VMs in MigrationPlan have been successfully migrated")
+		return ctrl.Result{}, r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodSucceeded, "All migrations completed successfully")
+	}
+
+	r.ctxlog.Info("Migrations are still in progress. Requeuing for status update.")
+	if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress"); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
@@ -1320,11 +1334,11 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	for _, vmMachine := range vmMachines {
-		// Check if VM is powered off
-		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
-			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
-		}
 		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
+			// Check if VM is powered off
+			if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
+				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
+			}
 			for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {
 				// Get RDMDisk CR
 				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}

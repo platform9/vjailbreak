@@ -219,16 +219,17 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			ctxlog.Info("VMwareMachine not found during migration deletion, nothing to do.", "VMwareMachineName", vmwMachineName)
-			return nil
+		} else {
+			ctxlog.Error(err, "Failed to get VMwareMachine for cleanup")
 		}
-		return errors.Wrap(err, "failed to get VMwareMachine for cleanup")
+		return nil
 	}
 
 	if vmwMachine.Status.Migrated {
 		ctxlog.Info("Setting VMwareMachine status.migrated to false", "VMwareMachineName", vmwMachineName)
 		vmwMachine.Status.Migrated = false
 		if err := r.Status().Update(ctx, vmwMachine); err != nil {
-			return errors.Wrap(err, "failed to update VMwareMachine status")
+			ctxlog.Error(err, "Failed to update VMwareMachine status during cleanup")
 		}
 	}
 

@@ -163,7 +163,10 @@ const columns: GridColDef[] = [
                                     handleRetry();
                                 }}
                                 size="small"
-                                color="primary"
+                                sx={{
+                                cursor: 'pointer',
+                                position: 'relative'
+                            }}
                             >
                                 <ReplayIcon />
                             </IconButton>
