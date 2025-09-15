@@ -111,9 +111,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Handle deletion reconciliation
 	if !migration.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
-			if err := r.reconcileDelete(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
+			r.reconcileDelete(ctx, migration)
 
 			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
 			if err := r.Update(ctx, migration); err != nil {
@@ -195,26 +193,25 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // reconcileDelete handles the cleanup logic when Migration object is deleted.
-func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) error {
+func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
 
 	if migration.Spec.VMName == "" {
 		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
-		return nil
+		return
 	}
 
 	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get VMware credentials name for migration")
-		return nil
+		return
 	}
 
-	// Then use it to get the k8s compatible name
 	vmwMachineName, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
-		return nil
+		return
 	}
 
 	vmwMachine := &vjailbreakv1alpha1.VMwareMachine{}
@@ -225,7 +222,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 		} else {
 			ctxlog.Error(err, "Failed to get VMwareMachine for cleanup")
 		}
-		return nil
+		return
 	}
 
 	if vmwMachine.Status.Migrated {
@@ -235,8 +232,6 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 			ctxlog.Error(err, "Failed to update VMwareMachine status during cleanup")
 		}
 	}
-
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

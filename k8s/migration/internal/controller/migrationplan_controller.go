@@ -399,27 +399,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	// Migrate RDM disks if any
 	err = r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
 	if err != nil {
-		if err == verrors.ErrRDMDiskNotMigrated {
-			retries := migrationplan.Status.RetryCount
-			if retries <= 5 {
-				delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
-				r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
-				migrationplan.Status.RetryCount++
-				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, "RDM disk not migrated yet, requeuing MigrationPlan."); err != nil {
-					r.ctxlog.Error(err, "Failed to update MigrationPlan retry count")
-					return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
-				}
-				r.ctxlog.Info("RDM disk not migrated, requeuing MigrationPlan for retry. ", "Retry Count: ", retries)
-				return ctrl.Result{RequeueAfter: delay}, nil
-			}
-		}
-		r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
-		migrationplan.Status.MigrationStatus = corev1.PodFailed
-		migrationplan.Status.MigrationMessage = fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)
-		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
-		}
-		return ctrl.Result{}, err
+		return r.handleRDMError(ctx, migrationplan, err)
 	}
 
 	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
@@ -461,7 +441,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	allSucceeded := true
 	var firstFailureMessage string
 
-	for _, migration := range allMigrations.Items {
+	for i := range allMigrations.Items {
+		migration := allMigrations.Items[i]
 		if !migration.DeletionTimestamp.IsZero() {
 			allSucceeded = false
 			continue
@@ -475,6 +456,19 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				if firstFailureMessage == "" {
 					firstFailureMessage = fmt.Sprintf("Post-migration for VM '%s' failed", migration.Spec.VMName)
 				}
+
+				// update the individual migration's status
+				migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
+				migration.Status.Conditions = append(migration.Status.Conditions, corev1.PodCondition{
+					Type:               "PostMigrationFailed",
+					Status:             corev1.ConditionTrue,
+					Reason:             "PostMigrationActionError",
+					Message:            err.Error(),
+					LastTransitionTime: metav1.Now(),
+				})
+				if updateErr := r.Status().Update(ctx, &migration); updateErr != nil {
+					r.ctxlog.Error(updateErr, "Failed to update migration status after post-migration failure")
+				}
 			}
 		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 			anyFailed = true
@@ -487,7 +481,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	if anyFailed {
-		allSucceeded = false
 		r.ctxlog.Info("One or more migrations have failed. Marking MigrationPlan as Failed.", "reason", firstFailureMessage)
 		return ctrl.Result{}, r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, firstFailureMessage)
 	}
@@ -1399,4 +1392,27 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		}
 	}
 	return nil
+}
+
+// helper function for RDM error handling logic to reduce complexity in the main reconciler.
+func (r *MigrationPlanReconciler) handleRDMError(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, err error) (ctrl.Result, error) {
+	if err == verrors.ErrRDMDiskNotMigrated {
+		retries := migrationplan.Status.RetryCount
+		if retries <= 5 {
+			delay := 5 * time.Duration(math.Pow(2, float64(retries))) * time.Second
+			r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
+			migrationplan.Status.RetryCount++
+			if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, "RDM disk not migrated yet, requeuing MigrationPlan."); updateErr != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", updateErr)
+			}
+			return ctrl.Result{RequeueAfter: delay}, nil
+		}
+	}
+
+	r.ctxlog.Info("RDM disk not migrated, failing MigrationPlan.", "error", err.Error())
+	message := fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)
+	if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, message); updateErr != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", updateErr)
+	}
+	return ctrl.Result{}, err
 }
