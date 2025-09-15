@@ -44,7 +44,7 @@ type OpenstackCredsReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	Local                   bool
-	MaxConcurrentReconciles uint64
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
@@ -225,7 +225,7 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

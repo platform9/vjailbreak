@@ -66,7 +66,7 @@ type MigrationPlanReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	ctxlog                  logr.Logger
-	MaxConcurrentReconciles uint64
+	MaxConcurrentReconciles int
 }
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
@@ -1195,7 +1195,7 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
