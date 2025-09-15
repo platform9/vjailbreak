@@ -132,7 +132,7 @@ export default function MaasConfigDetailsModal({
             fullWidth
         >
             <DialogTitle>
-                Bare-metal Configuration Details
+                Bare Metal Configuration Details
             </DialogTitle>
             <DialogContent dividers>
                 {loading ? (

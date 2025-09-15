@@ -353,13 +353,13 @@ runcmd:
         } catch (error) {
             console.error('Error submitting form:', error);
             reportError(error as Error, {
-                context: 'maas-config-submission',
+                context: 'baremetal-config-submission',
                 metadata: {
                     configName: formData.configName,
                     maasUrl: formData.maasUrl,
                     os: formData.os,
                     namespace: formData.namespace,
-                    action: 'create-maas-config'
+                    action: 'create-baremetal-config'
                 }
             });
             setNotification({

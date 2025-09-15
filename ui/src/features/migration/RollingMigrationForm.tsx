@@ -384,11 +384,11 @@ export default function RollingMigrationFormDrawer({
                     const config = await getBMConfig(configs[0].metadata.name, VJAILBREAK_DEFAULT_NAMESPACE);
                     setSelectedMaasConfig(config);
                 } catch (error) {
-                    console.error(`Failed to fetch Bare-metal config:`, error);
+                    console.error(`Failed to fetch Bare Metal config:`, error);
                 }
             }
         } catch (error) {
-            console.error("Failed to fetch Bare-metal configs:", error);
+            console.error("Failed to fetch Bare Metal configs:", error);
         } finally {
             setLoadingMaasConfig(false);
         }
@@ -2398,12 +2398,12 @@ export default function RollingMigrationFormDrawer({
                             loadingPCD={loadingPCD}
                         />
                         <Box>
-                            <Step stepNumber="2" label="Bare-metal Config (Verify the configuration)" />
+                            <Step stepNumber="2" label="Bare Metal Config (Verify the configuration)" />
                             <Box sx={{ ml: 5, mt: 1 }}>
                                 {loadingMaasConfig ? (
-                                    <Typography variant="body2">Loading Bare-metal Config...</Typography>
+                                    <Typography variant="body2">Loading Bare Metal Config...</Typography>
                                 ) : maasConfigs.length === 0 ? (
-                                    <Typography variant="body2">No Bare-metal Config available</Typography>
+                                    <Typography variant="body2">No Bare Metal Config available</Typography>
                                 ) : (
                                     <Typography
                                         variant="subtitle2"
@@ -2416,7 +2416,7 @@ export default function RollingMigrationFormDrawer({
                                         }}
                                         onClick={handleViewMaasConfig}
                                     >
-                                        View Bare-metal Config Details
+                                        View Bare Metal Config Details
                                     </Typography>
                                 )}
                             </Box>
@@ -2594,10 +2594,10 @@ export default function RollingMigrationFormDrawer({
                 <MaasConfigDialog
                     open={maasConfigDialogOpen}
                     onClose={handleCloseMaasConfig}
-                    aria-labelledby="maas-config-dialog-title"
+                    aria-labelledby="baremetal-config-dialog-title"
                 >
-                    <DialogTitle id="maas-config-dialog-title">
-                        <Typography variant="h6">ESXi - Bare-metal Configuration</Typography>
+                    <DialogTitle id="baremetal-config-dialog-title">
+                        <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>
                     </DialogTitle>
                     <DialogContent dividers>
                         {loadingMaasConfig ? (

@@ -32,9 +32,9 @@ export const navigationItems: NavigationItem[] = [
     icon: <AgentsIcon />
   },
   {
-    id: 'maas-config',
-    label: 'Bare-metal Config',
-    path: '/dashboard/maas-config',
+    id: 'baremetal-config',
+    label: 'Bare Metal Config',
+    path: '/dashboard/baremetal-config',
     icon: <ConfigIcon />
   },
   {
