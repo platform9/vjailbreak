@@ -33,7 +33,7 @@ export const navigationItems: NavigationItem[] = [
   },
   {
     id: 'maas-config',
-    label: 'Maas Config',
+    label: 'Bare-metal Config',
     path: '/dashboard/maas-config',
     icon: <ConfigIcon />
   },
