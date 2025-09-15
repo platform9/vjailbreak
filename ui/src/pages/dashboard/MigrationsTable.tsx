@@ -10,9 +10,9 @@ import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
-import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
+import { TriggerAdminCutoverButton, deleteMigration  } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover, retryMigration } from "src/api/migrations/migrations";
+import { triggerAdminCutover } from "src/api/migrations/migrations";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
@@ -123,23 +123,26 @@ const columns: GridColDef[] = [
             const initiateCutover = params.row?.spec?.initiateCutover;
             const migrationName = params.row?.metadata?.name;
             const namespace = params.row?.metadata?.namespace;
+            const showRetryButton = phase === Phase.Failed;
+
+            const handleRetry = async () => {
+                if (!migrationName || !namespace) {
+                    console.error("Cannot retry: migration name or namespace is missing.");
+                    return;
+                }
+                try {
+                    await deleteMigration(migrationName, namespace);
+                    params.row.refetchMigrations?.();
+                } catch (error) {
+                    console.error(`Failed to delete migration '${migrationName}' for retry:`, error);
+                }
+            };
             
             // Show admin cutover button if:
             // 1. initiateCutover is false (manual cutover)
             // 2. Phase is AwaitingAdminCutOver
 
             const showAdminCutover = initiateCutover && (phase === Phase.AwaitingAdminCutOver);
-            const showRetryButton = phase === Phase.Failed;
-
-            const handleRetry = async () => {
-                if (!migrationName || !namespace) return;
-                try {
-                    await retryMigration(migrationName, namespace);
-                    params.row.refetchMigrations?.();
-                } catch (error) {
-                    console.error("Failed to retry migration:", error);
-                }
-            };
 
             return (
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
