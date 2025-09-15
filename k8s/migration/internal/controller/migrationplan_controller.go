@@ -1323,11 +1323,11 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	for _, vmMachine := range vmMachines {
-		// Check if VM is powered off
-		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
-			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
-		}
 		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
+			// Check if VM is powered off
+			if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
+				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
+			}
 			for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {
 				// Get RDMDisk CR
 				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}
