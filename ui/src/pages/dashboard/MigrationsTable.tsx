@@ -10,9 +10,9 @@ import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
 import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
-import { TriggerAdminCutoverButton, deleteMigration  } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
+import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover } from "src/api/migrations/migrations";
+import { triggerAdminCutover, deleteMigration } from "src/api/migrations/migrations";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
