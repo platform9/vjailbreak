@@ -48,6 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -63,8 +64,9 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	ctxlog logr.Logger
+	Scheme                  *runtime.Scheme
+	ctxlog                  logr.Logger
+	MaxConcurrentReconciles int
 }
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
@@ -1193,6 +1195,7 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
 		Owns(&vjailbreakv1alpha1.Migration{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
@@ -1320,11 +1323,11 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
 	for _, vmMachine := range vmMachines {
-		// Check if VM is powered off
-		if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
-			return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
-		}
 		if len(vmMachine.Spec.VMInfo.RDMDisks) > 0 {
+			// Check if VM is powered off
+			if vmMachine.Status.PowerState != string(govmomitypes.VirtualMachineGuestStateNotRunning) {
+				return fmt.Errorf("VM %s is not powered off, cannot migrate RDM disks", vmMachine.Name)
+			}
 			for _, rdmDisk := range vmMachine.Spec.VMInfo.RDMDisks {
 				// Get RDMDisk CR
 				rdmDiskCR := &vjailbreakv1alpha1.RDMDisk{}
