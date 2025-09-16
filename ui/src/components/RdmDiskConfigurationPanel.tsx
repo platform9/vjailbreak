@@ -115,9 +115,8 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
     }
 
 
-    const availableBackendPools = openstackCreds?.spec?.cinderBackendPools || []
-    // TODO: Update this when backend provides actual volume types - using mock data for now
-    const availableVolumeTypes = ['ssd', 'hdd', 'nvme', 'performance', 'standard']
+    const availableBackendPools = openstackCreds?.status?.openstack?.volumeBackends || []
+    const availableVolumeTypes = openstackCreds?.status?.openstack?.volumeTypes || []
 
     if (rdmDisks.length === 0) {
         return (

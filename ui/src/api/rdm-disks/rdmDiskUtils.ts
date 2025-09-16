@@ -1,4 +1,4 @@
-import { getRdmDisksList, getRdmDisk } from "./rdmDisks"
+import { getRdmDisksList } from "./rdmDisks"
 import { RdmDisk } from "./model"
 import { VMwareMachine } from "../vmware-machines/model"
 import { VmData } from "../migration-templates/model"

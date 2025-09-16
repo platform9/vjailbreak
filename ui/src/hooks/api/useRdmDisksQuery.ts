@@ -20,7 +20,7 @@ export const useRdmDisksQuery = ({
     },
     enabled,
     refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes - RDM disks don't change frequently
+    staleTime: 1000 * 60 * 5, // 5 minutes
     placeholderData: [],
   })
 }
