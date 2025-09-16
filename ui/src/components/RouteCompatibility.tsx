@@ -7,7 +7,7 @@ const LEGACY_TAB_MAPPING = {
   'credentials': '/dashboard/credentials',
   'clusterconversions': '/dashboard/cluster-conversions',
   'clustermigrations': '/dashboard/cluster-conversions', // legacy mapping
-  'maasconfig': '/dashboard/maas-config'
+  'maasconfig': '/dashboard/baremetal-config'
 }
 
 export default function RouteCompatibility() {

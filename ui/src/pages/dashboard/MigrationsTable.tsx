@@ -2,6 +2,7 @@ import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } fro
 import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
@@ -11,7 +12,7 @@ import { RefetchOptions } from "@tanstack/react-query";
 import { calculateTimeElapsed } from "src/utils";
 import { TriggerAdminCutoverButton } from "src/components/TriggerAdminCutover/TriggerAdminCutoverButton";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { triggerAdminCutover } from "src/api/migrations/migrations";
+import { triggerAdminCutover, deleteMigration } from "src/api/migrations/migrations";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 
 // Move the STATUS_ORDER and columns from Dashboard.tsx to here
@@ -121,6 +122,21 @@ const columns: GridColDef[] = [
             const phase = params.row?.status?.phase;
             const initiateCutover = params.row?.spec?.initiateCutover;
             const migrationName = params.row?.metadata?.name;
+            const namespace = params.row?.metadata?.namespace;
+            const showRetryButton = phase === Phase.Failed;
+
+            const handleRetry = async () => {
+                if (!migrationName || !namespace) {
+                    console.error("Cannot retry: migration name or namespace is missing.");
+                    return;
+                }
+                try {
+                    await deleteMigration(migrationName, namespace);
+                    params.row.refetchMigrations?.();
+                } catch (error) {
+                    console.error(`Failed to delete migration '${migrationName}' for retry:`, error);
+                }
+            };
             
             // Show admin cutover button if:
             // 1. initiateCutover is false (manual cutover)
@@ -140,6 +156,24 @@ const columns: GridColDef[] = [
                                 console.error("Failed to trigger cutover:", error);
                             }}
                         />
+                    )}
+
+                    {showRetryButton && (
+                        <Tooltip title="Retry migration">
+                            <IconButton
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRetry();
+                                }}
+                                size="small"
+                                sx={{
+                                cursor: 'pointer',
+                                position: 'relative'
+                            }}
+                            >
+                                <ReplayIcon />
+                            </IconButton>
+                        </Tooltip>
                     )}
                     
                     <Tooltip title={"Delete migration"}>

@@ -795,7 +795,7 @@ func ResumeRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrati
 }
 
 // ValidateRollingMigrationPlan validates that a rolling migration plan meets all the prerequisites
-// It checks VMware credentials, MAAS configurations, and ESXi host readiness
+// It checks VMware credentials, Bare Metal configurations, and ESXi host readiness
 func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigrationPlanScope, configMap *corev1.ConfigMap) (bool, string, error) {
 	config := GetRollingMigrationPlanValidationConfigFromConfigMap(configMap)
 	if config == nil {

@@ -190,7 +190,7 @@ runcmd:
                 }
             }
         } catch (error) {
-            console.error('Error fetching existing MaasConfig:', error);
+            console.error('Error fetching existing Bare Metal Config:', error);
         } finally {
             setInitialLoading(false);
 
@@ -294,7 +294,7 @@ runcmd:
         if (urlError) {
             setNotification({
                 open: true,
-                message: 'Please fix the MAAS URL format',
+                message: 'Please fix the Bare Metal Provider URL format',
                 severity: 'error'
             });
             return;
@@ -347,24 +347,24 @@ runcmd:
 
             setNotification({
                 open: true,
-                message: 'MaasConfig saved successfully',
+                message: 'Bare Metal Config saved successfully',
                 severity: 'success'
             });
         } catch (error) {
             console.error('Error submitting form:', error);
             reportError(error as Error, {
-                context: 'maas-config-submission',
+                context: 'baremetal-config-submission',
                 metadata: {
                     configName: formData.configName,
                     maasUrl: formData.maasUrl,
                     os: formData.os,
                     namespace: formData.namespace,
-                    action: 'create-maas-config'
+                    action: 'create-baremetal-config'
                 }
             });
             setNotification({
                 open: true,
-                message: 'Failed to save MaasConfig',
+                message: 'Failed to save Bare Metal Config',
                 severity: 'error'
             });
         } finally {
@@ -396,10 +396,10 @@ runcmd:
                 <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid' }}>
                     <Section sx={{ mb: 2 }}>
                         <Grid container columnSpacing={4} rowSpacing={2}>
-                            {/* First row - MAAS URL and Insecure*/}
+                            {/* First row - Bare Metal Provider URL and Insecure*/}
                             <Grid item xs={12} md={6}>
                                 <FormField>
-                                    <Typography variant="subtitle2" gutterBottom>MAAS URL</Typography>
+                                    <Typography variant="subtitle2" gutterBottom>Bare Metal Provider URL</Typography>
                                     <TextField
                                         fullWidth
                                         name="maasUrl"

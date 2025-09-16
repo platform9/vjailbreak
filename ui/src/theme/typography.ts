@@ -134,6 +134,49 @@ const typography = {
     lineHeight: "20px",
     letterSpacing: "normal",
   },
+  // Button typography variant
+  button: {
+    fontFamily: "Fira Sans",
+    fontSize: "14px",
+    fontWeight: 500,
+    fontStretch: "normal",
+    fontStyle: "normal",
+    lineHeight: "1.75",
+    letterSpacing: "0.02857em",
+    textTransform: "uppercase" as const,
+  },
+  // Overline typography variant
+  overline: {
+    fontFamily: "Fira Sans",
+    fontSize: "12px",
+    fontWeight: 400,
+    fontStretch: "normal",
+    fontStyle: "normal",
+    lineHeight: "2.66",
+    letterSpacing: "0.08333em",
+    textTransform: "uppercase" as const,
+  },
+  // Monospace variants for code and technical content
+  monospace: {
+    fontFamily:
+      '"Fira Code", "SF Mono", "Monaco", "Consolas", "Roboto Mono", monospace',
+    fontSize: "14px",
+    fontWeight: "normal",
+    fontStretch: "normal",
+    fontStyle: "normal",
+    lineHeight: "1.5",
+    letterSpacing: "normal",
+  },
+  code: {
+    fontFamily:
+      '"Fira Code", "SF Mono", "Monaco", "Consolas", "Roboto Mono", monospace',
+    fontSize: "13px",
+    fontWeight: "normal",
+    fontStretch: "normal",
+    fontStyle: "normal",
+    lineHeight: "1.4",
+    letterSpacing: "normal",
+  },
 }
 
 export default typography

@@ -6,6 +6,7 @@ import {
   styled,
   TextField,
 } from "@mui/material"
+import customTypography from "../../theme/typography"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
@@ -43,11 +44,12 @@ const Fields = styled("div")(({ theme }) => ({
   marginTop: theme.spacing(2),
 }))
 
-const CustomTextField = styled(TextField)({
+const CustomTextField = styled(TextField)(() => ({
   "& .MuiOutlinedInput-root": {
-    fontFamily: "Monospace",
+    // Use monospace variant for input fields (larger, more readable)
+    ...customTypography.monospace,
   },
-})
+}))
 
 // Intefaces
 interface MigrationOptionsPropsInterface {
