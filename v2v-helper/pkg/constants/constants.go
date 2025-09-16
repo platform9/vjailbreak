@@ -3,6 +3,10 @@ package constants
 import "time"
 
 const (
+	HotplugCPUKey       = "HOTPLUG_CPU"
+	HotplugMemoryKey    = "HOTPLUG_MEMORY"
+	HotplugCPUMaxKey    = "HOTPLUG_CPU_MAX"
+	HotplugMemoryMaxKey = "HOTPLUG_MEMORY_MAX"
 	RhelFirstBootScript = `#!/bin/bash
 set -e
 LOG_FILE="/var/log/network_fix.log"
@@ -109,6 +113,12 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// VMActiveWaitRetryLimit is the number of retries to wait for vm to become active
 	VMActiveWaitRetryLimit = 15
 
+	// VolumeAvailableWaitIntervalSeconds is the interval to wait for volume to become available
+	VolumeAvailableWaitIntervalSeconds = 5
+
+	// VolumeAvailableWaitRetryLimit is the number of retries to wait for volume to become available
+	VolumeAvailableWaitRetryLimit = 15
+
 	// DefaultMigrationMethod is the default migration method
 	DefaultMigrationMethod = "hot"
 
@@ -118,6 +128,12 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
+	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
+	PopulateVMwareMachineFlavors = true
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
+
+	// VCenterLoginRetryLimit is the number of retries for vcenter login
+	VCenterLoginRetryLimit = 1
 )

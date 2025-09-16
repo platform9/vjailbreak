@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -12,9 +11,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -71,6 +68,7 @@ func GetMigrationConfigMapName() (string, error) {
 	}
 	return fmt.Sprintf("migration-config-%s", vmK8sName), nil
 }
+
 func GetVMwareMachineName() (string, error) {
 	vmK8sName := os.Getenv("VMWARE_MACHINE_OBJECT_NAME")
 	if vmK8sName == "" {
@@ -114,55 +112,4 @@ func atoi(s string) int {
 		return 0
 	}
 	return i
-}
-
-func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
-	vjailbreakSettingsCM := &corev1.ConfigMap{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
-		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
-	}
-
-	if vjailbreakSettingsCM.Data == nil {
-		return &VjailbreakSettings{
-			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
-			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
-			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
-			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
-			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
-			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
-		}, nil
-	}
-
-	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
-		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
-	}
-
-	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
-		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
-	}
-
-	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
-		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
-	}
-
-	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
-		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
-	}
-
-	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
-		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
-	}
-
-	if vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "" {
-		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
-	}
-
-	return &VjailbreakSettings{
-		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
-		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
-		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
-		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
-		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
-		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
-	}, nil
 }

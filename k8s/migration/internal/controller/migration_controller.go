@@ -25,6 +25,7 @@ import (
 	"time"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,7 +49,8 @@ import (
 // MigrationReconciler reconciles a Migration object
 type MigrationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
@@ -59,7 +61,12 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwaremachines/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -121,10 +128,18 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			ctxlog.Info("Migration pod not found yet, requeuing.")
+			ctxlog.Info("Migration pod not found yet, requeuing", "migration", migration.Name)
 			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
+	if migration.Spec.PodRef != pod.Name {
+		migration.Spec.PodRef = pod.Name
+		if err := r.Update(ctx, migration); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
@@ -238,6 +253,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		)).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
@@ -278,7 +294,11 @@ loop:
 				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
 				break loop
 			}
-			// If startCutover is "yes", continue to check for next phase
+			// Admin cutover was triggered, reset to a lower phase so it can progress normally
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
+
+			// If startCutover is "yes", don't set phase here - let it progress to next phase
+			// by continuing to check other events
 			continue
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
@@ -385,6 +405,5 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 	if len(podList.Items) == 0 {
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
-	scope.Migration.Spec.PodRef = podList.Items[0].Name
 	return &podList.Items[0], nil
 }

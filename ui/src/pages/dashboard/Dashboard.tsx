@@ -20,7 +20,6 @@ import CredentialsTable from "./CredentialsTable"
 import BMConfigForm from "./BMConfigForm"
 import RollingMigrationsTable from "./RollingMigrationsTable"
 import WarningIcon from '@mui/icons-material/Warning';
-import { useNodesQuery } from "../../hooks/api/useNodesQuery"
 import { useRollingMigrationPlansQuery } from "../../hooks/api/useRollingMigrationPlansQuery"
 
 
@@ -233,14 +232,6 @@ export default function Dashboard() {
     return baseMessage
   }
 
-  const { data: nodes } = useNodesQuery()
-
-  useEffect(() => {
-    if (!!migrations && migrations.length === 0 && (!nodes || nodes.length === 0)) {
-      navigate("/onboarding")
-    }
-  }, [migrations, navigate])
-
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
@@ -310,7 +301,7 @@ export default function Dashboard() {
           <Tab
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                Maas Config
+                Bare Metal Config
               </Box>
             }
           />

@@ -121,6 +121,21 @@ func (mr *MockVirtV2VOperationsMockRecorder) GetOsRelease(path interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOsRelease", reflect.TypeOf((*MockVirtV2VOperations)(nil).GetOsRelease), path)
 }
 
+// GetOsReleaseAllVolumes mocks base method.
+func (m *MockVirtV2VOperations) GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOsReleaseAllVolumes", disks)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOsReleaseAllVolumes indicates an expected call of GetOsReleaseAllVolumes.
+func (mr *MockVirtV2VOperationsMockRecorder) GetOsReleaseAllVolumes(disks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOsReleaseAllVolumes", reflect.TypeOf((*MockVirtV2VOperations)(nil).GetOsReleaseAllVolumes), disks)
+}
+
 // GetPartitions mocks base method.
 func (m *MockVirtV2VOperations) GetPartitions(disk string) ([]string, error) {
 	m.ctrl.T.Helper()

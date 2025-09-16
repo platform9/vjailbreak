@@ -72,6 +72,7 @@ type MigrationPlanSpec struct {
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
+	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
@@ -97,6 +98,8 @@ type MigrationPlanStatus struct {
 	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
+	// Migration RetryCount is the number of times the migration has been retried
+	RetryCount int `json:"retryCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

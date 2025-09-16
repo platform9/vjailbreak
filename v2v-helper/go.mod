@@ -7,7 +7,7 @@ require (
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250718102048-de8740c10909
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250904115639-c2134e9ef3b9
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0

@@ -24,6 +24,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import Accordion from "@mui/material/Accordion"
 import AccordionDetails from "@mui/material/AccordionDetails"
 import AccordionSummary from "@mui/material/AccordionSummary"
+import { OpenstackCreds } from "src/api/openstack-creds/model";
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
@@ -53,13 +54,14 @@ const CustomTextField = styled(TextField)({
 })
 
 // Interfaces
-interface MigrationOptionsPropsInterface {
-  params: FormValues
+export interface MigrationOptionsPropsInterface {
+  params: FormValues & { useFlavorless?: boolean }
   onChange: (key: string) => (value: unknown) => void
+  openstackCredentials?: OpenstackCreds;
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-  key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
-) => (value: unknown) => void
+    key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+  ) => (value: unknown) => void
 
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
@@ -78,6 +80,7 @@ export default function MigrationOptionsAlt({
   params,
   onChange,
   selectedMigrationOptions,
+  openstackCredentials,
   updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
@@ -105,6 +108,8 @@ export default function MigrationOptionsAlt({
 
     return dayjs(minDate).add(1, "minute")
   }, [params, selectedMigrationOptions])
+
+  const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -424,8 +429,46 @@ export default function MigrationOptionsAlt({
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
                   Disconnect NICs on the source VM to prevent IP conflicts.
                 </Typography>
-              </Fields>        
+              </Fields>
 
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Fallback to DHCP if IP can't be preserved"
+                  control={
+                    <Checkbox
+                      checked={params?.fallbackToDHCP || false}
+                      onChange={(e) => {
+                        onChange("fallbackToDHCP")(e.target.checked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  Migration will fail if the original IP cannot be reserved.  
+                </Typography>
+              </Fields>
+
+            {isPCD && (
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Use Dynamic Hotplug-Enabled Flavors"
+                  control={
+                    <Checkbox
+                      checked={params?.useFlavorless || false}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
+                        onChange("useFlavorless")(isChecked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  This will use the base flavor ID specified in PCD.
+                </Typography>
+              </Fields>
+
+            )}
             {/*
             Pre and Post Web Hooks
 // ...

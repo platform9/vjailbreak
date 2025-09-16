@@ -25,23 +25,31 @@ COPY manager manager
 # Using same Fedora version for consistency and required runtime dependencies
 FROM fedora:42
 
-WORKDIR /tmp
-RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
+WORKDIR /tmp/rpms
+COPY nbdkit/*.rpm /tmp/rpms/
 
-# Install runtime dependencies:
-# - nbdkit: Network Block Device toolkit for accessing disk images
-# - nbdkit-vddk-plugin: VMware VDDK plugin for accessing VMware disks
-# - libnbd: Network Block Device client library
-# - virt-v2v: Convert VMs between platforms (e.g., VMware to OpenStack)
-# - virtio-win: VirtIO drivers for Windows guests
 RUN dnf install -y \
-    nbdkit \
-    nbdkit-vddk-plugin \
-    libnbd 
-    
-RUN dnf install -y /tmp/virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
+    ./libnbd-1.22.2-1.fc42.x86_64.rpm \
+    ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
     dnf clean all && \
-    rm -rf /var/cache/dnf
+    rm -rf /var/cache/dnf /tmp/rpms/
+
+#version lock 
+RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
+    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
+    nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
+    nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
+    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
+
