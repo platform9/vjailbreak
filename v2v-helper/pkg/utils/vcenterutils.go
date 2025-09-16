@@ -37,6 +37,8 @@ type MigrationParams struct {
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
 	SecurityGroups          string
+	RDMDisks                string
+	FallbackToDHCP          bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -75,5 +77,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		VMwareMachineName:       string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork: string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
 		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
+		RDMDisks:                string(configMap.Data["RDM_DISK_NAMES"]),
+		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
 	}, nil
 }

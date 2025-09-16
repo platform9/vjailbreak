@@ -26,23 +26,30 @@ COPY manager manager
 FROM fedora:42
 
 WORKDIR /tmp/rpms
+COPY nbdkit/*.rpm /tmp/rpms/
 
-RUN curl -L -o nbdkit.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-1.42.4-1.fc42.x86_64.rpm && \
-    curl -L -o nbdkit-vddk.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm && \
-    curl -L -o libnbd.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/libnbd-1.22.2-1.fc42.x86_64.rpm && \
-    curl -L -o nbdkit-server.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-server-1.42.4-1.fc42.x86_64.rpm && \
-    curl -L -o nbdkit-basic-plugins.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm && \
-    curl -L -o nbdkit-basic-filters.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm && \
-    dnf install -y ./*.rpm && \
+RUN dnf install -y \
+    ./libnbd-1.22.2-1.fc42.x86_64.rpm \
+    ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
+    ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
+    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm && \
     dnf clean all && \
-    rm -rf /tmp/rpms
+    rm -rf /var/cache/dnf /tmp/rpms/
 
-WORKDIR /tmp
-RUN curl -L -o virt-v2v-2.7.13-1.fc42.x86_64.rpm https://github.com/platform9/vjailbreak/raw/refs/heads/main/assets/rpms/virt-v2v-2.7.13-1.fc42.x86_64.rpm
-
-RUN dnf install -y /tmp/virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf
+#version lock 
+RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
+    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
+    nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
+    nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
+    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager

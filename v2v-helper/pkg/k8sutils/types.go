@@ -1,4 +1,4 @@
-package utils
+package k8sutils
 
 type VjailbreakSettings struct {
 	ChangedBlocksCopyIterationThreshold int
@@ -10,4 +10,5 @@ type VjailbreakSettings struct {
 	PopulateVMwareMachineFlavors        bool
 	VolumeAvailableWaitIntervalSeconds  int
 	VolumeAvailableWaitRetryLimit       int
+	VCenterLoginRetryLimit              int
 }

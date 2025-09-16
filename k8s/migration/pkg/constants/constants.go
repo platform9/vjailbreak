@@ -141,6 +141,9 @@ const (
 	// CredsRequeueAfter is the time to requeue after
 	CredsRequeueAfter = 1 * time.Minute
 
+	// OpenstackCredsRequeueAfter is the time to requeue after.
+	OpenstackCredsRequeueAfter = 60 * time.Minute
+
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
 
@@ -170,7 +173,6 @@ const (
 
 	// RDMDiskControllerName is the name of the RDM disk controller
 	RDMDiskControllerName = "rdmdisk-controller"
-
 	// VCenterVMScanConcurrencyLimit is the limit for concurrency while scanning vCenter VMs
 	VCenterVMScanConcurrencyLimit = 100
 
@@ -206,6 +208,9 @@ const (
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
+
+	// VCenterLoginRetryLimit is the number of retries for vcenter login
+	VCenterLoginRetryLimit = 5
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
