@@ -64,11 +64,11 @@ export const useRdmValidation = ({
       )
     })
 
-    // Only check for power state validation errors (no missing VMs validation)
+    // Only check for power state validation errors
     const hasPoweredOnVMs = poweredOnRdmVMs.length > 0
     const hasValidationError = hasPoweredOnVMs
 
-    // Only power state error message (no selection error)
+    // Only power state error message
     let powerStateErrorMessage = ""
 
     if (hasPoweredOnVMs) {
@@ -76,7 +76,6 @@ export const useRdmValidation = ({
       powerStateErrorMessage = `All VMs with shared RDM disks must be powered off for migration. Currently powered on: ${poweredOnVmNames}`
     }
 
-    // Legacy combined error message for backward compatibility
     const errorMessage = powerStateErrorMessage
 
     return {
@@ -85,11 +84,11 @@ export const useRdmValidation = ({
       errorMessage,
       hasPowerStateError: hasPoweredOnVMs,
       powerStateErrorMessage,
-      hasSelectionError: false, // No selection errors anymore
-      selectionErrorMessage: "", // No selection errors anymore
-      missingVMs: [], // No missing VMs anymore
-      rdmGroups: {}, // Not needed for validation anymore
-      requiredVMs: [], // Not needed for validation anymore
+      hasSelectionError: false,
+      selectionErrorMessage: "",
+      missingVMs: [],
+      rdmGroups: {},
+      requiredVMs: [],
     }
   }, [selectedVMs, allVMs])
 

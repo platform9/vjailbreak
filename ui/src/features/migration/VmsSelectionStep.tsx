@@ -200,10 +200,7 @@ export default function VmsSelectionStep({
     allVMs: vmsWithFlavor
   });
 
-  // RDM disks query - always enabled since we have mock data
-  const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery({
-    enabled: true
-  });
+  const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery();
 
   // RDM configuration state
   const [rdmConfigurations, setRdmConfigurations] = useState<Array<{
