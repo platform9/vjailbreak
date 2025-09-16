@@ -39,7 +39,8 @@ RUN dnf install -y \
     ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./virt-v2v-2.7.13-1.fc42.x86_64.rpm && \
+    ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
+    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
@@ -48,7 +49,7 @@ RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
     libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
     nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
     nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
-    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64
+    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
