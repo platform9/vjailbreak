@@ -115,6 +115,7 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
+  fallbackToDHCP?: boolean
 }
 
 
@@ -473,6 +474,7 @@ export default function MigrationFormDrawer({
         securityGroups: params.securityGroups,
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
+      fallbackToDHCP: params.fallbackToDHCP || false,
     };
 
 

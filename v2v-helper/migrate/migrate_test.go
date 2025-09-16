@@ -39,11 +39,11 @@ func TestCreateVolumes(t *testing.T) {
 
 	gomock.InOrder(
 		mockOpenStackOps.EXPECT().
-			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[0].Name, inputvminfo.VMDisks[0].Size, "linux", false, "voltype-1").
+			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[0].Name, inputvminfo.VMDisks[0].Size, "linux", false, "voltype-1", false).
 			Return(&volumes.Volume{ID: "id1", Name: "test-vm-disk1"}, nil).
 			AnyTimes(),
 		mockOpenStackOps.EXPECT().
-			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[1].Name, inputvminfo.VMDisks[1].Size, "linux", false, "voltype-2").
+			CreateVolume(inputvminfo.Name+"-"+inputvminfo.VMDisks[1].Name, inputvminfo.VMDisks[1].Size, "linux", false, "voltype-2", false).
 			Return(&volumes.Volume{ID: "id2", Name: "test-vm-disk2"}, nil).
 			AnyTimes(),
 	)
@@ -478,7 +478,7 @@ func TestCreateTargetInstance(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -531,7 +531,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.NoError(t, err)
 }
 
@@ -565,6 +565,6 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		InPod:            false,
 		TargetFlavorId:   "flavor-id",
 	}
-	err := migobj.CreateTargetInstance(inputvminfo)
+	err := migobj.CreateTargetInstance(inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
 	assert.Contains(t, err.Error(), "number of network ports does not match number of network names")
 }

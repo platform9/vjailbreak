@@ -49,7 +49,6 @@ func main() {
 			<-ackChan
 		}
 		utils.PrintLog(msg)
-		return
 	}
 
 	client, err := utils.GetInclusterClient()
@@ -93,6 +92,7 @@ func main() {
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
+	openstackclients.K8sClient = client
 	utils.PrintLog("Connected to OpenStack")
 
 	// Get thumbprint
@@ -107,7 +107,6 @@ func main() {
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 	}
-
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
 		UserName:                vCenterUserName,
@@ -141,9 +140,11 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
+		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {

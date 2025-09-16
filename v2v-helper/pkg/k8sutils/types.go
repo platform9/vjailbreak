@@ -1,4 +1,4 @@
-package utils
+package k8sutils
 
 type VjailbreakSettings struct {
 	ChangedBlocksCopyIterationThreshold int
@@ -8,4 +8,7 @@ type VjailbreakSettings struct {
 	VCenterScanConcurrencyLimit         int
 	CleanupVolumesAfterConvertFailure   bool
 	PopulateVMwareMachineFlavors        bool
+	VolumeAvailableWaitIntervalSeconds  int
+	VolumeAvailableWaitRetryLimit       int
+	VCenterLoginRetryLimit              int
 }

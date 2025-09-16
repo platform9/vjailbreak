@@ -8,9 +8,12 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -61,9 +64,27 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 
 	// Create the client
 	c := new(vim25.Client)
-	err = s.Login(ctx, c, nil)
+	// Exponential retry logic
+	client, err := k8sutils.GetInclusterClient()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to login: %v", err)
+		return nil, nil, fmt.Errorf("failed to get in-cluster client: %v", err)
+	}
+	migrationSettings, err := k8sutils.GetVjailbreakSettings(ctx, client)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %v", err)
+	}
+	maxRetries := migrationSettings.VCenterLoginRetryLimit
+	baseDelay := 500 * time.Millisecond // Initial delay
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = s.Login(ctx, c, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to login: %v", err)
+		}
+		if attempt < maxRetries {
+			delayNum := math.Pow(2, float64(attempt)) * 500
+			baseDelay = time.Duration(delayNum) * time.Millisecond
+			time.Sleep(baseDelay * time.Duration(1<<uint(attempt-1))) // Exponential backoff
+		}
 	}
 
 	// Return both the client and the session for persistent re-authentication
@@ -127,10 +148,10 @@ func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Da
 			if err := login(ctx, vcclient.VCClient, nil); err != nil {
 				return nil, fmt.Errorf("failed to re-login during datacenter refresh: %v", err)
 			}
-			
+
 			// Create a new finder with the refreshed client
 			vcclient.VCFinder = find.NewFinder(vcclient.VCClient, false)
-			
+
 			// Try again
 			datacenters, err = vcclient.VCFinder.DatacenterList(ctx, "*")
 			if err != nil {

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -233,24 +234,44 @@ func (r *Reporter) GetCutoverLabel() (string, error) {
 
 func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 	go func() {
-		watch, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
-			FieldSelector: fmt.Sprintf("metadata.name=%s", r.PodName),
-		})
-		if err != nil {
-			fmt.Printf("Failed to watch pod labels: %v\n", err)
-		}
-		defer watch.Stop()
-		originalStartCutover := "no"
-		for event := range watch.ResultChan() {
-			pod, ok := event.Object.(*corev1.Pod)
-			if !ok {
-				continue
-			}
-			if cutover, ok := pod.Labels["startCutover"]; ok {
-				if cutover != originalStartCutover {
-					ch <- cutover
-					originalStartCutover = cutover
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Printf("Error: Context canceled for pod %s: %v\n", r.PodName, ctx.Err())
+				return
+			default:
+				fmt.Printf("Info: Starting watch for pod %s in namespace %s\n", r.PodName, r.PodNamespace)
+				timeoutSeconds := int64(172800)
+				watch, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
+					FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
+					TimeoutSeconds: &timeoutSeconds,
+				})
+				if err != nil {
+					fmt.Printf("Error: Failed to start watch for pod %s: %v\n", r.PodName, err)
+					time.Sleep(5 * time.Second)
+					continue
 				}
+				fmt.Printf("Info: Watch established for pod %s with timeout %d seconds\n", r.PodName, timeoutSeconds)
+				defer watch.Stop()
+				originalStartCutover := "no"
+				fmt.Printf("Info: Entering event loop for pod %s\n", r.PodName)
+				for event := range watch.ResultChan() {
+					pod, ok := event.Object.(*corev1.Pod)
+					if !ok {
+						fmt.Printf("Error: Received non-pod event for pod %s: %v\n", r.PodName, event.Object)
+						continue
+					}
+					if cutover, ok := pod.Labels["startCutover"]; ok {
+						if cutover != originalStartCutover {
+							fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
+							ch <- cutover
+							fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+							originalStartCutover = cutover
+						}
+					}
+				}
+				fmt.Printf("Info: Watch channel closed for pod %s after ~%d seconds, retrying...\n", r.PodName, timeoutSeconds)
+				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
