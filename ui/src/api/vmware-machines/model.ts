@@ -32,6 +32,7 @@ export interface VMwareMachine {
   spec: {
     vms: VMwareVM
     targetFlavorId?: string
+    rdmDisks?: string[]
   }
   status: {
     migrated: boolean

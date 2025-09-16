@@ -1,0 +1,309 @@
+import React, { useState, useEffect, useRef } from 'react'
+import {
+    Box,
+    Typography,
+    Card,
+    CardContent,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Chip,
+    Divider,
+    Alert,
+    Grid,
+    Tooltip,
+    TextField,
+    IconButton,
+    Button,
+} from '@mui/material'
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material'
+import { RdmDisk } from 'src/api/rdm-disks/model'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
+
+interface RdmDiskConfiguration {
+    diskName: string
+    cinderBackendPool: string
+    volumeType: string
+    source: { [key: string]: string }
+}
+
+interface RdmDiskConfigurationPanelProps {
+    rdmDisks: RdmDisk[]
+    openstackCreds?: OpenstackCreds
+    selectedVMs: string[]
+    onConfigurationChange: (configurations: RdmDiskConfiguration[]) => void
+}
+
+export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps> = ({
+    rdmDisks,
+    openstackCreds,
+    selectedVMs,
+    onConfigurationChange,
+}) => {
+    const [configurations, setConfigurations] = useState<RdmDiskConfiguration[]>([])
+    const initializedRef = useRef(false)
+
+    // Initialize configurations when rdmDisks change
+    useEffect(() => {
+        if (rdmDisks.length > 0 && !initializedRef.current) {
+            const initialConfigs = rdmDisks.map(disk => ({
+                diskName: disk.spec.diskName,
+                cinderBackendPool: disk.spec.openstackVolumeRef?.cinderBackendPool || '',
+                volumeType: disk.spec.openstackVolumeRef?.volumeType || '',
+                source: disk.spec.openstackVolumeRef?.source || {},
+            }))
+            setConfigurations(initialConfigs)
+            initializedRef.current = true
+        }
+    }, [rdmDisks])
+
+    // Notify parent when configurations change
+    useEffect(() => {
+        onConfigurationChange(configurations)
+    }, [configurations, onConfigurationChange])
+
+    const updateConfiguration = (index: number, field: keyof RdmDiskConfiguration, value: string | Record<string, string>) => {
+        setConfigurations(prev => {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], [field]: value }
+            return updated
+        })
+    }
+
+    const addSourceField = (configIndex: number) => {
+        setConfigurations(prev => {
+            const updated = [...prev]
+            updated[configIndex] = {
+                ...updated[configIndex],
+                source: { ...updated[configIndex].source, '': '' }
+            }
+            return updated
+        })
+    }
+
+    const updateSourceField = (configIndex: number, oldKey: string, newKey: string, value: string) => {
+        setConfigurations(prev => {
+            const updated = [...prev]
+            const newSource = { ...updated[configIndex].source }
+
+            if (oldKey !== newKey) {
+                delete newSource[oldKey]
+            }
+            newSource[newKey] = value
+
+            updated[configIndex] = {
+                ...updated[configIndex],
+                source: newSource
+            }
+            return updated
+        })
+    }
+
+    const removeSourceField = (configIndex: number, key: string) => {
+        setConfigurations(prev => {
+            const updated = [...prev]
+            const newSource = { ...updated[configIndex].source }
+            delete newSource[key]
+
+            updated[configIndex] = {
+                ...updated[configIndex],
+                source: newSource
+            }
+            return updated
+        })
+    }
+
+
+    const availableBackendPools = openstackCreds?.spec?.cinderBackendPools || []
+    // TODO: Update this when backend provides actual volume types - using mock data for now
+    const availableVolumeTypes = ['ssd', 'hdd', 'nvme', 'performance', 'standard']
+
+    if (rdmDisks.length === 0) {
+        return (
+            <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                    No RDM disks available for configuration.
+                </Typography>
+            </Box>
+        )
+    }
+
+    return (
+        <Box sx={{ mt: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                🔗 RDM Disk Configuration
+            </Typography>
+
+            <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                    Configure OpenStack Cinder settings for each RDM disk. These settings will be applied when migrating the selected VMs.
+                </Typography>
+            </Alert>
+
+            <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Selected VMs:
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {selectedVMs.map(vmName => (
+                        <Chip key={vmName} label={vmName} size="small" color="primary" variant="outlined" />
+                    ))}
+                </Box>
+            </Box>
+
+            {rdmDisks.map((disk, index) => {
+                const config = configurations[index]
+                if (!config) return null
+
+                const ownerVMs = disk.spec.ownerVMs
+                const diskSizeGB = Math.round(disk.spec.diskSize / (1024 * 1024 * 1024))
+
+                return (
+                    <Card key={disk.metadata.name} sx={{ mb: 2 }}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                                    {disk.spec.displayName}
+                                </Typography>
+                                <Chip
+                                    label={`${diskSizeGB} GB`}
+                                    size="small"
+                                    color="secondary"
+                                    variant="outlined"
+                                />
+                            </Box>
+
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Disk Name: {disk.spec.diskName} • UUID: {disk.spec.uuid}
+                            </Typography>
+
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    Owner VMs:
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {ownerVMs.map(vmName => {
+                                        const isSelected = selectedVMs.includes(vmName)
+                                        const chipElement = (
+                                            <Chip
+                                                key={vmName}
+                                                label={vmName}
+                                                size="small"
+                                                color={isSelected ? "primary" : "default"}
+                                                variant={isSelected ? "filled" : "outlined"}
+                                            />
+                                        );
+
+                                        // Show tooltip for unselected VMs
+                                        if (!isSelected) {
+                                            return (
+                                                <Tooltip key={vmName} title={`${vmName} also shares this RDM disk (not selected for migration)`}>
+                                                    {chipElement}
+                                                </Tooltip>
+                                            );
+                                        }
+
+                                        return chipElement;
+                                    })}
+                                </Box>
+                            </Box>
+
+                            <Divider sx={{ my: 2 }} />
+
+                            <Grid container spacing={2} sx={{ mb: 2 }}>
+                                <Grid item xs={12} md={6}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Cinder Backend Pool *</InputLabel>
+                                        <Select
+                                            value={config.cinderBackendPool}
+                                            label="Cinder Backend Pool *"
+                                            onChange={(e) => updateConfiguration(index, 'cinderBackendPool', e.target.value)}
+                                        >
+                                            {availableBackendPools.map(pool => (
+                                                <MenuItem key={pool} value={pool}>
+                                                    {pool}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+
+                                <Grid item xs={12} md={6}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Volume Type *</InputLabel>
+                                        <Select
+                                            value={config.volumeType}
+                                            label="Volume Type *"
+                                            onChange={(e) => updateConfiguration(index, 'volumeType', e.target.value)}
+                                        >
+                                            {availableVolumeTypes.map(type => (
+                                                <MenuItem key={type} value={type}>
+                                                    {type}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                            </Grid>
+
+                            <Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                        Volume Ref Configuration
+                                    </Typography>
+                                    <Button
+                                        size="small"
+                                        startIcon={<AddIcon />}
+                                        onClick={() => addSourceField(index)}
+                                    >
+                                        Add Field
+                                    </Button>
+                                </Box>
+
+                                {Object.entries(config.source).map(([key, value], sourceIndex) => (
+                                    <Grid container spacing={1} alignItems="center" key={`${index}-${sourceIndex}`} sx={{ mb: 1 }}>
+                                        <Grid item xs={5}>
+                                            <TextField
+                                                size="small"
+                                                placeholder="Key"
+                                                value={key}
+                                                onChange={(e) => updateSourceField(index, key, e.target.value, value)}
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid item xs={5}>
+                                            <TextField
+                                                size="small"
+                                                placeholder="Value"
+                                                value={value}
+                                                onChange={(e) => updateSourceField(index, key, key, e.target.value)}
+                                                fullWidth
+                                            />
+                                        </Grid>
+                                        <Grid item xs={2}>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => removeSourceField(index, key)}
+                                                color="error"
+                                            >
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </Grid>
+                                    </Grid>
+                                ))}
+
+                                {Object.keys(config.source).length === 0 && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                        No volume ref configuration fields added
+                                    </Typography>
+                                )}
+                            </Box>
+                        </CardContent>
+                    </Card>
+                )
+            })}
+
+        </Box>
+    )
+}
