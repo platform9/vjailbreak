@@ -19,10 +19,222 @@ export const getVMwareMachines = async (
       }
     : undefined
 
-  return axios.get<VMwareMachineList>({
+  const response = await axios.get<VMwareMachineList>({
     endpoint,
     config,
   })
+
+  // TODO: REMOVE MOCK DATA - Add mock RDM VMs for testing
+  const mockRdmVMs: VMwareMachine[] = [
+    {
+      apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+      kind: "VmwareMachine",
+      metadata: {
+        name: "vm001-mock-rdm",
+        namespace: namespace,
+        creationTimestamp: "2024-01-15T10:00:00Z",
+        labels: {
+          "vjailbreak.k8s.pf9.io/is-shared-rdm": "true",
+          "vjailbreak.k8s.pf9.io/vmware-cluster": "test-cluster",
+          "vjailbreak.k8s.pf9.io/esxi-name": "esx-host-1",
+        },
+      },
+      spec: {
+        vms: {
+          name: "vm001-mock-rdm",
+          cpu: 4,
+          memory: 8192,
+          datastores: ["datastore1"],
+          disks: ["disk1", "disk2"],
+          networks: ["VM Network"],
+          vmState: "stopped",
+          ipAddress: "192.168.1.100",
+          osFamily: "windowsGuest",
+          networkInterfaces: [
+            {
+              mac: "00:50:56:12:34:56",
+              network: "VM Network",
+              ipAddress: "192.168.1.100",
+            },
+          ],
+        },
+        targetFlavorId: "",
+        rdmDisks: ["rdm-disk-shared-1"],
+      },
+      status: {
+        migrated: false,
+        powerState: "notRunning",
+      },
+    },
+    {
+      apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+      kind: "VmwareMachine",
+      metadata: {
+        name: "vm002-mock-rdm",
+        namespace: namespace,
+        creationTimestamp: "2024-01-15T10:00:00Z",
+        labels: {
+          "vjailbreak.k8s.pf9.io/is-shared-rdm": "true",
+          "vjailbreak.k8s.pf9.io/vmware-cluster": "test-cluster",
+          "vjailbreak.k8s.pf9.io/esxi-name": "esx-host-2",
+        },
+      },
+      spec: {
+        vms: {
+          name: "vm002-mock-rdm",
+          cpu: 2,
+          memory: 4096,
+          datastores: ["datastore1"],
+          disks: ["disk3", "disk4"],
+          networks: ["VM Network"],
+          vmState: "running",
+          ipAddress: "192.168.1.101",
+          osFamily: "linuxGuest",
+          networkInterfaces: [
+            {
+              mac: "00:50:56:12:34:57",
+              network: "VM Network",
+              ipAddress: "192.168.1.101",
+            },
+          ],
+        },
+        targetFlavorId: "",
+        rdmDisks: ["rdm-disk-shared-1"],
+      },
+      status: {
+        migrated: false,
+        powerState: "running",
+      },
+    },
+    {
+      apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+      kind: "VmwareMachine",
+      metadata: {
+        name: "vm003-mock-rdm",
+        namespace: namespace,
+        creationTimestamp: "2024-01-15T10:00:00Z",
+        labels: {
+          "vjailbreak.k8s.pf9.io/is-shared-rdm": "true",
+          "vjailbreak.k8s.pf9.io/vmware-cluster": "test-cluster",
+          "vjailbreak.k8s.pf9.io/esxi-name": "esx-host-3",
+        },
+      },
+      spec: {
+        vms: {
+          name: "vm003-mock-rdm",
+          cpu: 4,
+          memory: 8192,
+          datastores: ["datastore2"],
+          disks: ["disk5", "disk6"],
+          networks: ["VM Network"],
+          vmState: "stopped",
+          ipAddress: "192.168.1.102",
+          osFamily: "windowsGuest",
+          networkInterfaces: [
+            {
+              mac: "00:50:56:12:34:58",
+              network: "VM Network",
+              ipAddress: "192.168.1.102",
+            },
+          ],
+        },
+        targetFlavorId: "",
+        rdmDisks: ["rdm-disk-shared-2"],
+      },
+      status: {
+        migrated: false,
+        powerState: "notRunning",
+      },
+    },
+    {
+      apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+      kind: "VmwareMachine",
+      metadata: {
+        name: "vm004-normal",
+        namespace: namespace,
+        creationTimestamp: "2024-01-15T10:00:00Z",
+        labels: {
+          "vjailbreak.k8s.pf9.io/vmware-cluster": "test-cluster",
+          "vjailbreak.k8s.pf9.io/esxi-name": "esx-host-1",
+        },
+      },
+      spec: {
+        vms: {
+          name: "vm004-normal",
+          cpu: 2,
+          memory: 4096,
+          datastores: ["datastore1"],
+          disks: ["disk7", "disk8"],
+          networks: ["VM Network"],
+          vmState: "running",
+          ipAddress: "192.168.1.103",
+          osFamily: "linuxGuest",
+          networkInterfaces: [
+            {
+              mac: "00:50:56:12:34:59",
+              network: "VM Network",
+              ipAddress: "192.168.1.103",
+            },
+          ],
+        },
+        targetFlavorId: "",
+      },
+
+      status: {
+        migrated: false,
+        powerState: "running",
+      },
+    },
+    {
+      apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+      kind: "VmwareMachine",
+      metadata: {
+        name: "vm005-mock-rdm",
+        namespace: namespace,
+        creationTimestamp: "2024-01-15T10:00:00Z",
+        labels: {
+          "vjailbreak.k8s.pf9.io/is-shared-rdm": "true",
+          "vjailbreak.k8s.pf9.io/vmware-cluster": "test-cluster",
+          "vjailbreak.k8s.pf9.io/esxi-name": "esx-host-1",
+        },
+      },
+      spec: {
+        vms: {
+          name: "vm005-mock-rdm",
+          cpu: 2,
+          memory: 4096,
+          datastores: ["datastore1"],
+          disks: ["disk7", "disk8"],
+          networks: ["VM Network"],
+          vmState: "running",
+          ipAddress: "192.168.1.103",
+          osFamily: "linuxGuest",
+          networkInterfaces: [
+            {
+              mac: "00:50:56:12:34:59",
+              network: "VM Network",
+              ipAddress: "192.168.1.103",
+            },
+          ],
+        },
+        rdmDisks: ["rdm-disk-shared-2"],
+        targetFlavorId: "",
+      },
+
+      status: {
+        migrated: false,
+        powerState: "running",
+      },
+    },
+  ]
+
+  // Add mock RDM VMs to the response
+  const mockResponse: VMwareMachineList = {
+    ...response,
+    items: [...response.items, ...mockRdmVMs],
+  }
+
+  return mockResponse
 }
 
 /**
