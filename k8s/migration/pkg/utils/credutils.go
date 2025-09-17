@@ -1431,7 +1431,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			{
 				Type: "VirtualMachine",
 				PathSet: []string{
-					"config.hardware.device", "config.name", "config.uuid", "config.instanceUuid",
+					"config.hardware.device", "config.name", "config.uuid",
 					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
 					"config.hardware.numCPU", "config.hardware.memoryMB",
 					"datastore", "network", "runtime",
@@ -1621,25 +1621,38 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 				clusterName = val.(clusterDetails).ClusterName
 				esxiName = val.(clusterDetails).ESXIName
 			}
-			// Build networks list from NetworkInterfaces to match NIC count
-			// Check if all nic.Network matches netNames, if not, add missing networks to netNames
+			// Collect unique network references
+			netRefs := make(map[types.ManagedObjectReference]struct{})
 			for _, nic := range nicList {
-				matchFound := false
-				for _, netName := range netNames {
-					if nic.Network == netName {
-						matchFound = true
-						break
-					}
+				netRefs[types.ManagedObjectReference{Type: "Network", Value: nic.Network}] = struct{}{}
+			}
+
+			// Batch retrieve network names
+			netMap := make(map[types.ManagedObjectReference]string)
+			if len(netRefs) > 0 {
+				var netList []mo.Network
+				refList := make([]types.ManagedObjectReference, 0, len(netRefs))
+				for ref := range netRefs {
+					refList = append(refList, ref)
 				}
-				if !matchFound {
-					var netObj mo.Network
-					netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-					err := collector.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-					if err != nil {
-						log.Error(err, "failed to retrieve network name for", "Network MOR", netRef)
-						continue
+				if err := collector.Retrieve(ctx, refList, []string{"name"}, &netList); err != nil {
+					log.Error(err, "failed to retrieve network names")
+					continue
+				}
+				for _, net := range netList {
+					netMap[net.Self] = net.Name
+				}
+			}
+
+			// Assign network names to NICs
+			for _, nic := range nicList {
+				netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+				if netName, ok := netMap[netRef]; ok {
+					if !slices.Contains(netNames, netName) {
+						netNames = append(netNames, netName)
 					}
-					netNames = append(netNames, netObj.Name)
+				} else {
+					log.Error(fmt.Errorf("network not found"), "network name not found for NIC", "Network MOR", nic.Network, "VM NAME", moVM.Config.Name)
 				}
 			}
 

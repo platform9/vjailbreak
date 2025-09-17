@@ -160,7 +160,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().UpdateDisksInfo(gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+		mockVMOps.EXPECT().GetVMInfo("linux", "").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -207,7 +207,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		// 1. Both Disks Change
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+		mockVMOps.EXPECT().GetVMInfo("linux", "").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -261,7 +261,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		// 2. Only Disk 1 Changes
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+		mockVMOps.EXPECT().GetVMInfo("linux", "").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -288,7 +288,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		// 3. No disk changes
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+		mockVMOps.EXPECT().GetVMInfo("linux", "").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -316,7 +316,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockVMOps.EXPECT().VMPowerOff().Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().GetVMInfo("linux").Return(vm.VMInfo{
+		mockVMOps.EXPECT().GetVMInfo("linux", "").Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",
 			UEFI:   false,
@@ -440,14 +440,14 @@ func TestCreateTargetInstance(t *testing.T) {
 		RAM:   2048,
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), false).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
 		},
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), false).Return(&ports.Port{
 		MACAddress: "mac-address",
 		FixedIPs: []ports.IP{
 			{IPAddress: "ip-address"},
