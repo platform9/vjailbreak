@@ -1431,7 +1431,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			{
 				Type: "VirtualMachine",
 				PathSet: []string{
-					"config.hardware.device", "config.name",
+					"config.hardware.device", "config.name", "config.uuid", "config.instanceUuid",
 					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
 					"config.hardware.numCPU", "config.hardware.memoryMB",
 					"datastore", "network", "runtime",
