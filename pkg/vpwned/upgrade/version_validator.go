@@ -3,6 +3,8 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -669,45 +671,39 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 
 func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
+	log.Printf("Fetching upgrade manifest from: %s", url)
 	resp, err := http.Get(url)
-	if err != nil { return fmt.Errorf("failed to fetch manifest from %s: %w", url, err) }
+	if err != nil {
+		return fmt.Errorf("failed to fetch manifest from %s: %w", url, err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch manifest: received status code %d", resp.StatusCode)
+		return fmt.Errorf("received non-200 status code fetching manifest: %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil { return fmt.Errorf("failed to read manifest body: %w", err) }
-
-	docs := strings.Split(string(body), "---")
-	for _, doc := range docs {
-		doc = strings.TrimSpace(doc)
-		if doc == "" { continue }
-
-		obj := &unstructured.Unstructured{}
-		if err := sigsyaml.Unmarshal([]byte(doc), obj); err != nil {
-			log.Printf("Warning: could not unmarshal document, skipping: %v", err)
-			continue
-		}
-
-		if obj.GetKind() == "" || obj.GetAPIVersion() == "" {
-			log.Printf("Warning: document is missing kind or apiVersion, skipping.")
-			continue
-		}
-
-		op, err := controllerutil.CreateOrUpdate(ctx, kubeClient, obj, func() error {
-			return nil
-		})
-
-		if err != nil {
-			return fmt.Errorf("failed to apply resource %s/%s: %w", obj.GetKind(), obj.GetName(), err)
-		}
-		if op != controllerutil.OperationResultNone {
-			log.Printf("Successfully applied resource %s (%s): %s", obj.GetName(), obj.GetKind(), op)
-		}
+	if err != nil {
+		return fmt.Errorf("failed to read manifest body: %w", err)
 	}
-	log.Println("All resources from the manifest have been applied successfully.")
+
+	fileName := fmt.Sprintf("/tmp/%s.yaml", tag)
+	if err := os.WriteFile(fileName, body, 0644); err != nil {
+		return fmt.Errorf("failed to write manifest to temporary file %s: %w", fileName, err)
+	}
+	log.Printf("Successfully saved manifest to %s", fileName)
+
+	log.Printf("Applying manifest")
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", fileName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error applying manifest: %s", string(output))
+		return fmt.Errorf("kubectl apply failed: %w", err)
+	}
+
+	log.Printf("Successfully applied manifest. Output:\n%s", string(output))
+	_ = os.Remove(fileName)
+
 	return nil
 }
 
