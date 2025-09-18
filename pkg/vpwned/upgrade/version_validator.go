@@ -3,6 +3,8 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -26,6 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/util/retry"
 )
 
 type ValidationResult struct {
@@ -433,12 +436,14 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
-	dep := &appsv1.Deployment{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
-		return err
-	}
-	dep.Spec.Replicas = &target
-	return kubeClient.Update(ctx, dep)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
+			return err
+		}
+		dep.Spec.Replicas = &target
+		return kubeClient.Update(ctx, dep)
+	})
 }
 
 func waitForDeploymentReadyLocal(ctx context.Context, kubeClient client.Client, name, namespace string, timeout time.Duration) error {
@@ -663,52 +668,41 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 	return nil
 }
 
-func fetchCRDsFromGitHub(tag string) ([]byte, error) {
+func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
+	log.Printf("Fetching upgrade manifest from: %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to fetch manifest from %s: %w", url, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to fetch CRDs: %s", resp.Status)
-	}
-	return ioutil.ReadAll(resp.Body)
-}
 
-func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
-	data, err := fetchCRDsFromGitHub(tag)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("received non-200 status code fetching manifest: %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read manifest body: %w", err)
 	}
-	docs := strings.Split(string(data), "---")
-	for _, doc := range docs {
-		doc = strings.TrimSpace(doc)
-		if doc == "" {
-			continue
-		}
-		var crd apiextensionsv1.CustomResourceDefinition
-		if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
-			err := kubeClient.Create(ctx, &crd)
-			if err != nil {
-				if kerrors.IsAlreadyExists(err) {
-					existing := &apiextensionsv1.CustomResourceDefinition{}
-					if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {
-						return err
-					}
-					existing.Spec = crd.Spec
-					if err := kubeClient.Update(ctx, existing); err != nil {
-						return err
-					}
-					log.Printf("Updated CRD: %s", crd.Name)
-				} else {
-					return err
-				}
-			} else {
-				log.Printf("Created CRD: %s", crd.Name)
-			}
-		}
+
+	fileName := fmt.Sprintf("/tmp/%s.yaml", tag)
+	if err := os.WriteFile(fileName, body, 0644); err != nil {
+		return fmt.Errorf("failed to write manifest to temporary file %s: %w", fileName, err)
 	}
+	log.Printf("Successfully saved manifest to %s", fileName)
+
+	log.Printf("Applying manifest")
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", fileName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error applying manifest: %s", string(output))
+		return fmt.Errorf("kubectl apply failed: %w", err)
+	}
+
+	log.Printf("Successfully applied manifest. Output:\n%s", string(output))
+	_ = os.Remove(fileName)
+
 	return nil
 }
 
@@ -743,6 +737,7 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 		}
 		return err
 	}
+	log.Printf("Successfully updated version-config ConfigMap to version %s.", tag)
 	return nil
 }
 
