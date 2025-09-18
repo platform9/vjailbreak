@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/util/retry"
 )
 
 type ValidationResult struct {
@@ -433,12 +434,14 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
-	dep := &appsv1.Deployment{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
-		return err
-	}
-	dep.Spec.Replicas = &target
-	return kubeClient.Update(ctx, dep)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
+			return err
+		}
+		dep.Spec.Replicas = &target
+		return kubeClient.Update(ctx, dep)
+	})
 }
 
 func waitForDeploymentReadyLocal(ctx context.Context, kubeClient client.Client, name, namespace string, timeout time.Duration) error {

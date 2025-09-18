@@ -2671,6 +2671,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - namespaces
   - pods
   - secrets
   verbs:
@@ -2707,6 +2708,12 @@ rules:
   - patch
   - update
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - '*'
+- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
@@ -2742,6 +2749,13 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - '*'
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
@@ -3666,7 +3680,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: quay.io/platform9/vjailbreak-controller:v0.3.3
+        image: quay.io/platform9/vjailbreak-controller:0.3.4
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3746,7 +3760,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.3
+      - image: quay.io/platform9/vjailbreak-vpwned:0.3.4
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

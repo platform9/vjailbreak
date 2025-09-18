@@ -65,6 +65,10 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=bmconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=*
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=*
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=*
 
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
