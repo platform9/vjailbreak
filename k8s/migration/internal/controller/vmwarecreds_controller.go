@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +35,7 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -87,8 +89,9 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
-
-	if _, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds); err != nil {
+	// Connect and log in to ESX or vCenter
+	connection, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
+	if err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
@@ -99,6 +102,9 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
+	// log out from vCenter or ESXI
+	defer utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, connection) // Logout the client
+
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
@@ -110,32 +116,75 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
-	err := utils.CreateVMwareClustersAndHosts(ctx, scope)
+	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
-
 	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}
-	for _, vm := range vminfo {
-		if vm.Name == "" || vm.ESXiName == "" || vm.ClusterName == "" {
-			ctxlog.Info("Skipping VM with empty name, ESXi or cluster", "VM", vm.Name, "ESXi", vm.ESXiName, "Cluster", vm.ClusterName)
-			continue
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "Error fetching VJAILBreak settings")
+	}
+	batchSize := 10
+
+	if len(vminfo) > vjailbreakSettings.VCenterScanConcurrencyLimit {
+		batchSize = int((len(vminfo) / vjailbreakSettings.VCenterScanConcurrencyLimit))
+	}
+
+	ctxlog.Info("Processing VMs in batches", "batchSize", batchSize)
+
+	// Create a WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(vminfo)) // Channel to collect errors
+
+	// Process VMs in batches
+	for i := 0; i < len(vminfo); i += batchSize {
+		end := i + batchSize
+		if end > len(vminfo) {
+			end = len(vminfo)
 		}
-		err = utils.CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &vm)
+
+		// Create a batch of VMs
+		batch := vminfo[i:end]
+
+		// Launch a goroutine for the batch
+		wg.Add(1)
+		go func(batch []vjailbreakv1alpha1.VMInfo) {
+			defer wg.Done()
+			for _, vm := range batch {
+				if vm.Name == "" || vm.ESXiName == "" || vm.ClusterName == "" {
+					ctxlog.Info("Skipping VM with empty name, ESXi or cluster", "VM", vm.Name, "ESXi", vm.ESXiName, "Cluster", vm.ClusterName)
+					continue
+				}
+				// Process the VM
+				if err := utils.CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &vm); err != nil {
+					errChan <- errors.Wrap(err, "Error creating or updating VMwareMachine for VMwareCreds")
+					return
+				}
+			}
+		}(batch)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	for err := range errChan {
 		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "Error creating or updating VMwareMachine for VMwareCreds")
+			return ctrl.Result{}, err
 		}
-		err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
-		}
-		err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
-		}
+	}
+
+	// Process stale VMs and clusters after all batches are done
+	if err := utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	if err := utils.DeleteStaleVMwareClustersAndHosts(ctx, scope); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
 	}
 	err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
 	if err != nil {

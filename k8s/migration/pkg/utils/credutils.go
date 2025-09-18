@@ -481,6 +481,8 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
+var providerClientCache *sync.Map
+
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
@@ -507,10 +509,17 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
-		Reauth:   true,
 	}
-
-	c := new(vim25.Client)
+	var c *vim25.Client
+	if providerClientCache != nil {
+		if cachedClient, ok := providerClientCache.Load(vmwcreds.Spec.SecretRef.Name); ok {
+			c = cachedClient.(*vim25.Client)
+		}
+	} else {
+		providerClientCache = &sync.Map{}
+		c = new(vim25.Client)
+		providerClientCache.Store(vmwcreds.Spec.SecretRef.Name, c)
+	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
@@ -540,6 +549,41 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 
 	return c, nil
+}
+
+func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
+		return err
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+	}
+	u.User = url.UserPassword(username, password)
+	// Connect and log in to ESX or vCenter
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+	}
+	err = s.Logout(ctx, vcentreClient)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
+		return err
+	}
+	return nil
 }
 
 // GetVMwNetworks gets the networks of a VM
@@ -649,6 +693,8 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vms: %w", err)
 	}
+	c.Timeout = 5 * time.Minute
+	defer c.CloseIdleConnections()
 	vmData, rdmDiskMap, err := getVMDetails(ctx, scope, vms, c)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fetch vm data: %w", err)
@@ -1414,7 +1460,6 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	const batchSize = 50
 	log := scope.Logger
 	collector := property.DefaultCollector(client)
-
 	// Build ObjectSet for VM retrieval
 	var objectSet []types.ObjectSpec
 	for _, vm := range vms {
@@ -1431,7 +1476,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			{
 				Type: "VirtualMachine",
 				PathSet: []string{
-					"config.hardware.device", "config.name", "config.uuid",
+					"config.hardware.device", "config.name", "config.uuid", "config.instanceUuid",
 					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
 					"config.hardware.numCPU", "config.hardware.memoryMB",
 					"datastore", "network", "runtime",
@@ -1518,14 +1563,25 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 				dsNames = append(dsNames, name)
 			}
 		}
-
-		// Network names
-		var netNames []string
-		for _, ref := range moVM.Network {
-			if name, ok := netMap[ref]; ok {
-				netNames = append(netNames, name)
-			}
+		// NIC & Guest Network extraction
+		nicList, _ := ExtractVirtualNICs(&moVM)
+		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
+			continue
 		}
+		var netNames []string
+		// Retrive Network on basis on NICs
+		// Build networks list from NetworkInterfaces to match NIC count
+		for _, nic := range nicList {
+			var netObj mo.Network
+			netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+			err := collector.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				log.Error(err, "failed to retrieve network name", "Network MOR", nic.Network)
+				continue
+			}
+			netNames = append(netNames, netObj.Name)
+		}
+
 		var diskLabels []string
 		controllers := make(map[int32]types.BaseVirtualSCSIController)
 		for _, device := range moVM.Config.Hardware.Device {
@@ -1534,12 +1590,26 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 		}
 		// Get basic RDM disk info from VM properties
+		if moVM.Config == nil {
+			log.Error(fmt.Errorf("vm config is nil"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		} else if moVM.Config.Uuid == "" {
+			log.Error(fmt.Errorf("vm uuid is empty"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		} else if vmMap[moVM.Config.Uuid] == nil {
+			log.Error(fmt.Errorf("vm not found in vmMap"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		}
 		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vmMap[moVM.Config.Uuid], hostStorageMap)
 		if err != nil {
 			log.Error(err, "failed to get host storage device info", "VM NAME", moVM.Config.Name)
 			continue
 		}
 		attributes := strings.Split(moVM.Summary.Config.Annotation, "\n")
+		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+		var osFamily string
+		var clusterName string
+		var esxiName string
 		for _, device := range moVM.Config.Hardware.Device {
 			disk, ok := device.(*types.VirtualDisk)
 			if !ok {
@@ -1547,6 +1617,10 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 
 			_, rdmInfo, err := processVMDisk(ctx, disk, hostStorageInfo, moVM.Config.Name)
+			if err != nil {
+				log.Error(err, "failed to process VM disk", "VM NAME", moVM.Config.Name)
+				continue
+			}
 			// check if rdmInfo is empty
 			if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
 				rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
@@ -1573,7 +1647,6 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, moVM.Config.Name)
 					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
 				}
-				//rdmSemaphore.Lock()
 				savedInfo, loaded := rdmDiskMap.LoadOrStore(strings.TrimSpace(rdmInfo.Name), rdmInfo)
 				if loaded {
 					savedInfoDetails, ok := savedInfo.(vjailbreakv1alpha1.RDMDisk)
@@ -1583,165 +1656,121 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 						rdmDiskMap.Store(strings.TrimSpace(rdmInfo.Name), rdmInfo)
 					}
 				}
-				//rdmSemaphore.Unlock()
 			}
+		}
 
-			// NIC & Guest Network extraction
-			nicList, _ := ExtractVirtualNICs(&moVM)
-			if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
+		// Determine cluster name
+		val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
+		if !ok {
+			// Get the host name and parent (cluster) information
+			host := mo.HostSystem{}
+			hostSystemMap.Store(host.Reference().Value, host)
+
+			err = collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
+			if err != nil {
+				log.Error(err, "failed to get host name", "VM NAME", moVM.Config.Name)
 				continue
 			}
-
-			// Determine cluster name
-			var clusterName string
-			var esxiName string
-			val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
-			if !ok {
-				// Get the host name and parent (cluster) information
-				host := mo.HostSystem{}
-				hostSystemMap.Store(host.Reference().Value, host)
-
-				err = collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
-				if err != nil {
-					log.Error(err, "failed to get host name", "VM NAME", moVM.Config.Name)
-					continue
-				}
-				clusterName = getClusterNameFromHost(ctx, client, host)
-				if strings.TrimSpace(moVM.Config.Name) == "" {
-					log.Info("Skipping VM with no name", "VM", moVM.Config.Name)
-					continue
-				}
-				esxiName = host.Name
-				clusterDetails := clusterDetails{
-					ESXIName:    esxiName,
-					ClusterName: clusterName,
-				}
-				hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
-			} else {
-				clusterName = val.(clusterDetails).ClusterName
-				esxiName = val.(clusterDetails).ESXIName
+			clusterName = getClusterNameFromHost(ctx, client, host)
+			if strings.TrimSpace(moVM.Config.Name) == "" {
+				log.Info("Skipping VM with no name", "VM", moVM.Config.Name)
+				continue
 			}
-			// Collect unique network references
-			netRefs := make(map[types.ManagedObjectReference]struct{})
-			for _, nic := range nicList {
-				netRefs[types.ManagedObjectReference{Type: "Network", Value: nic.Network}] = struct{}{}
+			esxiName = host.Name
+			clusterDetails := clusterDetails{
+				ESXIName:    esxiName,
+				ClusterName: clusterName,
 			}
-
-			// Batch retrieve network names
-			netMap := make(map[types.ManagedObjectReference]string)
-			if len(netRefs) > 0 {
-				var netList []mo.Network
-				refList := make([]types.ManagedObjectReference, 0, len(netRefs))
-				for ref := range netRefs {
-					refList = append(refList, ref)
-				}
-				if err := collector.Retrieve(ctx, refList, []string{"name"}, &netList); err != nil {
-					log.Error(err, "failed to retrieve network names")
-					continue
-				}
-				for _, net := range netList {
-					netMap[net.Self] = net.Name
-				}
-			}
-
-			// Assign network names to NICs
-			for _, nic := range nicList {
-				netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-				if netName, ok := netMap[netRef]; ok {
-					if !slices.Contains(netNames, netName) {
-						netNames = append(netNames, netName)
-					}
-				} else {
-					log.Error(fmt.Errorf("network not found"), "network name not found for NIC", "Network MOR", nic.Network, "VM NAME", moVM.Config.Name)
-				}
-			}
-
-			// Get the guest network info
-			guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
-			if err != nil {
-				//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
-			}
-
-			// Convert VM name to Kubernetes-safe name
-			vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
-			if err != nil {
-				//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
-			}
-
-			vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-			vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
-			var guestNetworks []vjailbreakv1alpha1.GuestNetwork
-			var osFamily string
-			err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
-			switch {
-			case apierrors.IsNotFound(err):
-				// First time creation – use whatever vCenter gave us (could be nil)
-				guestNetworks = guestNetworksFromVmware
-				osFamily = moVM.Guest.GuestFamily
-
-			case err != nil:
-				// Unexpected error
-				//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
-				//return
-
-			default:
-				// Object exists
-				if len(guestNetworksFromVmware) > 0 {
-					// Only update if we got fresh data from vCenter
-					guestNetworks = guestNetworksFromVmware
-				} else {
-					// Use existing data because VM is switched off and we can't get the info from vCenter
-					guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
-				}
-				if moVM.Guest.GuestFamily != "" {
-					osFamily = moVM.Guest.GuestFamily
-				} else {
-					osFamily = vmwvm.Spec.VMInfo.OSFamily
-				}
-			}
-
-			if len(guestNetworksFromVmware) > 0 {
-				// Extract IP addresses from guest networks and set it in network interfaces
-				for i, nic := range nicList {
-					for _, guestNet := range guestNetworksFromVmware {
-						if nic.MAC == guestNet.MAC {
-							// Check if IP is ipv4
-							if !strings.Contains(guestNet.IP, ":") {
-								nicList[i].IPAddress = guestNet.IP
-							}
-							break
-						}
-					}
-				}
-			} else {
-				log.Info("No guest network info available from VMware for vm", "VM NAME", moVM.Config.Name)
-				// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
-				for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
-					for i, existingNic := range nicList {
-						if existingNic.MAC == nic.MAC {
-							nicList[i].IPAddress = nic.IPAddress
-							break
-						}
-					}
-				}
-			}
-			batchInfos = append(batchInfos, vjailbreakv1alpha1.VMInfo{
-				Name:              moVM.Config.Name,
-				Datastores:        dsNames,
-				Disks:             diskLabels,
-				Networks:          netNames,
-				IPAddress:         moVM.Guest.IpAddress,
-				VMState:           moVM.Guest.GuestState,
-				OSFamily:          osFamily,
-				CPU:               int(moVM.Config.Hardware.NumCPU),
-				Memory:            int(moVM.Config.Hardware.MemoryMB),
-				RDMDisks:          rdmForVM,
-				ESXiName:          esxiName,
-				ClusterName:       clusterName,
-				NetworkInterfaces: nicList,
-				GuestNetworks:     guestNetworks,
-			})
+			hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
+		} else {
+			clusterName = val.(clusterDetails).ClusterName
+			esxiName = val.(clusterDetails).ESXIName
 		}
+
+		// Get the guest network info
+		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
+		if err != nil {
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
+		}
+
+		// Convert VM name to Kubernetes-safe name
+		vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
+		if err != nil {
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
+		}
+
+		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
+		err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
+		switch {
+		case apierrors.IsNotFound(err):
+			// First time creation – use whatever vCenter gave us (could be nil)
+			guestNetworks = guestNetworksFromVmware
+			osFamily = moVM.Guest.GuestFamily
+
+		case err != nil:
+			// Unexpected error
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
+			//return
+
+		default:
+			// Object exists
+			if len(guestNetworksFromVmware) > 0 {
+				// Only update if we got fresh data from vCenter
+				guestNetworks = guestNetworksFromVmware
+			} else {
+				// Use existing data because VM is switched off and we can't get the info from vCenter
+				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
+			}
+			if moVM.Guest.GuestFamily != "" {
+				osFamily = moVM.Guest.GuestFamily
+			} else {
+				osFamily = vmwvm.Spec.VMInfo.OSFamily
+			}
+		}
+
+		if len(guestNetworksFromVmware) > 0 {
+			// Extract IP addresses from guest networks and set it in network interfaces
+			for i, nic := range nicList {
+				for _, guestNet := range guestNetworksFromVmware {
+					if nic.MAC == guestNet.MAC {
+						// Check if IP is ipv4
+						if !strings.Contains(guestNet.IP, ":") {
+							nicList[i].IPAddress = guestNet.IP
+						}
+						break
+					}
+				}
+			}
+		} else {
+			log.Info("No guest network info available from VMware for vm", "VM NAME", moVM.Config.Name)
+			// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
+			for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
+				for i, existingNic := range nicList {
+					if existingNic.MAC == nic.MAC {
+						nicList[i].IPAddress = nic.IPAddress
+						break
+					}
+				}
+			}
+		}
+
+		batchInfos = append(batchInfos, vjailbreakv1alpha1.VMInfo{
+			Name:              moVM.Config.Name,
+			Datastores:        dsNames,
+			Disks:             diskLabels,
+			Networks:          netNames,
+			IPAddress:         moVM.Guest.IpAddress,
+			VMState:           moVM.Guest.GuestState,
+			OSFamily:          osFamily,
+			CPU:               int(moVM.Config.Hardware.NumCPU),
+			Memory:            int(moVM.Config.Hardware.MemoryMB),
+			RDMDisks:          rdmForVM,
+			ESXiName:          esxiName,
+			ClusterName:       clusterName,
+			NetworkInterfaces: nicList,
+			GuestNetworks:     guestNetworks,
+		})
 	}
 	return batchInfos, rdmDiskMap, nil
 }
