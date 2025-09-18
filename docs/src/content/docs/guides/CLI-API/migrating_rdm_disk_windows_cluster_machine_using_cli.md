@@ -77,7 +77,7 @@ Since VMware does not allow snapshots of a VM with attached RDM disks, you must:
 1) For each VM go to the Edit Settings, click on the cross icon near the RDM disks, keep "Delete files from storage" unchecked.
 2) For each VM go to the Edit Settings,click on Remove the SCSI controller used by these disks, this will be in Physical sharing mode.
 
-![Detach RDM Disk in vmware](https://github.com/rishabh625/vjailbreak/blob/docs/rdm-migration-guide/docs/src/assets/vmware-removing-rdm-disk.png)
+![Detach RDM Disk in vmware](https://raw.githubusercontent.com/rishabh625/vjailbreak/refs/heads/docs/rdm-migration-guide/docs/src/assets/vmware-removing-rdm-disk.png)
 
 This ensures the snapshot and migration can proceed without errors.
 
