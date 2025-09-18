@@ -1,6 +1,11 @@
 # Migrating RDM Disk
 
-This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using **vjailbreak**.  
+This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using 
+RDM disks are mostly used of windows machine.
+
+RDM disk migration is only supported for PCD version >= September 2025
+
+**vjailbreak**.  
 
 ---
 
@@ -64,8 +69,15 @@ This will show the RDM disk identifiers.
 ### 3. Detach RDM Disk and Power Off VM in Vmware
 Since VMware does not allow snapshots of a VM with attached RDM disks, you must:  
 
-- **Detach the RDM disk** from the VM.  
 - **Power off** the VM to be migrated.  
+- **Detach the RDM disk** from the VM.  
+
+**Steps to detach RDM disks in vmware**
+
+1) For each VM go to the Edit Settings, click on the cross icon near the RDM disks, keep "Delete files from storage" unchecked.
+2) For each VM go to the Edit Settings,click on Remove the SCSI controller used by these disks, this will be in Physical sharing mode.
+
+![Detach RDM Disk in vmware](https://github.com/rishabh625/vjailbreak/blob/docs/rdm-migration-guide/docs/src/assets/vmware-removing-rdm-disk.png)
 
 This ensures the snapshot and migration can proceed without errors.
 
