@@ -54,19 +54,19 @@ var (
 			Namespace:     "migration-system",
 			Name:          "migration-controller-manager",
 			ContainerName: "manager",
-			ImagePrefix:   "docker.io/platform9/vjailbreak-controller",
+			ImagePrefix:   "quay.io/platform9/vjailbreak-controller",
 		},
 		{
 			Namespace:     "migration-system",
 			Name:          "migration-vpwned-sdk",
 			ContainerName: "vpwned",
-			ImagePrefix:   "docker.io/platform9/vjailbreak-vpwned",
+			ImagePrefix:   "quay.io/platform9/vjailbreak-vpwned",
 		},
 		{
 			Namespace:     "migration-system",
 			Name:          "vjailbreak-ui",
 			ContainerName: "vjailbreak-ui-container",
-			ImagePrefix:   "docker.io/platform9/vjailbreak-ui",
+			ImagePrefix:   "quay.io/platform9/vjailbreak-ui",
 		},
 	}
 )

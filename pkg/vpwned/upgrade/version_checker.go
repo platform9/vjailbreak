@@ -138,9 +138,9 @@ func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
 	log.Printf("Verifying images exist for tag: %s", tag)
 
 	images := []string{
-		"docker.io/platform9/vjailbreak-ui:" + tag,
-		"docker.io/platform9/vjailbreak-controller:" + tag,
-		"docker.io/platform9/vjailbreak-vpwned:" + tag,
+		"quay.io/platform9/vjailbreak-ui:" + tag,
+		"quay.io/platform9/vjailbreak-controller:" + tag,
+		"quay.io/platform9/vjailbreak-vpwned:" + tag,
 	}
 
 	for _, imageName := range images {
