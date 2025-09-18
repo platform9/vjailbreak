@@ -663,52 +663,48 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 	return nil
 }
 
-func fetchCRDsFromGitHub(tag string) ([]byte, error) {
-	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to fetch CRDs: %s", resp.Status)
-	}
-	return ioutil.ReadAll(resp.Body)
-}
 
 func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
-	data, err := fetchCRDsFromGitHub(tag)
-	if err != nil {
-		return err
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
+	resp, err := http.Get(url)
+	if err != nil { return fmt.Errorf("failed to fetch manifest from %s: %w", url, err) }
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch manifest: received status code %d", resp.StatusCode)
 	}
-	docs := strings.Split(string(data), "---")
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil { return fmt.Errorf("failed to read manifest body: %w", err) }
+
+	docs := strings.Split(string(body), "---")
 	for _, doc := range docs {
 		doc = strings.TrimSpace(doc)
-		if doc == "" {
+		if doc == "" { continue }
+
+		obj := &unstructured.Unstructured{}
+		if err := sigsyaml.Unmarshal([]byte(doc), obj); err != nil {
+			log.Printf("Warning: could not unmarshal document, skipping: %v", err)
 			continue
 		}
-		var crd apiextensionsv1.CustomResourceDefinition
-		if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
-			err := kubeClient.Create(ctx, &crd)
-			if err != nil {
-				if kerrors.IsAlreadyExists(err) {
-					existing := &apiextensionsv1.CustomResourceDefinition{}
-					if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {
-						return err
-					}
-					existing.Spec = crd.Spec
-					if err := kubeClient.Update(ctx, existing); err != nil {
-						return err
-					}
-					log.Printf("Updated CRD: %s", crd.Name)
-				} else {
-					return err
-				}
-			} else {
-				log.Printf("Created CRD: %s", crd.Name)
-			}
+
+		if obj.GetKind() == "" || obj.GetAPIVersion() == "" {
+			log.Printf("Warning: document is missing kind or apiVersion, skipping.")
+			continue
+		}
+
+		op, err := controllerutil.CreateOrUpdate(ctx, kubeClient, obj, func() error {
+			return nil
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to apply resource %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+		}
+		if op != controllerutil.OperationResultNone {
+			log.Printf("Successfully applied resource %s (%s): %s", obj.GetName(), obj.GetKind(), op)
 		}
 	}
+	log.Println("All resources from the manifest have been applied successfully.")
 	return nil
 }
 
@@ -743,6 +739,7 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 		}
 		return err
 	}
+	log.Printf("Successfully updated version-config ConfigMap to version %s.", tag)
 	return nil
 }
 
