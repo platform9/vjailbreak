@@ -3,7 +3,7 @@
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using 
 RDM disks are mostly used of windows machine.
 
-RDM disk migration is only supported for PCD version >= September 2025
+RDM disk migration is only supported for **PCD version >= September 2025**
 
 **vjailbreak**.  
 
