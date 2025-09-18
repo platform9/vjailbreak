@@ -108,3 +108,30 @@ Look for:
 status:
   phase: Available
 ```
+
+### 7. Ensure all VM's of cluster is migrated
+
+1) Check RDM disk is available as volume in PCD or openstack
+
+2) Ensure all VM's of cluster is migrated
+
+3) Power on all VM's together
+
+### Rollback plan - if migration fails
+
+1) Delete VMs created in PCD or openstack
+2) Delete managed volume 
+``` openstack volume delete volumeid --remote```
+3) Attach RDM disk in VMware to powered off VM's
+
+    - Add the reference VMDK disks
+
+    - Add New Device > Existing Hard Disk.
+  This will add the disk as New Hard disk.
+    - Change the controller of this hard disk to "New SCSI Controller" which we created in firs step.
+
+    Repeat the process for all the RDM disk.
+
+![Re attach RDM disk on failure](https://raw.githubusercontent.com/rishabh625/vjailbreak/refs/heads/docs/rdm-migration-guide/docs/src/assets/vmware-adding-back-disk.png)
+
+4) Power on all the VM's on Vmware
