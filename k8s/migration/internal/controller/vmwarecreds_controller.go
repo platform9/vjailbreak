@@ -115,7 +115,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 
-	err := utils.CreateVMwareClustersAndHosts(ctx, scope)
+	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
