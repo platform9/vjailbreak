@@ -24,7 +24,42 @@ If using PCD we recommend toggling the "Is PCD credentials" option. This will au
 
 For non PCD environment the `openstack.rc` file will be available as part of various distribution and documentation. The `openstack.rc` file is typically used for any automation with the OpenStack CLI.
 
-Here is an example of the `openstack.rc` file:
+#### Required Variables
+
+vJailbreak requires the following environment variables to be present in your admin RC file. **All of these variables are mandatory** and the migration will fail if any are missing:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OS_AUTH_URL` | OpenStack Keystone authentication URL | `https://keystone.example.com:5000/v3` |
+| `OS_USERNAME` | OpenStack username with admin privileges | `admin` |
+| `OS_PASSWORD` | Password for the OpenStack user | `your-secure-password` |
+| `OS_REGION_NAME` | OpenStack region where VMs will be created | `RegionOne` |
+| `OS_PROJECT_NAME` | OpenStack project name for VM deployment | `service` |
+| `OS_PROJECT_DOMAIN_NAME` | OpenStack project domain name | `Default` |
+| `OS_AUTH_TYPE` | OpenStack authentication type | `password` |
+| `OS_IDENTITY_API_VERSION` | OpenStack identity API version | `3` |
+| `OS_USER_DOMAIN_NAME` | OpenStack user domain name | `Default` |
+| `OS_INTERFACE` | OpenStack API interface type | `public` |
+
+#### Optional Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OS_INSECURE` | Skip SSL certificate verification | `true` or `false` |
+
+#### User Permissions
+
+The user specified in `OS_USERNAME` must have administrative privileges in OpenStack to:
+- Create and manage virtual machines
+- Access network and storage resources  
+- Create and manage volumes
+- Access compute, network, and storage services
+
+The project specified in `OS_PROJECT_NAME` must exist and have sufficient quotas for the VMs being migrated.
+
+#### Example Admin RC File
+
+Here is an example of the `openstack.rc` file with all variables:
 
 ```bash
 export OS_USERNAME=<your-username>
@@ -37,6 +72,7 @@ export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=service
 export OS_INTERFACE=public
+export OS_INSECURE=false
 ```
 
 :::note
