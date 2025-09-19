@@ -1493,6 +1493,7 @@ export default function VmsSelectionStep({
               cinderBackendPool: config.cinderBackendPool,
               volumeType: config.volumeType,
               source: config.source,
+              openstackCreds: openstackCredName,
             }
           }
         } as Partial<RdmDisk>;
