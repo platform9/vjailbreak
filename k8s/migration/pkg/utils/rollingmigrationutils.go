@@ -225,8 +225,8 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 		return nil, nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
 	if c != nil {
+		defer c.CloseIdleConnections()
 		defer func() {
-			defer c.CloseIdleConnections()
 			LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c)
 		}()
 	}
