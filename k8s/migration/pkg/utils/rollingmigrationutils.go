@@ -224,6 +224,7 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	}
 	if c != nil {
 		defer func() {
+			defer c.CloseIdleConnections()
 			LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c)
 		}()
 	}

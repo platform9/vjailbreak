@@ -1451,6 +1451,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	if c != nil {
+		defer c.CloseIdleConnections()
 		defer func() {
 			LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
 		}()

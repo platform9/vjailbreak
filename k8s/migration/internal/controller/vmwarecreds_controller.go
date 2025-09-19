@@ -100,6 +100,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
 	if c != nil {
+		defer c.CloseIdleConnections()
 		defer func() {
 			utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c)
 		}()
