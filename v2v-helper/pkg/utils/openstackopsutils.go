@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -46,7 +47,40 @@ type OpenStackMetadata struct {
 	UUID string `json:"uuid"`
 }
 
+var (
+	cachedMetadata *OpenStackMetadata
+	metadataMutex  sync.RWMutex
+)
+
 func GetCurrentInstanceUUID() (string, error) {
+
+	// Step 1. Path with a read lock
+	// First Check if the data is already cached. This read lock allows multiple
+	// Goroutines to read the cached data concurrently.
+
+	metadataMutex.RLock()
+	if cachedMetadata != nil {
+		// If cached, return it immediately.
+		defer metadataMutex.RUnlock()
+		return cachedMetadata.UUID, nil
+	}
+
+	// Release the read lock before we get the Write lock.
+	metadataMutex.RUnlock()
+
+	// Step 2. Path with write lock
+	// Acquire a write lock to fetch and cache the metadata.
+	metadataMutex.Lock()
+	defer metadataMutex.Unlock()
+
+	// Check again if another goroutine has already fetched the metadata.
+
+	if cachedMetadata != nil {
+		return cachedMetadata.UUID, nil
+	}
+
+	// Step 4: Fetch metadata from the OpenStack metadata service
+
 	client := retryablehttp.NewClient()
 	client.RetryMax = 5
 	client.Logger = nil
@@ -70,7 +104,7 @@ func GetCurrentInstanceUUID() (string, error) {
 	if err := json.Unmarshal(body, &metadata); err != nil {
 		return "", fmt.Errorf("failed to unmarshal metadata: %s", err)
 	}
-
+	cachedMetadata = &metadata
 	return metadata.UUID, nil
 }
 

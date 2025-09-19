@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -20,8 +21,43 @@ type InstanceMetadata struct {
 	UUID string `json:"uuid"`
 }
 
+// Package-level variables to implement a thread-safe cache.
+var (
+	// cachedMetadata holds the metadata once it's been successfully fetched.
+	cachedMetadata *InstanceMetadata
+	// metadataMutex protects access to cachedMetadata.
+	metadataMutex sync.RWMutex
+)
+
 // GetCurrentInstanceMetadata retrieves metadata about the current instance from the OpenStack metadata service
 func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
+	// Step 1. Path with a read lock
+	// First Check if the data is already cached. This readlocky allows multiple
+	// Goroutines to read the cached data concurrently.
+
+	metadataMutex.RLock()
+	if cachedMetadata != nil {
+		// If cached, return it immediately.
+		defer metadataMutex.RUnlock()
+		return cachedMetadata, nil
+	}
+
+	// Release the read lock before we get the Write lock.
+	metadataMutex.RUnlock()
+
+	// Step 2. Path with write lock
+	// Acquire a write lock to fetch and cache the metadata.
+	metadataMutex.Lock()
+	defer metadataMutex.Unlock()
+
+	// Check again if another goroutine has already fetched the metadata.
+
+	if cachedMetadata != nil {
+		return cachedMetadata, nil
+	}
+
+	// Step 4: Fetch metadata from the OpenStack metadata service
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
 	if err != nil {
@@ -55,8 +91,10 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 	if metadata.UUID == "" {
 		return nil, errors.New("instance UUID not found in metadata")
 	}
+	cachedMetadata = &metadata
+	// Step 5: Return the fetched metadata
 
-	return &metadata, nil
+	return cachedMetadata, nil
 }
 
 // VerifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
