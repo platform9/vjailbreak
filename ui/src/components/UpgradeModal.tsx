@@ -111,7 +111,7 @@ export const UpgradeModal = ({ show, onClose }) => {
 
           setTimeout(() => {
             window.location.reload();
-          }, 3000);
+          }, 2000);
         }
       } catch (err) {
         setUpgradeInProgress(false);
