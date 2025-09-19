@@ -45,7 +45,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
     const [configurations, setConfigurations] = useState<RdmDiskConfiguration[]>([])
     const initializedRef = useRef(false)
 
-    // Initialize configurations when rdmDisks change
+    // Initialize config when rdmDisks change
     useEffect(() => {
         if (rdmDisks.length > 0 && !initializedRef.current) {
             const initialConfigs = rdmDisks.map(disk => ({
