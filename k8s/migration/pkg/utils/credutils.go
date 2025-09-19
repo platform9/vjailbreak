@@ -481,6 +481,8 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
+var providerClientCache *sync.Map
+
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
@@ -510,7 +512,16 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 
-	c := new(vim25.Client)
+	var c *vim25.Client
+	if providerClientCache != nil {
+		if cachedClient, ok := providerClientCache.Load(vmwcreds.Spec.SecretRef.Name); ok {
+			c = cachedClient.(*vim25.Client)
+		}
+	} else {
+		providerClientCache = &sync.Map{}
+		c = new(vim25.Client)
+		providerClientCache.Store(vmwcreds.Spec.SecretRef.Name, c)
+	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
@@ -1434,9 +1445,15 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	if c != nil {
+		defer func() {
+			LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
+		}()
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
@@ -1706,4 +1723,39 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	}
 
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
+}
+
+func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
+		return err
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+	}
+	u.User = url.UserPassword(username, password)
+	// Connect and log in to ESX or vCenter
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+	}
+	err = s.Logout(ctx, vcentreClient)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
+		return err
+	}
+	return nil
 }

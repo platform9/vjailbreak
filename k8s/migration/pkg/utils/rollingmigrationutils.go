@@ -80,12 +80,12 @@ func getMigrationObject(ctx context.Context, k8sClient client.Client, vmwareObje
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
-	
+
 	k8sName, err := GetK8sCompatibleVMWareObjectName(vmwareObjectName, vmwarecreds.Name)
 	if err != nil {
 		return errors.Wrap(err, errorMsg)
 	}
-	
+
 	return k8sClient.Get(ctx, types.NamespacedName{
 		Name:      GenerateRollingMigrationObjectName(k8sName, rollingMigrationPlan),
 		Namespace: constants.NamespaceMigrationSystem,
@@ -222,7 +222,11 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
-
+	if c != nil {
+		defer func() {
+			LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c)
+		}()
+	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
 	if err != nil {
