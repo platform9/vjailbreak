@@ -1,6 +1,7 @@
 import { Box, Typography, Drawer, styled, Paper, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Select, MenuItem, GlobalStyles, FormLabel, Snackbar } from "@mui/material"
 import ClusterIcon from "@mui/icons-material/Hub"
 import React, { useState, useMemo, useEffect, useCallback } from "react"
+import { getTypographyStyles } from "../../theme/typography-utils"
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid"
 import { useNavigate } from "react-router-dom"
 import Footer from "../../components/forms/Footer"
@@ -384,11 +385,11 @@ export default function RollingMigrationFormDrawer({
                     const config = await getBMConfig(configs[0].metadata.name, VJAILBREAK_DEFAULT_NAMESPACE);
                     setSelectedMaasConfig(config);
                 } catch (error) {
-                    console.error(`Failed to fetch MAAS config:`, error);
+                    console.error(`Failed to fetch Bare Metal config:`, error);
                 }
             }
         } catch (error) {
-            console.error("Failed to fetch MAAS configs:", error);
+            console.error("Failed to fetch Bare Metal configs:", error);
         } finally {
             setLoadingMaasConfig(false);
         }
@@ -2398,12 +2399,12 @@ export default function RollingMigrationFormDrawer({
                             loadingPCD={loadingPCD}
                         />
                         <Box>
-                            <Step stepNumber="2" label="MAAS Config (Verify the configuration)" />
+                            <Step stepNumber="2" label="Bare Metal Config (Verify the configuration)" />
                             <Box sx={{ ml: 5, mt: 1 }}>
                                 {loadingMaasConfig ? (
-                                    <Typography variant="body2">Loading MAAS Config...</Typography>
+                                    <Typography variant="body2">Loading Bare Metal Config...</Typography>
                                 ) : maasConfigs.length === 0 ? (
-                                    <Typography variant="body2">No MAAS Config available</Typography>
+                                    <Typography variant="body2">No Bare Metal Config available</Typography>
                                 ) : (
                                     <Typography
                                         variant="subtitle2"
@@ -2416,7 +2417,7 @@ export default function RollingMigrationFormDrawer({
                                         }}
                                         onClick={handleViewMaasConfig}
                                     >
-                                        View MAAS Config Details
+                                        View Bare Metal Config Details
                                     </Typography>
                                 )}
                             </Box>
@@ -2533,12 +2534,12 @@ export default function RollingMigrationFormDrawer({
                                     />
                                 </Paper>
                                 {vmIpValidationError && (
-                                    <Alert severity="warning" >
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
                                         {vmIpValidationError}
                                     </Alert>
                                 )}
                                 {osValidationError && (
-                                    <Alert severity="warning" >
+                                    <Alert severity="warning" sx={{ mt: 2 }}>
                                         {osValidationError}
                                     </Alert>
                                 )}
@@ -2594,10 +2595,10 @@ export default function RollingMigrationFormDrawer({
                 <MaasConfigDialog
                     open={maasConfigDialogOpen}
                     onClose={handleCloseMaasConfig}
-                    aria-labelledby="maas-config-dialog-title"
+                    aria-labelledby="baremetal-config-dialog-title"
                 >
-                    <DialogTitle id="maas-config-dialog-title">
-                        <Typography variant="h6">ESXi - MAAS Configuration</Typography>
+                    <DialogTitle id="baremetal-config-dialog-title">
+                        <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>
                     </DialogTitle>
                     <DialogContent dividers>
                         {loadingMaasConfig ? (
@@ -2614,7 +2615,7 @@ export default function RollingMigrationFormDrawer({
                                             <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
                                         </ConfigField>
                                         <ConfigField>
-                                            <FieldLabel>MAAS URL:</FieldLabel>
+                                            <FieldLabel>Bare Metal Provider URL:</FieldLabel>
                                             <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
                                         </ConfigField>
                                         <ConfigField>
@@ -2976,7 +2977,8 @@ export default function RollingMigrationFormDrawer({
                                                     sx={{
                                                         width: '200px',
                                                         '& .MuiInputBase-input': {
-                                                            fontFamily: 'monospace'
+                                                            // Use monospace variant for IP input fields (larger, more readable)
+                                                            ...getTypographyStyles.monospace,
                                                         }
                                                     }}
                                                     error={validationStatus === 'invalid'}
