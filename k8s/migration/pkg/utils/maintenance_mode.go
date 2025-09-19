@@ -33,6 +33,7 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	}
 	if c != nil {
 		defer func() {
+			defer c.CloseIdleConnections()
 			LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
 		}()
 	}
