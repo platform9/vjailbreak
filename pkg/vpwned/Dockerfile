@@ -21,10 +21,7 @@ RUN make vpwctl
 FROM alpine:3.18
 
 # Install ca-certificates and tzdata for proper SSL and timezone support
-RUN apk --no-cache add ca-certificates tzdata skopeo curl jq \
-    && curl -LO "https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl" \
-    && chmod +x kubectl \
-    && mv kubectl /usr/local/bin/kubectl
+RUN apk --no-cache add ca-certificates tzdata skopeo
 
 # Set working directory
 WORKDIR /root/

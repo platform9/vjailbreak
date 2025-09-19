@@ -3,8 +3,7 @@ package upgrade
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -21,6 +20,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -669,8 +670,9 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 }
 
 func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
-	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/00crds.yaml", tag)
 	log.Printf("Fetching upgrade manifest from: %s", url)
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch manifest from %s: %w", url, err)
@@ -678,31 +680,49 @@ func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("received non-200 status code fetching manifest: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected HTTP status: %s", resp.Status)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest body: %w", err)
+	decoder := utilyaml.NewYAMLOrJSONDecoder(resp.Body, 4096)
+
+	for {
+		u := &unstructured.Unstructured{}
+		if err := decoder.Decode(u); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to read manifest body: %w", err)
+		}
+
+		if u.GetKind() == "" {
+			continue
+		}
+
+		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}
+
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(u.GroupVersionKind())
+		err := kubeClient.Get(ctx, key, existing)
+
+		if kerrors.IsNotFound(err) {
+			if err := kubeClient.Create(ctx, u); err != nil {
+				log.Printf("Failed to create %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
+				return err
+			}
+			log.Printf("Created %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
+		} else if err == nil {
+			u.SetResourceVersion(existing.GetResourceVersion())
+			if err := kubeClient.Update(ctx, u); err != nil {
+				log.Printf("Failed to update %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
+				return err
+			}
+			log.Printf("Updated %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
+		} else {
+			return fmt.Errorf("failed to get existing resource %s/%s: %w", u.GetNamespace(), u.GetName(), err)
+		}
 	}
 
-	fileName := fmt.Sprintf("/tmp/%s.yaml", tag)
-	if err := os.WriteFile(fileName, body, 0644); err != nil {
-		return fmt.Errorf("failed to write manifest to temporary file %s: %w", fileName, err)
-	}
-	log.Printf("Successfully saved manifest to %s", fileName)
-
-	log.Printf("Applying manifest")
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", fileName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("Error applying manifest: %s", string(output))
-		return fmt.Errorf("kubectl apply failed: %w", err)
-	}
-
-	log.Printf("Successfully applied manifest. Output:\n%s", string(output))
-	_ = os.Remove(fileName)
-
+	log.Printf("Successfully applied all resources from manifest %s", tag)
 	return nil
 }
 

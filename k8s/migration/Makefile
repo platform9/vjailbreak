@@ -126,8 +126,8 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
 	cd config/addons && $(KUSTOMIZE) edit set image vpwned=${VPWNED_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
-	cp dist/install.yaml ../../deploy/00crds.yaml
-	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/' > ../../deploy/upgrade-all-resources.yaml
+	cp dist/install.yaml ../../deploy/installer.yaml
+	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/' > ../../deploy/00crds.yaml
 
 ##@ Deployment
 
