@@ -29,6 +29,7 @@ import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
 import Step from "../../components/forms/Step";
 import { useEffect, useState, useCallback } from "react";
+import { getTypographyStyles } from "../../theme/typography-utils";
 import * as React from "react";
 import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
 import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
@@ -1707,7 +1708,7 @@ export default function VmsSelectionStep({
                         sx={{
                           width: '200px',
                           '& .MuiInputBase-input': {
-                            fontFamily: 'monospace'
+                            ...getTypographyStyles.monospace,
                           }
                         }}
                         error={validationStatus === 'invalid'}

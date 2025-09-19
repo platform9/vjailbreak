@@ -89,8 +89,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
-	// Connect and log in to ESX or vCenter
-	connection, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
+	c, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
 	if err != nil {
 		// Update the status of the VMwareCreds object
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
@@ -102,9 +101,12 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
 	}
-	// log out from vCenter or ESXI
-	defer utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, connection) // Logout the client
-
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c)
+		}()
+	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"

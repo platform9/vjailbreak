@@ -551,41 +551,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	return c, nil
 }
 
-func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
-	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
-		return err
-	}
-
-	host := vmwareCredsinfo.Host
-	username := vmwareCredsinfo.Username
-	password := vmwareCredsinfo.Password
-	disableSSLVerification := vmwareCredsinfo.Insecure
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
-	}
-	u, err := url.Parse(host)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
-	}
-	u.User = url.UserPassword(username, password)
-	// Connect and log in to ESX or vCenter
-	s := &cache.Session{
-		URL:      u,
-		Insecure: disableSSLVerification,
-	}
-	err = s.Logout(ctx, vcentreClient)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
-		return err
-	}
-	return nil
-}
-
 // GetVMwNetworks gets the networks of a VM
 func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
 	// Pre-allocate networks slice to avoid append allocations
@@ -1436,9 +1401,16 @@ func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, 
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
+		}()
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
@@ -1801,4 +1773,39 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	}
 
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
+}
+
+func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
+		return err
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+	}
+	u.User = url.UserPassword(username, password)
+	// Connect and log in to ESX or vCenter
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+	}
+	err = s.Logout(ctx, vcentreClient)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
+		return err
+	}
+	return nil
 }
