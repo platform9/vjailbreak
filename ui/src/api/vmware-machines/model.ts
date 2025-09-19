@@ -10,6 +10,7 @@ export interface VMwareVM {
   assignedIp?: string
   osFamily?: string
   networkInterfaces?: VmNetworkInterface[]
+  rdmDisks?: string[]
 }
 
 export interface VmNetworkInterface {
@@ -32,7 +33,6 @@ export interface VMwareMachine {
   spec: {
     vms: VMwareVM
     targetFlavorId?: string
-    rdmDisks?: string[]
   }
   status: {
     migrated: boolean
