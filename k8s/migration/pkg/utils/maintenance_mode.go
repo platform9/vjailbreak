@@ -32,8 +32,8 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		return false, fmt.Sprintf("failed to validate vCenter connection: %v", err), fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	if c != nil {
+		defer c.CloseIdleConnections()
 		defer func() {
-			defer c.CloseIdleConnections()
 			LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
 		}()
 	}
