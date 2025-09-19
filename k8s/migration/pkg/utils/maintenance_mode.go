@@ -28,10 +28,17 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	k8sClient := scope.Client
 	// Connect to vCenter
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwcreds)
+	defer LogoutVMwareClient(ctx, k8sClient, vmwcreds, c) // Logout the client
+
 	if err != nil {
 		return false, fmt.Sprintf("failed to validate vCenter connection: %v", err), fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
+		}()
+	}
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
 
@@ -174,10 +181,12 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string) (*types.HostMaintenanceSpec, error) {
 	// Connect to vCenter
 	c, err := ValidateVMwareCreds(ctx, k8sClient, vmwcreds)
+	defer LogoutVMwareClient(ctx, k8sClient, vmwcreds, c) // Logout the client
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-
+	defer LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
 

@@ -481,6 +481,8 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
+var providerClientCache *sync.Map
+
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
@@ -507,10 +509,17 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
-		Reauth:   true,
 	}
-
-	c := new(vim25.Client)
+	var c *vim25.Client
+	if providerClientCache != nil {
+		if cachedClient, ok := providerClientCache.Load(vmwcreds.Spec.SecretRef.Name); ok {
+			c = cachedClient.(*vim25.Client)
+		}
+	} else {
+		providerClientCache = &sync.Map{}
+		c = new(vim25.Client)
+		providerClientCache.Store(vmwcreds.Spec.SecretRef.Name, c)
+	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
@@ -633,11 +642,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
 	vmErrors := []vmError{}
-	errMu := sync.Mutex{}
-	panicMu := sync.Mutex{}
-	panicErrors := []interface{}{}
-	vminfoMu := sync.Mutex{}
-	var wg sync.WaitGroup
 
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
 	if err != nil {
@@ -654,37 +658,12 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vms: %w", err)
 	}
-	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
-
-	// Create a semaphore to limit concurrent goroutines
-	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
-	rdmDiskMap := &sync.Map{}
-	for i := range vms {
-		// Acquire semaphore (blocks if 100 goroutines are already running)
-		semaphore <- struct{}{}
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			// Release semaphore when done
-			defer func() { <-semaphore }()
-			// Don't panic on error
-			defer func() {
-				if r := recover(); r != nil {
-					panicMu.Lock()
-					panicErrors = append(panicErrors, r)
-					panicMu.Unlock()
-				}
-			}()
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
-		}(i)
+	c.Timeout = 5 * time.Minute
+	defer c.CloseIdleConnections()
+	vmData, rdmDiskMap, err := getVMDetails(ctx, scope, vms, c)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch vm data: %w", err)
 	}
-	// Wait for all VMs to be processed
-	wg.Wait()
-
-	// Close the semaphore channel after all goroutines have completed
-	close(semaphore)
-
 	if len(vmErrors) > 0 {
 		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
 		// Print individual VM errors for better debugging
@@ -692,7 +671,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 			log.Error(e.err, "VM error details", "vmName", e.vmName)
 		}
 	}
-	return vminfo, rdmDiskMap, nil
+	return vmData, rdmDiskMap, nil
 }
 
 // ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
@@ -1421,22 +1400,17 @@ func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, 
 	return volBackendPools, nil
 }
 
-func appendToVMErrorsThreadSafe(errMu *sync.Mutex, vmErrors *[]vmError, vmName string, err error) {
-	errMu.Lock()
-	*vmErrors = append(*vmErrors, vmError{vmName: vmName, err: err})
-	errMu.Unlock()
-}
-
-func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, vmInfo vjailbreakv1alpha1.VMInfo) {
-	vminfoMu.Lock()
-	*vminfo = append(*vminfo, vmInfo)
-	vminfoMu.Unlock()
-}
-
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+	}
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
+		}()
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
@@ -1447,244 +1421,337 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
-var rdmSemaphore = &sync.Mutex{}
+var hostStorageMap *sync.Map = &sync.Map{}
+var rdmDiskMap *sync.Map = &sync.Map{}
 
-// processSingleVM processes a single VM, extracting its properties and updating the VMInfo and VMwareMachine resources
-// It handles RDM disks, networks, and other VM properties.
-// It also manages synchronization of RDM disk information across VMs and VMwareMachine resources.
-// It uses a mutex to ensure thread-safe access to shared resources like vmErrors and vminfo.
-// The function is designed to be run concurrently for multiple VMs, hence the use of goroutines and mutexes for synchronization.
-// due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
-//
-//nolint:gocyclo
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map) {
-	var vmProps mo.VirtualMachine
-	var datastores []string
-	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
-	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
-	var clusterName string
-	rdmForVM := make([]string, 0)
+func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*object.VirtualMachine, client *vim25.Client) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
+	vmMap := make(map[string]*object.VirtualMachine)
+	for _, vm := range vms {
+		vmMap[vm.UUID(ctx)] = vm
+	}
+	const batchSize = 50
 	log := scope.Logger
-	err := vm.Properties(ctx, vm.Reference(), []string{
-		"config",
-		"guest",
-		"runtime",
-		"network",
-		"summary.config.annotation",
-	}, &vmProps)
+	collector := property.DefaultCollector(client)
+	// Build ObjectSet for VM retrieval
+	var objectSet []types.ObjectSpec
+	for _, vm := range vms {
+		objectSet = append(objectSet, types.ObjectSpec{
+			Obj:  vm.Reference(),
+			Skip: types.NewBool(false),
+		})
+	}
+
+	// Retrieve VM core properties
+	filterSpec := types.PropertyFilterSpec{
+		ObjectSet: objectSet,
+		PropSet: []types.PropertySpec{
+			{
+				Type: "VirtualMachine",
+				PathSet: []string{
+					"config.hardware.device", "config.name", "config.uuid", "config.instanceUuid",
+					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
+					"config.hardware.numCPU", "config.hardware.memoryMB",
+					"datastore", "network", "runtime",
+					"summary.config.annotation",
+				},
+			},
+		},
+	}
+	req := types.RetrieveProperties{
+		SpecSet: []types.PropertyFilterSpec{filterSpec},
+	}
+
+	res, err := collector.RetrieveProperties(ctx, req, batchSize)
 	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VM properties: %w", err))
-		return
+		return nil, nil, fmt.Errorf("failed to retrieve VM properties: %w", err)
 	}
-	if vmProps.Config == nil {
-		// VM is not powered on or is in creating state
-		log.Info("VM properties not available for vm, skipping this VM", "VM NAME", vm.Name())
-		return
+
+	// Decode into VMs
+	var fetchedVMs []mo.VirtualMachine
+	if err := mo.LoadObjectContent(res.Returnval, &fetchedVMs); err != nil {
+		return nil, nil, fmt.Errorf("failed to decode ObjectContent into mo.VirtualMachine: %w", err)
 	}
-	// Fetch details required for RDM disks
-	hostStorageMap := sync.Map{}
-	controllers := make(map[int32]types.BaseVirtualSCSIController)
-	// Collect all SCSI controller to find shared RDM disks
-	for _, device := range vmProps.Config.Hardware.Device {
-		if scsiController, ok := device.(types.BaseVirtualSCSIController); ok {
-			controllers[device.GetVirtualDevice().Key] = scsiController
+	// Fetch all annotations
+	attributeMap := make(map[string][]string)
+	// Step 1: Collect unique datastore & network MORs
+	dsRefs := make(map[types.ManagedObjectReference]struct{})
+	netRefs := make(map[types.ManagedObjectReference]struct{})
+	for _, moVM := range fetchedVMs {
+		for _, ref := range moVM.Datastore {
+			dsRefs[ref] = struct{}{}
+		}
+		for _, ref := range moVM.Network {
+			netRefs[ref] = struct{}{}
+		}
+		attributeMap[moVM.Reference().Value] = strings.Split(moVM.Summary.Config.Annotation, "\n")
+	}
+
+	// Step 2: Bulk retrieve datastore names
+	dsMap := make(map[types.ManagedObjectReference]string)
+	if len(dsRefs) > 0 {
+		var dsList []mo.Datastore
+		refList := make([]types.ManagedObjectReference, 0, len(dsRefs))
+		for ref := range dsRefs {
+			refList = append(refList, ref)
+		}
+		if err := collector.Retrieve(ctx, refList, []string{"name"}, &dsList); err == nil {
+			for _, ds := range dsList {
+				dsMap[ds.Self] = ds.Name
+			}
+		} else {
+			log.Error(err, "failed to retrieve datastore names")
 		}
 	}
-	// Get basic RDM disk info from VM properties
-	hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vm, &hostStorageMap)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get disk info for vm: %w", err))
-		return
+
+	// Step 3: Bulk retrieve network names
+	netMap := make(map[types.ManagedObjectReference]string)
+	if len(netRefs) > 0 {
+		var netList []mo.Network
+		refList := make([]types.ManagedObjectReference, 0, len(netRefs))
+		for ref := range netRefs {
+			refList = append(refList, ref)
+		}
+		if err := collector.Retrieve(ctx, refList, []string{"name"}, &netList); err == nil {
+			for _, nw := range netList {
+				netMap[nw.Self] = nw.Name
+			}
+		} else {
+			log.Error(err, "failed to retrieve network names")
+		}
 	}
 
-	attributes := strings.Split(vmProps.Summary.Config.Annotation, "\n")
-	pc := property.DefaultCollector(c)
-	for _, device := range vmProps.Config.Hardware.Device {
-		disk, ok := device.(*types.VirtualDisk)
-		if !ok {
+	// Step 4: Build final VMInfo list
+	var batchInfos []vjailbreakv1alpha1.VMInfo
+	for _, moVM := range fetchedVMs {
+		rdmForVM := make([]string, 0)
+		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
 			continue
 		}
-		dsref, rdmInfo, err := processVMDisk(ctx, disk, hostStorageInfo, vm.Name())
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to process VM disk: %w", err))
-			return
-		}
-		// check if rdmInfo is empty
-		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
-			rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
-			rdmInfo, err := populateRDMDiskInfoFromAttributes(ctx, rdmInfo, attributes)
-			if err != nil {
-				log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", vm.Name())
-				return
+
+		// Datastore names
+		var dsNames []string
+		for _, ref := range moVM.Datastore {
+			if name, ok := dsMap[ref]; ok {
+				dsNames = append(dsNames, name)
 			}
-			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
-				savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
-				if !ok {
-					log.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
-					return
+		}
+		// NIC & Guest Network extraction
+		nicList, _ := ExtractVirtualNICs(&moVM)
+		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
+			continue
+		}
+		var netNames []string
+		// Retrive Network on basis on NICs
+		// Build networks list from NetworkInterfaces to match NIC count
+		for _, nic := range nicList {
+			var netObj mo.Network
+			netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+			err := collector.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+			if err != nil {
+				log.Error(err, "failed to retrieve network name", "Network MOR", nic.Network)
+				continue
+			}
+			netNames = append(netNames, netObj.Name)
+		}
+
+		var diskLabels []string
+		controllers := make(map[int32]types.BaseVirtualSCSIController)
+		for _, device := range moVM.Config.Hardware.Device {
+			if scsiCtrl, ok := device.(types.BaseVirtualSCSIController); ok {
+				controllers[device.GetVirtualDevice().Key] = scsiCtrl
+			}
+		}
+		// Get basic RDM disk info from VM properties
+		if moVM.Config == nil {
+			log.Error(fmt.Errorf("vm config is nil"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		} else if moVM.Config.Uuid == "" {
+			log.Error(fmt.Errorf("vm uuid is empty"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		} else if vmMap[moVM.Config.Uuid] == nil {
+			log.Error(fmt.Errorf("vm not found in vmMap"), "skipping VM", "VM NAME", moVM.Config.Name)
+			continue
+		}
+		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vmMap[moVM.Config.Uuid], hostStorageMap)
+		if err != nil {
+			log.Error(err, "failed to get host storage device info", "VM NAME", moVM.Config.Name)
+			continue
+		}
+		attributes := strings.Split(moVM.Summary.Config.Annotation, "\n")
+		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+		var osFamily string
+		var clusterName string
+		var esxiName string
+		for _, device := range moVM.Config.Hardware.Device {
+			disk, ok := device.(*types.VirtualDisk)
+			if !ok {
+				continue
+			}
+
+			_, rdmInfo, err := processVMDisk(ctx, disk, hostStorageInfo, moVM.Config.Name)
+			if err != nil {
+				log.Error(err, "failed to process VM disk", "VM NAME", moVM.Config.Name)
+				continue
+			}
+			// check if rdmInfo is empty
+			if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
+				rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
+				rdmInfo, err := populateRDMDiskInfoFromAttributes(ctx, rdmInfo, attributes)
+				if err != nil {
+					log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", moVM.Config.Name)
+					continue
 				}
-				// Compare OpenstackVolumeRef details
-				if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
-					if !reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) {
-						log.Info("RDM VolumeRef doesn't match compared to other clustered VM's, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", vm.Name(), "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
+				if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
+					savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
+					if !ok {
+						log.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
 						continue
 					}
-				}
-				// Add owner VMs if not exists already and sort OwnerVMs alphabetically
-				// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs
-				rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, vm.Name())
-				slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
-			}
-			rdmSemaphore.Lock()
-			savedInfo, loaded := rdmDiskMap.LoadOrStore(strings.TrimSpace(rdmInfo.Name), rdmInfo)
-			if loaded {
-				savedInfoDetails, ok := savedInfo.(vjailbreakv1alpha1.RDMDisk)
-				if ok && !reflect.DeepEqual(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs) {
-					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs...)
-					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
-					rdmDiskMap.Store(strings.TrimSpace(rdmInfo.Name), rdmInfo)
-				}
-			}
-			rdmSemaphore.Unlock()
-		}
-		if dsref != nil {
-			var ds mo.Datastore
-			err = pc.RetrieveOne(ctx, *dsref, []string{"name"}, &ds)
-			if err != nil {
-				appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get datastore: %w", err))
-				return
-			}
-
-			datastores = AppendUnique(datastores, ds.Name)
-			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
-		}
-	}
-	// Get the host name and parent (cluster) information
-	host := mo.HostSystem{}
-	err = property.DefaultCollector(c).RetrieveOne(ctx, *vmProps.Runtime.Host, []string{"name", "parent"}, &host)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get host name: %w", err))
-		return
-	}
-
-	clusterName = getClusterNameFromHost(ctx, c, host)
-	if len(rdmForVM) >= 1 && len(disks) == 0 {
-		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
-		return
-	}
-
-	// Get the virtual NICs
-	nicList, err := ExtractVirtualNICs(&vmProps)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
-	}
-	// Build networks list from NetworkInterfaces to match NIC count
-	for _, nic := range nicList {
-		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
-			return
-		}
-		networks = append(networks, netObj.Name)
-	}
-
-	// Get the guest network info
-	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&vmProps)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
-	}
-
-	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
-	}
-
-	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
-	var guestNetworks []vjailbreakv1alpha1.GuestNetwork
-	var osFamily string
-	err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
-	switch {
-	case apierrors.IsNotFound(err):
-		// First time creation – use whatever vCenter gave us (could be nil)
-		guestNetworks = guestNetworksFromVmware
-		osFamily = vmProps.Guest.GuestFamily
-
-	case err != nil:
-		// Unexpected error
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
-		return
-
-	default:
-		// Object exists
-		if len(guestNetworksFromVmware) > 0 {
-			// Only update if we got fresh data from vCenter
-			guestNetworks = guestNetworksFromVmware
-		} else {
-			// Use existing data because VM is switched off and we can't get the info from vCenter
-			guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
-		}
-		if vmProps.Guest.GuestFamily != "" {
-			osFamily = vmProps.Guest.GuestFamily
-		} else {
-			osFamily = vmwvm.Spec.VMInfo.OSFamily
-		}
-	}
-
-	if len(guestNetworksFromVmware) > 0 {
-		// Extract IP addresses from guest networks and set it in network interfaces
-		for i, nic := range nicList {
-			for _, guestNet := range guestNetworksFromVmware {
-				if nic.MAC == guestNet.MAC {
-					// Check if IP is ipv4
-					if !strings.Contains(guestNet.IP, ":") {
-						nicList[i].IPAddress = guestNet.IP
+					// Compare OpenstackVolumeRef details
+					if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
+						if !reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) {
+							log.Info("RDM VolumeRef doesn't match compared to other clustered VM's, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", moVM.Config.Name, "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
+							continue
+						}
 					}
-					break
+					// Add owner VMs if not exists already and sort OwnerVMs alphabetically
+					// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs
+					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, moVM.Config.Name)
+					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
+				}
+				savedInfo, loaded := rdmDiskMap.LoadOrStore(strings.TrimSpace(rdmInfo.Name), rdmInfo)
+				if loaded {
+					savedInfoDetails, ok := savedInfo.(vjailbreakv1alpha1.RDMDisk)
+					if ok && !reflect.DeepEqual(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs) {
+						rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs...)
+						slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
+						rdmDiskMap.Store(strings.TrimSpace(rdmInfo.Name), rdmInfo)
+					}
 				}
 			}
 		}
-	} else {
-		log.Info("No guest network info available from VMware for vm", "VM NAME", vm.Name())
-		// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
-		for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
-			for i, existingNic := range nicList {
-				if existingNic.MAC == nic.MAC {
-					nicList[i].IPAddress = nic.IPAddress
-					break
-				}
-			}
-		}
-	}
 
-	// exclude vCLS VMs
-	if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
-		return
+		// Determine cluster name
+		val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
+		if !ok {
+			// Get the host name and parent (cluster) information
+			host := mo.HostSystem{}
+			hostSystemMap.Store(host.Reference().Value, host)
+
+			err = collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
+			if err != nil {
+				log.Error(err, "failed to get host name", "VM NAME", moVM.Config.Name)
+				continue
+			}
+			clusterName = getClusterNameFromHost(ctx, client, host)
+			if strings.TrimSpace(moVM.Config.Name) == "" {
+				log.Info("Skipping VM with no name", "VM", moVM.Config.Name)
+				continue
+			}
+			esxiName = host.Name
+			clusterDetails := clusterDetails{
+				ESXIName:    esxiName,
+				ClusterName: clusterName,
+			}
+			hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
+		} else {
+			clusterName = val.(clusterDetails).ClusterName
+			esxiName = val.(clusterDetails).ESXIName
+		}
+
+		// Get the guest network info
+		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
+		if err != nil {
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
+		}
+
+		// Convert VM name to Kubernetes-safe name
+		vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
+		if err != nil {
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
+		}
+
+		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
+		err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
+		switch {
+		case apierrors.IsNotFound(err):
+			// First time creation – use whatever vCenter gave us (could be nil)
+			guestNetworks = guestNetworksFromVmware
+			osFamily = moVM.Guest.GuestFamily
+
+		case err != nil:
+			// Unexpected error
+			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
+			//return
+
+		default:
+			// Object exists
+			if len(guestNetworksFromVmware) > 0 {
+				// Only update if we got fresh data from vCenter
+				guestNetworks = guestNetworksFromVmware
+			} else {
+				// Use existing data because VM is switched off and we can't get the info from vCenter
+				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
+			}
+			if moVM.Guest.GuestFamily != "" {
+				osFamily = moVM.Guest.GuestFamily
+			} else {
+				osFamily = vmwvm.Spec.VMInfo.OSFamily
+			}
+		}
+
+		if len(guestNetworksFromVmware) > 0 {
+			// Extract IP addresses from guest networks and set it in network interfaces
+			for i, nic := range nicList {
+				for _, guestNet := range guestNetworksFromVmware {
+					if nic.MAC == guestNet.MAC {
+						// Check if IP is ipv4
+						if !strings.Contains(guestNet.IP, ":") {
+							nicList[i].IPAddress = guestNet.IP
+						}
+						break
+					}
+				}
+			}
+		} else {
+			log.Info("No guest network info available from VMware for vm", "VM NAME", moVM.Config.Name)
+			// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
+			for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
+				for i, existingNic := range nicList {
+					if existingNic.MAC == nic.MAC {
+						nicList[i].IPAddress = nic.IPAddress
+						break
+					}
+				}
+			}
+		}
+
+		batchInfos = append(batchInfos, vjailbreakv1alpha1.VMInfo{
+			Name:              moVM.Config.Name,
+			Datastores:        dsNames,
+			Disks:             diskLabels,
+			Networks:          netNames,
+			IPAddress:         moVM.Guest.IpAddress,
+			VMState:           moVM.Guest.GuestState,
+			OSFamily:          osFamily,
+			CPU:               int(moVM.Config.Hardware.NumCPU),
+			Memory:            int(moVM.Config.Hardware.MemoryMB),
+			RDMDisks:          rdmForVM,
+			ESXiName:          esxiName,
+			ClusterName:       clusterName,
+			NetworkInterfaces: nicList,
+			GuestNetworks:     guestNetworks,
+		})
 	}
-	currentVM := vjailbreakv1alpha1.VMInfo{
-		Name:              vmProps.Config.Name,
-		Datastores:        datastores,
-		Disks:             disks,
-		Networks:          networks,
-		IPAddress:         vmProps.Guest.IpAddress,
-		VMState:           vmProps.Guest.GuestState,
-		OSFamily:          osFamily,
-		CPU:               int(vmProps.Config.Hardware.NumCPU),
-		Memory:            int(vmProps.Config.Hardware.MemoryMB),
-		ESXiName:          host.Name,
-		ClusterName:       clusterName,
-		RDMDisks:          rdmForVM,
-		NetworkInterfaces: nicList,
-		GuestNetworks:     guestNetworks,
-	}
-	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
-	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
-	if err != nil {
-		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
-	}
+	return batchInfos, rdmDiskMap, nil
+}
+
+var hostSystemMap sync.Map
+
+type clusterDetails struct {
+	ClusterName string
+	ESXIName    string
 }
 
 // FindHotplugBaseFlavor connects to OpenStack and finds a flavor with 0 vCPUs and 0 RAM
@@ -1706,4 +1773,39 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	}
 
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
+}
+
+func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
+		return err
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != "/sdk" {
+		host += "/sdk"
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+	}
+	u.User = url.UserPassword(username, password)
+	// Connect and log in to ESX or vCenter
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+	}
+	err = s.Logout(ctx, vcentreClient)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
+		return err
+	}
+	return nil
 }
