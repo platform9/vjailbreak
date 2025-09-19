@@ -4,10 +4,10 @@ import { VMwareMachine } from "../vmware-machines/model"
 import { VmData } from "../migration-templates/model"
 
 /**
- * Check if a VM has the shared RDM label
+ * Check if a VM has shared RDM disks
  */
-export const hasSharedRdmLabel = (vm: VMwareMachine): boolean => {
-  return vm.metadata.labels?.["vjailbreak.k8s.pf9.io/is-shared-rdm"] === "true"
+export const hasSharedRdmDisks = (vm: VMwareMachine): boolean => {
+  return !!(vm.spec.vms.rdmDisks && vm.spec.vms.rdmDisks.length > 0)
 }
 
 /**
@@ -38,13 +38,13 @@ export const getRdmDependencies = (
   vm: VMwareMachine,
   rdmDisksMap: Map<string, RdmDisk>
 ): string[] => {
-  if (!vm.spec.rdmDisks || vm.spec.rdmDisks.length === 0) {
+  if (!vm.spec.vms.rdmDisks || vm.spec.vms.rdmDisks.length === 0) {
     return []
   }
 
   const dependencies = new Set<string>()
 
-  vm.spec.rdmDisks.forEach((rdmDiskName) => {
+  vm.spec.vms.rdmDisks.forEach((rdmDiskName) => {
     const rdmDisk = rdmDisksMap.get(rdmDiskName)
     if (rdmDisk && rdmDisk.spec.ownerVMs) {
       rdmDisk.spec.ownerVMs.forEach((ownerVm) => {
@@ -67,8 +67,8 @@ export const mapToVmDataWithRdm = (
   rdmDisksMap: Map<string, RdmDisk>
 ): VmData[] => {
   return machines.map((machine) => {
-    const hasSharedRdm = hasSharedRdmLabel(machine)
-    const rdmDisks = machine.spec.rdmDisks || []
+    const hasSharedRdm = hasSharedRdmDisks(machine)
+    const rdmDisks = machine.spec.vms.rdmDisks || []
     const rdmDependencies = getRdmDependencies(machine, rdmDisksMap)
 
     return {

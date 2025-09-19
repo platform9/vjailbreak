@@ -93,6 +93,7 @@ export interface FormValues extends Record<string, unknown> {
   }
   vms?: VmData[]
   rdmConfigurations?: Array<{
+    uuid: string;
     diskName: string;
     cinderBackendPool: string;
     volumeType: string;

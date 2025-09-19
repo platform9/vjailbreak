@@ -204,6 +204,7 @@ export default function VmsSelectionStep({
 
   // RDM configuration state
   const [rdmConfigurations, setRdmConfigurations] = useState<Array<{
+    uuid: string;
     diskName: string;
     cinderBackendPool: string;
     volumeType: string;
@@ -550,12 +551,26 @@ export default function VmsSelectionStep({
         </Box>
       ),
     },
+    {
+      field: "rdmDisks",
+      headerName: "RDM Disks",
+      flex: 1.2,
+      hideable: true,
+      valueGetter: (value: string[]) => value?.join(", ") || "—",
+      renderHeader: () => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <div style={{ fontWeight: 500 }}>RDM Disks</div>
+          <Tooltip title="Raw Device Mapping disks associated with this VM.">
+            <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
+          </Tooltip>
+        </Box>
+      ),
+    },
     // Hidden column for sorting by vmState
     {
       field: "vmState",
       headerName: "Status",
       flex: 1,
-      headerClassName: 'hidden-column',
       sortable: true,
       sortComparator: (v1, v2) => {
         if (v1 === "running" && v2 === "stopped") return -1;
@@ -1465,8 +1480,8 @@ export default function VmsSelectionStep({
       });
 
       const updatePromises = rdmConfigurations.map(async (config) => {
-        // Find the RDM disk by diskName
-        const rdmDisk = rdmDisks.find(disk => disk.spec.diskName === config.diskName);
+        // Find the RDM disk by uuid
+        const rdmDisk = rdmDisks.find(disk => disk.spec.uuid === config.uuid);
         if (!rdmDisk) {
           console.warn(`RDM disk not found for diskName: ${config.diskName}`);
           return;
@@ -1551,7 +1566,8 @@ export default function VmsSelectionStep({
                 },
                 columns: {
                   columnVisibilityModel: {
-                    vmState: false  // Hide the vmState column that we use only for sorting
+                    vmState: false,  // Hide the vmState column that we use only for sorting
+                    rdmDisks: false  // Hide the RDM disks column by default
                   }
                 }
               }}

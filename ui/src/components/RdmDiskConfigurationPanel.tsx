@@ -22,6 +22,7 @@ import { RdmDisk } from 'src/api/rdm-disks/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 
 interface RdmDiskConfiguration {
+    uuid: string
     diskName: string
     cinderBackendPool: string
     volumeType: string
@@ -48,6 +49,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
     useEffect(() => {
         if (rdmDisks.length > 0 && !initializedRef.current) {
             const initialConfigs = rdmDisks.map(disk => ({
+                uuid: disk.spec.uuid,
                 diskName: disk.spec.diskName,
                 cinderBackendPool: disk.spec.openstackVolumeRef?.cinderBackendPool || '',
                 volumeType: disk.spec.openstackVolumeRef?.volumeType || '',
