@@ -481,8 +481,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
-var providerClientCache *sync.Map
-
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
