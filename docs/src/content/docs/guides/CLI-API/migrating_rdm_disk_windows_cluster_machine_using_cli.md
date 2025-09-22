@@ -3,7 +3,7 @@
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using 
 RDM disks are mostly used of windows machine.
 
-RDM disk migration is only supported for **PCD version >= September 2025**
+RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)**. For multipath support (connecting to SAN array), **PCD version >= October 2025 (2025.10)** is required.
 
 **vjailbreak**.  
 
@@ -15,7 +15,12 @@ Before you begin, ensure the following:
 
 1. **RDM disk is attached** to the Windows machine.  
 2. **vjailbreak** is deployed in your cluster.  
-3. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
+3. **PCD Requirements**:
+   - Minimum version: **July 2025 (2025.7)**.
+   - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes default libvirt and QEMU packages
+   - Check PCD release notes for exact version names/numbers
+   - **Volume type must have multi-attach support enabled** in OpenStack.  
+4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
 
 You can fetch these values using:  
 
