@@ -1,6 +1,6 @@
 import { Box, IconButton, Tooltip, Typography, Menu, MenuItem } from "@mui/material"
 import { GridToolbarQuickFilter } from "@mui/x-data-grid"
-import { RefreshRounded, FilterList as FilterListIcon } from "@mui/icons-material"
+import { RefreshRounded, FilterList as FilterListIcon, CalendarToday as CalendarIcon } from "@mui/icons-material"
 import { useState } from "react"
 
 interface CustomSearchToolbarProps {
@@ -8,8 +8,10 @@ interface CustomSearchToolbarProps {
   onRefresh?: () => void;
   disableRefresh?: boolean;
   placeholder?: string;
-  onFilterChange?: (filter: string) => void;
-  currentFilter?: string;
+  onStatusFilterChange?: (filter: string) => void;
+  currentStatusFilter?: string;
+  onDateFilterChange?: (filter: string) => void;
+  currentDateFilter?: string;
 }
 
 const CustomSearchToolbar = ({
@@ -17,26 +19,35 @@ const CustomSearchToolbar = ({
   onRefresh,
   disableRefresh = false,
   placeholder = "Search",
-  onFilterChange,
-  currentFilter = 'All'
+  onStatusFilterChange,
+  currentStatusFilter = 'All',
+  onDateFilterChange,
+  currentDateFilter = 'All Time'
 }: CustomSearchToolbarProps) => {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
+  const [statusAnchorEl, setStatusAnchorEl] = useState<null | HTMLElement>(null);
+  const [dateAnchorEl, setDateAnchorEl] = useState<null | HTMLElement>(null);
+  
+  const statusMenuOpen = Boolean(statusAnchorEl);
+  const dateMenuOpen = Boolean(dateAnchorEl);
 
-  const handleFilterClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'];
+  const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days'];
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, menu: 'status' | 'date') => {
+    if (menu === 'status') setStatusAnchorEl(event.currentTarget);
+    if (menu === 'date') setDateAnchorEl(event.currentTarget);
   };
 
-  const handleFilterClose = () => {
-    setAnchorEl(null);
+  const handleMenuClose = () => {
+    setStatusAnchorEl(null);
+    setDateAnchorEl(null);
   };
 
-  const handleFilterSelect = (filter: string) => {
-    onFilterChange?.(filter);
-    handleFilterClose();
+  const handleFilterSelect = (filter: string, menu: 'status' | 'date') => {
+    if (menu === 'status') onStatusFilterChange?.(filter);
+    if (menu === 'date') onDateFilterChange?.(filter);
+    handleMenuClose();
   };
-
-  const filterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'];
 
   return (
     <Box
@@ -55,32 +66,47 @@ const CustomSearchToolbar = ({
             <Tooltip title="Refresh">
               <span>
                 <IconButton
-                  onClick={onRefresh}
-                  disabled={disableRefresh}
-                  size="small"
+                onClick={onRefresh}
+                disabled={disableRefresh}
+                size="small"
                 >
                   <RefreshRounded />
                 </IconButton>
               </span>
             </Tooltip>
           )}
-          {onFilterChange && (
+          {onDateFilterChange && (
             <>
-              <Tooltip title="Filter">
-                <IconButton onClick={handleFilterClick} size="small">
+              <Tooltip title="Filter by creation date">
+                <IconButton onClick={(e) => handleMenuClick(e, 'date')} size="small">
+                  <CalendarIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Menu anchorEl={dateAnchorEl} open={dateMenuOpen} onClose={handleMenuClose}>
+                {dateFilterOptions.map((option) => (
+                  <MenuItem key={option} selected={option === currentDateFilter} onClick={() => handleFilterSelect(option, 'date')}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+          {onStatusFilterChange && (
+            <>
+              <Tooltip title="Filter by status">
+                <IconButton onClick={(e) => handleMenuClick(e, 'status')} size="small">
                   <FilterListIcon />
                 </IconButton>
               </Tooltip>
               <Menu
-                anchorEl={anchorEl}
-                open={open}
-                onClose={handleFilterClose}
-              >
-                {filterOptions.map((option) => (
+              anchorEl={statusAnchorEl}
+              open={statusMenuOpen}
+              onClose={handleMenuClose}>
+                {statusFilterOptions.map((option) => (
                   <MenuItem
-                    key={option}
-                    selected={option === currentFilter}
-                    onClick={() => handleFilterSelect(option)}
+                  key={option}
+                  selected={option === currentStatusFilter}
+                  onClick={() => handleFilterSelect(option, 'status')}
                   >
                     {option}
                   </MenuItem>
@@ -96,8 +122,8 @@ const CustomSearchToolbar = ({
               sx={{
                 "& .MuiInputBase-input": {
                   textOverflow: "ellipsis",
-                }
-              }}
+                 }
+                }}
             />
           </div>
         </Box>

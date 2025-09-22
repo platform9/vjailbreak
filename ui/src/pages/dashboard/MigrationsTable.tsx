@@ -215,19 +215,20 @@ interface CustomToolbarProps {
     onBulkAdminCutover: () => void;
     numEligibleForCutover: number;
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>;
-    onFilterChange: (filter: string) => void;
-    currentFilter: string;
+    onStatusFilterChange: (filter: string) => void;
+    currentStatusFilter: string;
+    onDateFilterChange: (filter: string) => void;
+    currentDateFilter: string;
 }
 
-
-const CustomToolbar = ({ numSelected, onDeleteSelected, onBulkAdminCutover, numEligibleForCutover, refetchMigrations, onFilterChange, currentFilter }: CustomToolbarProps) => {
+const CustomToolbar = ({ numSelected, onDeleteSelected, onBulkAdminCutover, numEligibleForCutover, refetchMigrations, onStatusFilterChange, currentStatusFilter, onDateFilterChange, currentDateFilter }: CustomToolbarProps) => {
     return (
         <GridToolbarContainer
-            sx={{
-                p: 2,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
+        sx={{
+            p: 2,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
             }}
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -237,36 +238,38 @@ const CustomToolbar = ({ numSelected, onDeleteSelected, onBulkAdminCutover, numE
                 </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                {numSelected > 0 && (
+                {numSelected > 0 ? (
                     <>
                         <Button
-                            variant="outlined"
-                            color="error"
-                            startIcon={<DeleteIcon />}
-                            onClick={onDeleteSelected}
-                            sx={{ height: 40 }}
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={onDeleteSelected}
+                        sx={{ height: 40 }}
                         >
                             Delete Selected ({numSelected})
                         </Button>
-                        
+
                         {numEligibleForCutover > 0 && (
                             <Button
-                                variant="outlined"
-                                color="primary"
-                                startIcon={<PlayArrowIcon />}
-                                onClick={onBulkAdminCutover}
-                                sx={{ height: 40 }}
+                            variant="outlined"
+                            color="primary"
+                            startIcon={<PlayArrowIcon />}
+                            onClick={onBulkAdminCutover}
+                            sx={{ height: 40 }}
                             >
                                 Trigger Cutover ({numEligibleForCutover})
                             </Button>
                         )}
                     </>
-                )}
+                ) : null}
                 <CustomSearchToolbar
                     placeholder="Search by Name, Status, or Progress"
                     onRefresh={refetchMigrations}
-                    onFilterChange={numSelected === 0 ? onFilterChange : undefined}
-                    currentFilter={currentFilter}
+                    onStatusFilterChange={numSelected === 0 ? onStatusFilterChange : undefined}
+                    currentStatusFilter={currentStatusFilter}
+                    onDateFilterChange={numSelected === 0 ? onDateFilterChange : undefined}
+                    currentDateFilter={currentDateFilter}
                 />
             </Box>
         </GridToolbarContainer>
@@ -291,6 +294,7 @@ export default function MigrationsTable({
     const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false);
     const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState('All');
+    const [dateFilter, setDateFilter] = useState('All Time');
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);
@@ -298,23 +302,46 @@ export default function MigrationsTable({
 
     const filteredMigrations = useMemo(() => {
         if (!migrations) return [];
+
+        const now = new Date();
+        let timeCutoff = 0;
+
+        switch (dateFilter) {
+            case 'Last 24 hours':
+                timeCutoff = now.getTime() - 24 * 60 * 60 * 1000;
+                break;
+            case 'Last 7 days':
+                timeCutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+                break;
+            case 'Last 30 days':
+                timeCutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+                break;
+            default:
+                timeCutoff = 0;
+        }
+
+        const dateFiltered = migrations.filter(m => {
+            if (!m.metadata?.creationTimestamp) return false;
+            return new Date(m.metadata.creationTimestamp).getTime() >= timeCutoff;
+        });
+
         switch (statusFilter) {
             case 'Succeeded':
-                return migrations.filter(m => m.status?.phase === Phase.Succeeded);
+                return dateFiltered.filter(m => m.status?.phase === Phase.Succeeded);
             case 'Failed':
-                return migrations.filter(m => m.status?.phase === Phase.Failed);
+                return dateFiltered.filter(m => m.status?.phase === Phase.Failed);
             case 'In Progress':
-                return migrations.filter(m => m.status?.phase && IN_PROGRESS_PHASES.includes(m.status.phase));
+                return dateFiltered.filter(m => m.status?.phase && IN_PROGRESS_PHASES.includes(m.status.phase));
             case 'All':
             default:
-                return migrations;
+                return dateFiltered;
         }
-    }, [migrations, statusFilter]);
+    }, [migrations, statusFilter, dateFilter]);
 
     // Get selected migrations that are eligible for admin cutover
     const selectedMigrations = migrations?.filter(m => selectedRows.includes(m.metadata?.name)) || [];
-    const eligibleForCutover = selectedMigrations.filter(migration => 
-    migration.status?.phase === Phase.AwaitingAdminCutOver
+    const eligibleForCutover = selectedMigrations.filter(migration =>
+        migration.status?.phase === Phase.AwaitingAdminCutOver
     );
 
     const handleBulkAdminCutover = async () => {
@@ -398,8 +425,10 @@ export default function MigrationsTable({
                             }}
                             onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
                             refetchMigrations={refetchMigrations}
-                            onFilterChange={setStatusFilter}
-                            currentFilter={statusFilter}
+                            onStatusFilterChange={setStatusFilter}
+                            currentStatusFilter={statusFilter}
+                            onDateFilterChange={setDateFilter}
+                            currentDateFilter={dateFilter}
                         />
                     ) : undefined,
                 }}
