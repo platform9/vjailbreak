@@ -132,8 +132,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	batchSize := 10
 
-	if len(vminfo) > vjailbreakSettings.VCenterScanConcurrencyLimit {
+	if vjailbreakSettings.VCenterScanConcurrencyLimit > 0 && len(vminfo) > vjailbreakSettings.VCenterScanConcurrencyLimit {
 		batchSize = int((len(vminfo) / vjailbreakSettings.VCenterScanConcurrencyLimit))
+		if batchSize == 0 {
+			batchSize = 1
+		}
 	}
 
 	ctxlog.Info("Processing VMs in batches", "batchSize", batchSize)
