@@ -437,6 +437,8 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
+	// retry.DefaultRetry will retry the update function up to 5 times between each attempt. 
+	// This automatically handle locking conflicts which can happen if the resource is modified between the Get and Update calls.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		dep := &appsv1.Deployment{}
 		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
