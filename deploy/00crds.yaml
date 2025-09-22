@@ -2667,6 +2667,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
   - pods/status
   verbs:
   - get
