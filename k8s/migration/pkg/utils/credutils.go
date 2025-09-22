@@ -1442,9 +1442,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer func() {
-			LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
-		}()
+		defer LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)

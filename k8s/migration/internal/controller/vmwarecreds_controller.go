@@ -101,9 +101,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer func() {
-			utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c)
-		}()
+		defer utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c)
 	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
