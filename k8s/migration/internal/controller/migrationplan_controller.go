@@ -42,7 +42,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -76,6 +75,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
@@ -374,30 +374,57 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
-	vmMachines := &vjailbreakv1alpha1.VMwareMachineList{}
-	err := r.List(ctx, vmMachines, &client.ListOptions{Namespace: migrationtemplate.Namespace, LabelSelector: labels.SelectorFromSet(map[string]string{constants.VMwareCredsLabel: vmwcreds.Name})})
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to list vmwaremachines")
-	}
 	// vmMachinesArr is created to maintain order in which VM migration is triggered
 	vmMachinesArr := make([]*vjailbreakv1alpha1.VMwareMachine, 0)
 	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, 0)
-	// List all VMs and gather its data
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
-		// List all VMs
 		for _, vm := range parallelvms {
-			for i := range vmMachines.Items {
-				if vmMachines.Items[i].Spec.VMInfo.Name == vm {
-					vmobj := vmMachines.Items[i]
-					vmMachinesArr = append(vmMachinesArr, &vmobj)
-					vmMachinesMap[vm] = &vmobj
-					break
-				}
+			// Generate the expected VMwareMachine name
+			vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to get k8s compatible name for VM %s", vm)
 			}
+
+			// Fetch individual VMwareMachine
+			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
+			err = r.Get(ctx, types.NamespacedName{
+				Name:      vmk8sname,
+				Namespace: migrationtemplate.Namespace,
+			}, vmMachine)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return ctrl.Result{}, errors.Errorf("VMwareMachine %s not found for VM %s", vmk8sname, vm)
+				}
+				return ctrl.Result{}, errors.Wrapf(err, "failed to get VMwareMachine %s for VM %s", vmk8sname, vm)
+			}
+
+			// Verify VMwareMachine has correct VMwareCreds label
+			if vmMachine.Labels == nil {
+				return ctrl.Result{}, errors.Errorf("VMwareMachine %s has no labels", vmMachine.Name)
+			}
+
+			expectedLabel := vmwcreds.Name
+			actualLabel, exists := vmMachine.Labels[constants.VMwareCredsLabel]
+			if !exists {
+				return ctrl.Result{}, errors.Errorf("VMwareMachine %s missing required label %s", vmMachine.Name, constants.VMwareCredsLabel)
+			}
+
+			if actualLabel != expectedLabel {
+				return ctrl.Result{}, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
+			}
+
+			// Verify VM name matches
+			if vmMachine.Spec.VMInfo.Name != vm {
+				return ctrl.Result{}, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
+			}
+
+			// Add to collections
+			vmMachinesArr = append(vmMachinesArr, vmMachine)
+			vmMachinesMap[vm] = vmMachine
 		}
 	}
 	// Migrate RDM disks if any
-	err = r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
+	err := r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
 	if err != nil {
 		if err == verrors.ErrRDMDiskNotMigrated {
 			retries := migrationplan.Status.RetryCount
@@ -433,7 +460,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err = r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
