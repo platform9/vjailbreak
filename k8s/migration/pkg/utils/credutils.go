@@ -509,19 +509,9 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
-		Reauth:   true,
+		Reauth:   false,
 	}
-
-	var c *vim25.Client
-	if providerClientCache != nil {
-		if cachedClient, ok := providerClientCache.Load(vmwcreds.Spec.SecretRef.Name); ok {
-			c = cachedClient.(*vim25.Client)
-		}
-	} else {
-		providerClientCache = &sync.Map{}
-		c = new(vim25.Client)
-		providerClientCache.Store(vmwcreds.Spec.SecretRef.Name, c)
-	}
+	c := new(vim25.Client)
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
