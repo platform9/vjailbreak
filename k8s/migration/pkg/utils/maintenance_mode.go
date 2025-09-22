@@ -186,7 +186,12 @@ func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmw
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-	defer LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
+		}()
+	}
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
 
