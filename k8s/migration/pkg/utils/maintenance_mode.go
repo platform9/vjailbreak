@@ -33,9 +33,7 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer func() {
-			LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
-		}()
+		defer LogoutVMwareClient(ctx, k8sClient, vmwcreds, c)
 	}
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
