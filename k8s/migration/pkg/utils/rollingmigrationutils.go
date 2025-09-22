@@ -226,9 +226,7 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer func() {
-			LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c)
-		}()
+		defer LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c)
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
