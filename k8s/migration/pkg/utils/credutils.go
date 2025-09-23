@@ -38,6 +38,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -48,6 +49,7 @@ import (
 
 const (
 	trueString = "true" // Define at package level
+	sdkPath    = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -481,6 +483,8 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
+var vmwareClientMap *sync.Map
+
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
@@ -495,8 +499,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
 	}
 	u, err := url.Parse(host)
 	if err != nil {
@@ -509,8 +513,30 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Insecure: disableSSLVerification,
 		Reauth:   true,
 	}
-
-	c := new(vim25.Client)
+	var c *vim25.Client
+	if vmwareClientMap == nil {
+		vmwareClientMap = &sync.Map{}
+	} else {
+		mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+		if val, ok := vmwareClientMap.Load(mapKey); ok {
+			cachedClient, valid := val.(*vim25.Client)
+			if valid && cachedClient != nil {
+				c = cachedClient
+				sessMgr := session.NewManager(c)
+				userSession, err := sessMgr.UserSession(ctx)
+				if err == nil && userSession != nil {
+					return c, nil
+				}
+				// If the cached client is no longer valid, delete it from the map
+				vmwareClientMap.Delete(fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification))
+				c = new(vim25.Client)
+				vmwareClientMap.Store(mapKey, c)
+			}
+		} else {
+			c = new(vim25.Client)
+			vmwareClientMap.Store(mapKey, c)
+		}
+	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
@@ -1438,6 +1464,14 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
+	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
 	if err != nil {
@@ -1706,4 +1740,40 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	}
 
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
+}
+
+// LogoutVMwareClient logs out from the VMware vCenter client session
+func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error getting vCenter credentials from secret")
+		return err
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	password := vmwareCredsinfo.Password
+	disableSSLVerification := vmwareCredsinfo.Insecure
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+	}
+	u.User = url.UserPassword(username, password)
+	// Connect and log in to ESX or vCenter
+	s := &cache.Session{
+		URL:      u,
+		Insecure: disableSSLVerification,
+	}
+	err = s.Logout(ctx, vcentreClient)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
+		return err
+	}
+	return nil
 }
