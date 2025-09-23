@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { fetchPods, streamPodLogs, type Pod } from "../api/kubernetes/pods"
+import { fetchPods, streamPodLogs } from "../api/kubernetes/pods"
+import { type Pod } from "../api/kubernetes/model"
 
 interface UseDeploymentLogsParams {
   deploymentName: string

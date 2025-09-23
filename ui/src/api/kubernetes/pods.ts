@@ -1,63 +1,39 @@
+import { Pod, PodListResponse } from "./model"
 import { KUBERNETES_API_BASE_PATH } from "../constants"
-
-/**
- * Centralized Kubernetes API functions for pod operations
- */
-
-export interface Pod {
-  metadata: {
-    name: string
-    namespace: string
-  }
-}
-
-export interface PodListResponse {
-  items: Pod[]
-}
-
-/**
- * Get auth headers for Kubernetes API requests
- */
-const getKubernetesHeaders = () => {
-  const authToken = import.meta.env.VITE_API_TOKEN
-  return {
-    "Content-Type": "application/json;charset=UTF-8",
-    ...(authToken && { Authorization: `Bearer ${authToken}` }),
-  }
-}
+import axios from "../axios"
 
 /**
  * Fetch pods from a namespace with optional label selector
+ * @param namespace - The namespace to fetch pods from
+ * @param labelSelector - Optional label selector to filter pods
  */
 export const fetchPods = async (
   namespace: string,
   labelSelector?: string
 ): Promise<Pod[]> => {
-  const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
-  const endpoint = `${baseUrl}${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods`
+  const endpoint = `${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods`
   
-  const params = new URLSearchParams()
-  if (labelSelector) {
-    params.set("labelSelector", labelSelector)
-  }
-  
-  const url = `${endpoint}?${params.toString()}`
+  const config = labelSelector
+    ? {
+        params: {
+          labelSelector,
+        },
+      }
+    : undefined
 
-  const response = await fetch(url, {
-    headers: getKubernetesHeaders(),
-    signal: new AbortController().signal,
+  const response = await axios.get<PodListResponse>({
+    endpoint,
+    config,
   })
-      
-  if (!response.ok) {
-    throw new Error(`Failed to fetch pods: HTTP ${response.status}: ${response.statusText}`)
-  }
-
-  const data: PodListResponse = await response.json()
-  return data.items
+  
+  return response.items
 }
 
 /**
  * Stream logs from a specific pod
+ * @param namespace - The namespace of the pod
+ * @param podName - The name of the pod to stream logs from
+ * @param options - Optional streaming configuration
  */
 export const streamPodLogs = async (
   namespace: string,
@@ -70,8 +46,7 @@ export const streamPodLogs = async (
 ): Promise<Response> => {
   const { follow = true, tailLines = "100", signal } = options
   
-  const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
-  const endpoint = `${baseUrl}${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods/${podName}/log`
+  const endpoint = `${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods/${podName}/log`
   
   const params = new URLSearchParams({
     follow: follow.toString(),
@@ -80,8 +55,18 @@ export const streamPodLogs = async (
   
   const url = `${endpoint}?${params.toString()}`
 
-  const response = await fetch(url, {
-    headers: getKubernetesHeaders(),
+  // For streaming endpoints, we need to use raw fetch instead of axios
+  const authToken = import.meta.env.VITE_API_TOKEN
+  const headers = {
+    "Content-Type": "application/json;charset=UTF-8",
+    ...(authToken && { Authorization: `Bearer ${authToken}` }),
+  }
+  
+  const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
+  const fullUrl = `${baseUrl}${url}`
+
+  const response = await fetch(fullUrl, {
+    headers,
     signal,
   })
 
