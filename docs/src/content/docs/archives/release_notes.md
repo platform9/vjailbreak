@@ -259,3 +259,68 @@ description: Archived Release Notes for vJailbreak
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.12...v0.1.13
+## v0.1.14
+
+### What's Changed
+* revert the changes for duplicate networks by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/605
+* accept os_family correctly and override if present by @spai-p9 in https://github.com/platform9/vjailbreak/pull/607
+* support migration without a cluster on pcd by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/608
+* do not fail migrations for snapshot delettions by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/611
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.13...v0.1.14
+## v0.1.15
+
+### What's Changed
+* fix part-to-dev input by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/614
+* Fix RC file parsing to support special characters in OpenStack credentials. by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/619
+* Made changes to the desination cluster selection by showing cred name… by @patil-pratik-87 n https://github.com/platform9/vjailbreak/pull/634
+* pcdclusters and tenant in UI (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/633
+* Destination cluster dropdown changes for same id by @patil-pratik-87  in https://github.com/platform9/vjailbreak/pull/636
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.14...v0.1.15
+## v0.2.0
+
+### What's Changed
+* refactor: unify release notes workflow for both PR merges and direct releases by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/631
+* Update release notes for v0.1.14 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/645
+* Update release notes for v0.1.15 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/646
+* PR description for testing by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/647
+* configmap for current vjailbreak version (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/632
+* Update docs from gh-pages by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/649
+* Updated VMware custom resource to capture RDM disk information in VM details by @rishabh625 in https://github.com/platform9/vjailbreak/pull/563
+* sanitize kubernetes label values by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/655
+* dynamic etc host entries for controller (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/663
+* Added a new sidenav by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/664
+* rolling conversion validations by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/566
+* remove docs dir and optimize API doc generation by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/652
+* #667 Fixes the Rebase Action by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/668
+* Check the target IP Allocation Pool to determine if Source VM IP is Available and Handle Port Creation 409 Conflict (release) by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/662
+* fix docs for yamls by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/670
+* Validate Openstack creds only for same env by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/681
+* Delete the mastercreds for openstack by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/678
+* Bugsnag and sidenav enahancements by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/679
+* Delete VMware credentials stuck in Unknown state by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/683
+* Detect ubuntu vm's < 17.10 and appropriately handle the networking for the interfaces  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/674
+* Fixed issue where sidenav collapse icon was coming on top of the Migr… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/695
+* v2v-helper: Add sled in the checks by @spai-p9 in https://github.com/platform9/vjailbreak/pull/694
+
+### New Contributors
+* @rishabh625 made their first contribution in https://github.com/platform9/vjailbreak/pull/563
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.15...v0.2.0
+## v0.2.1
+
+### What's Changed
+* Nit: readme by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/704
+* Backport: vPwned: fix condition trigger for vm migrations by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/682
+* GH actions for cross fork PRs by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/709
+* remove docker login for build only steps by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/717
+* add kubernetes dashboard by default to grafana by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/714
+* Add opensource.txt file,inject it into the vm and prebake virtio-drivers by @spai-p9 in https://github.com/platform9/vjailbreak/pull/718
+* Revert pr 662 by @spai-p9 @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/719
+* simplified the release notes workflow to update docs by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/710
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.2.0...v0.2.1
