@@ -75,7 +75,6 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
@@ -344,6 +343,49 @@ func extractVCenterCredentials(secret *corev1.Secret) (username, password, host 
 	return
 }
 
+// GetVMwareMachineForVM fetches the VMwareMachine corresponding to a given VM name
+func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm string, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachine, error) {
+	// Generate the expected VMwareMachine name
+	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get k8s compatible name for VM %s", vm)
+	}
+
+	// Fetch individual VMwareMachine
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      vmk8sname,
+		Namespace: migrationtemplate.Namespace,
+	}, vmMachine)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, errors.Errorf("VMwareMachine %s not found for VM %s", vmk8sname, vm)
+		}
+		return nil, errors.Wrapf(err, "failed to get VMwareMachine %s for VM %s", vmk8sname, vm)
+	}
+
+	// Verify VMwareMachine has correct VMwareCreds label
+	if vmMachine.Labels == nil {
+		return nil, errors.Errorf("VMwareMachine %s has no labels", vmMachine.Name)
+	}
+
+	expectedLabel := vmwcreds.Name
+	actualLabel, exists := vmMachine.Labels[constants.VMwareCredsLabel]
+	if !exists {
+		return nil, errors.Errorf("VMwareMachine %s missing required label %s", vmMachine.Name, constants.VMwareCredsLabel)
+	}
+
+	if actualLabel != expectedLabel {
+		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
+	}
+
+	// Verify VM name matches
+	if vmMachine.Spec.VMInfo.Name != vm {
+		return nil, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
+	}
+	return vmMachine, nil
+}
+
 // ReconcileMigrationPlanJob reconciles jobs created by the migration plan
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -379,46 +421,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, 0)
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		for _, vm := range parallelvms {
-			// Generate the expected VMwareMachine name
-			vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "failed to get k8s compatible name for VM %s", vm)
+				return ctrl.Result{}, errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
 			}
-
-			// Fetch individual VMwareMachine
-			vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
-			err = r.Get(ctx, types.NamespacedName{
-				Name:      vmk8sname,
-				Namespace: migrationtemplate.Namespace,
-			}, vmMachine)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					return ctrl.Result{}, errors.Errorf("VMwareMachine %s not found for VM %s", vmk8sname, vm)
-				}
-				return ctrl.Result{}, errors.Wrapf(err, "failed to get VMwareMachine %s for VM %s", vmk8sname, vm)
-			}
-
-			// Verify VMwareMachine has correct VMwareCreds label
-			if vmMachine.Labels == nil {
-				return ctrl.Result{}, errors.Errorf("VMwareMachine %s has no labels", vmMachine.Name)
-			}
-
-			expectedLabel := vmwcreds.Name
-			actualLabel, exists := vmMachine.Labels[constants.VMwareCredsLabel]
-			if !exists {
-				return ctrl.Result{}, errors.Errorf("VMwareMachine %s missing required label %s", vmMachine.Name, constants.VMwareCredsLabel)
-			}
-
-			if actualLabel != expectedLabel {
-				return ctrl.Result{}, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
-			}
-
-			// Verify VM name matches
-			if vmMachine.Spec.VMInfo.Name != vm {
-				return ctrl.Result{}, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
-			}
-
-			// Add to collections
 			vmMachinesArr = append(vmMachinesArr, vmMachine)
 			vmMachinesMap[vm] = vmMachine
 		}
