@@ -1492,7 +1492,6 @@ export default function VmsSelectionStep({
             openstackVolumeRef: {
               cinderBackendPool: config.cinderBackendPool,
               volumeType: config.volumeType,
-              source: config.source,
               openstackCreds: openstackCredName,
             }
           }

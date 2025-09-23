@@ -14,10 +14,8 @@ import {
     Grid,
     Tooltip,
     TextField,
-    IconButton,
-    Button,
 } from '@mui/material'
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material'
+// Icons removed since source fields are now readonly
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 
@@ -73,48 +71,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
         })
     }
 
-    const addSourceField = (configIndex: number) => {
-        setConfigurations(prev => {
-            const updated = [...prev]
-            updated[configIndex] = {
-                ...updated[configIndex],
-                source: { ...updated[configIndex].source, '': '' }
-            }
-            return updated
-        })
-    }
-
-    const updateSourceField = (configIndex: number, oldKey: string, newKey: string, value: string) => {
-        setConfigurations(prev => {
-            const updated = [...prev]
-            const newSource = { ...updated[configIndex].source }
-
-            if (oldKey !== newKey) {
-                delete newSource[oldKey]
-            }
-            newSource[newKey] = value
-
-            updated[configIndex] = {
-                ...updated[configIndex],
-                source: newSource
-            }
-            return updated
-        })
-    }
-
-    const removeSourceField = (configIndex: number, key: string) => {
-        setConfigurations(prev => {
-            const updated = [...prev]
-            const newSource = { ...updated[configIndex].source }
-            delete newSource[key]
-
-            updated[configIndex] = {
-                ...updated[configIndex],
-                source: newSource
-            }
-            return updated
-        })
-    }
+    // Source fields are now readonly, so add/update/remove functions are no longer needed
 
 
     const availableBackendPools = openstackCreds?.status?.openstack?.volumeBackends || []
@@ -253,14 +210,15 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                                         Volume Ref Configuration
                                     </Typography>
-                                    <Button
-                                        size="small"
-                                        startIcon={<AddIcon />}
-                                        onClick={() => addSourceField(index)}
-                                    >
-                                        Add Field
-                                    </Button>
                                 </Box>
+
+                                <Alert severity="info" sx={{ mb: 2 }}>
+                                    <Typography variant="body2">
+                                        <strong>Hint:</strong> Edit this field in the VMware Notes section.
+                                        <br />
+                                        Multipath SAN support is available only in PCD ≥ 2025.10.
+                                    </Typography>
+                                </Alert>
 
                                 {Object.entries(config.source).map(([key, value], sourceIndex) => (
                                     <Grid container spacing={1} alignItems="center" key={`${index}-${sourceIndex}`} sx={{ mb: 1 }}>
@@ -269,8 +227,15 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                                                 size="small"
                                                 placeholder="Key"
                                                 value={key}
-                                                onChange={(e) => updateSourceField(index, key, e.target.value, value)}
                                                 fullWidth
+                                                InputProps={{
+                                                    readOnly: true,
+                                                }}
+                                                sx={{
+                                                    '& .MuiInputBase-input': {
+                                                        backgroundColor: 'action.disabledBackground',
+                                                    }
+                                                }}
                                             />
                                         </Grid>
                                         <Grid item xs={5}>
@@ -278,25 +243,26 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                                                 size="small"
                                                 placeholder="Value"
                                                 value={value}
-                                                onChange={(e) => updateSourceField(index, key, key, e.target.value)}
                                                 fullWidth
+                                                InputProps={{
+                                                    readOnly: true,
+                                                }}
+                                                sx={{
+                                                    '& .MuiInputBase-input': {
+                                                        backgroundColor: 'action.disabledBackground',
+                                                    }
+                                                }}
                                             />
                                         </Grid>
                                         <Grid item xs={2}>
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => removeSourceField(index, key)}
-                                                color="error"
-                                            >
-                                                <DeleteIcon />
-                                            </IconButton>
+                                            {/* Removed delete button since fields are now readonly */}
                                         </Grid>
                                     </Grid>
                                 ))}
 
                                 {Object.keys(config.source).length === 0 && (
                                     <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                        No volume ref configuration fields added
+                                        No volume ref configuration fields available
                                     </Typography>
                                 )}
                             </Box>
