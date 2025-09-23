@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { fetchPods, streamPodLogs, type Pod } from "../api/kubernetes/pods"
 
 interface UseDeploymentLogsParams {
   deploymentName: string
@@ -14,19 +15,7 @@ interface UseDeploymentLogsReturn {
   reconnect: () => void
 }
 
-interface Pod {
-  metadata: {
-    name: string
-    namespace: string
-  }
-}
-
-interface PodListResponse {
-  items: Pod[]
-}
-
 const MAX_LOG_LINES = 1000
-const KUBERNETES_API_BASE_PATH = "/api/v1"
 
 export const useDeploymentLogs = ({
   deploymentName,
@@ -53,46 +42,19 @@ export const useDeploymentLogs = ({
     }
   }, [])
 
-  const fetchPods = useCallback(async (): Promise<Pod[]> => {
-    const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
-    const endpoint = `${baseUrl}${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods`
-    const params = new URLSearchParams({
-      labelSelector: labelSelector,
-    })
-    const url = `${endpoint}?${params.toString()}`
-
-    const response = await fetch(url, {
-      headers: getFetchHeaders(),
-      signal: new AbortController().signal,})
-      
-    if (!response.ok) {
-      throw new Error(`Failed to fetch pods: HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const data: PodListResponse = await response.json()
-    return data.items
+  const fetchPodsForDeployment = useCallback(async (): Promise<Pod[]> => {
+    return fetchPods(namespace, labelSelector)
   }, [namespace, labelSelector])
 
-  const streamPodLogs = useCallback(async (podName: string, podNamespace: string): Promise<void> => {
-    const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
-    const endpoint = `${baseUrl}${KUBERNETES_API_BASE_PATH}/namespaces/${podNamespace}/pods/${podName}/log`
-    const params = new URLSearchParams({
-      follow: "true",
-      tailLines: "100",
-    })
-    const url = `${endpoint}?${params.toString()}`
-
+  const streamPodLogsWithProcessing = useCallback(async (podName: string, podNamespace: string): Promise<void> => {
     const abortController = new AbortController()
     abortControllersRef.current.push(abortController)
 
-    const response = await fetch(url, {
-      headers: getFetchHeaders(),
+    const response = await streamPodLogs(podNamespace, podName, {
+      follow: true,
+      tailLines: "100",
       signal: abortController.signal,
     })
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream logs from pod ${podName}: HTTP ${response.status}: ${response.statusText}`)
-    }
 
     const reader = response.body?.getReader()
     if (!reader) {
@@ -165,7 +127,7 @@ export const useDeploymentLogs = ({
 
     try {
       // First, fetch the pods for this deployment
-      const pods = await fetchPods()
+      const pods = await fetchPodsForDeployment()
       
       if (pods.length === 0) {
         throw new Error(`No pods found for deployment ${deploymentName} with label selector ${labelSelector}`)
@@ -175,7 +137,7 @@ export const useDeploymentLogs = ({
 
       // Start streaming logs from all pods
       const streamPromises = pods.map(pod => 
-        streamPodLogs(pod.metadata.name, pod.metadata.namespace)
+        streamPodLogsWithProcessing(pod.metadata.name, pod.metadata.namespace)
       )
 
       // Wait for all streams to complete (they won't unless there's an error or abort)
@@ -197,7 +159,7 @@ export const useDeploymentLogs = ({
         }
       }, 3000)
     }
-  }, [enabled, deploymentName, namespace, labelSelector, cleanup, fetchPods, streamPodLogs])
+  }, [enabled, deploymentName, namespace, labelSelector, cleanup, fetchPodsForDeployment, streamPodLogsWithProcessing])
 
   const reconnect = useCallback(() => {
     setLogs([])
@@ -226,12 +188,5 @@ export const useDeploymentLogs = ({
     isLoading,
     error,
     reconnect,
-  }
-}
-const getFetchHeaders = () => {
-  const authToken = import.meta.env.VITE_API_TOKEN
-  return {
-    "Content-Type": "application/json;charset=UTF-8",
-    ...(authToken && { Authorization: `Bearer ${authToken}` }),
   }
 }

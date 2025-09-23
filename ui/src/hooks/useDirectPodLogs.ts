@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { streamPodLogs } from "../api/kubernetes/pods"
 
 interface UseDirectPodLogsParams {
   podName: string
@@ -14,7 +15,6 @@ interface UseDirectPodLogsReturn {
 }
 
 const MAX_LOG_LINES = 1000
-const KUBERNETES_API_BASE_PATH = "/api/v1"
 
 export const useDirectPodLogs = ({
   podName,
@@ -48,25 +48,14 @@ export const useDirectPodLogs = ({
     setError(null)
 
     try {
-      const baseUrl = import.meta.env.MODE === "development" ? "/dev-api" : ""
-      const endpoint = `${baseUrl}${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods/${podName}/log`
-      const params = new URLSearchParams({
-        follow: "true",
-        tailLines: "100",
-      })
-      const url = `${endpoint}?${params.toString()}`
-
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
-      const response = await fetch(url, {
-        headers: getFetchHeaders(),
+      const response = await streamPodLogs(namespace, podName, {
+        follow: true,
+        tailLines: "100",
         signal: abortController.signal,
       })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
 
       setIsLoading(false)
 
@@ -169,13 +158,5 @@ export const useDirectPodLogs = ({
     isLoading,
     error,
     reconnect,
-  }
-}
-
-const getFetchHeaders = () => {
-  const authToken = import.meta.env.VITE_API_TOKEN
-  return {
-    "Content-Type": "application/json;charset=UTF-8",
-    ...(authToken && { Authorization: `Bearer ${authToken}` }),
   }
 }
