@@ -49,6 +49,7 @@ import (
 
 const (
 	trueString = "true" // Define at package level
+	sdkPath    = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -498,8 +499,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
 	}
 	u, err := url.Parse(host)
 	if err != nil {
@@ -1459,14 +1460,17 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
-
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
@@ -1738,6 +1742,7 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
 }
 
+// LogoutVMwareClient logs out from the VMware vCenter client session
 func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
@@ -1752,8 +1757,8 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
 	}
 	u, err := url.Parse(host)
 	if err != nil {
