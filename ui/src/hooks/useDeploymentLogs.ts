@@ -140,8 +140,7 @@ export const useDeploymentLogs = ({
         streamPodLogsWithProcessing(pod.metadata.name, pod.metadata.namespace)
       )
 
-      // Wait for all streams to complete (they won't unless there's an error or abort)
-      await Promise.all(streamPromises)
+    // Streams run indefinitely in parallel, handled individually
     } catch (err) {
       setIsLoading(false)
       if (err instanceof Error && err.name === 'AbortError') {
