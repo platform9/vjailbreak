@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	gophercloud "github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
@@ -167,7 +168,7 @@ func GetCert(endpoint string) (*x509.Certificate, error) {
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			log.Log.Info("Error closing connection", "error", err)
+			log.Log.Info("Error closing connection", "error", err, "endpoint", endpoint)
 		}
 	}()
 	cert := conn.ConnectionState().PeerCertificates[0]
@@ -551,7 +552,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		}
 		ctxlog := log.FromContext(ctx)
 		// Log the error and retry after a delay
-		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
+		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err, "maxRetries", maxRetries)
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
@@ -664,7 +665,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
-	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit, "datacenter", datacenter)
 
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
@@ -847,7 +848,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
 		if !slices.Contains(vminfo.RDMDisks, data) {
 			vminfo.RDMDisks = append(vminfo.RDMDisks, data)
-			log.FromContext(ctx).Info("RDM disk cannot be removed from VM, delete vmware custom resource if wanted to exclude rdm disks after detachment from VM and remove owner VM's reference from RDM disk.", "Disk: ", data, " VM: ", vminfo.Name)
+			log.FromContext(ctx).Info("RDM disk cannot be removed from VM, delete vmware custom resource if wanted to exclude rdm disks after detachment from VM and remove owner VM's reference from RDM disk", "disk", data, "vm", vminfo.Name)
 		}
 	}
 
@@ -1329,7 +1330,7 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisk vjailbre
 				}
 				mp := make(map[string]string)
 				mp[splotVolRef[0]] = splotVolRef[1]
-				log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
+				log.Info("Setting OpenStack Volume Ref for RDM disk", "diskName", diskName, "volumeRef", mp)
 				baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
 					VolumeRef: mp,
 				}
@@ -1442,14 +1443,254 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 var hostStorageMap *sync.Map = &sync.Map{}
 var rdmDiskMap *sync.Map = &sync.Map{}
 
-func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*object.VirtualMachine, client *vim25.Client) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
-	vmMap := make(map[string]*object.VirtualMachine)
-	for _, vm := range vms {
-		vmMap[vm.UUID(ctx)] = vm
+func buildVMInfo(moVM mo.VirtualMachine, dsNames []string, diskLabels []string, netNames []string, rdmForVM []string, esxiName string, clusterName string, nicList []vjailbreakv1alpha1.NIC, guestNetworks []vjailbreakv1alpha1.GuestNetwork, osFamily string) vjailbreakv1alpha1.VMInfo {
+	return vjailbreakv1alpha1.VMInfo{
+		Name:              moVM.Config.Name,
+		Datastores:        dsNames,
+		Disks:             diskLabels,
+		Networks:          netNames,
+		IPAddress:         moVM.Guest.IpAddress,
+		VMState:           moVM.Guest.GuestState,
+		OSFamily:          osFamily,
+		CPU:               int(moVM.Config.Hardware.NumCPU),
+		Memory:            int(moVM.Config.Hardware.MemoryMB),
+		RDMDisks:          rdmForVM,
+		ESXiName:          esxiName,
+		ClusterName:       clusterName,
+		NetworkInterfaces: nicList,
+		GuestNetworks:     guestNetworks,
 	}
-	const batchSize = 50
-	log := scope.Logger
-	collector := property.DefaultCollector(client)
+}
+
+func processGuestNetworks(ctx context.Context, moVM mo.VirtualMachine, nicList []vjailbreakv1alpha1.NIC, scope *scope.VMwareCredsScope, log logr.Logger) ([]vjailbreakv1alpha1.GuestNetwork, string, []vjailbreakv1alpha1.NIC, error) {
+	// Get the guest network info
+	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
+	if err != nil {
+		return nil, "", nicList, fmt.Errorf("failed to extract guest network info: %w", err)
+	}
+
+	// Convert VM name to Kubernetes-safe name
+	vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
+	if err != nil {
+		return nil, "", nicList, fmt.Errorf("failed to convert VM name to Kubernetes-safe name: %w", err)
+	}
+
+	var guestNetworks []vjailbreakv1alpha1.GuestNetwork
+	var osFamily string
+
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
+	vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
+	err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
+	switch {
+	case apierrors.IsNotFound(err):
+		// First time creation – use whatever vCenter gave us (could be nil)
+		guestNetworks = guestNetworksFromVmware
+		osFamily = moVM.Guest.GuestFamily
+
+	case err != nil:
+		return nil, "", nicList, fmt.Errorf("failed to get VMwareMachine: %w", err)
+
+	default:
+		// Object exists
+		if len(guestNetworksFromVmware) > 0 {
+			// Only update if we got fresh data from vCenter
+			guestNetworks = guestNetworksFromVmware
+		} else {
+			// Use existing data because VM is switched off and we can't get the info from vCenter
+			guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
+		}
+		if moVM.Guest.GuestFamily != "" {
+			osFamily = moVM.Guest.GuestFamily
+		} else {
+			osFamily = vmwvm.Spec.VMInfo.OSFamily
+		}
+	}
+
+	// Update NIC list with IP addresses
+	updatedNicList := make([]vjailbreakv1alpha1.NIC, len(nicList))
+	copy(updatedNicList, nicList)
+
+	if len(guestNetworksFromVmware) > 0 {
+		// Extract IP addresses from guest networks and set it in network interfaces
+		for i, nic := range updatedNicList {
+			for _, guestNet := range guestNetworksFromVmware {
+				if nic.MAC == guestNet.MAC {
+					// Check if IP is ipv4
+					if !strings.Contains(guestNet.IP, ":") {
+						updatedNicList[i].IPAddress = guestNet.IP
+					}
+					break
+				}
+			}
+		}
+	} else {
+		log.Info("No guest network info available from VMware for vm", "VM NAME", moVM.Config.Name)
+		// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
+		for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
+			for i, existingNic := range updatedNicList {
+				if existingNic.MAC == nic.MAC {
+					updatedNicList[i].IPAddress = nic.IPAddress
+					break
+				}
+			}
+		}
+	}
+
+	return guestNetworks, osFamily, updatedNicList, nil
+}
+
+func getHostClusterInfo(ctx context.Context, moVM mo.VirtualMachine, client *vim25.Client, collector *property.Collector) (string, string, error) {
+	// Determine cluster name
+	val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
+	if !ok {
+		// Get the host name and parent (cluster) information
+		host := mo.HostSystem{}
+		hostSystemMap.Store(host.Reference().Value, host)
+
+		err := collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get host name: %w", err)
+		}
+		clusterName := getClusterNameFromHost(ctx, client, host)
+		if strings.TrimSpace(moVM.Config.Name) == "" {
+			return "", "", fmt.Errorf("VM has no name")
+		}
+		esxiName := host.Name
+		clusterDetails := clusterDetails{
+			ESXIName:    esxiName,
+			ClusterName: clusterName,
+		}
+		hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
+		return clusterName, esxiName, nil
+	} else if val != nil {
+		if details, ok := val.(clusterDetails); ok {
+			return details.ClusterName, details.ESXIName, nil
+		}
+	}
+	return "", "", fmt.Errorf("unable to get host cluster info")
+}
+
+func processRDMDisks(ctx context.Context, moVM mo.VirtualMachine, hostStorageInfo *types.HostStorageDeviceInfo, attributes []string, rdmDiskMap *sync.Map, log logr.Logger) []string {
+	rdmForVM := make([]string, 0)
+
+	for _, device := range moVM.Config.Hardware.Device {
+		disk, ok := device.(*types.VirtualDisk)
+		if !ok {
+			continue
+		}
+
+		_, rdmInfo, err := processVMDisk(ctx, disk, hostStorageInfo, moVM.Config.Name)
+		if err != nil {
+			log.Error(err, "failed to process VM disk", "VM NAME", moVM.Config.Name)
+			continue
+		}
+
+		// check if rdmInfo is empty
+		if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
+			rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
+			rdmInfo, err := populateRDMDiskInfoFromAttributes(ctx, rdmInfo, attributes)
+			if err != nil {
+				log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", moVM.Config.Name)
+				continue
+			}
+
+			if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
+				savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
+				if !ok {
+					log.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
+					continue
+				}
+				// Compare OpenstackVolumeRef details
+				if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
+					if !reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) {
+						log.Info("RDM VolumeRef doesn't match compared to other clustered VM's, skipping the VM", "diskName", rdmInfo.Spec.DiskName, "vmName", moVM.Config.Name, "otherVMs", savedRDMDetails.Spec.OwnerVMs)
+						continue
+					}
+				}
+				// Add owner VMs if not exists already and sort OwnerVMs alphabetically
+				// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs
+				rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, moVM.Config.Name)
+				slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
+			}
+
+			savedInfo, loaded := rdmDiskMap.LoadOrStore(strings.TrimSpace(rdmInfo.Name), rdmInfo)
+			if loaded {
+				savedInfoDetails, ok := savedInfo.(vjailbreakv1alpha1.RDMDisk)
+				if ok && !reflect.DeepEqual(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs) {
+					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs...)
+					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
+					rdmDiskMap.Store(strings.TrimSpace(rdmInfo.Name), rdmInfo)
+				}
+			}
+		}
+	}
+
+	return rdmForVM
+}
+
+func validateVM(moVM mo.VirtualMachine, vmMap map[string]*object.VirtualMachine, log logr.Logger) bool {
+	switch {
+	case moVM.Config == nil:
+		log.Error(fmt.Errorf("vm config is nil"), "skipping VM", "VM NAME", moVM.Config.Name)
+		return false
+	case moVM.Config.Uuid == "":
+		log.Error(fmt.Errorf("vm uuid is empty"), "skipping VM", "VM NAME", moVM.Config.Name)
+		return false
+	case vmMap[moVM.Config.Uuid] == nil:
+		log.Error(fmt.Errorf("vm not found in vmMap"), "skipping VM", "VM NAME", moVM.Config.Name)
+		return false
+	}
+	return true
+}
+
+// VMwareObject represents an interface for VMware objects that have Self and Name properties
+type VMwareObject interface {
+	mo.Datastore | mo.Network
+}
+
+func retrieveNames[T VMwareObject](ctx context.Context, collector *property.Collector, refs map[types.ManagedObjectReference]struct{}, logger logr.Logger, objectType string) map[types.ManagedObjectReference]string {
+	mapObj := make(map[types.ManagedObjectReference]string)
+	if len(refs) > 0 {
+		var objectList []T
+		refList := make([]types.ManagedObjectReference, 0, len(refs))
+		for ref := range refs {
+			refList = append(refList, ref)
+		}
+		if err := collector.Retrieve(ctx, refList, []string{"name"}, &objectList); err == nil {
+			for _, obj := range objectList {
+				switch v := any(obj).(type) {
+				case mo.Datastore:
+					mapObj[v.Self] = v.Name
+				case mo.Network:
+					mapObj[v.Self] = v.Name
+				}
+			}
+		} else {
+			logger.Error(err, fmt.Sprintf("failed to retrieve %s names", objectType))
+		}
+	}
+	return mapObj
+}
+
+func collectVMReferences(fetchedVMs []mo.VirtualMachine) (map[types.ManagedObjectReference]struct{}, map[types.ManagedObjectReference]struct{}, map[string][]string) {
+	dsRefs := make(map[types.ManagedObjectReference]struct{})
+	netRefs := make(map[types.ManagedObjectReference]struct{})
+	attributeMap := make(map[string][]string)
+
+	for _, moVM := range fetchedVMs {
+		for _, ref := range moVM.Datastore {
+			dsRefs[ref] = struct{}{}
+		}
+		for _, ref := range moVM.Network {
+			netRefs[ref] = struct{}{}
+		}
+		attributeMap[moVM.Reference().Value] = strings.Split(moVM.Summary.Config.Annotation, "\n")
+	}
+
+	return dsRefs, netRefs, attributeMap
+}
+
+func buildVMPropertyFilter(vms []*object.VirtualMachine) types.PropertyFilterSpec {
 	// Build ObjectSet for VM retrieval
 	objectSet := make([]types.ObjectSpec, 0, len(vms))
 	for _, vm := range vms {
@@ -1460,7 +1701,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	}
 
 	// Retrieve VM core properties
-	filterSpec := types.PropertyFilterSpec{
+	return types.PropertyFilterSpec{
 		ObjectSet: objectSet,
 		PropSet: []types.PropertySpec{
 			{
@@ -1475,6 +1716,19 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			},
 		},
 	}
+}
+
+func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*object.VirtualMachine, client *vim25.Client) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
+	vmMap := make(map[string]*object.VirtualMachine)
+	for _, vm := range vms {
+		vmMap[vm.UUID(ctx)] = vm
+	}
+	const batchSize = 50
+	log := scope.Logger
+	collector := property.DefaultCollector(client)
+
+	// Build property filter for VM retrieval
+	filterSpec := buildVMPropertyFilter(vms)
 	req := types.RetrieveProperties{
 		SpecSet: []types.PropertyFilterSpec{filterSpec},
 	}
@@ -1489,59 +1743,16 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	if err := mo.LoadObjectContent(res.Returnval, &fetchedVMs); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode ObjectContent into mo.VirtualMachine: %w", err)
 	}
-	// Fetch all annotations
-	attributeMap := make(map[string][]string)
-	// Step 1: Collect unique datastore & network MORs
-	dsRefs := make(map[types.ManagedObjectReference]struct{})
-	netRefs := make(map[types.ManagedObjectReference]struct{})
-	for _, moVM := range fetchedVMs {
-		for _, ref := range moVM.Datastore {
-			dsRefs[ref] = struct{}{}
-		}
-		for _, ref := range moVM.Network {
-			netRefs[ref] = struct{}{}
-		}
-		attributeMap[moVM.Reference().Value] = strings.Split(moVM.Summary.Config.Annotation, "\n")
-	}
+	// Fetch all annotations and collect references
+	dsRefs, netRefs, attributeMap := collectVMReferences(fetchedVMs)
 
-	// Step 2: Bulk retrieve datastore names
-	dsMap := make(map[types.ManagedObjectReference]string)
-	if len(dsRefs) > 0 {
-		var dsList []mo.Datastore
-		refList := make([]types.ManagedObjectReference, 0, len(dsRefs))
-		for ref := range dsRefs {
-			refList = append(refList, ref)
-		}
-		if err := collector.Retrieve(ctx, refList, []string{"name"}, &dsList); err == nil {
-			for _, ds := range dsList {
-				dsMap[ds.Self] = ds.Name
-			}
-		} else {
-			log.Error(err, "failed to retrieve datastore names")
-		}
-	}
-
-	// Step 3: Bulk retrieve network names
-	netMap := make(map[types.ManagedObjectReference]string)
-	if len(netRefs) > 0 {
-		var netList []mo.Network
-		refList := make([]types.ManagedObjectReference, 0, len(netRefs))
-		for ref := range netRefs {
-			refList = append(refList, ref)
-		}
-		if err := collector.Retrieve(ctx, refList, []string{"name"}, &netList); err == nil {
-			for _, nw := range netList {
-				netMap[nw.Self] = nw.Name
-			}
-		} else {
-			log.Error(err, "failed to retrieve network names")
-		}
-	}
+	// Step 2: Bulk retrieve datastore and network names
+	dsMap := retrieveNames[mo.Datastore](ctx, collector, dsRefs, log, "datastore")
+	netMap := retrieveNames[mo.Network](ctx, collector, netRefs, log, "network")
 
 	// Step 4: Build final VMInfo list
 	batchInfos := make([]vjailbreakv1alpha1.VMInfo, 0, len(fetchedVMs))
 	for _, moVM := range fetchedVMs {
-		rdmForVM := make([]string, 0)
 		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
 			continue
 		}
@@ -1566,14 +1777,12 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 		// Retrieve Network on basis on NICs
 		// Build networks list from NetworkInterfaces to match NIC count
 		for _, nic := range nicList {
-			var netObj mo.Network
 			netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-			err := collector.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
-			if err != nil {
-				log.Error(err, "failed to retrieve network name", "Network MOR", nic.Network)
-				continue
+			if name, ok := netMap[netRef]; ok {
+				netNames = append(netNames, name)
+			} else {
+				log.Error(fmt.Errorf("network not found in netMap"), "Network MOR not found", "networkMOR", nic.Network)
 			}
-			netNames = append(netNames, netObj.Name)
 		}
 
 		var diskLabels []string
@@ -1584,15 +1793,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 		}
 		// Get basic RDM disk info from VM properties
-		switch {
-		case moVM.Config == nil:
-			log.Error(fmt.Errorf("vm config is nil"), "skipping VM", "VM NAME", moVM.Config.Name)
-			continue
-		case moVM.Config.Uuid == "":
-			log.Error(fmt.Errorf("vm uuid is empty"), "skipping VM", "VM NAME", moVM.Config.Name)
-			continue
-		case vmMap[moVM.Config.Uuid] == nil:
-			log.Error(fmt.Errorf("vm not found in vmMap"), "skipping VM", "VM NAME", moVM.Config.Name)
+		if !validateVM(moVM, vmMap, log) {
 			continue
 		}
 		hostStorageInfo, err := getHostStorageDeviceInfo(ctx, vmMap[moVM.Config.Uuid], hostStorageMap)
@@ -1600,174 +1801,32 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			log.Error(err, "failed to get host storage device info", "VM NAME", moVM.Config.Name)
 			continue
 		}
-		attributes := strings.Split(moVM.Summary.Config.Annotation, "\n")
+		attributes := attributeMap[moVM.Reference().Value]
 		var guestNetworks []vjailbreakv1alpha1.GuestNetwork
 		var osFamily string
 		var clusterName string
 		var esxiName string
-		for _, device := range moVM.Config.Hardware.Device {
-			disk, ok := device.(*types.VirtualDisk)
-			if !ok {
-				continue
-			}
 
-			_, rdmInfo, err := processVMDisk(ctx, disk, hostStorageInfo, moVM.Config.Name)
-			if err != nil {
-				log.Error(err, "failed to process VM disk", "VM NAME", moVM.Config.Name)
-				continue
-			}
-			// check if rdmInfo is empty
-			if !reflect.DeepEqual(rdmInfo, vjailbreakv1alpha1.RDMDisk{}) {
-				rdmForVM = append(rdmForVM, strings.TrimSpace(rdmInfo.Name))
-				rdmInfo, err := populateRDMDiskInfoFromAttributes(ctx, rdmInfo, attributes)
-				if err != nil {
-					log.Error(err, "failed to populate RDM disk info from attributes for vm", "VM NAME", moVM.Config.Name)
-					continue
-				}
-				if savedRDM, ok := rdmDiskMap.Load(rdmInfo.Name); ok && savedRDM != nil {
-					savedRDMDetails, ok := savedRDM.(vjailbreakv1alpha1.RDMDisk)
-					if !ok {
-						log.Error(fmt.Errorf("invalid type for savedRDM"), "expected RDMDisk", "got", fmt.Sprintf("%T", savedRDM))
-						continue
-					}
-					// Compare OpenstackVolumeRef details
-					if savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef != nil && rdmInfo.Spec.OpenstackVolumeRef.VolumeRef != nil {
-						if !reflect.DeepEqual(savedRDMDetails.Spec.OpenstackVolumeRef.VolumeRef, rdmInfo.Spec.OpenstackVolumeRef.VolumeRef) {
-							log.Info("RDM VolumeRef doesn't match compared to other clustered VM's, skipping the VM", "DiskName", rdmInfo.Spec.DiskName, "VMName: ", moVM.Config.Name, "Other VMs: ", savedRDMDetails.Spec.OwnerVMs)
-							continue
-						}
-					}
-					// Add owner VMs if not exists already and sort OwnerVMs alphabetically
-					// Compare existing OwnerVMs with rdmInfos.Spec.OwnerVMs
-					rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, moVM.Config.Name)
-					slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
-				}
-				savedInfo, loaded := rdmDiskMap.LoadOrStore(strings.TrimSpace(rdmInfo.Name), rdmInfo)
-				if loaded {
-					savedInfoDetails, ok := savedInfo.(vjailbreakv1alpha1.RDMDisk)
-					if ok && !reflect.DeepEqual(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs) {
-						rdmInfo.Spec.OwnerVMs = AppendUnique(rdmInfo.Spec.OwnerVMs, savedInfoDetails.Spec.OwnerVMs...)
-						slices.Sort(rdmInfo.Spec.OwnerVMs) // Sort OwnerVMs alphabetically
-						rdmDiskMap.Store(strings.TrimSpace(rdmInfo.Name), rdmInfo)
-					}
-				}
-			}
-		}
+		// Process RDM disks
+		rdmForVM := processRDMDisks(ctx, moVM, hostStorageInfo, attributes, rdmDiskMap, log)
 
-		// Determine cluster name
-		val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
-		if !ok {
-			// Get the host name and parent (cluster) information
-			host := mo.HostSystem{}
-			hostSystemMap.Store(host.Reference().Value, host)
-
-			err = collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
-			if err != nil {
-				log.Error(err, "failed to get host name", "VM NAME", moVM.Config.Name)
-				continue
-			}
-			clusterName = getClusterNameFromHost(ctx, client, host)
-			if strings.TrimSpace(moVM.Config.Name) == "" {
-				log.Info("Skipping VM with no name", "VM", moVM.Config.Name)
-				continue
-			}
-			esxiName = host.Name
-			clusterDetails := clusterDetails{
-				ESXIName:    esxiName,
-				ClusterName: clusterName,
-			}
-			hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
-		} else if val != nil {
-			if details, ok := val.(clusterDetails); ok {
-				clusterName = details.ClusterName
-				esxiName = details.ESXIName
-			}
-		}
-
-		// Get the guest network info
-		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
+		// Get host and cluster information
+		clusterName, esxiName, err = getHostClusterInfo(ctx, moVM, client, collector)
 		if err != nil {
-			log.Error(err, "failed to extract guest network info", "VM NAME", moVM.Config.Name)
+			log.Error(err, "failed to get host cluster info", "VM NAME", moVM.Config.Name)
 			continue
 		}
-		// Convert VM name to Kubernetes-safe name
-		vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
+
+		// Process guest networks and update NICs with IP addresses
+		guestNetworks, osFamily, nicList, err = processGuestNetworks(ctx, moVM, nicList, scope, log)
 		if err != nil {
-			log.Error(err, "failed to convert VM name to Kubernetes-safe name", "VM NAME", moVM.Config.Name)
+			log.Error(err, "failed to process guest networks", "VM NAME", moVM.Config.Name)
 			continue
 		}
-		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
-		err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
-		switch {
-		case apierrors.IsNotFound(err):
-			// First time creation – use whatever vCenter gave us (could be nil)
-			guestNetworks = guestNetworksFromVmware
-			osFamily = moVM.Guest.GuestFamily
 
-		case err != nil:
-			// Unexpected error
-			// appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
-			// return
-
-		default:
-			// Object exists
-			if len(guestNetworksFromVmware) > 0 {
-				// Only update if we got fresh data from vCenter
-				guestNetworks = guestNetworksFromVmware
-			} else {
-				// Use existing data because VM is switched off and we can't get the info from vCenter
-				guestNetworks = vmwvm.Spec.VMInfo.GuestNetworks
-			}
-			if moVM.Guest.GuestFamily != "" {
-				osFamily = moVM.Guest.GuestFamily
-			} else {
-				osFamily = vmwvm.Spec.VMInfo.OSFamily
-			}
-		}
-
-		if len(guestNetworksFromVmware) > 0 {
-			// Extract IP addresses from guest networks and set it in network interfaces
-			for i, nic := range nicList {
-				for _, guestNet := range guestNetworksFromVmware {
-					if nic.MAC == guestNet.MAC {
-						// Check if IP is ipv4
-						if !strings.Contains(guestNet.IP, ":") {
-							nicList[i].IPAddress = guestNet.IP
-						}
-						break
-					}
-				}
-			}
-		} else {
-			log.Info("No guest network info available from VMware for vm", "VM NAME", moVM.Config.Name)
-			// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
-			for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
-				for i, existingNic := range nicList {
-					if existingNic.MAC == nic.MAC {
-						nicList[i].IPAddress = nic.IPAddress
-						break
-					}
-				}
-			}
-		}
-
-		batchInfos = append(batchInfos, vjailbreakv1alpha1.VMInfo{
-			Name:              moVM.Config.Name,
-			Datastores:        dsNames,
-			Disks:             diskLabels,
-			Networks:          netNames,
-			IPAddress:         moVM.Guest.IpAddress,
-			VMState:           moVM.Guest.GuestState,
-			OSFamily:          osFamily,
-			CPU:               int(moVM.Config.Hardware.NumCPU),
-			Memory:            int(moVM.Config.Hardware.MemoryMB),
-			RDMDisks:          rdmForVM,
-			ESXiName:          esxiName,
-			ClusterName:       clusterName,
-			NetworkInterfaces: nicList,
-			GuestNetworks:     guestNetworks,
-		})
+		// Build and append VMInfo
+		vmInfo := buildVMInfo(moVM, dsNames, diskLabels, netNames, rdmForVM, esxiName, clusterName, nicList, guestNetworks, osFamily)
+		batchInfos = append(batchInfos, vmInfo)
 	}
 	return batchInfos, rdmDiskMap, nil
 }
