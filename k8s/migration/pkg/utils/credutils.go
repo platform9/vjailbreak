@@ -38,6 +38,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -481,6 +482,8 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
+var vmwareClientMap *sync.Map
+
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
@@ -507,9 +510,32 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
-		Reauth:   false,
+		Reauth:   true,
 	}
-	c := new(vim25.Client)
+	var c *vim25.Client
+	if vmwareClientMap == nil {
+		vmwareClientMap = &sync.Map{}
+	} else {
+		mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+		if val, ok := vmwareClientMap.Load(mapKey); ok {
+			cachedClient, valid := val.(*vim25.Client)
+			if valid && cachedClient != nil {
+				c = cachedClient
+				sessMgr := session.NewManager(c)
+				userSession, err := sessMgr.UserSession(ctx)
+				if err == nil && userSession != nil {
+					return c, nil
+				}
+				// If the cached client is no longer valid, delete it from the map
+				vmwareClientMap.Delete(fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification))
+				c = new(vim25.Client)
+				vmwareClientMap.Store(mapKey, c)
+			}
+		} else {
+			c = new(vim25.Client)
+			vmwareClientMap.Store(mapKey, c)
+		}
+	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
