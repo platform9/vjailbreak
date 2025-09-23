@@ -90,7 +90,7 @@ This ensures the snapshot and migration can proceed without errors.
 Edit the RDM disk to add `cinderBackendPool` and `volumeType`. Example:  
 
 ```bash
-kubectl patch rdmdisk vml.020072000060002ac000000000000144002838a5656202020 -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
+kubectl patch rdmdisk <name_of_rdmdisk_resource> -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
 ```
 
 ### 5. Create MigrationPlan
