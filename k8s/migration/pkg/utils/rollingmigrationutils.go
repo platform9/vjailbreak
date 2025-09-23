@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // CreateClusterMigration creates a new ClusterMigration object from the given cluster info and rolling migration plan
@@ -80,12 +81,12 @@ func getMigrationObject(ctx context.Context, k8sClient client.Client, vmwareObje
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
-	
+
 	k8sName, err := GetK8sCompatibleVMWareObjectName(vmwareObjectName, vmwarecreds.Name)
 	if err != nil {
 		return errors.Wrap(err, errorMsg)
 	}
-	
+
 	return k8sClient.Get(ctx, types.NamespacedName{
 		Name:      GenerateRollingMigrationObjectName(k8sName, rollingMigrationPlan),
 		Namespace: constants.NamespaceMigrationSystem,
@@ -222,7 +223,14 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to validate vCenter connection")
 	}
-
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k8sClient, vmwarecreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
+	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
 	if err != nil {
