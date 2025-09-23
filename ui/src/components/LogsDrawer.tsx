@@ -155,7 +155,7 @@ export default function LogsDrawer({
                             size="small"
                         >
                             <ToggleButton value="pod" aria-label="migration pod logs">
-                                Migration Pod
+                                Migration
                             </ToggleButton>
                             <ToggleButton value="controller" aria-label="controller logs">
                                 Controller
