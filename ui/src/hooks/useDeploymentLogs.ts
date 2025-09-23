@@ -64,56 +64,46 @@ export const useDeploymentLogs = ({
     const decoder = new TextDecoder()
     let buffer = ''
 
-    const readStream = async (): Promise<void> => {
+    // Stream logs using loop to avoid recursion
+    let done = false;
+    while (!done) {
       try {
-        const { done, value } = await reader.read()
-        
-        if (done) {
+        const { done: isDone, value } = await reader.read();
+        if (isDone) {
+          done = true;
           // Process any remaining buffer content
           if (buffer.trim()) {
-            const logLine = `[${podName}] ${buffer.trim()}`
+            const logLine = `[${podName}] ${buffer.trim()}`;
             setLogs(prevLogs => {
-              const newLogs = [...prevLogs, logLine]
-              return newLogs.length > MAX_LOG_LINES 
-                ? newLogs.slice(-MAX_LOG_LINES) 
-                : newLogs
-            })
+              const newLogs = [...prevLogs, logLine];
+              return newLogs.length > MAX_LOG_LINES
+                ? newLogs.slice(-MAX_LOG_LINES)
+                : newLogs;
+            });
           }
-          return
+          break;
         }
-
-        // Decode the chunk and add to buffer
-        buffer += decoder.decode(value, { stream: true })
-        
-        // Split by newlines and process complete lines
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
-        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         if (lines.length > 0) {
           const prefixedLines = lines
             .filter(line => line.trim())
-            .map(line => `[${podName}] ${line}`)
-          
+            .map(line => `[${podName}] ${line}`);
           setLogs(prevLogs => {
-            const newLogs = [...prevLogs, ...prefixedLines]
-            return newLogs.length > MAX_LOG_LINES 
-              ? newLogs.slice(-MAX_LOG_LINES) 
-              : newLogs
-          })
+            const newLogs = [...prevLogs, ...prefixedLines];
+            return newLogs.length > MAX_LOG_LINES
+              ? newLogs.slice(-MAX_LOG_LINES)
+              : newLogs;
+          });
         }
-
-        // Continue reading
-        return readStream()
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
-          // Stream was aborted, this is expected
-          return
+          break;
         }
-        throw err
+        throw err;
       }
     }
-
-    await readStream()
   }, [])
 
   const connect = useCallback(async () => {
@@ -139,6 +129,18 @@ export const useDeploymentLogs = ({
       const streamPromises = pods.map(pod => 
         streamPodLogsWithProcessing(pod.metadata.name, pod.metadata.namespace)
       )
+
+      // Handle each stream promise individually to catch errors
+      streamPromises.forEach(promise => {
+        promise.catch(err => {
+          if (err instanceof Error && err.name === 'AbortError') {
+            // Aborted, ignore
+            return
+          }
+          console.error('Log streaming error:', err)
+          setError(err instanceof Error ? err.message : 'Log streaming error')
+        })
+      })
 
     // Streams run indefinitely in parallel, handled individually
     } catch (err) {
