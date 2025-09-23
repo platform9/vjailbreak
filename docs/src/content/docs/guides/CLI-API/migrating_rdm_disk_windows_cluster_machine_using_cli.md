@@ -47,7 +47,7 @@ kubectl describe openstackcreds -n migration-system
 
   ```bash
 
-  os block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
+openstack block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
 
   ```
 
