@@ -28,13 +28,21 @@ You can then click on the **Admin Cutover** button to trigger the cutover proces
 ## Admin Cutover using kubectl patch
 You can also trigger the admin cutover using the `kubectl patch` command.
 1. First, identify the name of the migration `Pod` you want to perform the admin
-cutover for. You can list all migration `Pods` using the following command:
-```bash
-kubectl get pods -n migration-system 
-```
+cutover for. You can do that by doing the following things:
+    * Get the name of the migration namespace. You can find it in the vJailbreak UI under the migration details.
+     ```bash
+     kubectl get migration -n migration-system | grep -i <migration-name>
+     migration-name                AwaitingAdminCutOve   vjb    1h
+     ```
+    * Get the podRef of migration object
+    ```bash
+    kubectl get migration <migration-name> -n migration-system -o jsonpath='{.spec.podRef}'
+    <pod-name>
+    ```
+
 2. Once you have identified the migration `Pod`, you can trigger the admin cutover by
 executing the following command:
 ```bash
-kubectl patch pod pod-name -n migration-system -p '{"metadata":{"labels":{"startCutover":"yes"}}}'
+kubectl patch pod <pod-name> -n migration-system -p '{"metadata":{"labels":{"startCutover":"yes"}}}'
 ```
-Replace `pod-name` with the name of your migration `Pod` and `migration-system.
+Replace `pod-name` with the name of your migration `Pod` and `migration-system` with the name of your migration namespace.
