@@ -103,7 +103,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c)
+		defer func() {
+			if err := utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c); err != nil {
+				ctxlog.Error(err, "Failed to logout VMware client")
+			}
+		}()
 	}
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	// Update the status of the VMwareCreds object
@@ -131,7 +135,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	batchSize := 10
 
 	if vjailbreakSettings.VCenterScanConcurrencyLimit > 0 && len(vminfo) > vjailbreakSettings.VCenterScanConcurrencyLimit {
-		batchSize = int((len(vminfo) / vjailbreakSettings.VCenterScanConcurrencyLimit))
+		batchSize = len(vminfo) / vjailbreakSettings.VCenterScanConcurrencyLimit
 		if batchSize == 0 {
 			batchSize = 1
 		}

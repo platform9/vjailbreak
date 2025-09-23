@@ -49,6 +49,7 @@ import (
 
 const (
 	trueString = "true" // Define at package level
+	sdkPath    = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -498,8 +499,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
 	}
 	u, err := url.Parse(host)
 	if err != nil {
@@ -1417,14 +1418,17 @@ func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, 
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
-
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
-		defer LogoutVMwareClient(ctx, k3sclient, vmwcreds, c)
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
 	}
 	finder := find.NewFinder(c, false)
 	dc, err := finder.Datacenter(ctx, datacenter)
@@ -1447,7 +1451,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	log := scope.Logger
 	collector := property.DefaultCollector(client)
 	// Build ObjectSet for VM retrieval
-	var objectSet []types.ObjectSpec
+	objectSet := make([]types.ObjectSpec, 0, len(vms))
 	for _, vm := range vms {
 		objectSet = append(objectSet, types.ObjectSpec{
 			Obj:  vm.Reference(),
@@ -1535,7 +1539,7 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	}
 
 	// Step 4: Build final VMInfo list
-	var batchInfos []vjailbreakv1alpha1.VMInfo
+	batchInfos := make([]vjailbreakv1alpha1.VMInfo, 0, len(fetchedVMs))
 	for _, moVM := range fetchedVMs {
 		rdmForVM := make([]string, 0)
 		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
@@ -1550,12 +1554,16 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 		}
 		// NIC & Guest Network extraction
-		nicList, _ := ExtractVirtualNICs(&moVM)
+		nicList, err := ExtractVirtualNICs(&moVM)
+		if err != nil {
+			log.Error(err, "failed to extract NICs", "VM NAME", moVM.Config.Name)
+			continue
+		}
 		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
 			continue
 		}
 		var netNames []string
-		// Retrive Network on basis on NICs
+		// Retrieve Network on basis on NICs
 		// Build networks list from NetworkInterfaces to match NIC count
 		for _, nic := range nicList {
 			var netObj mo.Network
@@ -1576,13 +1584,14 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 		}
 		// Get basic RDM disk info from VM properties
-		if moVM.Config == nil {
+		switch {
+		case moVM.Config == nil:
 			log.Error(fmt.Errorf("vm config is nil"), "skipping VM", "VM NAME", moVM.Config.Name)
 			continue
-		} else if moVM.Config.Uuid == "" {
+		case moVM.Config.Uuid == "":
 			log.Error(fmt.Errorf("vm uuid is empty"), "skipping VM", "VM NAME", moVM.Config.Name)
 			continue
-		} else if vmMap[moVM.Config.Uuid] == nil {
+		case vmMap[moVM.Config.Uuid] == nil:
 			log.Error(fmt.Errorf("vm not found in vmMap"), "skipping VM", "VM NAME", moVM.Config.Name)
 			continue
 		}
@@ -1668,23 +1677,25 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 				ClusterName: clusterName,
 			}
 			hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
-		} else {
-			clusterName = val.(clusterDetails).ClusterName
-			esxiName = val.(clusterDetails).ESXIName
+		} else if val != nil {
+			if details, ok := val.(clusterDetails); ok {
+				clusterName = details.ClusterName
+				esxiName = details.ESXIName
+			}
 		}
 
 		// Get the guest network info
 		guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
 		if err != nil {
-			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get guest network info for vm %s: %w", vm.Name(), err))
+			log.Error(err, "failed to extract guest network info", "VM NAME", moVM.Config.Name)
+			continue
 		}
-
 		// Convert VM name to Kubernetes-safe name
 		vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
 		if err != nil {
-			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
+			log.Error(err, "failed to convert VM name to Kubernetes-safe name", "VM NAME", moVM.Config.Name)
+			continue
 		}
-
 		vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 		vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
 		err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
@@ -1696,8 +1707,8 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 
 		case err != nil:
 			// Unexpected error
-			//appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
-			//return
+			// appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VMwareMachine: %w", err))
+			// return
 
 		default:
 			// Object exists
@@ -1789,6 +1800,7 @@ func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.F
 	return nil, errors.New("no suitable base flavor found (0 vCPU, 0 RAM)")
 }
 
+// LogoutVMwareClient logs out from the VMware vCenter client session
 func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, vcentreClient *vim25.Client) error {
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
@@ -1803,8 +1815,8 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
 	}
 	u, err := url.Parse(host)
 	if err != nil {
