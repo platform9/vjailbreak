@@ -10,11 +10,22 @@ import {
     Paper,
     ToggleButton,
     ToggleButtonGroup,
+    useTheme,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { StyledDrawer, DrawerContent } from "src/components/forms/StyledDrawer";
 import { useDirectPodLogs } from "src/hooks/useDirectPodLogs";
 import { useDeploymentLogs } from "src/hooks/useDeploymentLogs";
+import {
+    DARK_BG_PAPER,
+    DARK_TEXT_PRIMARY,
+    DARK_DIVIDER,
+    LIGHT_BG_PAPER,
+    LIGHT_TEXT_PRIMARY,
+    LIGHT_DIVIDER,
+    DARK_TEXT_SECONDARY,
+    LIGHT_TEXT_SECONDARY,
+} from "src/theme/colors";
 
 interface LogsDrawerProps {
     open: boolean;
@@ -31,6 +42,9 @@ export default function LogsDrawer({
     namespace,
     migrationName,
 }: LogsDrawerProps) {
+    const theme = useTheme();
+    const isDarkMode = theme.palette.mode === 'dark';
+    
     const [follow, setFollow] = useState(true);
     const [logSource, setLogSource] = useState<'pod' | 'controller'>('pod');
     const [isTransitioning, setIsTransitioning] = useState(false);
@@ -245,6 +259,8 @@ export default function LogsDrawer({
                             overflow: "hidden",
                             display: "flex",
                             flexDirection: "column",
+                            backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
+                            borderColor: isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER,
                         }}
                     >
                         <Box
@@ -253,8 +269,8 @@ export default function LogsDrawer({
                                 flex: 1,
                                 overflow: "auto",
                                 p: 2,
-                                backgroundColor: "#1e1e1e",
-                                color: "#ffffff",
+                                backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
+                                color: isDarkMode ? DARK_TEXT_PRIMARY : LIGHT_TEXT_PRIMARY,
                                 fontFamily: "monospace",
                                 fontSize: "0.875rem",
                                 lineHeight: 1.4,
@@ -265,8 +281,10 @@ export default function LogsDrawer({
                             {currentLogs.length === 0 && !currentIsLoading && !currentError && !isTransitioning && (
                                 <Typography
                                     variant="body2"
-                                    color="text.secondary"
-                                    sx={{ fontFamily: "monospace" }}
+                                    sx={{ 
+                                        fontFamily: "monospace",
+                                        color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
+                                    }}
                                 >
                                     No logs available
                                 </Typography>
@@ -275,7 +293,9 @@ export default function LogsDrawer({
                                 <Box
                                     key={index}
                                     sx={{
-                                        borderBottom: index < currentLogs.length - 1 ? "1px solid #333" : "none",
+                                        borderBottom: index < currentLogs.length - 1 
+                                            ? `1px solid ${isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER}` 
+                                            : "none",
                                         py: 0.5,
                                     }}
                                 >
