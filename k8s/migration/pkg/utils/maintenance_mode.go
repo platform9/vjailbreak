@@ -15,6 +15,7 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -22,6 +23,8 @@ import (
 // CanEnterMaintenanceMode checks if an ESXi host can successfully enter maintenance mode
 // with all VMs automatically migrating off to other hosts. It checks host, VM, and cluster
 // settings that could block automatic VM migration.
+//
+//nolint:gocyclo // reason: function is complex but intentionally so
 func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwcreds *vjailbreakv1alpha1.VMwareCreds, hostName string, config RollingMigartionValidationConfig) (bool, string, error) {
 	// List of VMs that cannot migrate
 	blockedVMs := make([]string, 0)
@@ -31,7 +34,14 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	if err != nil {
 		return false, fmt.Sprintf("failed to validate vCenter connection: %v", err), fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k8sClient, vmwcreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
+	}
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
 
@@ -177,7 +187,15 @@ func GetMaintenanceModeOptions(ctx context.Context, k8sClient client.Client, vmw
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k8sClient, vmwcreds, c); err != nil {
+				// Log error but don't return it since this is a cleanup operation
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
+	}
 	// Create a finder to locate objects
 	finder := find.NewFinder(c, true)
 
