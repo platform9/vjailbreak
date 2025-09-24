@@ -1,11 +1,12 @@
-# Migrating RDM Disk
+---
+title: "Migrating RDM Disk"
+description: "A guide on how to migrate a Virtual Machine with RDM disks using the vjailbreak CLI."
+---
 
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using 
 RDM disks are mostly used of windows machine.
 
 RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)**. For multipath support (connecting to SAN array), **PCD version >= October 2025 (2025.10)** is required.
-
-**vjailbreak**.  
 
 ---
 
@@ -46,9 +47,7 @@ kubectl describe openstackcreds -n migration-system
 - To obtain the `source-id`,`source-name` or source details, you can run the following command against SAN Array:
 
   ```bash
-
-openstack block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
-
+  openstack block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
   ```
 
 ---
