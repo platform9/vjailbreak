@@ -445,7 +445,7 @@ export default function MigrationOptionsAlt({
                   }
                 />
                 <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  Migrated VM will use IP from DHCP if static IP is not preserved.  
+                  Migrated VM will use IP from DHCP if static IP cannot be preserved.  
                 </Typography>
               </Fields>
 
