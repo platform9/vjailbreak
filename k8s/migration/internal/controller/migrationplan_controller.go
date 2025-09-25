@@ -35,6 +35,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -1340,10 +1341,24 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 				}
 				// Validate that all ownerVMs are present in parallelVMs
-				for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
-					if _, ok := vmMachines[ownerVM]; !ok {
-						log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+				// This validation can be disabled via vjailbreak-settings ConfigMap
+				vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+				if err != nil {
+					log.FromContext(ctx).Error(err, "Failed to get vjailbreak settings, using default validation behavior")
+					// Fall back to default behavior (validation enabled) if we can't get settings
+					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+						if _, ok := vmMachines[ownerVM]; !ok {
+							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+						}
 					}
+				} else if vjailbreakSettings.ValidateRDMOwnerVMs {
+					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+						if _, ok := vmMachines[ownerVM]; !ok {
+							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+						}
+					}
+				} else {
+					log.FromContext(ctx).Info("RDM disk owner VM validation disabled via vjailbreak-settings", "rdmDisk", rdmDisk)
 				}
 				// Update existing RDMDisk CR
 				err = ValidateRDMDiskFields(rdmDiskCR)

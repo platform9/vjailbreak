@@ -111,6 +111,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
 			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
 			VCenterLoginRetryLimit:              constants.VCenterLoginRetryLimit,
+			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
 		}, nil
 	}
 
@@ -154,6 +155,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"] = strconv.Itoa(constants.VCenterLoginRetryLimit)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] == "" {
+		vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] = strconv.FormatBool(constants.ValidateRDMOwnerVMs)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
@@ -165,5 +170,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
 		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
 		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
+		ValidateRDMOwnerVMs:                 vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] == "true",
 	}, nil
 }

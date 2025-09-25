@@ -206,11 +206,18 @@ const (
 	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
 	PopulateVMwareMachineFlavors = true
 
+	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
+	ValidateRDMOwnerVMs = true
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
 	VCenterLoginRetryLimit = 5
+
+	// ConfigMap settings keys
+	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
+	ValidateRDMOwnerVMsKey = "validateRDMOwnerVMs"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
