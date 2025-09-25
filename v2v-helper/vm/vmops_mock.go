@@ -150,7 +150,7 @@ func (mr *MockVMOperationsMockRecorder) GetSnapshot(name interface{}) *gomock.Ca
 }
 
 // GetVMInfo mocks base method.
-func (m *MockVMOperations) GetVMInfo(ostype string) (VMInfo, error) {
+func (m *MockVMOperations) GetVMInfo(ostype string, rdmDisk []string) (VMInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVMInfo", ostype)
 	ret0, _ := ret[0].(VMInfo)
@@ -159,7 +159,7 @@ func (m *MockVMOperations) GetVMInfo(ostype string) (VMInfo, error) {
 }
 
 // GetVMInfo indicates an expected call of GetVMInfo.
-func (mr *MockVMOperationsMockRecorder) GetVMInfo(ostype interface{}) *gomock.Call {
+func (mr *MockVMOperationsMockRecorder) GetVMInfo(ostype interface{}, rdmDisk interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMInfo", reflect.TypeOf((*MockVMOperations)(nil).GetVMInfo), ostype)
 }

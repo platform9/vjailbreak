@@ -55,7 +55,7 @@ func (mr *MockOpenstackOperationsMockRecorder) AttachVolumeToVM(volumeID interfa
 }
 
 // CreatePort mocks base method.
-func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string) (*ports.Port, error) {
+func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePort", networkid, mac, ip, vmname, securityGroups)
 	ret0, _ := ret[0].(*ports.Port)
@@ -64,7 +64,7 @@ func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, i
 }
 
 // CreatePort indicates an expected call of CreatePort.
-func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vmname, securityGroups interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vmname, securityGroups interface{}, fallbackToDHCP bool) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), networkid, mac, ip, vmname, securityGroups)
 }
