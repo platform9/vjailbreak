@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -19,6 +20,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -26,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/util/retry"
 )
 
 type ValidationResult struct {
@@ -433,12 +437,16 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
-	dep := &appsv1.Deployment{}
-	if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
-		return err
-	}
-	dep.Spec.Replicas = &target
-	return kubeClient.Update(ctx, dep)
+	// retry.DefaultRetry will retry the update function up to 5 times between each attempt. 
+	// This automatically handle locking conflicts which can happen if the resource is modified between the Get and Update calls.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
+			return err
+		}
+		dep.Spec.Replicas = &target
+		return kubeClient.Update(ctx, dep)
+	})
 }
 
 func waitForDeploymentReadyLocal(ctx context.Context, kubeClient client.Client, name, namespace string, timeout time.Duration) error {
@@ -663,52 +671,60 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 	return nil
 }
 
-func fetchCRDsFromGitHub(tag string) ([]byte, error) {
-	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/upgrade-all-resources.yaml", tag)
+func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/deploy/00crds.yaml", tag)
+	log.Printf("Fetching upgrade manifest from: %s", url)
+
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to fetch manifest from %s: %w", url, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to fetch CRDs: %s", resp.Status)
-	}
-	return ioutil.ReadAll(resp.Body)
-}
 
-func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
-	data, err := fetchCRDsFromGitHub(tag)
-	if err != nil {
-		return err
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status: %s", resp.Status)
 	}
-	docs := strings.Split(string(data), "---")
-	for _, doc := range docs {
-		doc = strings.TrimSpace(doc)
-		if doc == "" {
+
+	decoder := utilyaml.NewYAMLOrJSONDecoder(resp.Body, 4096)
+
+	for {
+		u := &unstructured.Unstructured{}
+		if err := decoder.Decode(u); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to read manifest body: %w", err)
+		}
+
+		if u.GetKind() == "" {
 			continue
 		}
-		var crd apiextensionsv1.CustomResourceDefinition
-		if err := yaml.Unmarshal([]byte(doc), &crd); err == nil && crd.Kind == "CustomResourceDefinition" {
-			err := kubeClient.Create(ctx, &crd)
-			if err != nil {
-				if kerrors.IsAlreadyExists(err) {
-					existing := &apiextensionsv1.CustomResourceDefinition{}
-					if err := kubeClient.Get(ctx, client.ObjectKey{Name: crd.Name}, existing); err != nil {
-						return err
-					}
-					existing.Spec = crd.Spec
-					if err := kubeClient.Update(ctx, existing); err != nil {
-						return err
-					}
-					log.Printf("Updated CRD: %s", crd.Name)
-				} else {
-					return err
-				}
-			} else {
-				log.Printf("Created CRD: %s", crd.Name)
+
+		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}
+
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(u.GroupVersionKind())
+		err := kubeClient.Get(ctx, key, existing)
+
+		if kerrors.IsNotFound(err) {
+			if err := kubeClient.Create(ctx, u); err != nil {
+				log.Printf("Failed to create %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
+				return err
 			}
+			log.Printf("Created %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
+		} else if err == nil {
+			u.SetResourceVersion(existing.GetResourceVersion())
+			if err := kubeClient.Update(ctx, u); err != nil {
+				log.Printf("Failed to update %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
+				return err
+			}
+			log.Printf("Updated %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
+		} else {
+			return fmt.Errorf("failed to get existing resource %s/%s: %w", u.GetNamespace(), u.GetName(), err)
 		}
 	}
+
+	log.Printf("Successfully applied all resources from manifest %s", tag)
 	return nil
 }
 
@@ -743,6 +759,7 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 		}
 		return err
 	}
+	log.Printf("Successfully updated version-config ConfigMap to version %s.", tag)
 	return nil
 }
 

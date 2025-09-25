@@ -8,8 +8,11 @@ rules:
   - ""
   resources:
   - configmaps
+  - namespaces
   - pods
   - secrets
+  - serviceaccounts
+  - services
   verbs:
   - create
   - delete
@@ -35,6 +38,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
 - apiGroups:
   - ""
   resources:
@@ -71,6 +81,33 @@ rules:
   - batch
   resources:
   - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete
