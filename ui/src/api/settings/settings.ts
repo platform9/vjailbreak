@@ -20,7 +20,7 @@ export const getSettingsConfigMap = async (
 export const getDeploymentName = async (namespace:string = VERSION_NAMESPACE) : Promise<string> =>{
 try {
     const configMap = await getSettingsConfigMap(namespace);
-    return configMap.data.DEPLOYMEN_NAME;
+    return configMap.data.DEPLOYMENT_NAME;
 } catch (error) {
   console.error("Failed to fetch header name",error)
   throw error;
