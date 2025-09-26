@@ -11,4 +11,5 @@ type VjailbreakSettings struct {
 	VolumeAvailableWaitIntervalSeconds  int
 	VolumeAvailableWaitRetryLimit       int
 	VCenterLoginRetryLimit              int
+	ValidateRDMOwnerVMs                 bool
 }
