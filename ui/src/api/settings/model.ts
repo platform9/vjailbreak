@@ -13,13 +13,13 @@ export interface VjailbreakSettings {
     VM_ACTIVE_WAIT_RETRY_LIMIT: number
   }
   kind: string
-  metadata:{
+  metadata: {
     annotations?: Record<string,string>
-  }
     creationTimestamp: string
-    name: string    
+    name: string
     namespace: string
     resourceVersion: string
     uid: any
   }
+}
 
