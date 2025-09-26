@@ -107,7 +107,10 @@ export default function MigrationOptionsAlt({
           : params.dataCopyStartTime
     }
 
-    return dayjs(minDate).add(1, "minute")
+    // Disabled selection of time in the past
+    const computedMin = dayjs(minDate).add(1, "minute")
+    const now = dayjs()
+    return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
   const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
@@ -194,6 +197,7 @@ export default function MigrationOptionsAlt({
                 onChange={onChange}
                 disabled={!selectedMigrationOptions.dataCopyStartTime}
                 required={!!selectedMigrationOptions.dataCopyStartTime}
+                disablePast
               />
             </Fields>
 
@@ -241,6 +245,7 @@ export default function MigrationOptionsAlt({
                       required={
                         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                       }
+                      disablePast
                     />
                     <TimePicker
                       label="Cutover End Time"
@@ -253,6 +258,7 @@ export default function MigrationOptionsAlt({
                         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                       }
                       minDateTime={getMinEndTime()}
+                      disablePast
                       helperText="Should be greater than data copy/cutover start time"
                     />
                   </Fields>
