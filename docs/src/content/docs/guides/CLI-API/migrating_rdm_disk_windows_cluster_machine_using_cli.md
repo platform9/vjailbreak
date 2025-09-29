@@ -22,6 +22,7 @@ Before you begin, ensure the following:
    - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes default libvirt and QEMU packages.
    - **Volume type must have multi-attach support enabled** in OpenStack.  
 4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
+5. Source Details are added on RDM VMs in VMware described [here](#on-vmware)
 
 You can fetch  `cinderBackendPool` and `volumeType` values using:  
 
@@ -45,7 +46,7 @@ Please refer to the following documents for commands to fetch volume backend poo
 kubectl describe openstackcreds <openstackcredsname> -n migration-system
 ```
 
-After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in step 4 of Migration steps.
+After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
 
 
 ## On VMware 
@@ -162,10 +163,6 @@ Note:
 
 - While creating migration plan , make sure actual VM name is passed in `spec.virtualMachines` of migrationplan and not vm custom resource name.
 - Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy
-
-
-
-
 
 
 ### 6. Wait for Disk to Become Available
