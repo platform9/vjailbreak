@@ -805,7 +805,6 @@ export default function MigrationFormDrawer({
             vmwareCredName={params.vmwareCreds?.existingCredName}
             openstackCredName={params.openstackCreds?.existingCredName}
             openstackCredentials={openstackCredentials}
-            vmwareCluster={params.vmwareCluster}
           />
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
