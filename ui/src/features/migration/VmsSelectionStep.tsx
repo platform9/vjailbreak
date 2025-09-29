@@ -144,6 +144,7 @@ interface VmsSelectionStepProps {
   vmwareCredName?: string;
   openstackCredName?: string;
   openstackCredentials?: OpenstackCreds;
+  vmwareCluster?: string;
 }
 
 export default function VmsSelectionStep({
@@ -157,6 +158,7 @@ export default function VmsSelectionStep({
   vmwareCredName,
   openstackCredName,
   openstackCredentials,
+  vmwareCluster,
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
   const { track } = useAmplitude({ component: "VmsSelectionStep" });
@@ -666,7 +668,17 @@ export default function VmsSelectionStep({
   }, [open, vmList]);
 
   useEffect(() => {
-    const initialVmsWithFlavor = vmList.map(vm => {
+    const selectedClusterName = (() => {
+      if (!vmwareCluster) return undefined;
+      const parts = vmwareCluster.split(":");
+      return parts.length > 1 ? parts[1] : undefined;
+    })();
+
+    const filteredVmList = selectedClusterName
+      ? vmList.filter(vm => vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"] === selectedClusterName)
+      : vmList;
+
+    const initialVmsWithFlavor = filteredVmList.map(vm => {
       let flavor = "";
       if (vm.targetFlavorId) {
         const foundFlavor = openstackFlavors.find(f => f.id === vm.targetFlavorId);
@@ -708,7 +720,7 @@ export default function VmsSelectionStep({
       };
     });
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments, vmwareCluster]);
 
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
