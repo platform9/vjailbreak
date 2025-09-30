@@ -70,8 +70,8 @@ Perform the following steps on each VM from the cluster you are planning to migr
 
 RDM disk migration has been tested with two storage arrays:
 
-1. **HP Primera**
-2. **NetApp ONTAP** 
+1. HPE Primera
+2. NetApp ONTAP
 
 The `manageable list` command is only supported on HP Primera.
 
