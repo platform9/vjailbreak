@@ -150,7 +150,7 @@ This ensures that the snapshot and migration can proceed without errors.
 
 ### 4. Patch RDM Disk with the Required Fields
 
-Edit the RDM disk to add `cinderBackendPool` and `volumeType`. Example:  
+Edit each RDM disk to add `cinderBackendPool` and `volumeType`. Example:  
 
 ```bash
 kubectl patch rdmdisk <name_of_rdmdisk_resource> -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
