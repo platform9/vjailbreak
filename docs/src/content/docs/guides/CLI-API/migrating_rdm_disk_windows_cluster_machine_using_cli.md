@@ -23,6 +23,7 @@ Before you begin, ensure the following:
    - **Volume type must have multi-attach support enabled** in OpenStack.  
 4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
 5. Source Details are added on RDM VMs in VMware described [here](#on-vmware)
+6. Storage array configured in PCD is same as the one configured in VMware. Usually SAN arrays have logical pools/isolation, that must be same as well. 
 
 You can fetch  `cinderBackendPool` and `volumeType` values using:  
 
