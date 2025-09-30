@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { VmData } from "src/api/migration-templates/model"
 import { RdmDisk } from "src/api/rdm-disks/model"
 
-interface UseRdmConfigValidationProps {
+interface RdmConfigValidationProps {
   selectedVMs: VmData[]
   rdmDisks: RdmDisk[]
 }
@@ -19,10 +19,10 @@ interface RdmConfigValidationResult {
   }>
 }
 
-export const useRdmConfigValidation = ({
+export const RdmConfigValidation = ({
   selectedVMs,
   rdmDisks,
-}: UseRdmConfigValidationProps): RdmConfigValidationResult => {
+}: RdmConfigValidationProps): RdmConfigValidationResult => {
   
   const validationResult = useMemo(() => {
     // If no VMs are selected or no RDM disks exist, no validation errors

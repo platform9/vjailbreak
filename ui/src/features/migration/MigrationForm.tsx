@@ -50,7 +50,7 @@ import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import { useClusterData } from "./useClusterData"
 import { useErrorHandler } from "src/hooks/useErrorHandler"
-import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
+import { RdmConfigValidation } from "src/hooks/useRdmConfigValidation"
 import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { AMPLITUDE_EVENTS } from "src/types/amplitude"
@@ -699,7 +699,7 @@ export default function MigrationFormDrawer({
   }, [params.vms]);
 
   // RDM validation - check if RDM disks have missing required configuration
-  const rdmValidation = useRdmConfigValidation({
+  const rdmValidation = RdmConfigValidation({
     selectedVMs: params.vms || [],
     rdmDisks: rdmDisks,
   });
