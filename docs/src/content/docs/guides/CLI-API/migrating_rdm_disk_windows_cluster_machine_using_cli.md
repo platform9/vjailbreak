@@ -188,7 +188,6 @@ status:
 
 2. Ensure all VMs in the cluster are migrated.
 
-3. Power on all VMs together.
 
 ### Rollback Plan - If Migration Fails
 
