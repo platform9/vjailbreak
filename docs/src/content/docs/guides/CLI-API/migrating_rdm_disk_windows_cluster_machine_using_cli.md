@@ -73,7 +73,7 @@ RDM disk migration has been tested with two storage arrays:
 1. HPE Primera
 2. NetApp ONTAP
 
-The `manageable list` command is only supported on HP Primera.
+The `manageable list` command is only supported on HPE Primera.
 
 ---
 
