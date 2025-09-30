@@ -1232,18 +1232,31 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			} else {
 				ip = vminfo.IPs[idx]
 			}
+			ips := []string{}
+			if _, ok := vminfo.IPMap[vminfo.Mac[idx]]; ok {
+				ips = vminfo.IPMap[vminfo.Mac[idx]]
+			}
+			if len(ips) == 0 && vminfo.NetworkInterfaces != nil {
+				for _, nic := range vminfo.NetworkInterfaces {
+					if nic.MAC == vminfo.Mac[idx] {
+						ips = nic.IPAddress
+						break
+					}
+				}
+			}
 			if ip == "" && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
-						ip = nic.IPAddress
+						ip = nic.IPAddress[0]
 						break
 					}
 				}
 			}
 			if migobj.AssignedIP != "" {
+				ips = []string{migobj.AssignedIP}
 				ip = migobj.AssignedIP
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
+			port, err := openstackops.CreatePort(network, ips, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

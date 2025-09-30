@@ -56,6 +56,7 @@ type VMInfo struct {
 	State             types.VirtualMachinePowerState
 	Mac               []string
 	IPs               []string
+	IPMap             map[string][]string
 	UUID              string
 	Host              string
 	VMDisks           []VMDisk
@@ -178,6 +179,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 	}
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
+	ipMap := map[string][]string{}
 	// Get the vmware machine from k8s
 	vmk8sName, err := utils.GetVMwareMachineName()
 	if err != nil {
@@ -196,13 +198,25 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 				// Every mac should have a corresponding IP, Ignore link layer ip
 				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
 					ips = append(ips, guestNetwork.IP)
+					if _, ok := ipMap[guestNetwork.MAC]; !ok {
+						ipMap[guestNetwork.MAC] = []string{}
+					}
+					ipMap[guestNetwork.MAC] = append(ipMap[guestNetwork.MAC], guestNetwork.IP)
 				}
 			}
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
-						ips = append(ips, networkInterface.IPAddress)
+					for _, ip := range networkInterface.IPAddress {
+						if networkInterface.MAC == macAddresss && !strings.Contains(ip, ":") {
+							if _, ok := ipMap[networkInterface.MAC]; !ok {
+								ipMap[networkInterface.MAC] = []string{}
+							}
+							ipMap[networkInterface.MAC] = append(ipMap[networkInterface.MAC], ip)
+							ips = append(ips, ip)
+						}
+						// if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
+						// 	ips = append(ips, networkInterface.IPAddress)
 					}
 				}
 			}
@@ -243,6 +257,7 @@ func (vmops *VMOps) GetVMInfo(ostype string) (VMInfo, error) {
 		State:             o.Runtime.PowerState,
 		Mac:               mac,
 		IPs:               ips,
+		IPMap:             ipMap,
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,

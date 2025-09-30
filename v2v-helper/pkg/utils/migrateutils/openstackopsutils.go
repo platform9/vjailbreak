@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 )
 
 type OpenStackClients struct {
@@ -403,7 +406,27 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
+func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*subnets.Subnet, error) {
+	parsedIp := net.ParseIP(ip)
+	if parsedIp == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", ip)
+	}
+	for _, subnet := range subnetList {
+		sn, err := subnets.Get(osclient.NetworkingClient, subnet).Extract()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get subnet: %s", err)
+		}
+		_, ipNet, err := net.ParseCIDR(sn.CIDR)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CIDR %q for subnet %s : %w", sn.CIDR, sn.ID, err)
+		}
+		if ipNet.Contains(parsedIp) {
+			return sn, nil
+		}
+	}
+	return nil, fmt.Errorf("IP %s is not in any of the subnets", ip)
+}
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, ips []string, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	utils.PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
@@ -417,17 +440,31 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	if err != nil {
 		return nil, err
 	}
-
+	// for _, port := range portList {
+	// 	if port.MACAddress == mac {
+	// 		if len(port.FixedIPs) > 0 {
+	// 			foundPortIP := port.FixedIPs[0].IPAddress
+	// 			if ip != "" && foundPortIP != ip {
+	// 				return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
+	// 			}
+	// 		}
+	// 		utils.PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
+	// 		return &port, nil
+	// 	}
+	// }
+	// DBT : do we need to check or assume that fixedIPs and ips should be of same lenght ?
 	for _, port := range portList {
 		if port.MACAddress == mac {
 			if len(port.FixedIPs) > 0 {
-				foundPortIP := port.FixedIPs[0].IPAddress
-				if ip != "" && foundPortIP != ip {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
+				for _, fixedip := range port.FixedIPs {
+					found := slices.Contains(ips, fixedip.IPAddress)
+					if !found {
+						return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, fixedip.IPAddress, ip)
+					}
 				}
+				utils.PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
+				return &port, nil
 			}
-			utils.PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
-			return &port, nil
 		}
 	}
 
@@ -444,15 +481,24 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
 	}
-
-	if ip != "" {
-		createOpts.FixedIPs = []ports.IP{
-			{
-				SubnetID:  network.Subnets[0],
-				IPAddress: ip,
-			},
+	fixedIPs := make([]ports.IP, 0)
+	for _, ipPerMac := range ips {
+		subnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac)
+		if err != nil {
+			return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
 		}
+		fixedIPs = append(fixedIPs, ports.IP{
+			SubnetID:  subnetId.ID,
+			IPAddress: ipPerMac,
+		})
 	}
+	createOpts.FixedIPs = fixedIPs
+	// if ip != "" {
+	// 	fixedIPs = append(fixedIPs, ports.IP{
+	// 		SubnetID:  network.Subnets[0],
+	// 		IPAddress: ip,
+	// 	})
+	// }
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
