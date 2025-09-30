@@ -139,8 +139,9 @@ kubectl describe rdmdisk <vml-id> -n migration-system
 
 **Steps to detach RDM disks in VMware:**
 
-1. For each VM, go to **Edit Settings**, click on the cross icon near the RDM disks, and keep **"Delete files from storage" unchecked**.
-2. For each VM, go to **Edit Settings** and remove the SCSI controller used by these disks (this will be in Physical sharing mode).
+For each VM, go to **Edit Settings** and perform following steps. *Note down the details as you might need them in case you have to revert the migration.*  
+1. Click on the cross icon near the RDM disks, and keep "Delete files from storage" **unchecked**.
+2. Remove the SCSI controller used by these disks (this will be in Physical sharing mode).
 
 Note: Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
 
