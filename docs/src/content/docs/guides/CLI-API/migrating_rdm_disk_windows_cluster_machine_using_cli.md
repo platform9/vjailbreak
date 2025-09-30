@@ -27,6 +27,18 @@ Before you begin, ensure the following:
 
 You can fetch  `cinderBackendPool` and `volumeType` values using:  
 
+
+By describing the OpenStack credentials in vjailbreak:  
+
+```bash
+kubectl describe openstackcreds <openstackcredsname> -n migration-system
+```
+
+After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
+
+
+**Alternatively** you can also gather details using openstack cli
+
 ```bash
 openstack volume backend pool list
 openstack volume type list
@@ -34,20 +46,11 @@ openstack volume type list
 
 Please refer to the following documents for commands to fetch volume backend pool and volume type lists:
 
-**For cli client versions less than 2025.1:**
+opnestack cli version >= 6.2.1
+
 - [Volume Type List](https://docs.openstack.org/python-openstackclient/queens/cli/command-objects/volume-type.html#volume-type-list)
 - [Volume Backend Pool List](https://docs.openstack.org/python-openstackclient/latest/cli/command-objects/volume-backend.html#volume-backend-pool-list)
 
-**For cli client versions >= 2025.1:**
-- [Cinder Command Options Reference](https://docs.openstack.org/python-openstackclient/latest/contributor/command-options.html)
-
-**Alternatively**, you can easily retrieve this information by describing the OpenStack credentials in vjailbreak:  
-
-```bash
-kubectl describe openstackcreds <openstackcredsname> -n migration-system
-```
-
-After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
 
 
 ## On VMware 
@@ -201,17 +204,15 @@ status:
    openstack volume delete <volume-id> --remote
    ```
 
-  **For cli client versions less than 2025.1:**
 - [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete)
 
-**For cli client versions >= 2025.1:**
-- [Cinder Command Options Reference](https://docs.openstack.org/python-openstackclient/latest/contributor/command-options.html)
 
 3. Re-attach RDM disk in VMware to powered-off VMs:
 
    - Add the reference VMDK disks.
    - Add **New Device > Existing Hard Disk**. This will add the disk as a new hard disk.
    - Change the controller of this hard disk to **"New SCSI Controller"** which was created in the first step.
+   - For each VM, go to **Edit Settings** and add the SCSI controller for disk and select physical sharing mode.
 
    Repeat this process for all RDM disks.
 
