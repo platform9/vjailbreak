@@ -52,6 +52,8 @@ After describing the OpenStack credentials, look for `volumeTypes` and `volumeBa
 
 ## On VMware 
 
+Perform the following steps on each VM from the cluster you are planning to migrate. 
+
 - Add the following annotation to the VMware Notes field for the VM:
   ```
   VJB_RDM:Hard Disk:volumeRef:source-name=abac111
