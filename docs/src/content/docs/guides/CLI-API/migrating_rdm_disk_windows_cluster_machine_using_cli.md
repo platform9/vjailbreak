@@ -66,7 +66,7 @@ Perform the following steps on each VM from the cluster you are planning to migr
   openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
   ```
 
-**Note: Not all SAN arrays are supported by the OpenStack block storage client. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
+**Note: Not all SAN arrays are supported by the OpenStack block storage client, in such cases above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
 
 RDM disk migration has been tested with two storage arrays:
 
