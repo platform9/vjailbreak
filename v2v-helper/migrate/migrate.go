@@ -1244,14 +1244,14 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 					}
 				}
 			}
-			if ip == "" && vminfo.NetworkInterfaces != nil {
-				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] {
-						ip = nic.IPAddress[0]
-						break
-					}
-				}
-			}
+			// if ip == "" && vminfo.NetworkInterfaces != nil {
+			// 	for _, nic := range vminfo.NetworkInterfaces {
+			// 		if nic.MAC == vminfo.Mac[idx] {
+			// 			ip = nic.IPAddress[0]
+			// 			break
+			// 		}
+			// 	}
+			// }
 			if migobj.AssignedIP != "" {
 				ips = []string{migobj.AssignedIP}
 				ip = migobj.AssignedIP
