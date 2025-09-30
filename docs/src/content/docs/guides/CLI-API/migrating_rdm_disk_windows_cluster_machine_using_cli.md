@@ -7,7 +7,7 @@ RDM disks are primarily used for clustered Windows machines.
 
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using the CLI. 
 
-RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)** and is **not supported for OpenStack**. For multipath support (connecting to SAN array), **PCD version >= October 2025 (2025.10)** is required.
+RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)** and is **not supported for OpenStack**.
 
 ---
 
