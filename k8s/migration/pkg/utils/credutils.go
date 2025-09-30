@@ -1264,22 +1264,21 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					}
 				}
 
-    // Ensure owner reference is set to VMwareCreds for existing RDM disks
-    ownerRefExists := false
-    for _, ownerRef := range existingDisk.OwnerReferences {
-        if ownerRef.UID == vmwcreds.UID &&
-            ownerRef.Name == vmwcreds.GetName() &&
-            ownerRef.Kind == "VMwareCreds" &&
-            ownerRef.APIVersion == vmwcreds.GetAPIVersion() {
-            ownerRefExists = true
-            break
-        }
-    }
-    if !ownerRefExists {
-        if err := controllerutil.SetOwnerReference(vmwcreds, &existingDisk, k3sclient.Scheme()); err != nil {
-            return fmt.Errorf("failed to set owner reference on existing RDM disk CR '%s': %w", existingDisk.Name, err)
-        }
-    }
+				// Ensure owner reference is set to VMwareCreds for existing RDM disks
+				ownerRefExists := false
+				for _, ownerRef := range existingDisk.OwnerReferences {
+					if ownerRef.UID == vmwcreds.UID &&
+						ownerRef.Name == vmwcreds.GetName() &&
+						ownerRef.Kind == "VMwareCreds" {
+						ownerRefExists = true
+						break
+					}
+				}
+				if !ownerRefExists {
+					if err := controllerutil.SetOwnerReference(vmwcreds, &existingDisk, k3sclient.Scheme()); err != nil {
+						return fmt.Errorf("failed to set owner reference on existing RDM disk CR '%s': %w", existingDisk.Name, err)
+					}
+				}
 
 				err := k3sclient.Update(ctx, &existingDisk)
 				if err != nil {
@@ -1306,7 +1305,7 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					OpenstackVolumeRef: rdmInfo[i].Spec.OpenstackVolumeRef,
 				},
 			}
-			
+
 			// Set the owner reference to VMwareCreds so RDM disks are deleted when VMwareCreds is deleted
 			if err := controllerutil.SetOwnerReference(vmwcreds, rdmDiskCR, k3sclient.Scheme()); err != nil {
 				return fmt.Errorf("failed to set owner reference on RDM disk CR '%s': %w", rdmDiskCR.Name, err)
