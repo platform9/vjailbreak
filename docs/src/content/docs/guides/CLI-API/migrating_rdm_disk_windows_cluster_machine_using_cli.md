@@ -56,7 +56,7 @@ Perform the following steps on each VM from the cluster you are planning to migr
 
 - Add the following annotation to the VMware Notes field for the VM:
   ```
-  VJB_RDM:Hard Disk:volumeRef:source-name=abac111
+  VJB_RDM:Hard Disk 5:volumeRef:source-name=abac111
   ```
   Replace `Hard Disk` with the RDM disk name and `abac111` with the actual source details.
 
