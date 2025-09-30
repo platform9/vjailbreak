@@ -63,7 +63,7 @@ Perform the following steps on each VM from the cluster you are planning to migr
 - To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
 
   ```bash
-  openstack block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
+  openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
   ```
 
 **Note: Not all SAN arrays are supported by the OpenStack block storage client. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
