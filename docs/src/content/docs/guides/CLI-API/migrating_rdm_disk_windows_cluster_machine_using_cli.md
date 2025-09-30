@@ -58,7 +58,7 @@ Perform the following steps on each VM from the cluster you are planning to migr
   ```
   VJB_RDM:Hard Disk 5:volumeRef:source-name=abac111
   ```
-  Replace `Hard Disk` with the RDM disk name and `abac111` with the actual source details.
+  Replace `Hard Disk 5` with the RDM disk name and `abac111` with the actual source details.
 
 - To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
 
