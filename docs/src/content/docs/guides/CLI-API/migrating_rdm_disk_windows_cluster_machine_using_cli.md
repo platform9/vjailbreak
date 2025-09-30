@@ -156,6 +156,8 @@ Edit each RDM disk to add `cinderBackendPool` and `volumeType`. Example:
 kubectl patch rdmdisk <name_of_rdmdisk_resource> -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
 ```
 
+The volume type specified here must match the configuration the RDM disk volume has on the SAN array. Example: if the volume has de-duplication and compression enabled, the specified volume type on OpenStack side must have these settings enabled. 
+
 ### 5. Create Migration Plan
 Create a migration plan using the CLI.  
 Follow the detailed CLI steps here:  
