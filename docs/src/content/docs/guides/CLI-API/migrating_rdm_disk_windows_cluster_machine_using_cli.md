@@ -193,7 +193,7 @@ status:
 ### Rollback Plan - If Migration Fails
 
 1. Delete VMs created in PCD or OpenStack.
-2. Delete the managed volume:
+2. Remove the managed volume from OpenStack without deleting it from the SAN array:
 
    ```bash
    openstack volume delete <volume-id> --remote
