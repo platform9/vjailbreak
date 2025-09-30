@@ -19,7 +19,7 @@ Before you begin, ensure the following:
 2. **vjailbreak** is deployed in your cluster.  
 3. **PCD Requirements**:
    - Minimum version: **July 2025 (2025.7)**.
-   - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes default libvirt and QEMU packages.
+   - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes patched libvirt and QEMU packages.
    - **Volume type must have multi-attach support enabled** in OpenStack.  
 4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
 5. Source Details are added on RDM VMs in VMware described [here](#on-vmware)
