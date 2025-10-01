@@ -19,7 +19,7 @@ interface RdmConfigValidationResult {
   }>
 }
 
-export const RdmConfigValidation = ({
+export const useRdmConfigValidation = ({
   selectedVMs,
   rdmDisks,
 }: RdmConfigValidationProps): RdmConfigValidationResult => {
