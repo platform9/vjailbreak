@@ -140,7 +140,12 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
 	VCenterLoginRetryLimit = 1
 
-	// ConfigMap keys
+	// OpenstackCredsRequeueAfterMinutes is the time to requeue after.
+	OpenstackCredsRequeueAfterMinutes = 60
+
+	// VMwareCredsRequeueAfterMinutes is the time to requeue after.
+	VMwareCredsRequeueAfterMinutes = 60
+
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 )

@@ -50,6 +50,8 @@ import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import { useClusterData } from "./useClusterData"
 import { useErrorHandler } from "src/hooks/useErrorHandler"
+import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
+import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
@@ -92,6 +94,13 @@ export interface FormValues extends Record<string, unknown> {
     OS_INSECURE?: boolean
   }
   vms?: VmData[]
+  rdmConfigurations?: Array<{
+    uuid: string;
+    diskName: string;
+    cinderBackendPool: string;
+    volumeType: string;
+    source: Record<string, string>;
+  }>
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
   // Cluster selection fields
@@ -217,6 +226,11 @@ export default function MigrationFormDrawer({
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
 
+  // Query RDM disks
+  const { data: rdmDisks = [] } = useRdmDisksQuery({
+    enabled: vmwareCredsValidated && openstackCredsValidated
+  });
+
   // Polling Conditions
   const shouldPollMigrationTemplate = !migrationTemplate?.metadata?.name
 
@@ -320,7 +334,6 @@ export default function MigrationFormDrawer({
 
   useInterval(
     async () => {
-      console.log("migrationTemplate", migrationTemplate?.metadata?.name)
       if (shouldPollMigrationTemplate) {
         try {
           fetchMigrationTemplate()
@@ -478,15 +491,11 @@ export default function MigrationFormDrawer({
     };
 
 
-    console.log('Migration Fields:', JSON.stringify(migrationFields, null, 2));
 
     const body = createMigrationPlanJson(migrationFields);
-    console.log('Final Request Body:', JSON.stringify(body, null, 2));
 
     try {
-      console.log('Sending migration plan creation request...');
       const data = await postMigrationPlan(body);
-      console.log('Migration plan created successfully:', data);
 
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
@@ -689,6 +698,12 @@ export default function MigrationFormDrawer({
     return { hasError: false, errorMessage: "" };
   }, [params.vms]);
 
+  // RDM validation - check if RDM disks have missing required configuration
+  const rdmValidation = useRdmConfigValidation({
+    selectedVMs: params.vms || [],
+    rdmDisks: rdmDisks,
+  });
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
@@ -705,7 +720,9 @@ export default function MigrationFormDrawer({
       !params.storageMappings?.some(mapping => mapping.source === datastore)) ||
     !migrationOptionValidated ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
-    vmValidation.hasError
+    vmValidation.hasError ||
+    // RDM validation - ensure RDM disks are properly configured
+    rdmValidation.hasValidationError
 
   const sortedOpenstackNetworks = useMemo(
     () =>
@@ -807,6 +824,12 @@ export default function MigrationFormDrawer({
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
               {vmValidation.errorMessage}
+            </Alert>
+          )}
+          {/* Show RDM errors when validation fails */}
+          {rdmValidation.hasValidationError && (
+            <Alert severity="error" sx={{ mt: 2, ml: 6 }}>
+              {rdmValidation.errorMessage}
             </Alert>
           )}
           {/* Step 3 */}

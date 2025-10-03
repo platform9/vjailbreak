@@ -11,5 +11,9 @@ data:
   VCENTER_SCAN_CONCURRENCY_LIMIT: "10" # max number of vms to scan at the same time
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false" # cleanup volumes after disk convert failure
   POPULATE_VMWARE_MACHINE_FLAVORS: "true" # automatically populate VMwareMachine objects with OpenStack flavors
+  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: "10" # interval to wait for volume to become available
+  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: "15" # number of retries to wait for volume to become available
   VCENTER_LOGIN_RETRY_LIMIT: "5" # number of retries for vcenter login
-  VALIDATE_RDM_OWNER_VMS: "true" # enable/disable RDM owner VM validation
+  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for openstack creds
+  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for vmware creds
+  DEPLOYMENT_NAME: vJailbreak
