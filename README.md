@@ -172,7 +172,9 @@ For information about alternative licensing arrangements, contact info@platform9
    - **DNS Configuration**: If modifying `/etc/resolv.conf`, you must restart the controller pod for changes to take effect
      ```bash
      # After modifying resolv.conf
-     kubectl -n vjailbreak rollout restart deployment migration-controller-manager
+     kubectl -n migration-system scale deployment migration-controller-manager --replicas=0
+     # Wait till the `migration-controller-manager-xxxx` pod gets deleted. After that scale it back using below command.
+     kubectl -n migration-system scale deployment migration-controller-manager --replicas=1
      ```
 
 5. **Launch vJailbreak**:
