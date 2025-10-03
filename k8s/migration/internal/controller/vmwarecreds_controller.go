@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +35,7 @@ import (
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -139,8 +141,13 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
 	}
+	// Get vjailbreak settings to get requeue after time
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 
-	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(vjailbreakSettings.VMwareCredsRequeueAfterMinutes) * time.Minute}, nil
 }
 
 // nolint:unparam
