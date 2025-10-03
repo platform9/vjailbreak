@@ -826,10 +826,10 @@ export default function MigrationFormDrawer({
               {vmValidation.errorMessage}
             </Alert>
           )}
-          {/* Show RDM errors when validation fails */}
-          {rdmValidation.hasValidationError && (
+          {/* Show RDM configuration errors when validation fails */}
+          {rdmValidation.hasConfigError && (
             <Alert severity="error" sx={{ mt: 2, ml: 6 }}>
-              {rdmValidation.errorMessage}
+              {rdmValidation.configErrorMessage}
             </Alert>
           )}
           {/* Step 3 */}
