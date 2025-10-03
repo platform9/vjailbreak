@@ -1389,6 +1389,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
 						if _, ok := vmMachines[ownerVM]; !ok {
 							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+							return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk)
 						}
 					}
 				} else {
