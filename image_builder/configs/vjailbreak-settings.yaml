@@ -16,3 +16,4 @@ data:
   VCENTER_LOGIN_RETRY_LIMIT: "5" # number of retries for vcenter login
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for openstack creds
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for vmware creds
+  DEPLOYMENT_NAME: vJailbreak
