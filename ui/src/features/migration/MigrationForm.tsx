@@ -55,7 +55,7 @@ import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
-const stringsCompareFn = (a, b) =>
+const stringsCompareFn = (a: string, b: string) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
 
 const StyledDrawer = styled(Drawer)(({ theme }) => ({
@@ -128,7 +128,7 @@ export interface FormValues extends Record<string, unknown> {
 }
 
 
-export interface SelectedMigrationOptionsType extends Record<string, unknown> {
+export interface SelectedMigrationOptionsType {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
   cutoverOption: boolean
@@ -141,6 +141,7 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  [key: string]: unknown
 }
 
 
@@ -536,11 +537,11 @@ export default function MigrationFormDrawer({
       let errorResponse: {
         status?: number;
         statusText?: string;
-        data?: any;
+        data?: unknown;
         config?: {
           url?: string;
           method?: string;
-          data?: any;
+          data?: unknown;
         };
       } = {};
 

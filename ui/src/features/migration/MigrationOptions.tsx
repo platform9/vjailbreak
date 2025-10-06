@@ -27,8 +27,6 @@ import AccordionSummary from "@mui/material/AccordionSummary"
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
-  OS_TYPES,
-  OS_TYPES_OPTIONS,
   VM_CUTOVER_OPTIONS,
 } from "./constants"
 
@@ -83,7 +81,6 @@ export default function MigrationOptions({
   useEffect(() => {
     onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
-    onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -299,34 +296,6 @@ export default function MigrationOptions({
               />
             </Fields>
 
-            <Fields>
-              <FormControlLabel
-                id="os-family"
-                label="OS Family"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.osFamily}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions("osFamily")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions?.osFamily}
-                value={params?.osFamily || OS_TYPES.AUTO_DETECT}
-                onChange={(e) => {
-                  onChange("osFamily")(e.target.value)
-                }}
-              >
-                {OS_TYPES_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Fields>
 
             {/* Pre and Post Web Hooks */}
             {/* {PrePostWebHooksList.map((hook) => (
