@@ -84,9 +84,9 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
   ```
   Once the `/etc/hosts` file is modified execute below commands to apply the changes.
   ```
-  kubectl scale deployment migration-controller-manager -n migration-system --replias=0
+  kubectl scale deployment migration-controller-manager -n migration-system --replicas=0
   # Wait for the `migration-controller-manager-xxx` pod to be terminated. After that scale it back using below command
-  kubectl scale deployment migration-controller-manager -n migration-system --replias=1
+  kubectl scale deployment migration-controller-manager -n migration-system --replicas=1
   ```
 
 - **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, scale down and up the same `migration-controller-manager` deployment as shown above to apply the changes.
