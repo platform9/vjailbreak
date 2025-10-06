@@ -99,7 +99,10 @@ export default function MigrationOptions({
           : params.dataCopyStartTime
     }
 
-    return dayjs(minDate).add(1, "minute")
+    // Disabled selection of time in the past
+    const computedMin = dayjs(minDate).add(1, "minute")
+    const now = dayjs()
+    return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
   return (
@@ -197,6 +200,7 @@ export default function MigrationOptions({
                 onChange={onChange}
                 disabled={!selectedMigrationOptions.dataCopyStartTime}
                 required={!!selectedMigrationOptions.dataCopyStartTime}
+                disablePast
               />
             </Fields>
 
@@ -246,6 +250,7 @@ export default function MigrationOptions({
                     required={
                       params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                     }
+                    disablePast
                   />
                   <TimePicker
                     label="Cutover End Time"
@@ -258,6 +263,7 @@ export default function MigrationOptions({
                       params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                     }
                     minDateTime={getMinEndTime()}
+                    disablePast
                     helperText="Should be greater than data copy/cutover start time"
                   />
                 </Fields>
