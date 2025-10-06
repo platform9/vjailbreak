@@ -524,6 +524,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, ips []st
 			if err != nil {
 				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
 			}
+			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
 			fixedIPs = append(fixedIPs, ports.IP{
 				SubnetID:  subnetId.ID,
 				IPAddress: ipPerMac,
