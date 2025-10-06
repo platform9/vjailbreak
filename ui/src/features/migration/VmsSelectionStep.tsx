@@ -22,6 +22,7 @@ import {
   GlobalStyles,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridRow, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid";
+import { useQueryClient } from "@tanstack/react-query";
 import { VmData } from "src/api/migration-templates/model";
 import { OpenStackFlavor, OpenstackCreds } from "src/api/openstack-creds/model";
 import { patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines";
@@ -46,7 +47,7 @@ import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants";
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { useRdmValidation } from "src/hooks/useRdmValidation"
 import { RdmDiskConfigurationPanel } from "src/components/RdmDiskConfigurationPanel"
-import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
+import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from "src/hooks/api/useRdmDisksQuery"
 import { patchRdmDisk } from "src/api/rdm-disks/rdmDisks";
 import { RdmDisk } from "src/api/rdm-disks/model";
 
@@ -160,6 +161,7 @@ export default function VmsSelectionStep({
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
   const { track } = useAmplitude({ component: "VmsSelectionStep" });
+  const queryClient = useQueryClient();
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
@@ -1507,8 +1509,8 @@ export default function VmsSelectionStep({
       // Close the dialog after successful configuration
       handleCloseRdmConfigurationDialog();
 
-      // Refetch RDM disks to show updated configuration
-      // This would typically be handled by React Query invalidation if we had proper query management
+      // Invalidate RDM disks query to refetch updated configuration and re-run validation
+      queryClient.invalidateQueries({ queryKey: [RDM_DISKS_BASE_KEY] });
 
     } catch (error) {
       reportError(error as Error, {

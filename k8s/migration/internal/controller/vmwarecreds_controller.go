@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -197,7 +198,21 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating RDM disk CR for VMwareCreds '%s'", scope.Name()))
 	}
-	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
+	}
+	// Get vjailbreak settings to get requeue after time
+	vjailbreakSettings, err = k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	return ctrl.Result{RequeueAfter: time.Duration(vjailbreakSettings.VMwareCredsRequeueAfterMinutes) * time.Minute}, nil
 }
 
 // nolint:unparam

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -165,9 +166,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 	}
+	// Get vjailbreak settings to get requeue after time
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: constants.OpenstackCredsRequeueAfter}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: time.Duration(vjailbreakSettings.OpenstackCredsRequeueAfterMinutes) * time.Minute}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) error {
