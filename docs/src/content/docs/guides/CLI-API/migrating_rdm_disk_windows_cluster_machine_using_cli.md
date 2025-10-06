@@ -7,7 +7,7 @@ RDM disks are primarily used for clustered Windows machines.
 
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using the CLI. 
 
-RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)** and is **not supported for OpenStack**. For multipath support (connecting to SAN array), **PCD version >= October 2025 (2025.10)** is required.
+RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)** and is **not supported for OpenStack**.
 
 ---
 
@@ -19,11 +19,25 @@ Before you begin, ensure the following:
 2. **vjailbreak** is deployed in your cluster.  
 3. **PCD Requirements**:
    - Minimum version: **July 2025 (2025.7)**.
-   - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes default libvirt and QEMU packages.
+   - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes patched libvirt and QEMU packages.
    - **Volume type must have multi-attach support enabled** in OpenStack.  
 4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.  
+5. Source Details are added on RDM VMs in VMware described [here](#on-vmware)
+6. Storage array configured in PCD is same as the one configured in VMware. Usually SAN arrays have logical pools/isolation, that must be same as well. 
 
 You can fetch  `cinderBackendPool` and `volumeType` values using:  
+
+
+By describing the OpenStack credentials in vjailbreak:  
+
+```bash
+kubectl describe openstackcreds <openstackcredsname> -n migration-system
+```
+
+After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
+
+
+**Alternatively** you can also gather details using openstack cli
 
 ```bash
 openstack volume backend pool list
@@ -32,44 +46,37 @@ openstack volume type list
 
 Please refer to the following documents for commands to fetch volume backend pool and volume type lists:
 
-**For cli client versions less than 2025.1:**
+opnestack cli version >= 6.2.1
+
 - [Volume Type List](https://docs.openstack.org/python-openstackclient/queens/cli/command-objects/volume-type.html#volume-type-list)
 - [Volume Backend Pool List](https://docs.openstack.org/python-openstackclient/latest/cli/command-objects/volume-backend.html#volume-backend-pool-list)
 
-**For cli client versions >= 2025.1:**
-- [Cinder Command Options Reference](https://docs.openstack.org/python-openstackclient/latest/contributor/command-options.html)
-
-**Alternatively**, you can easily retrieve this information by describing the OpenStack credentials in vjailbreak:  
-
-```bash
-kubectl describe openstackcreds <openstackcredsname> -n migration-system
-```
-
-After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in step 4 of Migration steps.
 
 
 ## On VMware 
 
+Perform the following steps on each VM from the cluster you are planning to migrate. 
+
 - Add the following annotation to the VMware Notes field for the VM:
   ```
-  VJB_RDM:Hard Disk:volumeRef:source-name=abac111
+  VJB_RDM:Hard Disk 5:volumeRef:source-name=abac111
   ```
-  Replace `Hard Disk` with the RDM disk name and `abac111` with the actual source details.
+  Replace `Hard Disk 5` with the RDM disk name and `abac111` with the actual source details.
 
 - To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
 
   ```bash
-  openstack block storage volume manageable list SAN_Array_reference --os-volume-api-version 3.8
+  openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
   ```
 
-**Note: Not all SAN arrays are supported by the OpenStack block storage client. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
+**Note: Not all SAN arrays are supported by the OpenStack block storage client, in such cases above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
 
 RDM disk migration has been tested with two storage arrays:
 
-1. **HP Primera**
-2. **NetApp ONTAP** 
+1. HPE Primera
+2. NetApp ONTAP
 
-The `manageable list` command is only supported on HP Primera.
+The `manageable list` command is only supported on HPE Primera.
 
 ---
 
@@ -135,8 +142,9 @@ kubectl describe rdmdisk <vml-id> -n migration-system
 
 **Steps to detach RDM disks in VMware:**
 
-1. For each VM, go to **Edit Settings**, click on the cross icon near the RDM disks, and keep **"Delete files from storage" unchecked**.
-2. For each VM, go to **Edit Settings** and remove the SCSI controller used by these disks (this will be in Physical sharing mode).
+For each VM, go to **Edit Settings** and perform following steps. *Note down the details as you might need them in case you have to revert the migration.*  
+1. Click on the cross icon near the RDM disks, and keep "Delete files from storage" **unchecked**.
+2. Remove the SCSI controller used by these disks (this will be in Physical sharing mode).
 
 Note: Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
 
@@ -146,11 +154,13 @@ This ensures that the snapshot and migration can proceed without errors.
 
 ### 4. Patch RDM Disk with the Required Fields
 
-Edit the RDM disk to add `cinderBackendPool` and `volumeType`. Example:  
+Edit each RDM disk to add `cinderBackendPool` and `volumeType`. Example:  
 
 ```bash
 kubectl patch rdmdisk <name_of_rdmdisk_resource> -n migration-system -p '{"spec":{"openstackVolumeRef":{"cinderBackendPool":"backendpool_name","volumeType":"volume_type"}}}' --type=merge
 ```
+
+The volume type specified here must match the configuration the RDM disk volume has on the SAN array. Example: if the volume has de-duplication and compression enabled, the specified volume type on OpenStack side must have these settings enabled. 
 
 ### 5. Create Migration Plan
 Create a migration plan using the CLI.  
@@ -162,10 +172,6 @@ Note:
 
 - While creating migration plan , make sure actual VM name is passed in `spec.virtualMachines` of migrationplan and not vm custom resource name.
 - Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy
-
-
-
-
 
 
 ### 6. Wait for Disk to Become Available
@@ -188,28 +194,25 @@ status:
 
 2. Ensure all VMs in the cluster are migrated.
 
-3. Power on all VMs together.
 
 ### Rollback Plan - If Migration Fails
 
 1. Delete VMs created in PCD or OpenStack.
-2. Delete the managed volume:
+2. Remove the managed volume from OpenStack without deleting it from the SAN array:
 
    ```bash
    openstack volume delete <volume-id> --remote
    ```
 
-  **For cli client versions less than 2025.1:**
 - [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete)
 
-**For cli client versions >= 2025.1:**
-- [Cinder Command Options Reference](https://docs.openstack.org/python-openstackclient/latest/contributor/command-options.html)
 
 3. Re-attach RDM disk in VMware to powered-off VMs:
 
    - Add the reference VMDK disks.
    - Add **New Device > Existing Hard Disk**. This will add the disk as a new hard disk.
    - Change the controller of this hard disk to **"New SCSI Controller"** which was created in the first step.
+   - For each VM, go to **Edit Settings** and add the SCSI controller for disk and select physical sharing mode.
 
    Repeat this process for all RDM disks.
 
