@@ -64,7 +64,7 @@ func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, i
 }
 
 // CreatePort indicates an expected call of CreatePort.
-func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vmname, securityGroups interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, ips, mac, ip, vmname, securityGroups, fallbackToDHCP interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), networkid, mac, ip, vmname, securityGroups)
 }
