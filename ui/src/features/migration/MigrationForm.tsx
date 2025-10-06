@@ -44,7 +44,7 @@ import MigrationOptions from "./MigrationOptionsAlt"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceDestinationClusterSelection from "./SourceDestinationClusterSelection"
 import VmsSelectionStep from "./VmsSelectionStep"
-import { CUTOVER_TYPES, OS_TYPES } from "./constants"
+import { CUTOVER_TYPES } from "./constants"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
@@ -55,7 +55,7 @@ import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
-const stringsCompareFn = (a, b) =>
+const stringsCompareFn = (a: string, b: string) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
 
 const StyledDrawer = styled(Drawer)(({ theme }) => ({
@@ -128,20 +128,20 @@ export interface FormValues extends Record<string, unknown> {
 }
 
 
-export interface SelectedMigrationOptionsType extends Record<string, unknown> {
+export interface SelectedMigrationOptionsType {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
   cutoverOption: boolean
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
-  osFamily: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  [key: string]: unknown
 }
 
 
@@ -153,7 +153,6 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  osFamily: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -231,8 +230,10 @@ export default function MigrationFormDrawer({
     enabled: vmwareCredsValidated && openstackCredsValidated
   });
 
-  // Polling Conditions
-  const shouldPollMigrationTemplate = !migrationTemplate?.metadata?.name
+  // Polling Conditions - Poll when we have a migration template but it's not fully populated with networks/volumes
+  const shouldPollMigrationTemplate = migrationTemplate?.metadata?.name &&
+    (!migrationTemplate?.status?.openstack?.networks ||
+      !migrationTemplate?.status?.openstack?.volumeTypes)
 
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
@@ -321,7 +322,7 @@ export default function MigrationFormDrawer({
   const fetchMigrationTemplate = async () => {
     try {
       const updatedMigrationTemplate = await getMigrationTemplate(
-        migrationTemplate?.metadata?.name
+        migrationTemplate!.metadata!.name
       )
       setMigrationTemplate(updatedMigrationTemplate)
     } catch (err) {
@@ -424,10 +425,6 @@ export default function MigrationFormDrawer({
       spec: {
         networkMapping: networkMappings.metadata.name,
         storageMapping: storageMappings.metadata.name,
-        ...(selectedMigrationOptions.osFamily &&
-          params.osFamily !== OS_TYPES.AUTO_DETECT && {
-          osFamily: params.osFamily,
-        }),
       },
     }
     try {
@@ -488,6 +485,10 @@ export default function MigrationFormDrawer({
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
+      ...(selectedMigrationOptions.postMigrationScript &&
+        params.postMigrationScript && {
+        postMigrationScript: params.postMigrationScript,
+      }),
     };
 
 
@@ -536,11 +537,11 @@ export default function MigrationFormDrawer({
       let errorResponse: {
         status?: number;
         statusText?: string;
-        data?: any;
+        data?: unknown;
         config?: {
           url?: string;
           method?: string;
-          data?: any;
+          data?: unknown;
         };
       } = {};
 
