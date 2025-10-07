@@ -39,6 +39,33 @@ log "IS_MASTER: ${IS_MASTER}"
 log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
 
+set_default_password() {
+  
+  log "Setting default password for ubuntu user..."
+  
+  sudo usermod -p $(openssl passwd -1 "password") ubuntu
+  sudo chage -d 0 ubuntu
+  sudo passwd --expire ubuntu
+
+  if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
+    sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  else
+    echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config >/dev/null
+  fi
+  
+  if grep -qE '^\s*ChallengeResponseAuthentication' /etc/ssh/sshd_config; then
+    sudo sed -i 's/^\s*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+  else
+    echo 'ChallengeResponseAuthentication no' | sudo tee -a /etc/ssh/sshd_config >/dev/null
+  fi
+  
+  sudo systemctl restart ssh || sudo systemctl restart sshd
+
+  log "Default password set for ubuntu user. User will need to change it on first login"
+}
+
+set_default_password
+check_command "Setting default password for ubuntu user"
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {

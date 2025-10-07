@@ -45,7 +45,7 @@ import { validateOpenstackIPs } from "src/api/openstack-creds/openstackCreds";
 import { getSecret } from "src/api/secrets/secrets";
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants";
 import { useAmplitude } from "src/hooks/useAmplitude"
-import { useRdmValidation } from "src/hooks/useRdmValidation"
+import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
 import { RdmDiskConfigurationPanel } from "src/components/RdmDiskConfigurationPanel"
 import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from "src/hooks/api/useRdmDisksQuery"
 import { patchRdmDisk } from "src/api/rdm-disks/rdmDisks";
@@ -196,13 +196,15 @@ export default function VmsSelectionStep({
   // OS assignment state
   const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({});
 
-  // RDM validation logic
-  const rdmValidation = useRdmValidation({
-    selectedVMs,
-    allVMs: vmsWithFlavor
-  });
-
   const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery();
+
+  // RDM validation logic
+  const rdmValidation = useRdmConfigValidation({
+    selectedVMs: Array.from(selectedVMs).map(vmName => 
+      vmsWithFlavor.find(vm => vm.name === vmName)
+    ).filter(Boolean) as VmData[],
+    rdmDisks: rdmDisks,
+  });
 
   // RDM configuration state
   const [rdmConfigurations, setRdmConfigurations] = useState<Array<{
