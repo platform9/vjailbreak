@@ -1332,18 +1332,19 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisk vjailbre
 			diskName := strings.TrimSpace(parts[1])
 			key := parts[2]
 			value := parts[3]
-
-			// Update fields only if new value is provided
-			if strings.TrimSpace(key) == "volumeRef" && value != "" {
-				splotVolRef := strings.Split(value, "=")
-				if len(splotVolRef) != 2 {
-					return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
-				}
-				mp := make(map[string]string)
-				mp[splotVolRef[0]] = splotVolRef[1]
-				log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
-				baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
-					VolumeRef: mp,
+			if strings.TrimSpace(baseRDMDisk.Spec.DiskName) == diskName {
+				// Update fields only if new value is provided
+				if strings.TrimSpace(key) == "volumeRef" && value != "" {
+					splitVolRef := strings.Split(value, "=")
+					if len(splitVolRef) != 2 {
+						return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
+					}
+					mp := make(map[string]string)
+					mp[splitVolRef[0]] = splitVolRef[1]
+					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to", "value: ", mp, "owner VMs: ", baseRDMDisk.Spec.OwnerVMs)
+					baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
+						VolumeRef: mp,
+					}
 				}
 			}
 		}
