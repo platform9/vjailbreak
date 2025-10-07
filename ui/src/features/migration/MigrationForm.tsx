@@ -44,16 +44,18 @@ import MigrationOptions from "./MigrationOptionsAlt"
 import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
 import SourceDestinationClusterSelection from "./SourceDestinationClusterSelection"
 import VmsSelectionStep from "./VmsSelectionStep"
-import { CUTOVER_TYPES, OS_TYPES } from "./constants"
+import { CUTOVER_TYPES } from "./constants"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
 import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
 import { useClusterData } from "./useClusterData"
 import { useErrorHandler } from "src/hooks/useErrorHandler"
+import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
+import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
 import { useAmplitude } from "src/hooks/useAmplitude"
 import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
-const stringsCompareFn = (a, b) =>
+const stringsCompareFn = (a: string, b: string) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
 
 const StyledDrawer = styled(Drawer)(({ theme }) => ({
@@ -126,20 +128,20 @@ export interface FormValues extends Record<string, unknown> {
 }
 
 
-export interface SelectedMigrationOptionsType extends Record<string, unknown> {
+export interface SelectedMigrationOptionsType {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
   cutoverOption: boolean
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
-  osFamily: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  [key: string]: unknown
 }
 
 
@@ -151,7 +153,6 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  osFamily: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -224,8 +225,15 @@ export default function MigrationFormDrawer({
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
 
-  // Polling Conditions
-  const shouldPollMigrationTemplate = !migrationTemplate?.metadata?.name
+  // Query RDM disks
+  const { data: rdmDisks = [] } = useRdmDisksQuery({
+    enabled: vmwareCredsValidated && openstackCredsValidated
+  });
+
+  // Polling Conditions - Poll when we have a migration template but it's not fully populated with networks/volumes
+  const shouldPollMigrationTemplate = migrationTemplate?.metadata?.name &&
+    (!migrationTemplate?.status?.openstack?.networks ||
+      !migrationTemplate?.status?.openstack?.volumeTypes)
 
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
@@ -314,7 +322,7 @@ export default function MigrationFormDrawer({
   const fetchMigrationTemplate = async () => {
     try {
       const updatedMigrationTemplate = await getMigrationTemplate(
-        migrationTemplate?.metadata?.name
+        migrationTemplate!.metadata!.name
       )
       setMigrationTemplate(updatedMigrationTemplate)
     } catch (err) {
@@ -417,10 +425,6 @@ export default function MigrationFormDrawer({
       spec: {
         networkMapping: networkMappings.metadata.name,
         storageMapping: storageMappings.metadata.name,
-        ...(selectedMigrationOptions.osFamily &&
-          params.osFamily !== OS_TYPES.AUTO_DETECT && {
-          osFamily: params.osFamily,
-        }),
       },
     }
     try {
@@ -481,6 +485,10 @@ export default function MigrationFormDrawer({
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
+      ...(selectedMigrationOptions.postMigrationScript &&
+        params.postMigrationScript && {
+        postMigrationScript: params.postMigrationScript,
+      }),
     };
 
 
@@ -529,11 +537,11 @@ export default function MigrationFormDrawer({
       let errorResponse: {
         status?: number;
         statusText?: string;
-        data?: any;
+        data?: unknown;
         config?: {
           url?: string;
           method?: string;
-          data?: any;
+          data?: unknown;
         };
       } = {};
 
@@ -691,6 +699,12 @@ export default function MigrationFormDrawer({
     return { hasError: false, errorMessage: "" };
   }, [params.vms]);
 
+  // RDM validation - check if RDM disks have missing required configuration
+  const rdmValidation = useRdmConfigValidation({
+    selectedVMs: params.vms || [],
+    rdmDisks: rdmDisks,
+  });
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
@@ -707,7 +721,9 @@ export default function MigrationFormDrawer({
       !params.storageMappings?.some(mapping => mapping.source === datastore)) ||
     !migrationOptionValidated ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
-    vmValidation.hasError
+    vmValidation.hasError ||
+    // RDM validation - ensure RDM disks are properly configured
+    rdmValidation.hasValidationError
 
   const sortedOpenstackNetworks = useMemo(
     () =>
@@ -810,6 +826,12 @@ export default function MigrationFormDrawer({
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
               {vmValidation.errorMessage}
+            </Alert>
+          )}
+          {/* Show RDM configuration errors when validation fails */}
+          {rdmValidation.hasConfigError && (
+            <Alert severity="error" sx={{ mt: 2, ml: 6 }}>
+              {rdmValidation.configErrorMessage}
             </Alert>
           )}
           {/* Step 3 */}
