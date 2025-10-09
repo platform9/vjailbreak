@@ -100,7 +100,7 @@ const CustomToolbarWithActions = (props) => {
             >
               Assign Flavor ({rowSelectionModel.length})
             </Button>
-            {hasRdmVMs && (
+            {/* {hasRdmVMs && (
               <Button
                 variant="text"
                 color="secondary"
@@ -109,7 +109,7 @@ const CustomToolbarWithActions = (props) => {
               >
                 Configure RDM ({rowSelectionModel.length})
               </Button>
-            )}
+            )} */}
           </>
         )}
         <CustomSearchToolbar {...toolbarProps} />
