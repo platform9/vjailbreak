@@ -3,10 +3,10 @@ import { Button, Typography, Box, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import MigrationIcon from '@mui/icons-material/SwapHoriz';
 import ReplayIcon from '@mui/icons-material/Replay';
-import ListAltIcon from '@mui/icons-material/ListAlt';
+// import ListAltIcon from '@mui/icons-material/ListAlt';
 import { useState } from "react";
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import LogsDrawer from "src/components/LogsDrawer";
+// import LogsDrawer from "src/components/LogsDrawer";
 import { Condition, Migration, Phase } from "src/api/migrations/model";
 import MigrationProgress from "./MigrationProgress";
 import { QueryObserverResult } from "@tanstack/react-query";
@@ -148,7 +148,7 @@ const columns: GridColDef[] = [
 
             return (
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    {params.row.spec?.podRef && (
+                    {/* {params.row.spec?.podRef && (
                         <Tooltip title="View pod logs">
                             <IconButton
                                 onClick={(e) => {
@@ -169,7 +169,7 @@ const columns: GridColDef[] = [
                                 <ListAltIcon />
                             </IconButton>
                         </Tooltip>
-                    )}
+                    )} */}
 
                     {showAdminCutover && (
                         <TriggerAdminCutoverButton
@@ -299,8 +299,8 @@ export default function MigrationsTable({
     const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false);
     const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false);
     const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null);
-    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-    const [selectedPod, setSelectedPod] = useState<{ name: string; namespace: string; migrationName?: string } | null>(null);
+    // const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
+    // const [selectedPod, setSelectedPod] = useState<{ name: string; namespace: string; migrationName?: string } | null>(null);
 
     const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
         setSelectedRows(newSelection);
@@ -357,8 +357,8 @@ export default function MigrationsTable({
         ...migration,
         onDelete: onDeleteMigration,
         refetchMigrations,
-        setSelectedPod,
-        setLogsDrawerOpen
+        // setSelectedPod,
+        // setLogsDrawerOpen
     })) || [];
 
     return (
@@ -422,13 +422,13 @@ export default function MigrationsTable({
                 onErrorChange={setBulkCutoverError}
             />
 
-            <LogsDrawer
+            {/* <LogsDrawer
                 open={logsDrawerOpen}
                 onClose={() => setLogsDrawerOpen(false)}
                 podName={selectedPod?.name || ''}
                 namespace={selectedPod?.namespace || ''}
                 migrationName={selectedPod?.migrationName || ''}
-            />
+            /> */}
         </>
     );
 }
