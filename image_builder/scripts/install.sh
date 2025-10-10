@@ -15,6 +15,13 @@ check_command() {
   fi
 }
 
+# Ensure htpasswd CLI is available (apache2-utils/httpd-tools)
+install_htpasswd_cli() {
+    # Debian/Ubuntu
+    sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apache2-utils
+}
+
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
 
@@ -47,7 +54,7 @@ set_default_password() {
   sudo usermod -p $(openssl passwd -1 "password") ubuntu
   sudo chage -d 0 ubuntu
   sudo passwd --expire ubuntu
-
+  printf "password" | htpasswd -i -c /etc/htpasswd ubuntu
   if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
     sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   else
@@ -65,6 +72,7 @@ set_default_password() {
   log "Default password set for ubuntu user. User will need to change it on first login"
 }
 
+install_htpasswd_cli
 set_default_password
 check_command "Setting default password for ubuntu user"
 
