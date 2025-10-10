@@ -147,92 +147,6 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
   check_command "Waiting for NGINX Ingress Controller to be ready"
 
-  # Install cert-manager (controller + CRDs) and apply ClusterIssuers
-  if [ -x "/etc/pf9/install-cert-manager.sh" ]; then
-    log "Installing cert-manager and ClusterIssuers..."
-    sudo /etc/pf9/install-cert-manager.sh
-    check_command "Installing cert-manager and ClusterIssuers"
-  else
-    log "cert-manager installer script not found at /etc/pf9/install-cert-manager.sh; skipping"
-  fi
-
-  # Derive domain hosts at first boot if not provided (use nip.io based on Ingress LB IP)
-  derive_hosts_if_missing() {
-    # Ensure jq available for JSON parsing
-    if ! command -v jq >/dev/null 2>&1; then
-      if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -y >/dev/null 2>&1 || true
-        sudo apt-get install -y jq >/dev/null 2>&1 || true
-      fi
-    fi
-
-    # Default cluster issuer if not provided
-    export CLUSTER_ISSUER=${CLUSTER_ISSUER:-letsencrypt-staging}
-
-    # Try to get the ingress controller Service external address
-    local svc_json
-    svc_json=$(kubectl -n nginx-ingress get svc -l app.kubernetes.io/component=controller -o json 2>/dev/null || true)
-    local lb_ip lb_hostname ip_for_dns
-    lb_ip=$(echo "$svc_json" | jq -r '.items[0].status.loadBalancer.ingress[0].ip // empty' 2>/dev/null || true)
-    lb_hostname=$(echo "$svc_json" | jq -r '.items[0].status.loadBalancer.ingress[0].hostname // empty' 2>/dev/null || true)
-
-    if [ -n "$lb_ip" ]; then
-      ip_for_dns="$lb_ip"
-    elif [ -n "$lb_hostname" ]; then
-      # If hostname present, attempt to resolve to an IP for sslip.io/nip.io; if not, we can use sslip.io which accepts hostnames too
-      ip_for_dns=$(getent ahostsv4 "$lb_hostname" | awk '{print $1; exit}' || true)
-      [ -z "$ip_for_dns" ] && ip_for_dns="$lb_hostname"
-    else
-      # Fallback to node IP
-      ip_for_dns=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "127.0.0.1")
-    fi
-
-    # Only set hosts if they are empty; use <sub>.<ip>.nip.io pattern which auto-resolves
-    if [ -z "${UI_HOST:-}" ]; then export UI_HOST="ui.${ip_for_dns}.nip.io"; fi
-    if [ -z "${API_HOST:-}" ]; then export API_HOST="api.${ip_for_dns}.nip.io"; fi
-    if [ -z "${GRAFANA_HOST:-}" ]; then export GRAFANA_HOST="grafana.${ip_for_dns}.nip.io"; fi
-    if [ -z "${VPWNED_HOST:-}" ]; then export VPWNED_HOST="vpwned.${ip_for_dns}.nip.io"; fi
-
-    log "Using domains - UI_HOST=${UI_HOST}, API_HOST=${API_HOST}, GRAFANA_HOST=${GRAFANA_HOST}, VPWNED_HOST=${VPWNED_HOST}, CLUSTER_ISSUER=${CLUSTER_ISSUER}"
-  }
-
-  render_ingresses() {
-    # Ensure envsubst is available for templating; install if missing
-    if ! command -v envsubst >/dev/null 2>&1; then
-      if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -y >/dev/null 2>&1 || true
-        sudo apt-get install -y gettext-base >/dev/null 2>&1 || true
-      fi
-    fi
-
-    mkdir -p /etc/pf9/yamls-rendered
-    # Render known ingress files if present
-    for f in \
-      /etc/pf9/yamls/01ui.yaml \
-      /etc/pf9/yamls/10-vpwned.yaml \
-      /etc/pf9/yamls/11-vpwned-alt.yaml; do
-      if [ -f "$f" ]; then
-        if command -v envsubst >/dev/null 2>&1; then
-          envsubst < "$f" > "/etc/pf9/yamls-rendered/$(basename "$f")"
-        else
-          # Fallback: naive variable replacement for common vars
-          sed -e "s|\${UI_HOST}|${UI_HOST}|g" \
-              -e "s|\${API_HOST}|${API_HOST}|g" \
-              -e "s|\${GRAFANA_HOST}|${GRAFANA_HOST}|g" \
-              -e "s|\${VPWNED_HOST}|${VPWNED_HOST}|g" \
-              -e "s|\${CLUSTER_ISSUER}|${CLUSTER_ISSUER}|g" "$f" > "/etc/pf9/yamls-rendered/$(basename "$f")"
-        fi
-      fi
-    done
-
-    # Copy other yamls as-is
-    find /etc/pf9/yamls -maxdepth 1 -type f -name '*.yaml' ! -name '01ui.yaml' ! -name '10-vpwned.yaml' ! -name '11-vpwned-alt.yaml' -exec cp {} /etc/pf9/yamls-rendered/ \;
-    cp -r /etc/pf9/yamls/kube-prometheus /etc/pf9/yamls-rendered/ 2>/dev/null || true
-  }
-
-  derive_hosts_if_missing
-  render_ingresses
-
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
   sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
@@ -244,8 +158,7 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
   check_command "Applying kube-prometheus manifests"
 
-  # Apply rendered manifests (contain substituted hosts)
-  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls-rendered/
+  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 
   log "K3s master setup completed"
