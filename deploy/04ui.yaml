@@ -23,7 +23,6 @@ spec:
           volumeMounts:
             - name: nginx-shadow-htpasswd
               mountPath: /etc/nginx/shadow
-              readOnly: false
       volumes:
         - name: nginx-shadow-htpasswd
           hostPath:

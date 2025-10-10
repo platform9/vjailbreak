@@ -18,8 +18,8 @@ check_command() {
 # Ensure htpasswd CLI is available (apache2-utils/httpd-tools)
 install_htpasswd_cli() {
     # Debian/Ubuntu
-    sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && \
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apache2-utils
+    sudo  apt-get update --fix-missing -y && \
+    sudo  apt-get install -y apache2-utils
 }
 
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
