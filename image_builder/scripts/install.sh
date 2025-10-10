@@ -38,6 +38,7 @@ fi
 log "IS_MASTER: ${IS_MASTER}"
 log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
+log "INSTALL_K3S_EXEC: ${INSTALL_K3S_EXEC}"
 
 set_default_password() {
   
@@ -186,12 +187,14 @@ else
   # Echo K3S_URL and K3S_TOKEN for debugging
   export K3S_URL="https://$MASTER_IP:6443"
   export K3S_TOKEN="$K3S_TOKEN"
+  export INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC"
 
   log "K3S_URL: $K3S_URL"
   log "K3S_TOKEN: $K3S_TOKEN"
+  log "INSTALL_K3S_EXEC: $INSTALL_K3S_EXEC"
 
   # Install K3s worker
-  K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh
+  K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_EXEC=$INSTALL_K3S_EXEC INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh
   check_command "Installing K3s worker"
 
   # wait until ctr becomes responsive
