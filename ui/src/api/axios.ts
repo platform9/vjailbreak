@@ -1,6 +1,9 @@
 import axios from "axios"
 import { pathJoin } from "src/utils"
 import { AxiosRequestConfig } from "axios"
+import { checkAuth } from "src/utils/auth"
+
+
 
 interface ExtendedAxiosConfig extends AxiosRequestConfig {
   mock?: boolean
@@ -30,6 +33,21 @@ const getHeaders = () => {
 const axiosInstance = axios.create({
   headers: getHeaders(),
 })
+
+// Add interceptor to handle auth
+axiosInstance.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      // Redirect to OAuth2 login
+      window.location.href = '/oauth2/sign_in'
+    }
+    return Promise.reject(error)
+  }
+)
+
+// Check auth on app initialization
+checkAuth()
 
 const getDefaultBaseUrl = (config?: ExtendedAxiosConfig) => {
   if (import.meta.env.VITE_USE_MOCK_API === "true") {

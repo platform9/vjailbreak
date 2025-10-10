@@ -88,6 +88,26 @@ build {
     destination = "/tmp/opensource.txt"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/scripts/setup-authentik-ip.sh"
+    destination = "/tmp/setup-authentik-ip.sh"
+  }
+
+  provisioner "file" {
+  source      = "${path.root}/deploy/authentik"
+  destination = "/tmp/authentik"
+}
+
+provisioner "file" {
+  source      = "${path.root}/deploy/oauth2-proxy"
+  destination = "/tmp/oauth2-proxy"
+}
+
+provisioner "file" {
+  source      = "${path.root}/deploy/rbac"
+  destination = "/tmp/rbac"
+}
+
   provisioner "shell" {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
@@ -98,6 +118,12 @@ build {
     "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
     "sudo mv /etc/pf9/images/virtio-win.iso /home/ubuntu/virtio-win/virtio-win.iso",
     "sudo mv /tmp/yamls /etc/pf9/yamls",
+    "sudo mv /tmp/authentik /etc/pf9/yamls/authentik",
+    "sudo mv /tmp/oauth2-proxy /etc/pf9/yamls/oauth2-proxy",
+    "sudo mv /tmp/rbac /etc/pf9/yamls/rbac",
+    "sudo mv /tmp/setup-authentik-ip.sh /home/ubuntu/setup-authentik-ip.sh",
+    "sudo chmod +x /home/ubuntu/setup-authentik-ip.sh",
+    "sudo chown ubuntu:ubuntu /home/ubuntu/setup-authentik-ip.sh",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/env /etc/pf9/env",

@@ -29,6 +29,10 @@ vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
+authentik_server="ghcr.io/goauthentik/server:2024.8.3"
+oauth2_proxy="quay.io/oauth2-proxy/oauth2-proxy:v7.6.0"
+postgres="postgres:16-alpine"
+redis="redis:alpine"
 
 # Download and export images
 images=(
@@ -48,6 +52,10 @@ images=(
   "$grafana"
   "$alpine"
   "$vpwned"
+  "$authentik_server"
+  "$oauth2_proxy"
+  "$postgres"
+  "$redis"
 )
 
 for img in "${images[@]}"; do
