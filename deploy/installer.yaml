@@ -1043,6 +1043,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              projectName:
+                description: ProjectName is the name of the project in openstack
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -2174,8 +2177,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             required:
             - datacenter
+            - vcenterHost
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
