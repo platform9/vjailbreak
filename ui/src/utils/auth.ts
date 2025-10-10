@@ -56,5 +56,6 @@ export const getUserInfo = () => {
     localStorage.removeItem('user-groups')
     
     // Redirect to OAuth2 proxy sign out endpoint
-    window.location.href = '/oauth2/sign_out'
+    // After signing out from oauth2-proxy, redirect back to home page
+    window.location.href = '/oauth2/sign_out?rd=/'
   }

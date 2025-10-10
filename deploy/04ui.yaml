@@ -42,6 +42,9 @@ metadata:
   namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Don't require auth for oauth2 endpoints (start, callback, sign_out, etc.)
+    nginx.ingress.kubernetes.io/auth-url: ""
+    nginx.ingress.kubernetes.io/auth-signin: ""
 spec:
   ingressClassName: nginx
   rules:

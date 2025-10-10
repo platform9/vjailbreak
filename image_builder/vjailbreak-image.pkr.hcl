@@ -89,17 +89,17 @@ build {
   }
 
   provisioner "file" {
-    source      = "../scripts/setup-authentik-ip.sh"
+    source      = "scripts/setup-authentik-ip.sh"
     destination = "/tmp/setup-authentik-ip.sh"
   }
 
   provisioner "file" {
-    source      = "../deploy/authentik"
+    source      = "deploy/authentik"
     destination = "/tmp/authentik"
   }
 
   provisioner "file" {
-    source      = "../deploy/oauth2-proxy"
+    source      = "deploy/oauth2-proxy"
     destination = "/tmp/oauth2-proxy"
   }
 
