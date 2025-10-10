@@ -41,18 +41,18 @@ export const streamPodLogs = async (
   options: {
     follow?: boolean
     tailLines?: string
-    limitBytes?: string
+    limitBytes?: number
     signal?: AbortSignal
   } = {}
 ): Promise<Response> => {
-  const { follow = true, tailLines = "100", limitBytes = "500000", signal } = options
+  const { follow = true, tailLines = "100", limitBytes = 500000, signal } = options
   
   const endpoint = `${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods/${podName}/log`
   
   const params = new URLSearchParams({
     follow: follow.toString(),
     tailLines,
-    limitBytes,
+    limitBytes: limitBytes.toString(),
   })
   
   const url = `${endpoint}?${params.toString()}`
