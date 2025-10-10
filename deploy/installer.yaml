@@ -3800,6 +3800,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
+    cert-manager.io/cluster-issuer: ${CLUSTER_ISSUER:=letsencrypt-staging}
     nginx.ingress.kubernetes.io/backend-protocol: HTTP
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -3808,7 +3809,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - http:
+  - host: ${VPWNED_HOST}
+    http:
       paths:
       - backend:
           service:
@@ -3817,3 +3819,7 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - ${VPWNED_HOST}
+    secretName: vpwned-tls

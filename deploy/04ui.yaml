@@ -42,10 +42,16 @@ metadata:
   namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    cert-manager.io/cluster-issuer: "${CLUSTER_ISSUER:=letsencrypt-staging}"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - ${UI_HOST}
+    secretName: vjailbreak-ui-tls
   rules:
-  - http:
+  - host: ${UI_HOST}
+    http:
       paths:
       - path: /
         pathType: Prefix
@@ -64,10 +70,16 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
+    cert-manager.io/cluster-issuer: "${CLUSTER_ISSUER:=letsencrypt-staging}"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - ${API_HOST}
+    secretName: vjailbreak-api-tls
   rules:
-  - http:
+  - host: ${API_HOST}
+    http:
       paths:
       - path: /(apis.*)
         pathType: ImplementationSpecific

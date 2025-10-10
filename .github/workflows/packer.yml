@@ -414,11 +414,36 @@ jobs:
             echo "is_nightly=false" >> $GITHUB_ENV
           fi
 
+      - name: Set domain variables for Ingress
+        run: |
+          echo "UI_HOST=${{ github.event.inputs.ui_host || vars.UI_HOST }}" >> $GITHUB_ENV
+          echo "API_HOST=${{ github.event.inputs.api_host || vars.API_HOST }}" >> $GITHUB_ENV
+          echo "GRAFANA_HOST=${{ github.event.inputs.grafana_host || vars.GRAFANA_HOST }}" >> $GITHUB_ENV
+          echo "VPWNED_HOST=${{ github.event.inputs.vpwned_host || vars.VPWNED_HOST }}" >> $GITHUB_ENV
+          echo "CLUSTER_ISSUER=${{ github.event.inputs.cluster_issuer || vars.CLUSTER_ISSUER || 'letsencrypt-staging' }}" >> $GITHUB_ENV
+
       - name: Substitue image tags in manifests
         uses: danielr1996/envsubst-action@1.0.0
         with:
           input: ./ui/deploy/ui.yaml
           output: ./image_builder/deploy/01ui.yaml
+
+      - name: Copy vpwned ingress manifests
+        run: |
+          cp ./k8s/migration/config/addons/k8s.svc.yaml ./image_builder/deploy/10-vpwned.yaml
+          cp ./pkg/vpwned/deploy/k8s.svc.yaml ./image_builder/deploy/11-vpwned-alt.yaml
+
+      - name: Substitute hosts in vpwned ingress
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./image_builder/deploy/10-vpwned.yaml
+          output: ./image_builder/deploy/10-vpwned.yaml
+
+      - name: Substitute hosts in vpwned ingress (alt)
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./image_builder/deploy/11-vpwned-alt.yaml
+          output: ./image_builder/deploy/11-vpwned-alt.yaml
 
       - name: Substitue image tags in version config
         uses: danielr1996/envsubst-action@1.0.0
@@ -448,6 +473,11 @@ jobs:
           make -C ./k8s/migration/ build-installer
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
           cp -r ./k8s/kube-prometheus image_builder/deploy/
+
+      - name: Bundle cert-manager manifests
+        run: |
+          mkdir -p image_builder/deploy/cert-manager
+          cp ./k8s/cert-manager/cluster-issuers.yaml image_builder/deploy/cert-manager/cluster-issuers.yaml
 
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1

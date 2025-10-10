@@ -49,6 +49,11 @@ build {
   }
 
   provisioner "file" {
+    source      = "${path.root}/scripts/install-cert-manager.sh"
+    destination = "/tmp/install-cert-manager.sh"
+  }
+
+  provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
     destination = "/tmp/k3s.env"
   }
@@ -103,8 +108,10 @@ build {
     "sudo mv /tmp/env /etc/pf9/env",
     "sudo mv /tmp/vjailbreak-settings.yaml /etc/pf9/yamls/vjailbreak-settings.yaml",
     "sudo mv /tmp/version-checker.yaml /etc/pf9/yamls/version-checker.yaml",
+    "sudo mv /tmp/install-cert-manager.sh /etc/pf9/install-cert-manager.sh",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
+    "sudo chmod +x /etc/pf9/install-cert-manager.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
@@ -113,4 +120,3 @@ build {
     ]
   }
 }
-
