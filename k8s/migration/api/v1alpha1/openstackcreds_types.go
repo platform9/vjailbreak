@@ -78,6 +78,9 @@ type OpenstackCredsSpec struct {
 
 	// PCDHostConfig is the list of available clusters in openstack
 	PCDHostConfig []HostConfig `json:"pcdHostConfig,omitempty"`
+
+	// ProjectName is the name of the project in openstack
+	ProjectName string `json:"projectName,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

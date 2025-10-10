@@ -127,6 +127,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              projectName:
+                description: ProjectName is the name of the project in openstack
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials

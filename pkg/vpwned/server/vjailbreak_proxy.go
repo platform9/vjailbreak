@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	trueString               = "true"
-	NamespaceMigrationSystem = "migration-system"
+	trueString = "true"
 )
 
 type vjailbreakProxy struct {
@@ -104,9 +103,9 @@ func isIPInUse(client *gophercloud.ServiceClient, ip string) (bool, string, erro
 }
 
 // GetOpenstackCredentialsFromSecret retrieves and checks the secret
-func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
+func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string, secretNamespace string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	secret := &corev1.Secret{}
-	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: secretNamespace, Name: secretName}, secret); err != nil {
 		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
 	}
 
@@ -152,7 +151,7 @@ func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.Openstack
 		return nil, err
 	}
 
-	openstackCreds, err := GetOpenstackCredentialsFromSecret(ctx, k8sclient, openstackAccessInfo.SecretName)
+	openstackCreds, err := GetOpenstackCredentialsFromSecret(ctx, k8sclient, openstackAccessInfo.SecretName, openstackAccessInfo.SecretNamespace)
 	if err != nil {
 		return nil, err
 	}
