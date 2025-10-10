@@ -14,6 +14,9 @@
     },
     {
       "name": "BMProvider"
+    },
+    {
+      "name": "VailbreakProxy"
     }
   ],
   "consumes": [
@@ -659,6 +662,28 @@
         ]
       }
     },
+    "/vpw/v1/tags": {
+      "get": {
+        "operationId": "Version_GetAvailableTags",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiAvailableUpdatesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    },
     "/vpw/v1/un_cordon_host": {
       "post": {
         "operationId": "VCenter_UnCordonHost",
@@ -688,6 +713,156 @@
         ],
         "tags": [
           "VCenter"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade": {
+      "post": {
+        "operationId": "Version_InitiateUpgrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/cleanup_step": {
+      "post": {
+        "operationId": "Version_CleanupStep",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCleanupStepResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCleanupStepRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/confirm_cleanup": {
+      "post": {
+        "operationId": "Version_ConfirmCleanupAndUpgrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/progress": {
+      "get": {
+        "operationId": "Version_GetUpgradeProgress",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeProgressResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/validate_openstack_ip": {
+      "post": {
+        "operationId": "VailbreakProxy_ValidateOpenstackIp",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiValidateOpenstackIpResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiValidateOpenstackIpRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
         ]
       }
     },
@@ -737,6 +912,18 @@
     }
   },
   "definitions": {
+    "apiAvailableUpdatesResponse": {
+      "type": "object",
+      "properties": {
+        "updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiReleaseInfo"
+          }
+        }
+      }
+    },
     "apiBMListMachinesResponse": {
       "type": "object",
       "properties": {
@@ -824,6 +1011,28 @@
         "BootSourceID": {
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "apiCleanupStepRequest": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string"
+        }
+      }
+    },
+    "apiCleanupStepResponse": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
         }
       }
     },
@@ -1038,6 +1247,17 @@
         }
       }
     },
+    "apiOpenstackAccessInfo": {
+      "type": "object",
+      "properties": {
+        "secretName": {
+          "type": "string"
+        },
+        "secretNamespace": {
+          "type": "string"
+        }
+      }
+    },
     "apiPowerStatus": {
       "type": "string",
       "enum": [
@@ -1116,6 +1336,17 @@
           "type": "boolean"
         },
         "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiReleaseInfo": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "releaseNotes": {
           "type": "string"
         }
       }
@@ -1245,6 +1476,61 @@
         }
       }
     },
+    "apiUpgradeProgressResponse": {
+      "type": "object",
+      "properties": {
+        "currentStep": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number",
+          "format": "float"
+        },
+        "status": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "string"
+        },
+        "endTime": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpgradeRequest": {
+      "type": "object",
+      "properties": {
+        "targetVersion": {
+          "type": "string"
+        },
+        "autoCleanup": {
+          "type": "boolean"
+        }
+      }
+    },
+    "apiUpgradeResponse": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "$ref": "#/definitions/apiValidationResult"
+        },
+        "upgradeStarted": {
+          "type": "boolean"
+        },
+        "cleanupRequired": {
+          "type": "boolean"
+        },
+        "customResourceList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "apiVMInfo": {
       "type": "object",
       "properties": {
@@ -1273,6 +1559,63 @@
         },
         "bootDevice": {
           "$ref": "#/definitions/apiBootDevice"
+        }
+      }
+    },
+    "apiValidateOpenstackIpRequest": {
+      "type": "object",
+      "properties": {
+        "ip": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accessInfo": {
+          "$ref": "#/definitions/apiOpenstackAccessInfo"
+        }
+      }
+    },
+    "apiValidateOpenstackIpResponse": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "reason": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiValidationResult": {
+      "type": "object",
+      "properties": {
+        "agentsScaledDown": {
+          "type": "boolean"
+        },
+        "vmwareCredsDeleted": {
+          "type": "boolean"
+        },
+        "openstackCredsDeleted": {
+          "type": "boolean"
+        },
+        "noMigrationPlans": {
+          "type": "boolean"
+        },
+        "noRollingMigrationPlans": {
+          "type": "boolean"
+        },
+        "noCustomResources": {
+          "type": "boolean"
+        },
+        "passedAll": {
+          "type": "boolean"
         }
       }
     },
