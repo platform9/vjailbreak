@@ -72,9 +72,9 @@ set_default_password() {
   log "Default password set for ubuntu user. User will need to change it on first login"
 }
 
-install_htpasswd_cli
 set_default_password
 check_command "Setting default password for ubuntu user"
+install_htpasswd_cli
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
