@@ -31,8 +31,8 @@ virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stab
 alpine="quay.io/platform9/vjailbreak:alpine"
 authentik_server="ghcr.io/goauthentik/server:2024.8.3"
 oauth2_proxy="quay.io/oauth2-proxy/oauth2-proxy:v7.6.0"
-postgres="postgres:16-alpine"
-redis="redis:alpine"
+postgres="docker.io/library/postgres:16-alpine"
+redis="docker.io/library/redis:alpine"
 
 # Download and export images
 images=(
@@ -60,19 +60,19 @@ images=(
 
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  sudo ctr  i pull "$img"
+  sudo ctr -n k8s.io i pull "$img"
 
   tag=$(echo "$img" | cut -d'@' -f1)
   fname=$(echo "$tag" | tr '/:@' '_')
 
   echo "[*] Exporting to $fname.tar"
-  sudo ctr i export "image_builder/images/$fname.tar" "$img"
+  sudo ctr -n k8s.io i export "image_builder/images/$fname.tar" "$img"
 done
 
 
-ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
+ctr -n k8s.io images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
 sleep 10
-ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
+ctr -n k8s.io images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
 
 echo "[✔] All images downloaded and exported as tar files."
 
