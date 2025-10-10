@@ -41,7 +41,7 @@ export const streamPodLogs = async (
   options: {
     follow?: boolean
     tailLines?: string
-    limitBytes?: string
+    limitBytes?: number
     signal?: AbortSignal
   } = {}
 ): Promise<Response> => {
@@ -52,7 +52,7 @@ export const streamPodLogs = async (
   const params = new URLSearchParams({
     follow: follow.toString(),
     tailLines,
-    limitBytes,
+    limitBytes: limitBytes.toString(),
   })
   
   const url = `${endpoint}?${params.toString()}`
