@@ -49,3 +49,12 @@ export const getUserInfo = () => {
         return false
       })
   }
+
+  export const logout = () => {
+    // Clear local storage
+    localStorage.removeItem('user-email')
+    localStorage.removeItem('user-groups')
+    
+    // Redirect to OAuth2 proxy sign out endpoint
+    window.location.href = '/oauth2/sign_out'
+  }
