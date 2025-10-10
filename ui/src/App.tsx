@@ -1,6 +1,6 @@
 import { styled } from "@mui/material"
 import { useState } from "react"
-import { Route, Routes, useLocation, Navigate } from "react-router-dom"
+import { Route, Routes, Navigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import RouteCompatibility from "./components/RouteCompatibility"
@@ -12,7 +12,6 @@ import AgentsPage from "./pages/dashboard/AgentsPage"
 import CredentialsPage from "./pages/dashboard/CredentialsPage"
 import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
-import Onboarding from "./pages/onboarding/Onboarding"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -35,11 +34,9 @@ const AppContent = styled("div")(({ theme }) => ({
 }))
 
 function App() {
-  const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
-  const hideAppbar =
-    location.pathname === "/onboarding" || location.pathname === "/"
+  const hideAppbar = false  // Always show the app bar
 
   const handleOpenMigrationForm = (open, type = 'standard') => {
     setOpenMigrationForm(open);
@@ -72,7 +69,9 @@ function App() {
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
           </Route>
-          <Route path="/onboarding" element={<Onboarding />} />
+          {/* Onboarding route removed - always redirect to dashboard */}
+          <Route path="/onboarding" element={<Navigate to="/dashboard/migrations" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard/migrations" replace />} />
         </Routes>
       </AppContent>
     </AppFrame>

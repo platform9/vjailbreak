@@ -41,6 +41,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	audit "github.com/platform9/vjailbreak/k8s/migration/pkg/audit"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
@@ -50,6 +51,7 @@ import (
 type MigrationReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
+	AuditLogger             *audit.Logger
 	MaxConcurrentReconciles int
 }
 
@@ -74,7 +76,11 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // Reconcile reconciles a Migration object
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
-
+	// Extract user from context (set by webhook or admission controller)
+	user, ok := ctx.Value("user").(string)
+	if !ok {
+		user = "system" // Default to system if user not found in context
+	}
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
@@ -183,6 +189,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
+	r.AuditLogger.LogAction(ctx, user, "reconcile", "migration", req.Name, err == nil)
 
 	return ctrl.Result{}, nil
 }

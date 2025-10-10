@@ -491,7 +491,7 @@ jobs:
       - name: Download images and export as tar
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
-          sudo apt-get update && sudo apt-get install -y containerd.
+          sudo apt-get update && sudo apt-get install -y containerd
           sudo mkdir -p ./image_builder/images
           sudo chmod +x ./image_builder/scripts/download_images.sh
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}

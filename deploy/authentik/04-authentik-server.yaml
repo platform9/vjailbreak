@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authentik-secret
+  namespace: authentik
+type: Opaque
+stringData:
+  secret-key: "CHANGE_ME_GENERATE_RANDOM_KEY"  # Generate with: openssl rand -base64 32
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: authentik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-server
+  template:
+    metadata:
+      labels:
+        app: authentik-server
+    spec:
+      containers:
+      - name: authentik
+        image: ghcr.io/goauthentik/server:2024.8.3
+        args: ["server"]
+        env:
+        - name: AUTHENTIK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secret
+              key: secret-key
+        - name: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-postgres
+        - name: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__USER
+          valueFrom:
+            secretKeyRef:
+              name: authentik-postgres-secret
+              key: username
+        - name: AUTHENTIK_POSTGRESQL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: authentik-postgres-secret
+              key: password
+        - name: AUTHENTIK_REDIS__HOST
+          value: authentik-redis
+        - name: AUTHENTIK_ERROR_REPORTING__ENABLED
+          value: "false"
+        - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+          value: "vjb!@#"
+        - name: AUTHENTIK_BOOTSTRAP_EMAIL
+          value: "admin@vjailbreak.local"
+        - name: AUTHENTIK_BOOTSTRAP_TOKEN
+          value: "vjb!@#"
+        ports:
+        - containerPort: 9000
+          name: http
+        - containerPort: 9443
+          name: https
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: authentik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-worker
+  template:
+    metadata:
+      labels:
+        app: authentik-worker
+    spec:
+      containers:
+      - name: authentik
+        image: ghcr.io/goauthentik/server:2024.8.3
+        args: ["worker"]
+        env:
+        - name: AUTHENTIK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secret
+              key: secret-key
+        - name: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-postgres
+        - name: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__USER
+          valueFrom:
+            secretKeyRef:
+              name: authentik-postgres-secret
+              key: username
+        - name: AUTHENTIK_POSTGRESQL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: authentik-postgres-secret
+              key: password
+        - name: AUTHENTIK_REDIS__HOST
+          value: authentik-redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-server
+  namespace: authentik
+spec:
+  selector:
+    app: authentik-server
+  ports:
+  - name: http
+    port: 9000
+    targetPort: 9000
+  - name: https
+    port: 9443
+    targetPort: 9443

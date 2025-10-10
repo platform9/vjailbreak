@@ -1,0 +1,38 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-admins-binding
+subjects:
+- kind: Group
+  name: "vjailbreak-admins"  # Authentik group name
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: vjailbreak-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-operators-binding
+subjects:
+- kind: Group
+  name: "vjailbreak-operators"
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: vjailbreak-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-viewers-binding
+subjects:
+- kind: Group
+  name: "vjailbreak-viewers"
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: vjailbreak-viewer
+  apiGroup: rbac.authorization.k8s.io
