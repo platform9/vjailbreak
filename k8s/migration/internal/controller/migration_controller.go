@@ -51,7 +51,7 @@ import (
 type MigrationReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
-	AuditLogger             *audit.AuditLogger
+	AuditLogger             *audit.Logger
 	MaxConcurrentReconciles int
 }
 
@@ -77,7 +77,10 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	// Extract user from context (set by webhook or admission controller)
-	user := ctx.Value("user").(string)
+	user, ok := ctx.Value("user").(string)
+	if !ok {
+		user = "system" // Default to system if user not found in context
+	}
 	migration := &vjailbreakv1alpha1.Migration{}
 
 	if err := r.Get(ctx, req.NamespacedName, migration); err != nil {
