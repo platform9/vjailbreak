@@ -1218,6 +1218,13 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
 				}
 
+				//Update RDM disk CR if existing and new OpenStack volume reference does not match, and existing disk is not in managing, managed or error phase
+				if !reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+					!reflect.DeepEqual(rdmInfo[i].Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+					!(existingDisk.Status.Phase == constants.RDMPhaseManaging || existingDisk.Status.Phase == constants.RDMPhaseManaged || existingDisk.Status.Phase == constants.RDMPhaseError) {
+					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
+				}
+
 				// Add owner VMs if new reference is added
 				for _, ownerVM := range rdmInfo[i].Spec.OwnerVMs {
 					if !slices.Contains(existingDisk.Spec.OwnerVMs, ownerVM) {
