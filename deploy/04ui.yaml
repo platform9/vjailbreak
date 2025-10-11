@@ -20,14 +20,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
- .        volumeMounts:
-            - name: nginx-shadow-htpasswd
-              mountPath: /etc/nginx/shadow
-          volumes:
-            - name: nginx-shadow-htpasswd
-              hostPath:
-              path: /etc/htpasswd
-              type: FileOrCreate
+
 ---
 apiVersion: v1
 kind: Service
