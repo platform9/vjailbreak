@@ -44,8 +44,13 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - "${PUBLIC_IP}.nip.io"
+    secretName: vjailbreak-ui-tls
   rules:
-  - http:
+  - host: "${PUBLIC_IP}.nip.io"
+    http:
       paths:
       - path: /
         pathType: Prefix

@@ -15,11 +15,25 @@ check_command() {
   fi
 }
 
+# Ensure required tools exist (envsubst for rendering manifests)
+ensure_dependencies() {
+  if ! command -v envsubst >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      log "Installing dependency: gettext-base (for envsubst)"
+      sudo apt-get update -y && sudo apt-get install -y gettext-base
+      check_command "Installing gettext-base"
+    else
+      log "WARNING: envsubst not found and apt-get unavailable. Skipping install; rendering may fail."
+    fi
+  fi
+}
+
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
 
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+CERT_MANAGER_VERSION="v1.14.3"
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -127,6 +141,9 @@ if [ "$IS_MASTER" == "true" ]; then
   # Wait for K3s to be ready
   wait_for_k3s
 
+  # Ensure dependencies are present
+  ensure_dependencies
+
   # Move kubeconfig to ~/.kube/config so that helm can pick it up 
   mkdir -p ~/.kube
   sudo kubectl config view --raw > ~/.kube/config
@@ -147,6 +164,25 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
   check_command "Waiting for NGINX Ingress Controller to be ready"
 
+  # Detect the primary IP address to be used as the hostname
+  detect_public_ip() {
+    # Try to detect the primary routable IPv4 address
+    local ip
+    ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)
+    if [ -z "$ip" ]; then
+      ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    echo "$ip"
+  }
+
+  PUBLIC_IP=$(detect_public_ip)
+  if [ -z "$PUBLIC_IP" ]; then
+    log "ERROR: Could not detect PUBLIC_IP"
+    exit 1
+  fi
+  export PUBLIC_IP
+  log "Detected PUBLIC_IP: ${PUBLIC_IP}"
+
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
   sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
@@ -158,8 +194,94 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
   check_command "Applying kube-prometheus manifests"
 
-  sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
-  check_command "Applying additional manifests"
+  # Apply all additional manifests with environment substitution so ${PUBLIC_IP} is resolved
+  TMP_YAMLS_DIR=$(mktemp -d)
+  log "Rendering manifests from /etc/pf9/yamls with PUBLIC_IP=${PUBLIC_IP} into ${TMP_YAMLS_DIR}"
+  while IFS= read -r -d '' file; do
+    rel_path=${file#/etc/pf9/yamls/}
+    mkdir -p "${TMP_YAMLS_DIR}/$(dirname "$rel_path")"
+    envsubst < "$file" > "${TMP_YAMLS_DIR}/$rel_path"
+  done < <(find /etc/pf9/yamls -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
+
+  sudo kubectl --request-timeout=300s apply -R -f "${TMP_YAMLS_DIR}"
+  check_command "Applying additional manifests (envsubst-rendered)"
+
+  # Optionally open firewall for HTTP/HTTPS if ufw is present
+  if command -v ufw >/dev/null 2>&1; then
+    log "Configuring UFW to allow ports 80 and 443"
+    sudo ufw allow 80/tcp || true
+    sudo ufw allow 443/tcp || true
+  fi
+
+  # Install cert-manager (self-signed issuer will be created below)
+  log "Installing cert-manager (${CERT_MANAGER_VERSION})..."
+  kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+  check_command "Applying cert-manager core manifests"
+
+  # Wait for cert-manager to be ready
+  kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
+  check_command "Waiting for cert-manager to be available"
+
+  # Create a self-signed ClusterIssuer
+  log "Creating self-signed ClusterIssuer..."
+  kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-cluster-issuer
+spec:
+  selfSigned: {}
+EOF
+  check_command "Creating ClusterIssuer"
+
+  # Create Certificates in required namespaces using PUBLIC_IP and ${PUBLIC_IP}.nip.io
+  log "Creating Certificates for namespaces (migration-system, default, monitoring, vpwned)..."
+  kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vjailbreak-ui-cert
+  namespace: migration-system
+spec:
+  secretName: vjailbreak-ui-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: selfsigned-cluster-issuer
+  commonName: "${PUBLIC_IP}"
+  dnsNames:
+  - "${PUBLIC_IP}.nip.io"
+  ipAddresses:
+  - "${PUBLIC_IP}"
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-cert
+  namespace: monitoring
+spec:
+  secretName: grafana-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: selfsigned-cluster-issuer
+  commonName: "${PUBLIC_IP}"
+  dnsNames:
+  - "${PUBLIC_IP}.nip.io"
+  ipAddresses:
+  - "${PUBLIC_IP}"
+EOF
+  check_command "Creating Certificates"
+
+  # Wait for certificates to be Ready before proceeding
+  log "Waiting for certificates to become Ready..."
+  kubectl -n migration-system wait certificate vjailbreak-ui-cert --for=condition=Ready --timeout=180s
+  check_command "Waiting for vjailbreak-ui-cert to be Ready"
+  kubectl -n monitoring wait certificate grafana-cert --for=condition=Ready --timeout=180s
+  check_command "Waiting for grafana-cert to be Ready"
+
+  # Output final access endpoints
+  log "Ingress is configured for host: https://${PUBLIC_IP}.nip.io"
+  log "- UI:      https://${PUBLIC_IP}.nip.io/"
+  log "- Grafana: https://${PUBLIC_IP}.nip.io/grafana"
 
   log "K3s master setup completed"
 
