@@ -15,11 +15,59 @@ check_command() {
   fi
 }
 
+# Ensure htpasswd CLI is available (apache2-utils)
+install_htpasswd_cli() {
+  if command -v htpasswd >/dev/null 2>&1; then
+    log "htpasswd already present"
+    return 0
+  fi
+
+  log "Installing apache2-utils (htpasswd) ..."
+
+  # Wait for cloud-init/apt locks to clear
+  for i in {1..30}; do
+    if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+       sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+       sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; then
+      log "apt/dpkg is locked; retry ${i}/30"
+      sleep 5
+    else
+      break
+    fi
+  done
+
+  # Update apt indexes with retries
+  for i in {1..5}; do
+    sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && break || {
+      log "apt-get update failed; retry ${i}/5"
+      sleep 5
+    }
+  done
+
+  # Install apache2-utils with retries
+  for i in {1..5}; do
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apache2-utils && break || {
+      log "apache2-utils install failed; retry ${i}/5"
+      sleep 5
+    }
+  done
+
+  if command -v htpasswd >/dev/null 2>&1; then
+    log "htpasswd installed successfully"
+  else
+    log "ERROR: htpasswd not available after installation attempts"
+  fi
+}
+
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
 
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
+# Install htpasswd early so it's available when needed
+install_htpasswd_cli
+check_command "Installing apache2-utils (htpasswd)"
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -47,7 +95,6 @@ set_default_password() {
   sudo usermod -p $(openssl passwd -1 "password") ubuntu
   sudo chage -d 0 ubuntu
   sudo passwd --expire ubuntu
-
   if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
     sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   else
@@ -67,6 +114,7 @@ set_default_password() {
 
 set_default_password
 check_command "Setting default password for ubuntu user"
+printf "password" | htpasswd -i -c /etc/htpasswd ubuntu
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
