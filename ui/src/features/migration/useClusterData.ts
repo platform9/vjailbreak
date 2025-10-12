@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
 import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
 import { getPCDClusters } from "src/api/pcd-clusters"
-import { getSecret, getSecrets } from "src/api/secrets/secrets"
+import { getOpenstackCredentials } from "src/api/openstack-creds/openstackCreds"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
 import { VMwareCreds } from "src/api/vmware-creds/model"
 import { VMwareCluster } from "src/api/vmware-clusters/model"
@@ -50,11 +50,7 @@ export const useClusterData = (
   const [loadingVMware, setLoadingVMware] = useState(false)
   const [loadingPCD, setLoadingPCD] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fetchSecrets = async () => {
-    // This function is kept for compatibility with refetchAll
-    // but secrets are now fetched directly in fetchPcdData when needed
-    return await getSecrets(VJAILBREAK_DEFAULT_NAMESPACE)
-  }
+  // Removed fetchSecrets function - no longer needed
   const fetchSourceData = async () => {
     setLoadingVMware(true)
     setError(null)
@@ -72,26 +68,8 @@ export const useClusterData = (
         const credName = cred.metadata.name
         const datacenter = cred.spec.datacenter || credName
 
-        // Default vcenterName to credential name
-        let vcenterName = credName
-
-        // If credential has a secretRef, fetch the secret to get VCENTER_HOST
-        if (cred.spec.secretRef?.name) {
-          try {
-            const secret = await getSecret(
-              cred.spec.secretRef.name,
-              VJAILBREAK_DEFAULT_NAMESPACE
-            )
-            if (secret && secret.data && secret.data.VCENTER_HOST) {
-              vcenterName = secret.data.VCENTER_HOST
-            }
-          } catch (error) {
-            console.error(
-              `Failed to fetch secret for credential ${credName}:`,
-              error
-            )
-          }
-        }
+        // Use hostName directly from credential spec instead of fetching from secret
+        const vcenterName = cred.spec.hostName || credName
 
         const clustersResponse = await getVMwareClusters(
           VJAILBREAK_DEFAULT_NAMESPACE,
@@ -135,9 +113,6 @@ export const useClusterData = (
         return
       }
 
-      // Ensure we have fresh secrets data
-      const currentSecrets = await getSecrets(VJAILBREAK_DEFAULT_NAMESPACE)
-
       const clusterDataPromises = pcdClusters.items.map(
         async (cluster: PCDCluster) => {
           const clusterName = cluster.spec.clusterName
@@ -146,17 +121,18 @@ export const useClusterData = (
             ""
 
           let tenantName = ""
-
-          // Try to find secret with exact name format: {openstackCredName}-openstack-secret
           if (openstackCredName) {
-            // @ts-expect-error - currentSecrets is a SecretList
-            const secret = currentSecrets?.items?.find((secret) =>
-              secret?.metadata?.name?.includes(openstackCredName)
-            )
-            if (secret?.data?.OS_TENANT_NAME) {
-              tenantName = atob(secret.data.OS_TENANT_NAME)
-            } else if (secret?.data?.OS_PROJECT_NAME) {
-              tenantName = atob(secret.data.OS_PROJECT_NAME)
+            try {
+              const openstackCreds = await getOpenstackCredentials(
+                openstackCredName,
+                VJAILBREAK_DEFAULT_NAMESPACE
+              )
+              tenantName = openstackCreds?.spec?.projectName || ""
+            } catch (error) {
+              console.error(
+                `Failed to fetch OpenStack credentials for ${openstackCredName}:`,
+                error
+              )
             }
           }
 
@@ -180,8 +156,7 @@ export const useClusterData = (
   }
 
   const refetchAll = async () => {
-    // First fetch secrets, then fetch other data in parallel
-    await fetchSecrets()
+    // Fetch source and PCD data in parallel
     await Promise.all([fetchSourceData(), fetchPcdData()])
   }
 

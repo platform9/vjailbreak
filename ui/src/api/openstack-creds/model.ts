@@ -57,6 +57,7 @@ export interface OpenstackCredsSpec {
   pcdHostConfig?: PCDHostConfig[]
   cinderBackendPools?: string[]
   dataCopyMethods?: string[]
+  projectName?: string
 }
 
 export interface GetOpenstackCredsListMetadata {
