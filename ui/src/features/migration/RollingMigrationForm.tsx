@@ -1619,8 +1619,10 @@ export default function RollingMigrationFormDrawer({
 
                 const validationResult = await validateOpenstackIPs({
                     ip: ipList,
-                    source_name: openstackCredData.metadata.name,
-                    source_namespace: openstackCredData.metadata.namespace
+                    accessInfo: {
+                        secret_name: `${openstackCredData.metadata.name}-openstack-secret`,
+                        secret_namespace: openstackCredData.metadata.namespace
+                    }
                 });
 
                 // Process validation results

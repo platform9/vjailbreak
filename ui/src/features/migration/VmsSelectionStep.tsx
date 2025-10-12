@@ -827,8 +827,10 @@ export default function VmsSelectionStep({
 
         const validationResult = await validateOpenstackIPs({
           ip: ipList,
-          source_name: openstackCredentials.metadata.name,
-          source_namespace: openstackCredentials.metadata.namespace
+          accessInfo: {
+            secret_name: `${openstackCredentials.metadata.name}-openstack-secret`,
+            secret_namespace: openstackCredentials.metadata.namespace
+          }
         });
 
         // Process validation results

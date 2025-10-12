@@ -102,8 +102,10 @@ export const createOpenstackCredsWithSecret = async (
 // IP validation interfaces and function
 interface IPValidationRequest {
   ip: string[]
-  source_name: string
-  source_namespace: string
+  accessInfo: {
+    secret_name: string
+    secret_namespace: string
+  }
 }
 
 interface IPValidationResponse {
