@@ -155,6 +155,25 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
   check_command "Waiting for NGINX Ingress Controller to be ready"
 
+  # Install cert-manager
+  log "Installing cert-manager"
+  if [ -d "/etc/pf9/yamls/cert-manager" ]; then
+    sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
+    check_command "Applying cert-manager core manifests"
+
+    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager --timeout=300s
+    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager-cainjector --timeout=300s
+    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager-webhook --timeout=300s
+    check_command "Waiting for cert-manager deployments"
+
+    if [ -f "/etc/pf9/yamls/cert-manager/cluster-issuer.yaml" ]; then
+      sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cluster-issuer.yaml
+      check_command "Applying self-signed ClusterIssuer"
+    fi
+  else
+    log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
+  fi
+
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
   sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
