@@ -15,11 +15,15 @@ check_command() {
   fi
 }
 
+# Airgapped-friendly: no external package installs; we'll generate /etc/htpasswd using openssl
+
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
 
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
+# Airgapped: we'll generate /etc/htpasswd using openssl (no package installs)
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -47,7 +51,6 @@ set_default_password() {
   sudo usermod -p $(openssl passwd -1 "password") ubuntu
   sudo chage -d 0 ubuntu
   sudo passwd --expire ubuntu
-
   if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
     sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   else
@@ -67,6 +70,11 @@ set_default_password() {
 
 set_default_password
 check_command "Setting default password for ubuntu user"
+
+# Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
+sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 password)" > /etc/htpasswd'
+sudo chmod 644 /etc/htpasswd
+sudo chown root:root /etc/htpasswd
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
