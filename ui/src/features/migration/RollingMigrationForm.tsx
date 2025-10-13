@@ -344,8 +344,8 @@ export default function RollingMigrationFormDrawer({
 
     // Toast notification state
     const [toastOpen, setToastOpen] = useState(false);
-    const [toastMessage, setToastMessage] = useState("");
-    const [toastSeverity, setToastSeverity] = useState<"success" | "error" | "warning" | "info">("success");
+    const [toastMessage] = useState("");
+    const [toastSeverity] = useState<"success" | "error" | "warning" | "info">("success");
 
     const paginationModel = { page: 0, pageSize: 5 };
 
