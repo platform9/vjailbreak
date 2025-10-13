@@ -19,7 +19,7 @@ spec:
           image: platform9/vjailbreak-ui:v0.1
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 443
+            - containerPort: 80
 
 ---
 apiVersion: v1
@@ -32,9 +32,10 @@ spec:
     app: vjailbreak-ui
   type: ClusterIP
   ports:
-    - protocol: TCP
-      port: 443
-      targetPort: 443
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -49,13 +50,6 @@ metadata:
     nginx.ingress.kubernetes.io/hsts: "true"
     nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
     nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
-    nginx.ingress.kubernetes.io/server-snippet: |
-      add_header X-Frame-Options "DENY" always;
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-      add_header X-XSS-Protection "1; mode=block" always;
-      add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; frame-ancestors 'none'; upgrade-insecure-requests;" always;
-      add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self)" always;
 spec:
   ingressClassName: nginx
   tls:
@@ -63,7 +57,8 @@ spec:
     - "*.nip.io"
     secretName: vjailbreak-ui-tls
   rules:
-  - http:
+  - host: "*.nip.io"
+    http:
       paths:
       - path: /
         pathType: Prefix
@@ -71,7 +66,7 @@ spec:
           service:
             name: vjailbreak-ui-service
             port:
-              number: 443
+              number: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -88,14 +83,6 @@ metadata:
     nginx.ingress.kubernetes.io/hsts: "true"
     nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
     nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
-    nginx.ingress.kubernetes.io/server-snippet: |
-      proxy_set_header X-Forwarded-Proto https;
-      add_header X-Frame-Options "DENY" always;
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-      add_header X-XSS-Protection "1; mode=block" always;
-      add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; frame-ancestors 'none'; upgrade-insecure-requests;" always;
-      add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self)" always;
 spec:
   ingressClassName: nginx
   tls:
@@ -103,7 +90,8 @@ spec:
     - "*.nip.io"
     secretName: vjailbreak-api-tls
   rules:
-  - http:
+  - host: "*.nip.io"
+    http:
       paths:
       - path: /(apis.*)
         pathType: ImplementationSpecific
