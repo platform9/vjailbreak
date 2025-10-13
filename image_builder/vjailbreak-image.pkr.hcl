@@ -47,7 +47,10 @@ build {
     source      = "${path.root}/scripts/install.sh"
     destination = "/tmp/install.sh"
   }
-
+  provisioner "file" {
+    source      = "${path.root}/scripts/chhtpasswd.sh"
+    destination = "/tmp/chhtpasswd.sh"
+  }
   provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
     destination = "/tmp/k3s.env"
@@ -91,6 +94,7 @@ build {
   provisioner "shell" {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+    "sudo mv /tmp/chhtpasswd.sh /etc/pf9/chhtpasswd.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
     "sudo mkdir -p image_builder/images",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
