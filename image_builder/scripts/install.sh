@@ -15,49 +15,7 @@ check_command() {
   fi
 }
 
-# Ensure htpasswd CLI is available (apache2-utils)
-install_htpasswd_cli() {
-  if command -v htpasswd >/dev/null 2>&1; then
-    log "htpasswd already present"
-    return 0
-  fi
-
-  log "Installing apache2-utils (htpasswd) ..."
-
-  # Wait for cloud-init/apt locks to clear
-  for i in {1..30}; do
-    if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-       sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
-       sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; then
-      log "apt/dpkg is locked; retry ${i}/30"
-      sleep 5
-    else
-      break
-    fi
-  done
-
-  # Update apt indexes with retries
-  for i in {1..5}; do
-    sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && break || {
-      log "apt-get update failed; retry ${i}/5"
-      sleep 5
-    }
-  done
-
-  # Install apache2-utils with retries
-  for i in {1..5}; do
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apache2-utils && break || {
-      log "apache2-utils install failed; retry ${i}/5"
-      sleep 5
-    }
-  done
-
-  if command -v htpasswd >/dev/null 2>&1; then
-    log "htpasswd installed successfully"
-  else
-    log "ERROR: htpasswd not available after installation attempts"
-  fi
-}
+# Airgapped-friendly: no external package installs; we'll generate /etc/htpasswd using openssl
 
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
@@ -65,9 +23,7 @@ sleep 20
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-# Install htpasswd early so it's available when needed
-install_htpasswd_cli
-check_command "Installing apache2-utils (htpasswd)"
+# Airgapped: we'll generate /etc/htpasswd using openssl (no package installs)
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -114,7 +70,11 @@ set_default_password() {
 
 set_default_password
 check_command "Setting default password for ubuntu user"
-printf "password" | htpasswd -i -c /etc/htpasswd ubuntu
+
+# Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
+sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 password)" > /etc/htpasswd'
+sudo chmod 640 /etc/htpasswd
+sudo chown root:root /etc/htpasswd
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
