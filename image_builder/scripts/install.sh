@@ -201,6 +201,28 @@ if [ "$IS_MASTER" == "true" ]; then
   check_command "Creating config map from env file"
   log "Config map created successfully."
 
+  detect_primary_ip() {
+    if [ -n "${MASTER_IP}" ]; then
+      echo "${MASTER_IP}"
+      return 0
+    fi
+    ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]; exit}'
+  }
+
+  VM_IP=$(detect_primary_ip)
+  if [ -n "$VM_IP" ]; then
+    NIP_HOST="${VM_IP}.nip.io"
+    log "Patching Ingress hosts to ${NIP_HOST}"
+    kubectl -n migration-system patch ingress vjailbreak-ui-ingress --type=json \
+      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
+    kubectl -n migration-system patch ingress vjailbreak-api-ingress --type=json \
+      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
+    kubectl -n monitoring patch ingress grafana-api-ingress --type=json \
+      -p='[{"op":"add","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
+  else
+    log "WARNING: Could not detect VM IP to patch Ingress hosts."
+  fi
+
 else
   log "Setting up K3s Worker..."
 

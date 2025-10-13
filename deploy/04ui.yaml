@@ -72,7 +72,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: vjailbreak-api-ingress
-  namespace: default
+  namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     cert-manager.io/cluster-issuer: "selfsigned-cluster-issuer"
