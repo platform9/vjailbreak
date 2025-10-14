@@ -155,8 +155,6 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
   check_command "Waiting for NGINX Ingress Controller to be ready"
 
-  # Install cert-manager
-  log "Installing cert-manager"
   if [ -d "/etc/pf9/yamls/cert-manager" ]; then
     sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
     check_command "Applying cert-manager core manifests"
@@ -215,7 +213,7 @@ if [ "$IS_MASTER" == "true" ]; then
     log "Patching Ingress hosts to ${NIP_HOST}"
     kubectl -n migration-system patch ingress vjailbreak-ui-ingress --type=json \
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
-    kubectl -n migration-system patch ingress vjailbreak-api-ingress --type=json \
+    kubectl -n default patch ingress vjailbreak-api-ingress --type=json \
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
     kubectl -n monitoring patch ingress grafana-api-ingress --type=json \
       -p='[{"op":"add","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true

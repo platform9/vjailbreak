@@ -448,16 +448,7 @@ jobs:
           make -C ./k8s/migration/ build-installer
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
           cp -r ./k8s/kube-prometheus image_builder/deploy/
-          mkdir -p image_builder/deploy/cert-manager
-          curl -L https://github.com/cert-manager/cert-manager/releases/download/v1.14.3/cert-manager.yaml -o image_builder/deploy/cert-manager/cert-manager.yaml
-          cat > image_builder/deploy/cert-manager/cluster-issuer.yaml << 'EOF'
-          apiVersion: cert-manager.io/v1
-          kind: ClusterIssuer
-          metadata:
-            name: selfsigned-cluster-issuer
-          spec:
-            selfSigned: {}
-          EOF
+          cp -r image_builder/cert-manager-manifests image_builder/deploy/cert-manager
 
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1
