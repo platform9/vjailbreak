@@ -5,9 +5,9 @@ DEFAULT_USER="ubuntu"
 usage() {
   cat >&2 <<USAGE
 Usage:
-  pf9-htpasswd create <username>
-  pf9-htpasswd change_password <username>
-  pf9-htpasswd delete <username>
+  pf9-htpasswd create-user <username>
+  pf9-htpasswd update-password <username>
+  pf9-htpasswd delete-user <username>
 
 Notes:
   - Stores/reads entries in $HTPASSWD_FILE as username:$apr1$salt$hash (openssl apr1)
@@ -157,21 +157,21 @@ delete_user() {
 _pf9_ht_main() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
-    create)
+    create-user)
       local user="${1:-}"; shift || true
       if [[ -z "${user:-}" ]]; then
         prompt_user "$DEFAULT_USER" user
       fi
       create_user "$user"
       ;;
-    change_password)
+    update-password)
       local user="${1:-}"; shift || true
       if [[ -z "${user:-}" ]]; then
         prompt_user "$DEFAULT_USER" user
       fi
       change_password "$user"
       ;;
-    delete)
+    delete-user)
       local user="${1:-}"; shift || true
       if [[ -z "${user:-}" ]]; then
         prompt_user "$DEFAULT_USER" user
