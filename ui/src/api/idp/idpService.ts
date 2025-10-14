@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { authService } from '../auth/authService';
 import {
   IdentityProvider,
@@ -6,7 +5,6 @@ import {
   DexConfiguration,
   SAMLConfig,
   OIDCConfig,
-  LocalConfig,
   LocalUser,
 } from './types';
 

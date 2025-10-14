@@ -17,6 +17,9 @@
     },
     {
       "name": "VailbreakProxy"
+    },
+    {
+      "name": "IdentityProvider"
     }
   ],
   "consumes": [
@@ -309,6 +312,340 @@
         ],
         "tags": [
           "VCenter"
+        ]
+      }
+    },
+    "/vpw/v1/idp/dex/restart": {
+      "post": {
+        "operationId": "IdentityProvider_RestartDex",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiRestartDexResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiRestartDexRequest"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      }
+    },
+    "/vpw/v1/idp/local/users": {
+      "get": {
+        "operationId": "IdentityProvider_ListLocalUsers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiListLocalUsersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "IdentityProvider"
+        ]
+      },
+      "post": {
+        "operationId": "IdentityProvider_AddLocalUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiAddLocalUserResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiAddLocalUserRequest"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      }
+    },
+    "/vpw/v1/idp/local/users/{email}": {
+      "delete": {
+        "operationId": "IdentityProvider_DeleteLocalUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiDeleteLocalUserResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      },
+      "put": {
+        "operationId": "IdentityProvider_UpdateLocalUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpdateLocalUserResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/IdentityProviderUpdateLocalUserBody"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      }
+    },
+    "/vpw/v1/idp/providers": {
+      "get": {
+        "operationId": "IdentityProvider_ListProviders",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiListProvidersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "IdentityProvider"
+        ]
+      },
+      "post": {
+        "operationId": "IdentityProvider_CreateProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCreateProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCreateProviderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      }
+    },
+    "/vpw/v1/idp/providers/{id}": {
+      "get": {
+        "operationId": "IdentityProvider_GetProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      },
+      "delete": {
+        "operationId": "IdentityProvider_DeleteProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiDeleteProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      },
+      "put": {
+        "operationId": "IdentityProvider_UpdateProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpdateProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/IdentityProviderUpdateProviderBody"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
+        ]
+      }
+    },
+    "/vpw/v1/idp/providers/{id}/test": {
+      "post": {
+        "operationId": "IdentityProvider_TestProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiTestProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/IdentityProviderTestProviderBody"
+            }
+          }
+        ],
+        "tags": [
+          "IdentityProvider"
         ]
       }
     },
@@ -912,6 +1249,47 @@
     }
   },
   "definitions": {
+    "IdentityProviderTestProviderBody": {
+      "type": "object"
+    },
+    "IdentityProviderUpdateLocalUserBody": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "$ref": "#/definitions/apiLocalUserInfo"
+        }
+      }
+    },
+    "IdentityProviderUpdateProviderBody": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/apiProviderInfo"
+        }
+      }
+    },
+    "apiAddLocalUserRequest": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "$ref": "#/definitions/apiLocalUserInfo"
+        }
+      }
+    },
+    "apiAddLocalUserResponse": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "$ref": "#/definitions/apiLocalUserInfo"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiAvailableUpdatesResponse": {
       "type": "object",
       "properties": {
@@ -1061,6 +1439,50 @@
         }
       }
     },
+    "apiCreateProviderRequest": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/apiProviderInfo"
+        }
+      }
+    },
+    "apiCreateProviderResponse": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/apiProviderInfo"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiDeleteLocalUserResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiDeleteProviderResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiDeployMachineRequest": {
       "type": "object",
       "properties": {
@@ -1086,6 +1508,14 @@
         },
         "message": {
           "type": "string"
+        }
+      }
+    },
+    "apiGetProviderResponse": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/apiProviderInfo"
         }
       }
     },
@@ -1152,6 +1582,30 @@
         }
       }
     },
+    "apiListLocalUsersResponse": {
+      "type": "object",
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiLocalUserInfo"
+          }
+        }
+      }
+    },
+    "apiListProvidersResponse": {
+      "type": "object",
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiProviderInfo"
+          }
+        }
+      }
+    },
     "apiListVMsResponse": {
       "type": "object",
       "properties": {
@@ -1160,6 +1614,34 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/apiVMInfo"
+          }
+        }
+      }
+    },
+    "apiLocalUserInfo": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "title": "Only for create/update, never returned"
+        },
+        "hash": {
+          "type": "string",
+          "title": "Bcrypt hash"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }
@@ -1269,6 +1751,31 @@
       ],
       "default": "POWERED_OFF"
     },
+    "apiProviderInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "title": "\"saml\", \"oidc\", \"local\""
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "configJson": {
+          "type": "string",
+          "title": "JSON encoded config"
+        }
+      }
+    },
     "apiReclaimBMRequest": {
       "type": "object",
       "properties": {
@@ -1347,6 +1854,20 @@
           "type": "string"
         },
         "releaseNotes": {
+          "type": "string"
+        }
+      }
+    },
+    "apiRestartDexRequest": {
+      "type": "object"
+    },
+    "apiRestartDexResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
           "type": "string"
         }
       }
@@ -1451,6 +1972,20 @@
         }
       }
     },
+    "apiTestProviderResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
     "apiUnCordonHostRequest": {
       "type": "object",
       "properties": {
@@ -1468,6 +2003,34 @@
     "apiUnCordonHostResponse": {
       "type": "object",
       "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpdateLocalUserResponse": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "$ref": "#/definitions/apiLocalUserInfo"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpdateProviderResponse": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/apiProviderInfo"
+        },
         "success": {
           "type": "boolean"
         },
