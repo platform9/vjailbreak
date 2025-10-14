@@ -9,8 +9,6 @@ import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQue
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery"
 import VmwareCredentialsForm from "../../components/forms/VmwareCredentialsForm"
 import OpenstackCredentialsForm from "../../components/forms/OpenstackCredentialsForm"
-import { getSecret } from "src/api/secrets/secrets"
-import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
 
 const SourceAndDestinationStepContainer = styled("div")(({ theme }) => ({
   display: "grid",
@@ -43,28 +41,19 @@ export default function SourceAndDestinationEnvStep({
   const handleVmwareCredSelect = async (credId: string | null) => {
     setSelectedVmwareCred(credId)
     if (credId) {
-      let mappedCreds = {}
       const selectedCred = vmwareCredsList.find(cred => cred.metadata.name === credId)
       if (selectedCred) {
         try {
-          if (selectedCred.spec.secretRef?.name) {
-            // Fetch the secret data
-            const secretName = selectedCred.spec.secretRef.name
-            const secret = await getSecret(secretName, selectedCred.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE)
-
-            if (secret?.data) {
-              // Add secret data to mappedCreds
-              mappedCreds = {
-                existingCredName: selectedCred.metadata.name,
-                secretRef: selectedCred.spec.secretRef,
-                datacenter: secret.data.VCENTER_DATACENTER,
-              }
-            }
+          const mappedCreds = {
+            existingCredName: selectedCred.metadata.name,
+            secretRef: selectedCred.spec.secretRef,
+            datacenter: selectedCred.spec.datacenter,
+            hostName: selectedCred.spec.hostName,
           }
 
           onChange("vmwareCreds")(mappedCreds)
         } catch (error) {
-          console.error("Error fetching VMware credential secret:", error)
+          console.error("Error processing VMware credential:", error)
         }
       }
     } else {
@@ -79,13 +68,15 @@ export default function SourceAndDestinationEnvStep({
       const selectedCred = openstackCredsList.find(cred => cred.metadata.name === credId)
       if (selectedCred) {
         try {
+          // Use data directly from credential spec instead of fetching from secret
           const mappedCreds = {
             existingCredName: selectedCred.metadata.name,
+            projectName: selectedCred.spec.projectName,
           }
 
           onChange("openstackCreds")(mappedCreds)
         } catch (error) {
-          console.error("Error fetching OpenStack credential secret:", error)
+          console.error("Error processing OpenStack credential:", error)
         }
       }
     } else {

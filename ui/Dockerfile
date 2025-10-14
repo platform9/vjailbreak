@@ -29,7 +29,7 @@ COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
 COPY public /usr/share/nginx/html
 
 # Copy the Nginx configuration file
-COPY default.conf /etc/nginx/conf.d/
+COPY default.conf /etc/nginx/conf.d/default.conf
 
 # Copy the startup script
 COPY startup.sh /usr/local/bin/start.sh

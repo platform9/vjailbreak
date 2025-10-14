@@ -15,11 +15,15 @@ check_command() {
   fi
 }
 
+# Airgapped-friendly: no external package installs; we'll generate /etc/htpasswd using openssl
+
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
 sleep 20
 
 # Ensure the environment variables are set for cron
 export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
+# Airgapped: we'll generate /etc/htpasswd using openssl (no package installs)
 
 # Load environment variables from k3s.env
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -38,7 +42,39 @@ fi
 log "IS_MASTER: ${IS_MASTER}"
 log "MASTER_IP: ${MASTER_IP}"
 log "K3S_TOKEN: ${K3S_TOKEN}"
+log "INSTALL_K3S_EXEC: ${INSTALL_K3S_EXEC}"
 
+set_default_password() {
+  
+  log "Setting default password for ubuntu user..."
+  
+  sudo usermod -p $(openssl passwd -1 "password") ubuntu
+  sudo chage -d 0 ubuntu
+  sudo passwd --expire ubuntu
+  if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
+    sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  else
+    echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config >/dev/null
+  fi
+  
+  if grep -qE '^\s*ChallengeResponseAuthentication' /etc/ssh/sshd_config; then
+    sudo sed -i 's/^\s*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+  else
+    echo 'ChallengeResponseAuthentication no' | sudo tee -a /etc/ssh/sshd_config >/dev/null
+  fi
+  
+  sudo systemctl restart ssh || sudo systemctl restart sshd
+
+  log "Default password set for ubuntu user. User will need to change it on first login"
+}
+
+set_default_password
+check_command "Setting default password for ubuntu user"
+
+# Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
+sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 password)" > /etc/htpasswd'
+sudo chmod 644 /etc/htpasswd
+sudo chown root:root /etc/htpasswd
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
@@ -159,12 +195,14 @@ else
   # Echo K3S_URL and K3S_TOKEN for debugging
   export K3S_URL="https://$MASTER_IP:6443"
   export K3S_TOKEN="$K3S_TOKEN"
+  export INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC"
 
   log "K3S_URL: $K3S_URL"
   log "K3S_TOKEN: $K3S_TOKEN"
+  log "INSTALL_K3S_EXEC: $INSTALL_K3S_EXEC"
 
   # Install K3s worker
-  K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh
+  K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN INSTALL_K3S_EXEC=$INSTALL_K3S_EXEC INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh
   check_command "Installing K3s worker"
 
   # wait until ctr becomes responsive

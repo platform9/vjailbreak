@@ -4,7 +4,6 @@ package utils
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"math"
 	"net/http"
@@ -148,30 +147,6 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 		TenantName: fields["TenantName"],
 		Insecure:   insecure,
 	}, nil
-}
-
-// GetCert retrieves an X.509 certificate from an endpoint
-func GetCert(endpoint string) (*x509.Certificate, error) {
-	conf := &tls.Config{
-		//nolint:gosec // This is required to skip certificate verification
-		InsecureSkipVerify: true,
-	}
-	parsedURL, err := url.Parse(endpoint)
-	if err != nil {
-		return nil, errors.Wrap(err, "error parsing URL")
-	}
-	hostname := parsedURL.Hostname()
-	conn, err := tls.Dial("tcp", hostname+":443", conf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error connecting to %s", hostname)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Log.Info("Error closing connection", "error", err)
-		}
-	}()
-	cert := conn.ConnectionState().PeerCertificates[0]
-	return cert, nil
 }
 
 // VerifyNetworks verifies the existence of specified networks in OpenStack
@@ -429,21 +404,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if openstackCredential.Insecure {
 		tlsConfig.InsecureSkipVerify = true
 	} else {
-		// Get the certificate for the Openstack endpoint
-		caCert, certerr := GetCert(openstackCredential.AuthURL)
-		if certerr != nil {
-			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
-		}
-		// Trying to fetch the system cert pool and add the Openstack certificate to it
-		caCertPool, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get system cert pool: %w", err)
-		}
-		if caCertPool == nil {
-			caCertPool = x509.NewCertPool()
-		}
-		caCertPool.AddCert(caCert)
-		tlsConfig.RootCAs = caCertPool
+		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
@@ -1371,18 +1332,19 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisk vjailbre
 			diskName := strings.TrimSpace(parts[1])
 			key := parts[2]
 			value := parts[3]
-
-			// Update fields only if new value is provided
-			if strings.TrimSpace(key) == "volumeRef" && value != "" {
-				splotVolRef := strings.Split(value, "=")
-				if len(splotVolRef) != 2 {
-					return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
-				}
-				mp := make(map[string]string)
-				mp[splotVolRef[0]] = splotVolRef[1]
-				log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
-				baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
-					VolumeRef: mp,
+			if strings.TrimSpace(baseRDMDisk.Spec.DiskName) == diskName {
+				// Update fields only if new value is provided
+				if strings.TrimSpace(key) == "volumeRef" && value != "" {
+					splitVolRef := strings.Split(value, "=")
+					if len(splitVolRef) != 2 {
+						return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
+					}
+					mp := make(map[string]string)
+					mp[splitVolRef[0]] = splitVolRef[1]
+					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to", "value: ", mp, "owner VMs: ", baseRDMDisk.Spec.OwnerVMs)
+					baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
+						VolumeRef: mp,
+					}
 				}
 			}
 		}
