@@ -5,7 +5,7 @@ metadata:
   namespace: authentik
 type: Opaque
 stringData:
-  secret-key: "CHANGE_ME_GENERATE_RANDOM_KEY"  # Generate with: openssl rand -base64 32
+  secret-key: "Q0hBTkdFX01FX0dFTkVSQVRFX1JBTkRPTV9LRVk="
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: authentik
-        image: ghcr.io/goauthentik/server:2024.8.3
+        image: ghcr.io/goauthentik/server:2025.8.4
         args: ["server"]
         env:
         - name: AUTHENTIK_SECRET_KEY
@@ -51,11 +51,11 @@ spec:
         - name: AUTHENTIK_ERROR_REPORTING__ENABLED
           value: "false"
         - name: AUTHENTIK_BOOTSTRAP_PASSWORD
-          value: "vjb!@#"
+          value: "vjb123456"
         - name: AUTHENTIK_BOOTSTRAP_EMAIL
           value: "admin@vjailbreak.local"
         - name: AUTHENTIK_BOOTSTRAP_TOKEN
-          value: "vjb!@#"
+          value: "vjb123456"
         ports:
         - containerPort: 9000
           name: http
@@ -79,7 +79,7 @@ spec:
     spec:
       containers:
       - name: authentik
-        image: ghcr.io/goauthentik/server:2024.8.3
+        image: ghcr.io/goauthentik/server:2025.8.4
         args: ["worker"]
         env:
         - name: AUTHENTIK_SECRET_KEY

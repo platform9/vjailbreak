@@ -19,8 +19,6 @@ data:
     set_authorization_header = true
     pass_access_token = true
     pass_user_headers = true
-    whitelist_domains = [".10.9.0.138", "10.9.0.138:30900"]
-    cookie_domains = [".10.9.0.138"]
     reverse_proxy = true
 ---
 # Note: oauth2-proxy-secret is managed separately via kubectl patch
