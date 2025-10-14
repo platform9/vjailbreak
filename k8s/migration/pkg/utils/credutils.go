@@ -1173,6 +1173,13 @@ func containsString(slice []string, target string) bool {
 	return false
 }
 
+// Helper to check if Phase is not in managing/managed/error
+func isPhaseUpdatable(phase string) bool {
+	return phase != constants.RDMPhaseManaging &&
+		phase != constants.RDMPhaseManaged &&
+		phase != constants.RDMPhaseError
+}
+
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
 func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, rdmInfo []vjailbreakv1alpha1.RDMDisk) error {
 	// Both have RDM disks - preserve OpenStack related information
@@ -1218,11 +1225,11 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
 				}
 
-				//Update RDM disk CR if existing and new OpenStack volume reference does not match, and existing disk is not in managing, managed or error phase
+				// Update RDM disk CR if existing and new OpenStack volume reference does not match, and existing disk is not in managing, managed or error phase
 				if !reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
 					!reflect.DeepEqual(rdmInfo[i].Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
 					!reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, rdmInfo[i].Spec.OpenstackVolumeRef) &&
-					!(existingDisk.Status.Phase == constants.RDMPhaseManaging || existingDisk.Status.Phase == constants.RDMPhaseManaged || existingDisk.Status.Phase == constants.RDMPhaseError) {
+					isPhaseUpdatable(existingDisk.Status.Phase) {
 					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
 				}
 
