@@ -54,6 +54,7 @@ export const useDirectPodLogs = ({
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
         tailLines: "100",
+        limitBytes: 500000,
         signal: abortController.signal,
       })
 
