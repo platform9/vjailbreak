@@ -76,6 +76,8 @@ sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 passw
 sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
+cat /etc/pf9/pf9-htpasswd.sh >> /home/ubuntu/.bashrc
+
 # Function to wait for K3s to be ready
 wait_for_k3s() {
   local timeout=300
@@ -224,6 +226,5 @@ fi
 # Remove cron job to ensure this runs only once 
 crontab -l | grep -v '@reboot /etc/pf9/install.sh' | crontab -
 check_command "Removing cron job"
-
 # End of script
 exit 0

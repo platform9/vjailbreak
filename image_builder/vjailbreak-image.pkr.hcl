@@ -47,7 +47,10 @@ build {
     source      = "${path.root}/scripts/install.sh"
     destination = "/tmp/install.sh"
   }
-
+  provisioner "file" {
+    source      = "${path.root}/scripts/pf9-htpasswd.sh"
+    destination = "/tmp/pf9-htpasswd.sh"
+  }
   provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
     destination = "/tmp/k3s.env"
@@ -91,6 +94,7 @@ build {
   provisioner "shell" {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
+    "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
     "sudo mkdir -p image_builder/images",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
@@ -105,6 +109,7 @@ build {
     "sudo mv /tmp/version-checker.yaml /etc/pf9/yamls/version-checker.yaml",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
+    "sudo chmod +rwx /etc/pf9/pf9-htpasswd.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
