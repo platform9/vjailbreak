@@ -1,0 +1,74 @@
+---
+# Bind admin role to vjailbreak-admins group from Dex
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-admins-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vjailbreak-admin
+subjects:
+- kind: Group
+  name: vjailbreak-admins
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind operator role to vjailbreak-operators group from Dex
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-operators-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vjailbreak-operator
+subjects:
+- kind: Group
+  name: vjailbreak-operators
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind viewer role to vjailbreak-viewers group from Dex
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-viewers-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vjailbreak-viewer
+subjects:
+- kind: Group
+  name: vjailbreak-viewers
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind credential-manager role to vjailbreak-credential-managers group from Dex
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-credential-managers-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vjailbreak-credential-manager
+subjects:
+- kind: Group
+  name: vjailbreak-credential-managers
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Default admin user binding (for initial setup)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-default-admin-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vjailbreak-admin
+subjects:
+- kind: User
+  name: admin@vjailbreak.local
+  apiGroup: rbac.authorization.k8s.io

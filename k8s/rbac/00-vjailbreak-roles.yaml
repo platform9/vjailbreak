@@ -1,0 +1,200 @@
+---
+# Admin Role - Full access to all vJailbreak resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vjailbreak-admin
+  labels:
+    rbac.vjailbreak.io/role: admin
+rules:
+# Full access to all vJailbreak CRDs
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - bmconfigs
+  - clustermigrations
+  - esximigrations
+  - migrationplans
+  - migrations
+  - migrationtemplates
+  - networkmappings
+  - openstackcreds
+  - pcdclusters
+  - pcdhosts
+  - rdmdisks
+  - rollingmigrationplans
+  - storagemappings
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarecreds
+  - vmwarehosts
+  - vmwaremachines
+  verbs: ["*"]
+# Full access to status subresources
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - "*/status"
+  - "*/finalizers"
+  verbs: ["*"]
+# Access to core resources needed for migrations
+- apiGroups: [""]
+  resources:
+  - pods
+  - pods/log
+  - pods/status
+  - services
+  - secrets
+  - configmaps
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Access to jobs for migration execution
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Access to deployments for scaling
+- apiGroups: ["apps"]
+  resources:
+  - deployments
+  - deployments/scale
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+# Operator Role - Can create and manage migrations but not credentials
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vjailbreak-operator
+  labels:
+    rbac.vjailbreak.io/role: operator
+rules:
+# Create and manage migrations
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - migrationplans
+  - migrations
+  - clustermigrations
+  - esximigrations
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Read-only access to templates and mappings
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - migrationtemplates
+  - networkmappings
+  - storagemappings
+  - rollingmigrationplans
+  verbs: ["get", "list", "watch"]
+# Read-only access to credentials (can use but not modify)
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - vmwarecreds
+  - openstackcreds
+  verbs: ["get", "list", "watch"]
+# Read-only access to infrastructure
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarehosts
+  - vmwaremachines
+  - pcdclusters
+  - pcdhosts
+  - bmconfigs
+  - rdmdisks
+  verbs: ["get", "list", "watch"]
+# Access to status subresources
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - "*/status"
+  verbs: ["get", "list", "watch"]
+# Read access to pods and logs
+- apiGroups: [""]
+  resources:
+  - pods
+  - pods/log
+  - pods/status
+  verbs: ["get", "list", "watch"]
+# Read access to jobs
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  verbs: ["get", "list", "watch"]
+
+---
+# Viewer Role - Read-only access to all resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vjailbreak-viewer
+  labels:
+    rbac.vjailbreak.io/role: viewer
+rules:
+# Read-only access to all vJailbreak CRDs
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - bmconfigs
+  - clustermigrations
+  - esximigrations
+  - migrationplans
+  - migrations
+  - migrationtemplates
+  - networkmappings
+  - openstackcreds
+  - pcdclusters
+  - pcdhosts
+  - rdmdisks
+  - rollingmigrationplans
+  - storagemappings
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarecreds
+  - vmwarehosts
+  - vmwaremachines
+  verbs: ["get", "list", "watch"]
+# Read-only access to status subresources
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - "*/status"
+  verbs: ["get", "list", "watch"]
+# Read-only access to pods and logs
+- apiGroups: [""]
+  resources:
+  - pods
+  - pods/log
+  - pods/status
+  verbs: ["get", "list", "watch"]
+# Read-only access to jobs
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  verbs: ["get", "list", "watch"]
+
+---
+# Credential Manager Role - Can manage credentials only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vjailbreak-credential-manager
+  labels:
+    rbac.vjailbreak.io/role: credential-manager
+rules:
+# Full access to credentials
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - vmwarecreds
+  - openstackcreds
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Full access to network and storage mappings
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - networkmappings
+  - storagemappings
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Full access to migration templates
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources:
+  - migrationtemplates
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Access to secrets for credential storage
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs: ["get", "list", "watch", "create", "update", "patch"]

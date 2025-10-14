@@ -3,6 +3,7 @@ import { useState } from "react"
 import { Route, Routes, useLocation, Navigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
+import AuthGuard from "./components/AuthGuard"
 import RouteCompatibility from "./components/RouteCompatibility"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
 import RollingMigrationFormDrawer from "./features/migration/RollingMigrationForm"
@@ -13,6 +14,8 @@ import CredentialsPage from "./pages/dashboard/CredentialsPage"
 import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
+import LoginPage from "./pages/auth/LoginPage"
+import ChangePasswordPage from "./pages/auth/ChangePasswordPage"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -64,15 +67,41 @@ function App() {
           />
         )}
         <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+          
+          {/* Protected routes */}
           <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
-          <Route path="/dashboard" element={<DashboardLayout />}>
+          <Route 
+            path="/dashboard" 
+            element={
+              <AuthGuard>
+                <DashboardLayout />
+              </AuthGuard>
+            }
+          >
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />
-            <Route path="credentials" element={<CredentialsPage />} />
+            <Route 
+              path="credentials" 
+              element={
+                <AuthGuard requiredRole="credential-manager">
+                  <CredentialsPage />
+                </AuthGuard>
+              } 
+            />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
           </Route>
-          <Route path="/onboarding" element={<Onboarding />} />
+          <Route 
+            path="/onboarding" 
+            element={
+              <AuthGuard>
+                <Onboarding />
+              </AuthGuard>
+            } 
+          />
         </Routes>
       </AppContent>
     </AppFrame>
