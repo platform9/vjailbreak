@@ -95,7 +95,7 @@ spec:
   tls:
   - hosts:
     - "*.nip.io"
-    secretName: vjailbreak-api-tls
+    secretName: vjailbreak-ui-tls
   rules:
   - host: "*.nip.io"
     http:
