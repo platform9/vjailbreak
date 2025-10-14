@@ -109,7 +109,7 @@ build {
     "sudo mv /tmp/version-checker.yaml /etc/pf9/yamls/version-checker.yaml",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
-    "sudo chmod +rwx /etc/pf9/pf9-htpasswd.sh",
+    "sudo chmod +x /etc/pf9/pf9-htpasswd.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
