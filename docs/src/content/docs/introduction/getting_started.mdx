@@ -72,7 +72,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 **Important:** DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
 
 
-- **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually. Changes to `/etc/hosts` apply immediately.
+- **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually later.
   ```shell
   # Example manual addition to /etc/hosts
   sudo sh -c 'echo "192.168.1.100 vcenter.example.com" >> /etc/hosts'
@@ -82,12 +82,12 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
   sudo sh -c 'echo "192.168.1.101 esxi01.example.com esxi01" >> /etc/hosts'
   sudo sh -c 'echo "192.168.1.102 esxi02.example.com esxi02" >> /etc/hosts'
   ```
-
-- **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, you must restart the controller pod for changes to take effect
-  ```shell
-  # After modifying resolv.conf
-  kubectl -n vjailbreak rollout restart deployment migration-controller-manager
+  Once the `/etc/hosts` file is modified execute below commands to apply the changes.
   ```
+  kubectl -n migration-system rollout restart deployment migration-controller-manager
+  ```
+
+- **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, restart the same `migration-controller-manager` deployment as shown above to apply the changes.
 
 ### Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
