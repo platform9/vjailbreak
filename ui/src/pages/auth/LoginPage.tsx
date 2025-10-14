@@ -28,14 +28,6 @@ const LoginCard = styled(Card)(({ theme }) => ({
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
 }));
 
-const Logo = styled('img')({
-  width: 200,
-  marginBottom: 24,
-  display: 'block',
-  marginLeft: 'auto',
-  marginRight: 'auto',
-});
-
 const LoginPage = () => {
   const [isChecking, setIsChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
