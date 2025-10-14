@@ -522,3 +522,186 @@ message CleanupStepResponse {
     bool success = 2;
     string message = 3;
 }
+
+// Identity Provider Management APIs
+service IdentityProvider {
+    rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/idp/providers"
+        };
+    }
+    rpc GetProvider(GetProviderRequest) returns (GetProviderResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/idp/providers/{id}"
+        };
+    }
+    rpc CreateProvider(CreateProviderRequest) returns (CreateProviderResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/idp/providers"
+            body: "*"
+        };
+    }
+    rpc UpdateProvider(UpdateProviderRequest) returns (UpdateProviderResponse) {
+        option (google.api.http) = {
+            put: "/vpw/v1/idp/providers/{id}"
+            body: "*"
+        };
+    }
+    rpc DeleteProvider(DeleteProviderRequest) returns (DeleteProviderResponse) {
+        option (google.api.http) = {
+            delete: "/vpw/v1/idp/providers/{id}"
+        };
+    }
+    rpc TestProvider(TestProviderRequest) returns (TestProviderResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/idp/providers/{id}/test"
+            body: "*"
+        };
+    }
+    rpc RestartDex(RestartDexRequest) returns (RestartDexResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/idp/dex/restart"
+            body: "*"
+        };
+    }
+    rpc ListLocalUsers(ListLocalUsersRequest) returns (ListLocalUsersResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/idp/local/users"
+        };
+    }
+    rpc AddLocalUser(AddLocalUserRequest) returns (AddLocalUserResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/idp/local/users"
+            body: "*"
+        };
+    }
+    rpc UpdateLocalUser(UpdateLocalUserRequest) returns (UpdateLocalUserResponse) {
+        option (google.api.http) = {
+            put: "/vpw/v1/idp/local/users/{email}"
+            body: "*"
+        };
+    }
+    rpc DeleteLocalUser(DeleteLocalUserRequest) returns (DeleteLocalUserResponse) {
+        option (google.api.http) = {
+            delete: "/vpw/v1/idp/local/users/{email}"
+        };
+    }
+}
+
+message ListProvidersRequest {
+}
+
+message ProviderInfo {
+    string id = 1;
+    string type = 2; // "saml", "oidc", "local"
+    string name = 3;
+    string description = 4;
+    bool enabled = 5;
+    string config_json = 6; // JSON encoded config
+}
+
+message ListProvidersResponse {
+    repeated ProviderInfo providers = 1;
+}
+
+message GetProviderRequest {
+    string id = 1;
+}
+
+message GetProviderResponse {
+    ProviderInfo provider = 1;
+}
+
+message CreateProviderRequest {
+    ProviderInfo provider = 1;
+}
+
+message CreateProviderResponse {
+    ProviderInfo provider = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+message UpdateProviderRequest {
+    string id = 1;
+    ProviderInfo provider = 2;
+}
+
+message UpdateProviderResponse {
+    ProviderInfo provider = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+message DeleteProviderRequest {
+    string id = 1;
+}
+
+message DeleteProviderResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message TestProviderRequest {
+    string id = 1;
+}
+
+message TestProviderResponse {
+    bool success = 1;
+    string message = 2;
+    string details = 3;
+}
+
+message RestartDexRequest {
+}
+
+message RestartDexResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message LocalUserInfo {
+    string email = 1;
+    string username = 2;
+    string password = 3; // Only for create/update, never returned
+    string hash = 4; // Bcrypt hash
+    string user_id = 5;
+    repeated string groups = 6;
+}
+
+message ListLocalUsersRequest {
+}
+
+message ListLocalUsersResponse {
+    repeated LocalUserInfo users = 1;
+}
+
+message AddLocalUserRequest {
+    LocalUserInfo user = 1;
+}
+
+message AddLocalUserResponse {
+    LocalUserInfo user = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+message UpdateLocalUserRequest {
+    string email = 1;
+    LocalUserInfo user = 2;
+}
+
+message UpdateLocalUserResponse {
+    LocalUserInfo user = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+message DeleteLocalUserRequest {
+    string email = 1;
+}
+
+message DeleteLocalUserResponse {
+    bool success = 1;
+    string message = 2;
+}

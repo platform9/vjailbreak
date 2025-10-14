@@ -16,6 +16,7 @@ import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
 import LoginPage from "./pages/auth/LoginPage"
 import ChangePasswordPage from "./pages/auth/ChangePasswordPage"
+import IdentityProvidersPage from "./pages/settings/IdentityProvidersPage"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -93,6 +94,14 @@ function App() {
             />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
+            <Route 
+              path="identity-providers" 
+              element={
+                <AuthGuard requiredRole="admin">
+                  <IdentityProvidersPage />
+                </AuthGuard>
+              } 
+            />
           </Route>
           <Route 
             path="/onboarding" 
