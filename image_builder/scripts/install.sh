@@ -182,6 +182,17 @@ if [ "$IS_MASTER" == "true" ]; then
   check_command "Creating config map from env file"
   log "Config map created successfully."
 
+    # Deploy Authentik for RBAC
+  log "Deploying Authentik RBAC system..."
+  kubectl apply -f /etc/pf9/yamls/authentik/
+  check_command "Deploying Authentik"
+  
+  # Deploy OAuth2 Proxy
+  kubectl apply -f /etc/pf9/yamls/oauth2-proxy/
+  check_command "Deploying OAuth2 Proxy"
+    
+  log "RBAC system deployed successfully."
+
 else
   log "Setting up K3s Worker..."
 

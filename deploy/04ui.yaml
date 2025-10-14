@@ -39,10 +39,36 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  name: vjailbreak-oauth2-ingress
+  namespace: migration-system
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Don't require auth for oauth2 endpoints (start, callback, sign_out, etc.)
+    nginx.ingress.kubernetes.io/auth-url: ""
+    nginx.ingress.kubernetes.io/auth-signin: ""
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /oauth2
+        pathType: Prefix
+        backend:
+          service:
+            name: oauth2-proxy
+            port:
+              number: 4180
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
   name: vjailbreak-ui-ingress
   namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/auth-url: "http://$host/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "http://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups"
 spec:
   ingressClassName: nginx
   rules:
@@ -65,6 +91,9 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/auth-url: "http://$host/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "http://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups"
 spec:
   ingressClassName: nginx
   rules:
