@@ -1,0 +1,154 @@
+---
+# Fix the UI ServiceAccount RBAC permissions
+# This grants the UI service account access to vjailbreak custom resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vjailbreak-ui-manager-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role  # This ClusterRole exists in k8s/migration/config/rbac/role.yaml
+subjects:
+- kind: ServiceAccount
+  name: vjailbreak-ui-sa
+  namespace: migration-system
+
+---
+# Additional viewer role for read-only access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vjailbreak-ui-viewer
+  labels:
+    app.kubernetes.io/name: vjailbreak-ui
+    app.kubernetes.io/component: rbac
+rules:
+# Allow reading vjailbreak custom resources
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs
+  - clustermigrations
+  - esximigrations
+  - migrationplans
+  - migrations
+  - migrationtemplates
+  - networkmappings
+  - openstackcreds
+  - pcdclusters
+  - pcdhosts
+  - rdmdisks
+  - rollingmigrationplans
+  - storagemappings
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarecreds
+  - vmwarehosts
+  - vmwaremachines
+  verbs:
+  - get
+  - list
+  - watch
+# Allow reading status subresources
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - bmconfigs/status
+  - clustermigrations/status
+  - esximigrations/status
+  - migrationplans/status
+  - migrations/status
+  - migrationtemplates/status
+  - networkmappings/status
+  - openstackcreds/status
+  - pcdclusters/status
+  - pcdhosts/status
+  - rdmdisks/status
+  - rollingmigrationplans/status
+  - storagemappings/status
+  - vjailbreaknodes/status
+  - vmwarecreds/status
+  - vmwaremachines/status
+  verbs:
+  - get
+# Allow reading pods and logs for debugging
+- apiGroups: [""]
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+# Allow reading configmaps and secrets (for UI configuration)
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+# Allow reading namespaces
+- apiGroups: [""]
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+
+---
+# Audit policy for tracking UI requests
+# Save this as a separate file: /etc/kubernetes/audit-policy.yaml
+# Then configure kube-apiserver with:
+# --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+# --audit-log-path=/var/log/kubernetes/audit.log
+# --audit-log-maxage=30
+# --audit-log-maxbackup=10
+# --audit-log-maxsize=100
+apiVersion: audit.k8s.io/v1
+kind: Policy
+metadata:
+  name: vjailbreak-audit-policy
+rules:
+# Log all requests from vjailbreak-ui-sa at RequestResponse level
+- level: RequestResponse
+  users:
+  - "system:serviceaccount:migration-system:vjailbreak-ui-sa"
+  omitStages:
+  - RequestReceived
+
+# Log vjailbreak custom resource access
+- level: RequestResponse
+  verbs: ["create", "update", "patch", "delete"]
+  resources:
+  - group: "vjailbreak.k8s.pf9.io"
+  omitStages:
+  - RequestReceived
+
+# Log metadata for get/list operations on vjailbreak resources
+- level: Metadata
+  verbs: ["get", "list", "watch"]
+  resources:
+  - group: "vjailbreak.k8s.pf9.io"
+  omitStages:
+  - RequestReceived
+
+# Don't log read requests to system resources
+- level: None
+  users:
+  - "system:kube-proxy"
+  - "system:kube-scheduler"
+  - "system:kube-controller-manager"
+  verbs: ["get", "list", "watch"]
+
+# Log requests to sensitive endpoints at Metadata level
+- level: Metadata
+  resources:
+  - group: ""
+    resources: ["secrets", "configmaps"]
+  omitStages:
+  - RequestReceived
+
+# Default: log everything else at Metadata level
+- level: Metadata
+  omitStages:
+  - RequestReceived
