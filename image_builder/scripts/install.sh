@@ -215,8 +215,37 @@ if [ "$IS_MASTER" == "true" ]; then
     log "Patching Ingress hosts to ${NIP_HOST}"
     kubectl -n migration-system patch ingress vjailbreak-ui-ingress --type=json \
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
-    kubectl -n default patch ingress vjailbreak-api-ingress --type=json \
+    kubectl -n migration-system annotate ingress vjailbreak-ui-ingress \
+      nginx.ingress.kubernetes.io/proxy-hide-headers='WWW-Authenticate' --overwrite || true
+    kubectl -n migration-system patch ingress vjailbreak-api-ingress --type=json \
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
+    kubectl -n migration-system annotate ingress vjailbreak-api-ingress \
+      nginx.ingress.kubernetes.io/proxy-hide-headers='WWW-Authenticate' --overwrite || true
+    cat <<EOF | kubectl apply -f -
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: migration-vpwned-ingress
+      namespace: migration-system
+      annotations:
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+        nginx.ingress.kubernetes.io/use-regex: "true"
+        nginx.ingress.kubernetes.io/rewrite-target: /$1
+        nginx.ingress.kubernetes.io/proxy-hide-headers: "WWW-Authenticate"
+    spec:
+      ingressClassName: nginx
+      rules:
+      - host: "${NIP_HOST}"
+        http:
+          paths:
+          - path: /dev-api/sdk/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: migration-vpwned-service
+                port:
+                  number: 80
+    EOF
     kubectl -n monitoring patch ingress grafana-api-ingress --type=json \
       -p='[{"op":"add","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
   else
