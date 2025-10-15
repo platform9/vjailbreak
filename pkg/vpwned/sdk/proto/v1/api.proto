@@ -667,6 +667,7 @@ message LocalUserInfo {
     string hash = 4; // Bcrypt hash
     string user_id = 5;
     repeated string groups = 6;
+    string role = 7; // User role: super-admin, vjailbreak-admin, admin, operator, viewer
 }
 
 message ListLocalUsersRequest {

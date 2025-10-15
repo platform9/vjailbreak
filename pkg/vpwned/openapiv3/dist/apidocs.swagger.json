@@ -1643,6 +1643,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "role": {
+          "type": "string",
+          "title": "User role: super-admin, vjailbreak-admin, admin, operator, viewer"
         }
       }
     },

@@ -46,6 +46,7 @@ type LocalUser struct {
 	Username string   `yaml:"username" json:"username"`
 	UserID   string   `yaml:"userID" json:"userID"`
 	Groups   []string `yaml:"groups,omitempty" json:"groups,omitempty"`
+	Role     string   `yaml:"role,omitempty" json:"role,omitempty"`
 }
 
 func newIDPServer() *idpGRPC {
@@ -479,6 +480,7 @@ func (s *idpGRPC) ListLocalUsers(ctx context.Context, req *api.ListLocalUsersReq
 			Hash:     user.Hash,
 			UserId:   user.UserID,
 			Groups:   user.Groups,
+			Role:     user.Role,
 		})
 	}
 
@@ -523,6 +525,7 @@ func (s *idpGRPC) AddLocalUser(ctx context.Context, req *api.AddLocalUserRequest
 		Hash:     string(hash),
 		UserID:   req.User.UserId,
 		Groups:   req.User.Groups,
+		Role:     req.User.Role,
 	}
 
 	dexConfig.StaticPasswords = append(dexConfig.StaticPasswords, newUser)
@@ -545,6 +548,7 @@ func (s *idpGRPC) AddLocalUser(ctx context.Context, req *api.AddLocalUserRequest
 			Hash:     newUser.Hash,
 			UserId:   newUser.UserID,
 			Groups:   newUser.Groups,
+			Role:     newUser.Role,
 		},
 		Success: true,
 		Message: "User added successfully",
@@ -581,6 +585,9 @@ func (s *idpGRPC) UpdateLocalUser(ctx context.Context, req *api.UpdateLocalUserR
 			}
 			if len(req.User.Groups) > 0 {
 				dexConfig.StaticPasswords[i].Groups = req.User.Groups
+			}
+			if req.User.Role != "" {
+				dexConfig.StaticPasswords[i].Role = req.User.Role
 			}
 			found = true
 			break
