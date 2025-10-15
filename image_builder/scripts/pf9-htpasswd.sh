@@ -9,7 +9,7 @@ Usage:
   vjbctl user delete <username>
   vjbctl user change-password <username>
   vjbctl user list
-  vjbctl user load
+  vjbctl user refresh
 
 Notes:
   - Stores/reads entries in $HTPASSWD_FILE as username:$apr1$salt$hash (openssl apr1)
@@ -191,7 +191,7 @@ _pf9_ht_main() {
         list)
           list_users
           ;;
-        load|reload)
+        refresh|reload)
           sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
           ;;
         -h|--help|help|"")
