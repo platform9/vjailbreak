@@ -33,8 +33,10 @@ export interface LocalConfig {
 export interface LocalUser {
   email: string;
   username: string;
+  password?: string; // Only for creating/updating
+  hash?: string; // Bcrypt hash (stored)
   userID: string;
-  hash?: string; // bcrypt password hash
+  groups?: string[];
   role?: 'super-admin' | 'vjailbreak-admin' | 'admin' | 'operator' | 'viewer';
 }
 

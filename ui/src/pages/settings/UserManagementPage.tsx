@@ -12,7 +12,6 @@ import {
   Chip,
   Alert,
   CircularProgress,
-  Grid,
   Table,
   TableBody,
   TableCell,
@@ -29,8 +28,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
 import { idpService } from '../../api/idp/idpService';
 import { LocalUser } from '../../api/idp/types';
 
