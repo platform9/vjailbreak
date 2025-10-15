@@ -4,7 +4,9 @@ export interface NavigationItem {
   id: string
   label: string
   path: string
-  icon?: ReactNode
+  icon: ReactNode
+  external?: boolean
+  requiredRole?: string
   badge?: {
     label: string
     color: 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'
@@ -12,7 +14,6 @@ export interface NavigationItem {
   }
   disabled?: boolean
   hidden?: boolean
-  external?: boolean
   separator?: boolean
   children?: NavigationItem[]
 }

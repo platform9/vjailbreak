@@ -17,6 +17,13 @@ data:
       http: 0.0.0.0:5556
       allowedOrigins: ['*']
     
+    # Branding customization
+    frontend:
+      issuer: vJailbreak
+      logoURL: ""
+      dir: ""
+      theme: light
+    
     telemetry:
       http: 0.0.0.0:5558
     
