@@ -221,7 +221,7 @@ if [ "$IS_MASTER" == "true" ]; then
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
     kubectl -n migration-system annotate ingress vjailbreak-api-ingress \
       nginx.ingress.kubernetes.io/proxy-hide-headers='WWW-Authenticate' --overwrite || true
-    cat <<'EOF' | kubectl apply -f -
+    cat <<EOF | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -230,7 +230,7 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/rewrite-target: /\$1
     nginx.ingress.kubernetes.io/proxy-hide-headers: "WWW-Authenticate"
 spec:
   ingressClassName: nginx
