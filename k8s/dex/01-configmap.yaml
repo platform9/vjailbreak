@@ -49,6 +49,7 @@ data:
     - id: vjailbreak-ui
       redirectURIs:
         - 'http://HOST_IP/oauth2/callback'
+        - 'https://HOST_IP/oauth2/callback'
       name: 'vJailbreak UI'
       secret: vjailbreak-ui-secret-change-me
       

@@ -222,6 +222,8 @@ class AuthService {
 
   /**
    * Create authenticated axios instance with both user token and SA token
+   * Note: Browser axios cannot bypass SSL certificate validation
+   * Self-signed certificates must be accepted by the user in the browser
    */
   createAuthenticatedClient() {
     const accessToken = this.getAccessToken();
@@ -232,6 +234,7 @@ class AuthService {
         'X-Auth-Request-Access-Token': accessToken || '',
       },
       withCredentials: true,
+      // Browser axios doesn't support httpsAgent - certificate validation handled by browser
     });
   }
 }
