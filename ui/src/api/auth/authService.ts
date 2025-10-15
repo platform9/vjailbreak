@@ -68,9 +68,38 @@ class AuthService {
 
   /**
    * Get access token from headers (set by OAuth2 Proxy)
+   * Falls back to reading from X-Auth-Request-Access-Token header via userinfo
    */
-  getAccessToken(): string | null {
-    return localStorage.getItem('access_token');
+  async getAccessToken(): Promise<string | null> {
+    // First try localStorage
+    let token = localStorage.getItem('access_token');
+    if (token) return token;
+
+    // If not in localStorage, try to get from OAuth2 proxy userinfo
+    try {
+      const response = await axios.get(`${this.OAUTH2_BASE}/userinfo`, {
+        withCredentials: true,
+      });
+      
+      // OAuth2 proxy may set access token in response headers
+      const headerToken = response.headers['x-auth-request-access-token'];
+      if (headerToken) {
+        localStorage.setItem('access_token', headerToken);
+        return headerToken;
+      }
+      
+      // Extract from ID token if available
+      const idToken = response.data?.id_token || response.headers['x-auth-request-id-token'];
+      if (idToken) {
+        localStorage.setItem('id_token', idToken);
+        localStorage.setItem('access_token', idToken); // Use ID token as access token
+        return idToken;
+      }
+    } catch (error) {
+      console.error('Failed to get token from OAuth2 proxy:', error);
+    }
+
+    return null;
   }
 
   /**
@@ -226,15 +255,12 @@ class AuthService {
    * Self-signed certificates must be accepted by the user in the browser
    */
   createAuthenticatedClient() {
-    const accessToken = this.getAccessToken();
-    
+    // Don't use async here - let OAuth2 proxy handle auth via cookies
+    // The backend should read the token from the OAuth2 proxy forwarded headers
     return axios.create({
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'X-Auth-Request-Access-Token': accessToken || '',
-      },
       withCredentials: true,
-      // Browser axios doesn't support httpsAgent - certificate validation handled by browser
+      // OAuth2 proxy will forward authentication via cookies
+      // Backend nginx/oauth2-proxy will set X-Auth-Request-* headers
     });
   }
 }
