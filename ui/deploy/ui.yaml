@@ -57,6 +57,7 @@ metadata:
     nginx.ingress.kubernetes.io/hsts: "true"
     nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
     nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/proxy-hide-headers: "WWW-Authenticate"
 spec:
   ingressClassName: nginx
   tls:
@@ -75,21 +76,25 @@ spec:
             port:
               number: 80
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes
+  namespace: migration-system
+spec:
+  type: ExternalName
+  externalName: kubernetes.default.svc.cluster.local
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: vjailbreak-api-ingress
-  namespace: default
+  namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    cert-manager.io/cluster-issuer: "selfsigned-cluster-issuer"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
-    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/hsts: "true"
-    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
-    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/proxy-hide-headers: "WWW-Authenticate"
 spec:
   ingressClassName: nginx
   tls:
@@ -100,15 +105,15 @@ spec:
   - host: "*.nip.io"
     http:
       paths:
-      - path: /(apis.*)
-        pathType: ImplementationSpecific
+      - path: /api
+        pathType: Prefix
         backend:
           service:
             name: kubernetes
             port:
               number: 443
-      - path: /(api.*)
-        pathType: ImplementationSpecific
+      - path: /apis
+        pathType: Prefix
         backend:
           service:
             name: kubernetes
