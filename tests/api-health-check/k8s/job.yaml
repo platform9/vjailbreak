@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-health-check-sa
+  namespace: migration-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-health-check-reader
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "secrets", "pods", "services"]
+  verbs: ["get", "list"]
+- apiGroups: ["vjailbreak.k8s.pf9.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: api-health-check-binding
+subjects:
+- kind: ServiceAccount
+  name: api-health-check-sa
+  namespace: migration-system
+roleRef:
+  kind: ClusterRole
+  name: api-health-check-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: api-health-check
+  namespace: migration-system
+  labels:
+    app: api-health-check
+    type: integration-test
+spec:
+  ttlSecondsAfterFinished: 3600  # Keep job for 1 hour after completion
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: api-health-check
+    spec:
+      serviceAccountName: api-health-check-sa
+      restartPolicy: Never
+      containers:
+      - name: health-check
+        image: platform9/vjailbreak-api-health-check:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BASE_URL
+          value: "https://10.9.2.145"
+        - name: SKIP_SSL_VERIFY
+          value: "true"
+        - name: REPORT_FILE
+          value: "/tmp/reports/api-health-report.json"
+        volumeMounts:
+        - name: reports
+          mountPath: /tmp/reports
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: reports
+        emptyDir: {}
+---
+# Optional: ConfigMap for storing the last report
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-health-check-config
+  namespace: migration-system
+data:
+  base-url: "https://10.9.2.145"
+  skip-ssl-verify: "true"
