@@ -53,8 +53,13 @@ class AuthService {
       // Clear local storage
       this.clearTokens();
       
-      // Redirect to OAuth2 Proxy sign out
-      window.location.href = `${this.OAUTH2_BASE}/sign_out?rd=${encodeURIComponent('/login')}`;
+      // Build full HTTPS URL for redirect to avoid HTTP redirect issues
+      const protocol = window.location.protocol; // https:
+      const host = window.location.host; // 10.9.2.145 or hostname
+      const loginUrl = `${protocol}//${host}/login`;
+      
+      // Redirect to OAuth2 Proxy sign out with full URL
+      window.location.href = `${this.OAUTH2_BASE}/sign_out?rd=${encodeURIComponent(loginUrl)}`;
     } catch (error) {
       console.error('Logout failed:', error);
       throw error;

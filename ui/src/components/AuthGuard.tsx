@@ -5,7 +5,7 @@ import { authService } from '../api/auth/authService';
 
 interface AuthGuardProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'operator' | 'viewer' | 'credential-manager';
+  requiredRole?: 'admin' | 'operator' | 'viewer' | 'credential-manager' | 'vjailbreak-admin' | 'super-admin';
 }
 
 const AuthGuard = ({ children, requiredRole }: AuthGuardProps) => {

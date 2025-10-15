@@ -17,6 +17,7 @@ import Onboarding from "./pages/onboarding/Onboarding"
 import LoginPage from "./pages/auth/LoginPage"
 import ChangePasswordPage from "./pages/auth/ChangePasswordPage"
 import IdentityProvidersPage from "./pages/settings/IdentityProvidersPage"
+import UserManagementPage from "./pages/settings/UserManagementPage"
 
 const AppFrame = styled("div")(() => ({
   position: "relative",
@@ -99,6 +100,14 @@ function App() {
               element={
                 <AuthGuard requiredRole="admin">
                   <IdentityProvidersPage />
+                </AuthGuard>
+              } 
+            />
+            <Route 
+              path="users" 
+              element={
+                <AuthGuard requiredRole="vjailbreak-admin">
+                  <UserManagementPage />
                 </AuthGuard>
               } 
             />

@@ -16,6 +16,7 @@ bin/*
 node_modules
 openstack.rc
 .qodo
+.DS_STORE
 pkg/vpwned/vendor/*
 pkg/vpwned/bin/vpwctl
 proto_dependencies

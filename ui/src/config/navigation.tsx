@@ -46,11 +46,18 @@ export const navigationItems: NavigationItem[] = [
     external: true
   },
   {
-    id: 'settings',
-    label: 'Settings',
+    id: 'identity-providers',
+    label: 'Identity Providers',
     path: '/dashboard/identity-providers',
-    icon: <AdminPanelSettingsIcon />,
+    icon: <ConfigIcon />,
     requiredRole: 'admin'
+  },
+  {
+    id: 'user-management',
+    label: 'User Management',
+    path: '/dashboard/users',
+    icon: <AdminPanelSettingsIcon />,
+    requiredRole: 'vjailbreak-admin'
   }
 ]
 
