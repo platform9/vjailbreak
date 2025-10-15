@@ -14,26 +14,38 @@ A comprehensive integration test utility that validates all API endpoints used b
 ## Tested Endpoints
 
 ### Kubernetes API
-- `/api/v1/namespaces` - List namespaces
-- `/api/v1/namespaces/migration-system/vjailbreaknodes` - List nodes
-- `/api/v1/namespaces/migration-system/vjailbreakmigrations` - List migrations
-- `/api/v1/namespaces/migration-system/credentialsecrets` - List credentials
-- `/api/v1/namespaces/migration-system/clustermigrations` - List cluster migrations
-- `/api/v1/namespaces/migration-system/esximigrations` - List ESXi migrations
+- `GET /api/v1/namespaces` - List namespaces
+
+### VJailbreak CRDs
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/vjailbreaknodes`
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrations`
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/vmwarecreds`
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/openstackcreds`
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/clustermigrations`
+- `GET /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/esximigrations`
 
 ### vpwned SDK (gRPC-Gateway)
-- `/dev-api/sdk/vpw/v1/version` - Get version
-- `/dev-api/sdk/vpw/v1/idp/providers` - List identity providers
-- `/dev-api/sdk/vpw/v1/idp/local/users` - List local users
-- `/dev-api/sdk/vpw/v1/validate_openstack_ip` - Validate OpenStack IP
+- `GET /dev-api/sdk/vpw/v1/version` - SDK version
+- `GET /dev-api/sdk/vpw/v1/idp/providers` - List identity providers
+
+### User Management (CRUD)
+- `GET /dev-api/sdk/vpw/v1/idp/local/users` - List local users
+- `POST /dev-api/sdk/vpw/v1/idp/local/users` - Create test user (healthcheck@vjailbreak.local)
+- `PUT /dev-api/sdk/vpw/v1/idp/local/users/{email}` - Update test user
+- `DELETE /dev-api/sdk/vpw/v1/idp/local/users/{email}` - Delete test user
+
+**Note**: User CRUD tests create a test user `healthcheck@vjailbreak.local` with role `viewer`, update it, and then delete it. Set `Skip: true` in the endpoint definition to skip individual tests.
+
+### Other Endpoints
+- `POST /dev-api/sdk/vpw/v1/validate_openstack_ip` - Validate OpenStack IP
 
 ### OAuth2 Proxy
-- `/oauth2/auth` - Auth check
-- `/oauth2/userinfo` - User info
+- `GET /oauth2/auth` - Check authentication
+- `GET /oauth2/userinfo` - Get user info
 
-### UI
-- `/` - Root page
-- `/dashboard` - Dashboard page
+### UI Pages
+- `GET /` - Root page
+- `GET /dashboard` - Dashboard page
 
 ## Quick Start
 

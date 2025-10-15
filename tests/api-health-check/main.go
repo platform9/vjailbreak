@@ -13,11 +13,13 @@ import (
 
 // APIEndpoint represents an API endpoint to test
 type APIEndpoint struct {
-	Name        string
-	Method      string
-	Path        string
-	Description string
+	Name         string
+	Method       string
+	Path         string
+	Description  string
 	RequiresAuth bool
+	Body         string // JSON body for POST/PUT requests
+	Skip         bool   // Skip this test
 }
 
 // TestResult represents the result of testing an endpoint
@@ -150,11 +152,48 @@ func getAPIEndpoints() []APIEndpoint {
 			RequiresAuth: false,
 		},
 		{
-			Name:        "List Local Users",
-			Method:      "GET",
-			Path:        "/dev-api/sdk/vpw/v1/idp/local/users",
-			Description: "SDK IDP - List local users",
+			Name:         "List Local Users",
+			Method:       "GET",
+			Path:         "/dev-api/sdk/vpw/v1/idp/local/users",
+			Description:  "SDK IDP - List local users",
 			RequiresAuth: false,
+		},
+		{
+			Name:         "Create Test User",
+			Method:       "POST",
+			Path:         "/dev-api/sdk/vpw/v1/idp/local/users",
+			Description:  "SDK IDP - Create test user",
+			RequiresAuth: false,
+			Body: `{
+				"email": "healthcheck@vjailbreak.local",
+				"username": "healthcheck",
+				"password": "HealthCheck123!",
+				"role": "viewer",
+				"userID": "healthcheck-user"
+			}`,
+		},
+		{
+			Name:         "Update Test User",
+			Method:       "PUT",
+			Path:         "/dev-api/sdk/vpw/v1/idp/local/users/healthcheck@vjailbreak.local",
+			Description:  "SDK IDP - Update test user password",
+			RequiresAuth: false,
+			Body: `{
+				"email": "healthcheck@vjailbreak.local",
+				"username": "healthcheck-updated",
+				"password": "NewPassword123!",
+				"role": "viewer",
+				"userID": "healthcheck-user"
+			}`,
+			Skip: false, // Set to true to skip update test
+		},
+		{
+			Name:         "Delete Test User",
+			Method:       "DELETE",
+			Path:         "/dev-api/sdk/vpw/v1/idp/local/users/healthcheck@vjailbreak.local",
+			Description:  "SDK IDP - Delete test user",
+			RequiresAuth: false,
+			Skip:         false, // Set to true to skip delete test
 		},
 		{
 			Name:        "Validate OpenStack IP",
@@ -200,6 +239,15 @@ func getAPIEndpoints() []APIEndpoint {
 
 // testEndpoint tests a single API endpoint
 func testEndpoint(endpoint APIEndpoint) TestResult {
+	// Skip if marked to skip
+	if endpoint.Skip {
+		return TestResult{
+			Endpoint:  endpoint,
+			Success:   true,
+			Error:     "Skipped",
+			Timestamp: time.Now(),
+		}
+	}
 	result := TestResult{
 		Endpoint:  endpoint,
 		Timestamp: time.Now(),
@@ -212,9 +260,15 @@ func testEndpoint(endpoint APIEndpoint) TestResult {
 	var req *http.Request
 	var err error
 
-	if endpoint.Method == "POST" {
-		// For POST requests, send empty JSON body
-		req, err = http.NewRequest(endpoint.Method, url, strings.NewReader("{}"))
+	body := endpoint.Body
+	if body == "" && (endpoint.Method == "POST" || endpoint.Method == "PUT") {
+		// Default to empty JSON for POST/PUT if no body specified
+		body = "{}"
+	}
+
+	if body != "" {
+		// For POST/PUT requests with body
+		req, err = http.NewRequest(endpoint.Method, url, strings.NewReader(body))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
@@ -251,14 +305,14 @@ func testEndpoint(endpoint APIEndpoint) TestResult {
 	result.StatusCode = resp.StatusCode
 
 	// Read response body
-	body, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 
 	// Determine success based on status code
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		result.Success = true
 	} else {
 		result.Success = false
-		result.Error = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+		result.Error = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody))
 		if len(result.Error) > 200 {
 			result.Error = result.Error[:200] + "..."
 		}
