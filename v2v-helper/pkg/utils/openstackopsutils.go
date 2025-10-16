@@ -459,7 +459,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 			return sn, nil
 		}
 	}
-	return nil, fmt.Errorf("IP %s is not in any of the subnets", ip)
+	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
 func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
