@@ -16,7 +16,7 @@ spec:
       serviceAccountName: vjailbreak-ui-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.1
+          image: quay.io/platform9/vjailbreak-ui:2458-038b041
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -26,7 +26,7 @@ spec:
               value: /var/run/secrets/kubernetes.io/serviceaccount/token
             # Dex configuration
             - name: DEX_ISSUER
-              value: "http://HOST_IP:5556/dex"
+              value: "https://HOST_IP/dex"
             - name: OAUTH2_PROXY_URL
               value: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local:4180"
             # API server configuration
@@ -80,11 +80,15 @@ metadata:
   name: vjailbreak-api-ingress
   namespace: migration-system
   annotations:
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    # Force HTTPS redirect
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    # NO OAuth2 auth annotations - let service account tokens pass through
+    # Backend protocol for Kubernetes API
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "false"
+    # Pass Authorization header to backend
+    nginx.ingress.kubernetes.io/proxy-set-headers: "nginx-ingress/custom-headers"
+    # Explicitly disable OAuth2 auth for API paths
+    nginx.ingress.kubernetes.io/auth-url: ""
+    # Higher priority to match before UI ingress catches everything  
+    nginx.ingress.kubernetes.io/priority: "100"
 spec:
   ingressClassName: nginx
   rules:
@@ -94,16 +98,16 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: vjailbreak-ui-service
+            name: kubernetes
             port:
-              number: 80
+              number: 443
       - path: /apis
         pathType: Prefix
         backend:
           service:
-            name: vjailbreak-ui-service
+            name: kubernetes
             port:
-              number: 80
+              number: 443
 
 ---
 # UI Ingress WITH OAuth2 Proxy authentication
@@ -118,17 +122,40 @@ metadata:
     # Force HTTPS redirect
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Lower priority than API ingress (default is 0)
+    nginx.ingress.kubernetes.io/priority: "10"
     # OAuth2 Proxy annotations for UI authentication
     nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local:4180/oauth2/auth"
-    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$scheme://$host$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$scheme://$host/dashboard"
     nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Access-Token,Authorization"
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
-      - path: /
+      - path: /dashboard
         pathType: Prefix
+        backend:
+          service:
+            name: vjailbreak-ui-service
+            port:
+              number: 80
+      - path: /onboarding
+        pathType: Prefix
+        backend:
+          service:
+            name: vjailbreak-ui-service
+            port:
+              number: 80
+      - path: /assets
+        pathType: Prefix
+        backend:
+          service:
+            name: vjailbreak-ui-service
+            port:
+              number: 80
+      - path: /
+        pathType: Exact
         backend:
           service:
             name: vjailbreak-ui-service

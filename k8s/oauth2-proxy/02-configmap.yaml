@@ -10,22 +10,25 @@ data:
     provider_display_name = "vJailbreak Login"
     
     # Dex OIDC configuration (will be updated by setup script with actual IP)
-    # Note: Dex is exposed via Ingress on port 80, not directly on port 5556
-    oidc_issuer_url = "http://HOST_IP/dex"
-    redirect_url = "http://HOST_IP/oauth2/callback"
+    # Note: Dex is exposed via Ingress with HTTPS (SSL termination at ingress)
+    oidc_issuer_url = "https://HOST_IP/dex"
+    redirect_url = "https://HOST_IP/oauth2/callback"
     
     # OAuth2 endpoints
-    login_url = "http://HOST_IP/dex/auth"
+    login_url = "https://HOST_IP/dex/auth"
     redeem_url = "http://dex.dex.svc.cluster.local:5556/dex/token"
     oidc_jwks_url = "http://dex.dex.svc.cluster.local:5556/dex/keys"
     
+    # Skip TLS verification for self-signed certificates (development only)
+    ssl_insecure_skip_verify = true
+    
     # Email and user configuration
     email_domains = ["*"]
-    whitelist_domains = []
+    whitelist_domains = ["HOST_IP"]
     
     # Cookie configuration
     cookie_name = "_oauth2_proxy"
-    cookie_secure = false
+    cookie_secure = true
     cookie_httponly = true
     cookie_samesite = "lax"
     cookie_domains = []

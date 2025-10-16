@@ -5,8 +5,8 @@ metadata:
   namespace: dex
 data:
   config.yaml: |
-    # Issuer URL - Dex is exposed via Ingress on port 80, not directly on port 5556
-    issuer: http://HOST_IP/dex
+    # Issuer URL - Dex is exposed via Ingress with HTTPS (SSL termination at ingress)
+    issuer: https://HOST_IP/dex
     
     storage:
       type: kubernetes
@@ -19,7 +19,7 @@ data:
     
     # Branding customization
     frontend:
-      issuer: vJailbreak
+      issuer: "vJailbreak - VM Migration Platform"
       logoURL: ""
       dir: ""
       theme: light
@@ -48,7 +48,6 @@ data:
     staticClients:
     - id: vjailbreak-ui
       redirectURIs:
-        - 'http://HOST_IP/oauth2/callback'
         - 'https://HOST_IP/oauth2/callback'
       name: 'vJailbreak UI'
       secret: vjailbreak-ui-secret-change-me
