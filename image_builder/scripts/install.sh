@@ -157,23 +157,6 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl wait --namespace nginx-ingress --for=condition=ready pod --selector=app.kubernetes.io/name=ingress-nginx --timeout=300s
   check_command "Waiting for NGINX Ingress Controller to be ready"
 
-  if [ -d "/etc/pf9/yamls/cert-manager" ]; then
-    sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
-    check_command "Applying cert-manager core manifests"
-
-    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager --timeout=300s
-    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager-cainjector --timeout=300s
-    sudo kubectl -n cert-manager wait --for=condition=Available deployment/cert-manager-webhook --timeout=300s
-    check_command "Waiting for cert-manager deployments"
-
-    if [ -f "/etc/pf9/yamls/cert-manager/cluster-issuer.yaml" ]; then
-      sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cluster-issuer.yaml
-      check_command "Applying self-signed ClusterIssuer"
-    fi
-  else
-    log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
-  fi
-
   # Apply monitoring manifests
   log "Applying kube-prometheus manifests..."
   sudo kubectl --request-timeout=300s apply --server-side -f /etc/pf9/yamls/kube-prometheus/manifests/setup
@@ -200,30 +183,6 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
-
-  detect_primary_ip() {
-    if [ -n "${MASTER_IP}" ]; then
-      echo "${MASTER_IP}"
-      return 0
-    fi
-    ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]; exit}'
-  }
-
-  VM_IP=$(detect_primary_ip)
-  if [ -n "$VM_IP" ]; then
-    NIP_HOST="${VM_IP}.nip.io"
-    log "Patching Ingress hosts to ${NIP_HOST}"
-    kubectl -n migration-system patch ingress vjailbreak-ui-ingress --type=json \
-      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
-    kubectl -n default patch ingress vjailbreak-api-ingress --type=json \
-      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
-    kubectl -n migration-system patch ingress migration-vpwned-ingress --type=json \
-      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
-    kubectl -n monitoring patch ingress grafana-api-ingress --type=json \
-      -p='[{"op":"add","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
-  else
-    log "WARNING: Could not detect VM IP to patch Ingress hosts."
-  fi
 
 else
   log "Setting up K3s Worker..."
