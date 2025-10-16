@@ -217,6 +217,8 @@ if [ "$IS_MASTER" == "true" ]; then
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
     kubectl -n default patch ingress vjailbreak-api-ingress --type=json \
       -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"},{"op":"replace","path":"/spec/tls/0/hosts/0","value":"'"${NIP_HOST}"'"}]' || true
+    kubectl -n migration-system patch ingress migration-vpwned-ingress --type=json \
+      -p='[{"op":"replace","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
     kubectl -n monitoring patch ingress grafana-api-ingress --type=json \
       -p='[{"op":"add","path":"/spec/rules/0/host","value":"'"${NIP_HOST}"'"}]' || true
   else
