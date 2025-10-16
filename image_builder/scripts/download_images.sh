@@ -30,6 +30,12 @@ virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stab
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
 
+# Download cert-manager manifests
+CERT_MANAGER_VERSION="v1.16.1"
+CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+mkdir -p image_builder/cert-manager-manifests
+curl -L "${CERT_MANAGER_URL}" -o image_builder/cert-manager-manifests/cert-manager.yaml
+
 # Download and export images
 images=(
   "$kube_state_metrics"
