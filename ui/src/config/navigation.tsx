@@ -5,6 +5,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Analytics'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -43,6 +44,20 @@ export const navigationItems: NavigationItem[] = [
     path: '/grafana',
     icon: <MonitoringIcon />,
     external: true
+  },
+  {
+    id: 'identity-providers',
+    label: 'Identity Providers',
+    path: '/dashboard/identity-providers',
+    icon: <ConfigIcon />,
+    requiredRole: 'admin'
+  },
+  {
+    id: 'user-management',
+    label: 'User Management',
+    path: '/dashboard/users',
+    icon: <AdminPanelSettingsIcon />,
+    requiredRole: 'vjailbreak-admin'
   }
 ]
 

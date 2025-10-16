@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: api-health-check-cron
+  namespace: migration-system
+  labels:
+    app: api-health-check
+    type: scheduled-test
+spec:
+  # Run every 15 minutes
+  schedule: "*/15 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 900  # Clean up after 15 minutes
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: api-health-check
+        spec:
+          serviceAccountName: api-health-check-sa
+          restartPolicy: Never
+          containers:
+          - name: health-check
+            image: platform9/vjailbreak-api-health-check:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BASE_URL
+              value: "https://10.9.2.145"
+            - name: SKIP_SSL_VERIFY
+              value: "true"
+            - name: REPORT_FILE
+              value: "/tmp/reports/api-health-report.json"
+            volumeMounts:
+            - name: reports
+              mountPath: /tmp/reports
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "100m"
+              limits:
+                memory: "128Mi"
+                cpu: "200m"
+          volumes:
+          - name: reports
+            emptyDir: {}
