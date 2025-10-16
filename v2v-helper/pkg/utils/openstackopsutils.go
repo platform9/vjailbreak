@@ -455,6 +455,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 			return nil, fmt.Errorf("failed to parse CIDR %q for subnet %s : %w", sn.CIDR, sn.ID, err)
 		}
 		if ipNet.Contains(parsedIp) {
+			PrintLog(fmt.Sprintf("DEBUG : Subnet %s contains IP %s", sn.ID, ip))
 			return sn, nil
 		}
 	}
@@ -504,9 +505,13 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	if ip != "" {
 		PrintLog(fmt.Sprintf("DEBUG : SUNET LIST  : %v", network.Subnets))
+		subnet, err := osclient.GetSubnet(network.Subnets, ip)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get subnet: %s", err)
+		}
 		createOpts.FixedIPs = []ports.IP{
 			{
-				SubnetID:  network.Subnets[0],
+				SubnetID:  subnet.ID,
 				IPAddress: ip,
 			},
 		}
