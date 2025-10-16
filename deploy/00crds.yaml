@@ -2182,6 +2182,7 @@ spec:
                 type: string
             required:
             - datacenter
+            - vcenterHost
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
@@ -3670,8 +3671,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: '*.nip.io'
-    http:
+  - http:
       paths:
       - backend:
           service:
