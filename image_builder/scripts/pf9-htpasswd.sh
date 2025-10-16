@@ -5,9 +5,11 @@ DEFAULT_USER="ubuntu"
 usage() {
   cat >&2 <<USAGE
 Usage:
-  pf9-htpasswd create-user <username>
-  pf9-htpasswd update-password <username>
-  pf9-htpasswd delete-user <username>
+  vjbctl user create <username>
+  vjbctl user delete <username>
+  vjbctl user change-password <username>
+  vjbctl user list
+  vjbctl user refresh
 
 Notes:
   - Stores/reads entries in $HTPASSWD_FILE as username:$apr1$salt$hash (openssl apr1)
@@ -154,44 +156,67 @@ delete_user() {
   echo "User '$user' removed from $HTPASSWD_FILE."
 }
 
+list_users() {
+  ensure_file
+  awk -F: 'NF>=2 {print $1}' "$HTPASSWD_FILE"
+}
+
 _pf9_ht_main() {
-  local cmd="${1:-}"; shift || true
-  case "$cmd" in
-    create-user)
-      local user="${1:-}"; shift || true
-      if [[ -z "${user:-}" ]]; then
-        prompt_user "$DEFAULT_USER" user
-      fi
-      create_user "$user"
-      ;;
-    update-password)
-      local user="${1:-}"; shift || true
-      if [[ -z "${user:-}" ]]; then
-        prompt_user "$DEFAULT_USER" user
-      fi
-      change_password "$user"
-      ;;
-    delete-user)
-      local user="${1:-}"; shift || true
-      if [[ -z "${user:-}" ]]; then
-        prompt_user "$DEFAULT_USER" user
-      fi
-      delete_user "$user"
+  local ns="${1:-}"; shift || true
+  case "$ns" in
+    user)
+      local sub="${1:-}"; shift || true
+      case "$sub" in
+        create)
+          local user="${1:-}"; shift || true
+          if [[ -z "${user:-}" ]]; then
+            prompt_user "$DEFAULT_USER" user
+          fi
+          create_user "$user"
+          ;;
+        delete)
+          local user="${1:-}"; shift || true
+          if [[ -z "${user:-}" ]]; then
+            prompt_user "$DEFAULT_USER" user
+          fi
+          delete_user "$user"
+          ;;
+        change-password)
+          local user="${1:-}"; shift || true
+          if [[ -z "${user:-}" ]]; then
+            prompt_user "$DEFAULT_USER" user
+          fi
+          change_password "$user"
+          ;;
+        list)
+          list_users
+          ;;
+        refresh|reload)
+          sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          ;;
+        -h|--help|help|"")
+          usage; return 2
+          ;;
+        *)
+          echo "Unknown user subcommand: $sub" >&2
+          usage; return 2
+          ;;
+      esac
       ;;
     -h|--help|help|"")
       usage; return 2
       ;;
     *)
-      echo "Unknown command: $cmd" >&2
+      echo "Unknown command group: $ns" >&2
       usage; return 2
       ;;
   esac
 }
 
 # Define shell function to use as a command when sourced in .bashrc
-pf9_htpasswd() {
+vjb_ctl() {
   _pf9_ht_main "$@"
 }
 
 # Alias with hyphenated name for convenience
-alias pf9-htpasswd='pf9_htpasswd'
+alias vjbctl='vjb_ctl'
