@@ -93,8 +93,3 @@ vjbctl user delete temp.user
 # For changes to be reflected, refresh
 vjbctl user refresh
 ```
-
-## See also
-
-- Guides: `/guides/cli-api/migrating_using_cli_and_kubectl/`
-
