@@ -34,8 +34,8 @@ COPY default.conf /etc/nginx/conf.d/default.conf
 # Copy the startup script
 COPY startup.sh /usr/local/bin/start.sh
 
-# Expose nginx default port
-EXPOSE 80
+# Expose port
+EXPOSE 3000
 
 # Start Nginx server
 CMD ["/usr/local/bin/start.sh"]

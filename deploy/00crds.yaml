@@ -3670,8 +3670,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: '*.nip.io'
-    http:
+  - http:
       paths:
       - backend:
           service:

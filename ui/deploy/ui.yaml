@@ -39,8 +39,7 @@ spec:
     app: vjailbreak-ui
   type: ClusterIP
   ports:
-    - name: http
-      protocol: TCP
+    - protocol: TCP
       port: 80
       targetPort: 80
 ---
@@ -51,21 +50,12 @@ metadata:
   namespace: migration-system
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    cert-manager.io/cluster-issuer: "selfsigned-cluster-issuer"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/hsts: "true"
-    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
-    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - "*.nip.io"
-    secretName: vjailbreak-ui-tls
   rules:
-  - host: "*.nip.io"
-    http:
+  - http:
       paths:
       - path: /
         pathType: Prefix
@@ -82,23 +72,14 @@ metadata:
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    cert-manager.io/cluster-issuer: "selfsigned-cluster-issuer"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/hsts: "true"
-    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
-    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - "*.nip.io"
-    secretName: vjailbreak-ui-tls
   rules:
-  - host: "*.nip.io"
-    http:
+  - http:
       paths:
       - path: /(apis.*)
         pathType: ImplementationSpecific

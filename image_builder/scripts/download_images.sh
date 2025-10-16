@@ -27,10 +27,14 @@ controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-CERT_MANAGER_VERSION="v1.14.3"
-CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
+
+# Download cert-manager manifests
+CERT_MANAGER_VERSION="v1.16.1"
+CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+mkdir -p image_builder/cert-manager-manifests
+curl -L "${CERT_MANAGER_URL}" -o image_builder/cert-manager-manifests/cert-manager.yaml
 
 # Download and export images
 images=(
@@ -74,16 +78,3 @@ echo "[✔] All images downloaded and exported as tar files."
 # Download virtio-win.iso
 echo "[*] Downloading virtio-win.iso"
 wget -O image_builder/images/virtio-win.iso "$virtiowin"
-
-
-mkdir -p image_builder/cert-manager-manifests
-curl -L "${CERT_MANAGER_URL}" -o image_builder/cert-manager-manifests/cert-manager.yaml
-
-cat > image_builder/cert-manager-manifests/cluster-issuer.yaml << 'EOF'
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: selfsigned-cluster-issuer
-spec:
-  selfSigned: {}
-EOF
