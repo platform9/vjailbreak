@@ -264,8 +264,9 @@ else
 
 fi
 
+log "removing the cron job"
 # Remove cron job to ensure this runs only once 
-crontab -l | grep -v '@reboot /etc/pf9/install.sh' | crontab -
+sed -i 's;^@reboot root /etc/pf9/install.sh;;' /etc/crontab
 check_command "Removing cron job"
 # End of script
 exit 0
