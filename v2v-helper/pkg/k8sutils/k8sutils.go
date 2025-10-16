@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -182,6 +183,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
 		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
 		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
-		ValidateRDMOwnerVMs:                 vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] == "true",
+		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
 	}, nil
 }
