@@ -80,7 +80,7 @@ const CdsIconWrapper = styled('div')({
 
 
 const CustomToolbarWithActions = (props) => {
-  const { rowSelectionModel, onAssignFlavor, onAssignIP, hasPoweredOffVMs, ...toolbarProps } = props;
+  const { rowSelectionModel, onAssignFlavor, onAssignIP, poweredOffSelectionCount, ...toolbarProps } = props;
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
@@ -98,14 +98,14 @@ const CustomToolbarWithActions = (props) => {
             >
               Assign Flavor ({rowSelectionModel.length})
             </Button>
-            {hasPoweredOffVMs && (
+            {poweredOffSelectionCount > 0 && (
               <Button
                 variant="text"
                 color="primary"
                 onClick={onAssignIP}
                 size="small"
               >
-                Assign IP ({rowSelectionModel.length})
+                Assign IP ({poweredOffSelectionCount})
               </Button>
             )}
           </>
@@ -1228,25 +1228,29 @@ export default function VmsSelectionStep({
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
               slots={{
-                toolbar: (props) => (
-                  <CustomToolbarWithActions
-                    {...props}
-                    onRefresh={() => refreshVMList()}
-                    disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
-                    placeholder="Search by Name, Network Interface, CPU, or Memory"
-                    rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
-                      vmsWithFlavor.some(vm => vm.name === vmName)
-                    )}
-                    onAssignFlavor={handleOpenFlavorDialog}
-                    onAssignRdmConfiguration={handleOpenRdmConfigurationDialog}
-                    hasRdmVMs={rdmValidation.hasRdmVMs}
-                    onAssignIP={handleOpenBulkIPAssignment}
-                    hasPoweredOffVMs={Array.from(selectedVMs).some(vmName => {
-                      const vm = vmsWithFlavor.find(v => v.name === vmName);
-                      return vm && vm.powerState === "powered-off";
-                    })}
-                  />
-                ),
+                toolbar: (props) => {
+                  const poweredOffSelectionCount = Array.from(selectedVMs).filter(vmName => {
+                    const vm = vmsWithFlavor.find(v => v.name === vmName);
+                    return vm && vm.powerState === "powered-off";
+                  }).length;
+
+                  return (
+                    <CustomToolbarWithActions
+                      {...props}
+                      onRefresh={() => refreshVMList()}
+                      disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
+                      placeholder="Search by Name, Network Interface, CPU, or Memory"
+                      rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
+                        vmsWithFlavor.some(vm => vm.name === vmName)
+                      )}
+                      onAssignFlavor={handleOpenFlavorDialog}
+                      onAssignRdmConfiguration={handleOpenRdmConfigurationDialog}
+                      hasRdmVMs={rdmValidation.hasRdmVMs}
+                      onAssignIP={handleOpenBulkIPAssignment}
+                      poweredOffSelectionCount={poweredOffSelectionCount}
+                    />
+                  );
+                },
                 loadingOverlay: () => (
                   <CustomLoadingOverlay loadingMessage="Loading VMs ..." />
                 ),
