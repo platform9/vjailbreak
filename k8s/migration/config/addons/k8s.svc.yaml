@@ -73,8 +73,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: "*.nip.io"
-    http:
+  - http:
       paths:
       - path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific

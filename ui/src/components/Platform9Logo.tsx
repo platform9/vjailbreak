@@ -50,6 +50,7 @@ export default function Platform9Logo({ collapsed = false }: Platform9LogoProps)
       try { 
         const result = await getDeploymentName();
         setDepname(result);
+        document.title = result;
       } catch (e) {
         setDepname("vJailbreak")
         console.error("Failed to fetch data:", e);
