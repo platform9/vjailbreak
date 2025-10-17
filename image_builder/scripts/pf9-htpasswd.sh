@@ -165,7 +165,7 @@ _pf9_ht_main() {
   local args=()
   for arg in "$@"; do
     case "$arg" in
-      --no-reboot)
+      --no-restart)
         no_reboot=1
         ;;
       *)
