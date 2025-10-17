@@ -1,6 +1,5 @@
-
 HTPASSWD_FILE="/etc/htpasswd"
-DEFAULT_USER="ubuntu"
+DEFAULT_USER="admin"
 
 usage() {
   cat >&2 <<USAGE
@@ -162,6 +161,20 @@ list_users() {
 }
 
 _pf9_ht_main() {
+  local no_reboot=0
+  local args=()
+  for arg in "$@"; do
+    case "$arg" in
+      --no-reboot)
+        no_reboot=1
+        ;;
+      *)
+        args+=("$arg")
+        ;;
+    esac
+  done
+  set -- "${args[@]}"
+
   local ns="${1:-}"; shift || true
   case "$ns" in
     user)
@@ -173,6 +186,9 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           create_user "$user"
+          if [[ $no_reboot -eq 0 ]]; then
+            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          fi
           ;;
         delete)
           local user="${1:-}"; shift || true
@@ -180,6 +196,9 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           delete_user "$user"
+          if [[ $no_reboot -eq 0 ]]; then
+            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          fi
           ;;
         change-password)
           local user="${1:-}"; shift || true
@@ -187,9 +206,15 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           change_password "$user"
+          if [[ $no_reboot -eq 0 ]]; then
+            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          fi
           ;;
         list)
           list_users
+          if [[ $no_reboot -eq 0 ]]; then
+            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          fi
           ;;
         refresh|reload)
           sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
