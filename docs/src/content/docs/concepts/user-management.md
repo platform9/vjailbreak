@@ -34,6 +34,8 @@ vjbctl user change-password <username>
 vjbctl user refresh
 ```
 
+> Tip: Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `change-password`) to defer applying changes. Then run `vjbctl user refresh` once to apply all pending changes for better efficiency.
+
 ## Usage
 
 > Note: After any user change (e.g., password updates or deletions), run `vjbctl user refresh` for the changes to be reflected.
@@ -61,6 +63,20 @@ vjbctl user change-password <username>
 ```
 
 You will be prompted to enter the new password in the terminal.
+
+### Batch multiple changes efficiently
+
+To avoid refreshing after every change, you can batch multiple operations using `--no-restart` and then apply them all at once with a single refresh:
+
+```bash
+# Defer applying changes while making multiple updates
+vjbctl user create <username> --no-restart
+vjbctl user change-password <username> --no-restart
+vjbctl user delete <username> --no-restart
+
+# Apply all pending changes
+vjbctl user refresh
+```
 
 ### Refresh user credentials
 
