@@ -161,12 +161,12 @@ list_users() {
 }
 
 _pf9_ht_main() {
-  local no_reboot=0
+  local no_restart=0
   local args=()
   for arg in "$@"; do
     case "$arg" in
       --no-restart)
-        no_reboot=1
+        no_restart=1
         ;;
       *)
         args+=("$arg")
@@ -186,7 +186,7 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           create_user "$user"
-          if [[ $no_reboot -eq 0 ]]; then
+          if [[ $no_restart -eq 0 ]]; then
             sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
           fi
           ;;
@@ -196,7 +196,7 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           delete_user "$user"
-          if [[ $no_reboot -eq 0 ]]; then
+          if [[ $no_restart -eq 0 ]]; then
             sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
           fi
           ;;
@@ -206,13 +206,13 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           change_password "$user"
-          if [[ $no_reboot -eq 0 ]]; then
+          if [[ $no_restart -eq 0 ]]; then
             sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
           fi
           ;;
         list)
           list_users
-          if [[ $no_reboot -eq 0 ]]; then
+          if [[ $no_restart -eq 0 ]]; then
             sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
           fi
           ;;
