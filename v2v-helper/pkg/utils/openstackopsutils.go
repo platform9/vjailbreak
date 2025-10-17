@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 )
 
 type OpenStackClients struct {
@@ -438,7 +440,27 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	}
 	return port, nil
 }
-
+func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*subnets.Subnet, error) {
+	parsedIp := net.ParseIP(ip)
+	if parsedIp == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", ip)
+	}
+	for _, subnet := range subnetList {
+		sn, err := subnets.Get(osclient.NetworkingClient, subnet).Extract()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get subnet: %s", err)
+		}
+		_, ipNet, err := net.ParseCIDR(sn.CIDR)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CIDR %q for subnet %s : %w", sn.CIDR, sn.ID, err)
+		}
+		if ipNet.Contains(parsedIp) {
+			PrintLog(fmt.Sprintf("Subnet %s contains IP %s", sn.ID, ip))
+			return sn, nil
+		}
+	}
+	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
+}
 func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
@@ -482,9 +504,14 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	}
 
 	if ip != "" {
+		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
+		subnet, err := osclient.GetSubnet(network.Subnets, ip)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get subnet: %s", err)
+		}
 		createOpts.FixedIPs = []ports.IP{
 			{
-				SubnetID:  network.Subnets[0],
+				SubnetID:  subnet.ID,
 				IPAddress: ip,
 			},
 		}
