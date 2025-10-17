@@ -72,7 +72,7 @@ set_default_password
 check_command "Setting default password for ubuntu user"
 
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
-sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 password)" > /etc/htpasswd'
+sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
 sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
