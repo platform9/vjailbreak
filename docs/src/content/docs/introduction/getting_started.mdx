@@ -89,6 +89,22 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 
 - **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, restart the same `migration-controller-manager` deployment as shown above to apply the changes.
 
+### Initial Access Steps
+ 
+ - **SSH Access**
+   - Username: ubuntu
+   - Password: password
+   - Note: After you SSH, you will be prompted to change the password.
+   - Example:
+     ```bash
+     ssh ubuntu@<vjailbreak-vm-ip>
+     ```
+ 
+ - **UI Access**
+   - URL: http://<vjailbreak-vm-ip>/
+   - Username: admin
+   - Password: password
+ 
 ### Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
 - Start the migration process by providing the VMware vCenter and OpenStack admin.rc credentials.
@@ -97,4 +113,3 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 
 ### Scaling vJailbreak
 <ReadMore>Read more about [scaling vJailbreak](../../guides/how-to/scaling/).</ReadMore>
-
