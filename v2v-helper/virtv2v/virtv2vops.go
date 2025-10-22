@@ -41,6 +41,34 @@ type VirtV2VOperations interface {
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
 }
 
+// AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
+func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
+    // Create the netplan file locally
+    localPath := "/home/fedora/50-vj.yaml"
+    if err := os.WriteFile(localPath, []byte(netplanYAML), 0644); err != nil {
+        return fmt.Errorf("failed to create netplan yaml: %s", err)
+    }
+    log.Println("Created local netplan YAML")
+    log.Println("Uploading netplan YAML to disk")
+    os.Setenv("LIBGUESTFS_BACKEND", "direct")
+    var (
+        ans string
+        err error
+    )
+    if useSingleDisk {
+        command := `upload /home/fedora/50-vj.yaml /etc/netplan/50-vj.yaml`
+        ans, err = RunCommandInGuest(diskPath, command, true)
+    } else {
+        command := "upload"
+        ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/50-vj.yaml", "/etc/netplan/50-vj.yaml")
+    }
+    if err != nil {
+        fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
+        return err
+    }
+    return nil
+}
+
 func RetainAlphanumeric(input string) string {
 	var builder strings.Builder
 	for _, char := range input {
