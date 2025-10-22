@@ -1364,6 +1364,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
 		}
 	} else {
+		utils.PrintLog(fmt.Sprintf("DEBUG : Net Names : %v", networknames))
 		for idx, networkname := range networknames {
 			// Create Port Group with the same mac address as the source VM
 			// Find the network with the given ID
@@ -1382,6 +1383,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			} else {
 				ip = vminfo.IPs[idx]
 			}
+			utils.PrintLog(fmt.Sprintf("DEBUG : VM IP : %v", vminfo.IPs))
 			if ip == "" && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
