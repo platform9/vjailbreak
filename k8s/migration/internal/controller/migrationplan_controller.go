@@ -1454,10 +1454,19 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	}
 	// Update all RDMDisk CRs that need to be updated
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
-		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged {
+		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged || rdmDiskCR.Status.Phase == RDMPhaseError {
+			log.FromContext(ctx).Info("Skipping update for RDMDisk CR as it is already being managed or in error state", "rdmDiskName", rdmDiskCR.Name, "phase", rdmDiskCR.Status.Phase)
 			continue
 		}
-		if err := r.Update(ctx, &rdmDiskCR); err != nil {
+		rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      strings.TrimSpace(rdmDiskCR.Name),
+			Namespace: migrationplan.Namespace,
+		}, rdmDisk)
+		if err != nil {
+			return fmt.Errorf("failed to get RDMDisk CR: %w", err)
+		}
+		if err := r.Update(ctx, rdmDisk); err != nil {
 			return fmt.Errorf("failed to update RDMDisk CR: %w", err)
 		}
 	}

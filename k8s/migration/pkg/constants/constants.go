@@ -297,3 +297,11 @@ runcmd:
   - cloud-ctl prep-node
   - echo "Node preparation complete. Setup finished successfully."`
 )
+var (
+	// RDMPhaseManaging is the phase for RDMDisk when it is being managed
+	RDMPhaseManaging = "Managing"
+	// RDMPhaseManaged is the phase for RDMDisk when it has been successfully managed
+	RDMPhaseManaged = "Managed"
+	// RDMPhaseError is the phase for RDMDisk when there is an error
+	RDMPhaseError = "Error"
+)

@@ -72,7 +72,7 @@ set_default_password
 check_command "Setting default password for ubuntu user"
 
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
-sudo sh -c 'umask 0177; mkdir -p /etc; echo "ubuntu:$(openssl passwd -apr1 password)" > /etc/htpasswd'
+sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
 sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
@@ -222,9 +222,23 @@ else
   sleep 20 
 
 fi
-
+log "Installing cert-manager"
+if [ -d "/etc/pf9/yamls/cert-manager" ]; then
+    sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
+    check_command "Applying cert-manager manifests"
+    log "Waiting for cert-manager deployments to become available"
+    kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
+    check_command "Waiting for cert-manager deployments"
+    if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
+        sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
+        check_command "Applying private CA setup"
+    fi
+  else
+    log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
+fi
+log "removing the cron job"
 # Remove cron job to ensure this runs only once 
-crontab -l | grep -v '@reboot /etc/pf9/install.sh' | crontab -
+sed -i 's;^@reboot root /etc/pf9/install.sh;;' /etc/crontab
 check_command "Removing cron job"
 # End of script
 exit 0
