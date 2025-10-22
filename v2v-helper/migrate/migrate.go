@@ -1377,23 +1377,18 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ip := ""
-			if len(vminfo.Mac) != len(vminfo.IPs) {
-				ip = ""
-			} else {
-				ip = vminfo.IPs[idx]
-			}
+			ip := []string{}
+			ip = vminfo.IPs
 			utils.PrintLog(fmt.Sprintf("DEBUG : VM IP : %v", vminfo.IPs))
-			if ip == "" && vminfo.NetworkInterfaces != nil {
+			if len(ip) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
-						ip = nic.IPAddress
-						break
+						ip = append(ip, nic.IPAddress)
 					}
 				}
 			}
 			if migobj.AssignedIP != "" {
-				ip = migobj.AssignedIP
+				ip = []string{migobj.AssignedIP}
 			}
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
 			if err != nil {

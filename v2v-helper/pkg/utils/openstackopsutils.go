@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -461,7 +462,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
@@ -482,9 +483,18 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
 			}
 			if len(port.FixedIPs) > 0 {
-				foundPortIP := port.FixedIPs[0].IPAddress
-				if ip != "" && foundPortIP != ip {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
+				fixedIps := []string{}
+				for _, fixedIp := range port.FixedIPs {
+					fixedIps = append(fixedIps, fixedIp.IPAddress)
+				}
+				contain_all := true
+				for _, ipIdx := range ip {
+					if !slices.Contains(fixedIps, ipIdx) {
+						contain_all = false
+					}
+				}
+				if !contain_all {
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, fixedIps, ip)
 				}
 			}
 			PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
@@ -505,23 +515,20 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
 	}
-
-	if ip != "" {
-		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
-		
-		subnet, err := osclient.GetSubnet(network.Subnets, ip)
-		fixedIP := []ports.IP{}
-		if err != nil  && !fallbackToDHCP {
-			return nil, fmt.Errorf("failed to get subnet: %s", err)
+	if len(ip) > 0 {
+		fixedIPs := make([]ports.IP, 0)
+		for _, ipPerMac := range ip {
+			subnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac)
+			if err != nil {
+				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
+			}
+			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
+			fixedIPs = append(fixedIPs, ports.IP{
+				SubnetID:  subnetId.ID,
+				IPAddress: ipPerMac,
+			})
 		}
-		
-		if subnet != nil{				
-			fixedIP = append(fixedIP, ports.IP{
-			SubnetID:  subnet.ID,
-			IPAddress: ip,
-		    })
-		}
-		createOpts.FixedIPs = fixedIP
+		createOpts.FixedIPs = fixedIPs
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
