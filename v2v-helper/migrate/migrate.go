@@ -244,12 +244,12 @@ func (migobj *Migrate) WaitforAdminCutover(nbdserver []nbd.NBDOperations) error 
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 	for {
 		migobj.logMessage("DEBUG : Waiting for Admin Cutover conditions to be met")
+		label := <-migobj.PodLabelWatcher
 		for nbidx, nbdIdx := range nbdserver {
 			copiedSize, totalSize, duration := nbdIdx.GetProgress()
 			migobj.logMessage(fmt.Sprintf("Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, copiedSize, totalSize, duration))
 		}
-		label := <-migobj.PodLabelWatcher
-		// migobj.logMessage(fmt.Sprintf("Label: %s", label))
+		migobj.logMessage(fmt.Sprintf("Label: %s", label))
 		if label == "yes" {
 			break
 		}
