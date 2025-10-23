@@ -1440,6 +1440,10 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				if err != nil {
 					return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
 				}
+				// collect RDM disks that need to be updated (to be imported to Cinder)
+				if !rdmDiskCR.Spec.ImportToCinder {
+					rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
+				}
 				allRDMDisks = append(allRDMDisks, rdmDiskCR)
 			}
 		}
