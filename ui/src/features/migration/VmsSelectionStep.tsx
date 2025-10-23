@@ -576,7 +576,8 @@ export default function VmsSelectionStep({
     const selectedClusterName = (() => {
       if (!vmwareCluster) return undefined;
       const parts = vmwareCluster.split(":");
-      return parts.length > 1 ? parts[1] : undefined;
+      const clusterName = parts.length > 1 ? parts[1] : parts[0];
+      return clusterName === 'NO CLUSTER' ? undefined : clusterName;
     })();
 
     const filteredVmList = selectedClusterName
