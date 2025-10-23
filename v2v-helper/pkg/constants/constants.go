@@ -131,6 +131,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
 	PopulateVMwareMachineFlavors = true
 
+	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
+	ValidateRDMOwnerVMs = true
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
@@ -142,4 +145,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// VMwareCredsRequeueAfterMinutes is the time to requeue after.
 	VMwareCredsRequeueAfterMinutes = 60
+
+	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
+	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 )

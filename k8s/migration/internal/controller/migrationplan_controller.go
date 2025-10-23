@@ -34,6 +34,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -1410,9 +1411,28 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 				}
 				// Validate that all ownerVMs are present in parallelVMs
-				for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
-					if _, ok := vmMachines[ownerVM]; !ok {
-						log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+				// This validation can be disabled via vjailbreak-settings ConfigMap
+				vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+				switch err {
+				case nil:
+					if vjailbreakSettings.ValidateRDMOwnerVMs {
+						for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+							if _, ok := vmMachines[ownerVM]; !ok {
+								log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+								return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk)
+							}
+						}
+					} else {
+						log.FromContext(ctx).Info("RDM disk owner VM validation disabled via vjailbreak-settings", "rdmDisk", rdmDisk)
+					}
+				default:
+					// Successfully retrieved settings, proceed with validation
+					log.FromContext(ctx).Error(err, "Failed to get vjailbreak settings, using default validation behavior")
+					// Fall back to default behavior (validation enabled) if we can't get settings
+					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
+						if _, ok := vmMachines[ownerVM]; !ok {
+							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+						}
 					}
 				}
 				// Update existing RDMDisk CR
@@ -1420,24 +1440,32 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				if err != nil {
 					return fmt.Errorf("failed to validate RDMDisk CR: %w", err)
 				}
-				// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
-				// Another RDM disk controller will handle the rest of the migration,
-				// Will ensure that RDM disk is managed and imported to Cinder
-				if !rdmDiskCR.Spec.ImportToCinder {
-					rdmDiskCR.Spec.ImportToCinder = true
-					rdmDiskCR.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
-					rdmDiskCRToBeUpdated = append(rdmDiskCRToBeUpdated, *rdmDiskCR)
-				}
 				allRDMDisks = append(allRDMDisks, rdmDiskCR)
 			}
 		}
 	}
 	// Update all RDMDisk CRs that need to be updated
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
-		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged {
+		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged || rdmDiskCR.Status.Phase == RDMPhaseError {
+			log.FromContext(ctx).Info("Skipping update for RDMDisk CR as it is already being managed or in error state", "rdmDiskName", rdmDiskCR.Name, "phase", rdmDiskCR.Status.Phase)
 			continue
 		}
-		if err := r.Update(ctx, &rdmDiskCR); err != nil {
+		rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      strings.TrimSpace(rdmDiskCR.Name),
+			Namespace: migrationplan.Namespace,
+		}, rdmDisk)
+		if err != nil {
+			return fmt.Errorf("failed to get RDMDisk CR: %w", err)
+		}
+		// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
+		// Another RDM disk controller will handle the rest of the migration,
+		// Will ensure that RDM disk is managed and imported to Cinder
+		if !rdmDisk.Spec.ImportToCinder {
+			rdmDisk.Spec.ImportToCinder = true
+			rdmDisk.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
+		}
+		if err := r.Update(ctx, rdmDisk); err != nil {
 			return fmt.Errorf("failed to update RDMDisk CR: %w", err)
 		}
 	}

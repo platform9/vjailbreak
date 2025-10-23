@@ -13,4 +13,5 @@ type VjailbreakSettings struct {
 	VCenterLoginRetryLimit              int
 	OpenstackCredsRequeueAfterMinutes   int
 	VMwareCredsRequeueAfterMinutes      int
+	ValidateRDMOwnerVMs                 bool
 }
