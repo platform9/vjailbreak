@@ -240,7 +240,77 @@ func (migobj *Migrate) WaitforCutover() error {
 	return nil
 }
 
-func (migobj *Migrate) WaitforAdminCutover(nbdserver []nbd.NBDOperations) error {
+func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
+	vmops := migobj.VMops
+	nbdops := migobj.Nbdops
+	envURL := migobj.URL
+	envUserName := migobj.UserName
+	envPassword := migobj.Password
+	thumbprint := migobj.Thumbprint
+	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
+	if err != nil {
+		return errors.Wrap(err, "failed to get snapshot")
+	}
+
+	var changedAreas types.DiskChangeInfo
+
+	for idx := range vminfo.VMDisks {
+		changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
+		if err != nil {
+			return errors.Wrap(err, "failed to get changed disk areas")
+		}
+
+		if len(changedAreas.ChangedArea) == 0 {
+			migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+		} else {
+			migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
+
+			utils.PrintLog("Restarting NBD server")
+			err = nbdops[idx].StopNBDServer()
+			if err != nil {
+				return errors.Wrap(err, "failed to stop NBD server")
+			}
+
+			err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk, migobj.EventReporter)
+			if err != nil {
+				return errors.Wrap(err, "failed to start NBD server")
+			}
+			// sleep for 2 seconds to allow the NBD server to start
+			time.Sleep(2 * time.Second)
+
+			// 11. Copy Changed Blocks over
+			changedBlockCopySuccess := true
+			migobj.logMessage("Copying changed blocks")
+
+			// incremental block copy
+
+			startTime := time.Now()
+			migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
+
+			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+			if err != nil {
+				changedBlockCopySuccess = false
+			}
+
+			duration := time.Since(startTime)
+
+			migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
+
+			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
+			if err != nil {
+				return errors.Wrap(err, "failed to update disk info")
+			}
+			if !changedBlockCopySuccess {
+				migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
+				migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
+			}
+		}
+	}
+	return nil
+}
+
+func (migobj *Migrate) WaitforAdminCutover(ctx context.Context) error {
+	nbdserver := migobj.Nbdops
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
@@ -352,7 +422,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			}
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
-				if err := migobj.WaitforAdminCutover(nbdops); err != nil {
+				if err := migobj.WaitforAdminCutover(ctx); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
