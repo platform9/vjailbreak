@@ -92,7 +92,7 @@ build {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-    "sudo mkdir -p image_builder/images",
+    "sudo mkdir -p /etc/pf9/images",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
     "sudo mkdir -p /home/ubuntu/virtio-win",
     "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
