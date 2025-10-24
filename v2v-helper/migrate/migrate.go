@@ -306,6 +306,14 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			}
 		}
 	}
+	err = vmops.CleanUpSnapshots(false)
+	if err != nil {
+		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+	}
+	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+	if err != nil {
+		return errors.Wrap(err, "failed to take snapshot of source VM")
+	}
 	return nil
 }
 
@@ -325,7 +333,10 @@ outLoop:
 
 		default:
 			migobj.logMessage("Periodic Sync")
-			migobj.SyncCBT(ctx, vminfo)
+			err := migobj.SyncCBT(ctx, vminfo)
+			if err != nil {
+				return errors.Wrap(err, "failed to sync CBT")
+			}
 			for nbidx, nbdIdx := range nbdserver {
 				copiedSize, totalSize, duration := nbdIdx.GetProgress()
 				migobj.logMessage(fmt.Sprintf("Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, copiedSize, totalSize, duration))
