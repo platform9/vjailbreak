@@ -519,6 +519,9 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		}
 	}
 
+	if err != nil {
+		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, err)
+	}
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
 	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
