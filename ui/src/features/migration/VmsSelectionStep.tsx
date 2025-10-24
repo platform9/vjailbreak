@@ -79,26 +79,8 @@ const CdsIconWrapper = styled('div')({
 });
 
 
-interface CustomToolbarWithActionsProps {
-  rowSelectionModel: any[];
-  onAssignFlavor: () => void;
-  onAssignIP: () => void;
-  onAssignRdmConfiguration: () => void;
-  poweredOffSelectionCount: number;
-  hasRdmVMs?: boolean;
-  [key: string]: any;
-}
-
-const CustomToolbarWithActions = (props: CustomToolbarWithActionsProps) => {
-  const {
-    rowSelectionModel,
-    onAssignFlavor,
-    onAssignIP,
-    onAssignRdmConfiguration,
-    poweredOffSelectionCount,
-    hasRdmVMs,
-    ...toolbarProps
-  } = props;
+const CustomToolbarWithActions = (props) => {
+  const { rowSelectionModel, onAssignFlavor, onAssignIP, hasRdmVMs, onAssignRdmConfiguration, poweredOffSelectionCount, ...toolbarProps } = props;
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
