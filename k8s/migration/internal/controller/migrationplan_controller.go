@@ -1462,16 +1462,17 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		if err != nil {
 			return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 		}
-		// Migration Plan controller only sets ImportToCinder to true and OpenstackVolumeRef,
-		// Another RDM disk controller will handle the rest of the migration,
-		// Will ensure that RDM disk is managed and imported to Cinder
+		// Use MergeFrom patch to safely modify fields
+		patch := client.MergeFrom(rdmDisk.DeepCopy())
 		if !rdmDisk.Spec.ImportToCinder {
 			rdmDisk.Spec.ImportToCinder = true
 			rdmDisk.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
 		}
-		if err := r.Update(ctx, rdmDisk); err != nil {
-			return fmt.Errorf("failed to update RDMDisk CR: %w", err)
+		if err := r.Patch(ctx, rdmDisk, patch); err != nil {
+			return fmt.Errorf("failed to patch RDMDisk CR: %w", err)
 		}
+		log.FromContext(ctx).Info("Patched RDMDisk CR to import into Cinder",
+			"rdmDisk", rdmDisk.Name, "openstackCreds", openstackcreds.GetName())
 	}
 	// Wait for 25 seconds after updating disk details and before checking RDM disk status
 	time.Sleep(25 * time.Second)
