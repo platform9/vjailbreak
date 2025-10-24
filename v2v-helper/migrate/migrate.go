@@ -309,7 +309,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	return nil
 }
 
-func (migobj *Migrate) WaitforAdminCutover(ctx context.Context) error {
+func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	nbdserver := migobj.Nbdops
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
@@ -324,10 +324,13 @@ outLoop:
 			migobj.logMessage("Cutover conditions met")
 
 		default:
+			migobj.logMessage("Periodic Sync")
+			migobj.SyncCBT(ctx, vminfo)
 			for nbidx, nbdIdx := range nbdserver {
 				copiedSize, totalSize, duration := nbdIdx.GetProgress()
 				migobj.logMessage(fmt.Sprintf("Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, copiedSize, totalSize, duration))
 			}
+			migobj.logMessage("Periodic Sync completed")
 		}
 	}
 	return nil
@@ -422,7 +425,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			}
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
-				if err := migobj.WaitforAdminCutover(ctx); err != nil {
+				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
