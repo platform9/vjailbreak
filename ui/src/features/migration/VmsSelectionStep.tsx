@@ -85,7 +85,7 @@ interface CustomToolbarWithActionsProps {
   onAssignIP: () => void;
   onAssignRdmConfiguration: () => void;
   poweredOffSelectionCount: number;
-  hasRdmVMs?: boolean; // Made optional to match the actual usage
+  hasRdmVMs?: boolean;
   [key: string]: any;
 }
 
