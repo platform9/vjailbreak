@@ -581,13 +581,13 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = s.Login(ctx, c, nil)
-		if err == nil {
-			// Login successful
-			vmwareClientMap.Store(mapKey, c)
-			break
-		}
 		lastErr = err
 		ctxlog := log.FromContext(ctx)
+		if err == nil {
+			// Login successful break and check for datacenter
+			ctxlog.Info("Login successful", "attempt", attempt)
+			break
+		}
 		// Log the error and retry after a delay
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
 		// Classify the error
