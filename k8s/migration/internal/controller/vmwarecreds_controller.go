@@ -99,7 +99,18 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name())),
 				err.Error())
 		}
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error validating VMwareCreds '%s'", scope.Name()))
+		var permanentErr *utils.PermanentValidationError
+		if errors.As(err, &permanentErr) {
+			ctxlog.Error(permanentErr, "Permanent error validating VMwareCreds", "vmwarecreds", scope.Name())
+			return ctrl.Result{}, nil
+		}
+		var transientErr *utils.TransientValidationError
+		if errors.As(err, &transientErr) {
+			ctxlog.Error(transientErr, "Transient error validating VMwareCreds", "vmwarecreds", scope.Name())
+			return ctrl.Result{}, err
+		}
+		// unknown error type
+		return ctrl.Result{}, err
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()

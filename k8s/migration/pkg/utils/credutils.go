@@ -51,6 +51,80 @@ const (
 	sdkPath    = "/sdk" // SDK path constant
 )
 
+// Custom error type for credential validation
+type PermanentValidationError struct {
+	Message string
+	Err     error
+}
+
+func (e *PermanentValidationError) Error() string {
+	return e.Message
+}
+
+func (e *PermanentValidationError) Unwrap() error {
+	return e.Err
+}
+
+type TransientValidationError struct {
+	Message string
+	Err     error
+}
+
+func (e *TransientValidationError) Error() string {
+	return e.Message
+}
+
+func (e *TransientValidationError) Unwrap() error {
+	return e.Err
+}
+
+func classifyError(err error) error {
+	if err == nil {
+		return nil
+	}
+	errMsg := strings.ToLower(err.Error())
+
+	// Permanent errors (authentication/authorization failures)
+	if strings.Contains(errMsg, "incorrect user name or password") ||
+		strings.Contains(errMsg, "authentication failed") ||
+		strings.Contains(errMsg, "401") ||
+		strings.Contains(errMsg, "unauthorized") ||
+		strings.Contains(errMsg, "permission denied") ||
+		strings.Contains(errMsg, "access denied") ||
+		strings.Contains(errMsg, "invalid credentials") ||
+		strings.Contains(errMsg, "login failed") ||
+		strings.Contains(errMsg, "bad credentials") {
+		return &PermanentValidationError{
+			Message: "Authentication failed - please check credentials",
+			Err:     err,
+		}
+	}
+
+	// Transient errors (network/temporary issues)
+	if strings.Contains(errMsg, "timeout") ||
+		strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "temporary failure") ||
+		strings.Contains(errMsg, "network is unreachable") ||
+		strings.Contains(errMsg, "no route to host") ||
+		strings.Contains(errMsg, "tls handshake") ||
+		strings.Contains(errMsg, "i/o timeout") ||
+		strings.Contains(errMsg, "503") ||
+		strings.Contains(errMsg, "502") ||
+		strings.Contains(errMsg, "server misbehaving") {
+		return &TransientValidationError{
+			Message: "Temporary connection issue - will retry",
+			Err:     err,
+		}
+	}
+
+	// Default to transient for unknown errors (safer to retry)
+	return &TransientValidationError{
+		Message: "Unknown error - will retry",
+		Err:     err,
+	}
+}
+
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	creds := vjailbreakv1alpha1.VMwareCreds{}
@@ -474,14 +548,14 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Insecure: disableSSLVerification,
 		Reauth:   true,
 	}
+	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
 	var c *vim25.Client
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
 	} else {
-		mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
 		if val, ok := vmwareClientMap.Load(mapKey); ok {
 			cachedClient, valid := val.(*vim25.Client)
-			if valid && cachedClient != nil {
+			if valid && cachedClient.Client != nil {
 				c = cachedClient
 				sessMgr := session.NewManager(c)
 				userSession, err := sessMgr.UserSession(ctx)
@@ -504,29 +578,41 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
+	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
-			return c, nil
+			vmwareClientMap.Store(mapKey, c)
+			break
 		}
+		lastErr = err
 		ctxlog := log.FromContext(ctx)
 		// Log the error and retry after a delay
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
+		// Classify the error
+		classifiedErr := classifyError(err)
+		// If the error is permanent, return the error
+		if _, isPermanent := classifiedErr.(*PermanentValidationError); isPermanent {
+			return nil, classifiedErr
+		}
+		// If the error is transient, retry after a delay
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
+			c = nil // Clear the client to avoid re-using it
 		}
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, err)
+	if lastErr != nil {
+		classifiedErr := classifyError(lastErr)
+		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, classifiedErr)
 	}
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
 	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+		return nil, &PermanentValidationError{Message: "failed to find datacenter", Err: err}
 	}
 
 	return c, nil
