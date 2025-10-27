@@ -4,7 +4,23 @@ on:
   push:
     branches:
       - main
+      - harsh/soc2
   pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to scan'
+        required: true
+        type: string
+
+env:
+  QCOW2_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak
+  UI_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-ui
+  V2V_HELPER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
+  CONTROLLER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-controller
+  VPWNED_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-vpwned
 
 jobs:
   setup:
@@ -17,6 +33,74 @@ jobs:
         uses: actions/checkout@v4
       - name: Export Go Version
         run: echo "go-version=1.22" >> $GITHUB_OUTPUT
+
+  check-and-wait-for-artifacts:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Tag for Release Event
+        if: github.event_name == 'release'
+        id: set_release_tag
+        run: echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for Manual Trigger
+        if: github.event_name == 'workflow_dispatch'
+        id: set_manual_tag
+        run: echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for Push Event
+        if: github.event_name == 'push'
+        id: set_push_tag
+        run: |
+          GIT_SHA=$(git rev-parse --short HEAD)
+          BUILD_VERSION=${{ github.run_number }}
+          echo "tag=${BUILD_VERSION}-${GIT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for PR Event  
+        if: github.event_name == 'pull_request'
+        id: set_pr_tag
+        run: |
+          GIT_SHA=$(git rev-parse --short HEAD)
+          BUILD_VERSION=${{ github.run_number }}
+          echo "tag=${BUILD_VERSION}-${GIT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Get Tag
+        id: get_tag
+        run: echo "tag=${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag || steps.set_push_tag.outputs.tag || steps.set_pr_tag.outputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Install Dependencies
+        run: |
+          curl -LO https://github.com/oras-project/oras/releases/download/v1.2.1/oras_1.2.1_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin/ -xzvf oras_1.2.1_linux_amd64.tar.gz oras
+
+      - name: Wait and check for QCOW image (Max 45 mins)
+        run: |
+          RELEASE_TAG="${{ steps.get_tag.outputs.tag }}"
+          QCOW_IMAGE_URL="${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+
+          echo "Waiting for artifact to be available at $QCOW_IMAGE_URL"
+
+          for i in $(seq 1 135); do
+            if oras manifest fetch "$QCOW_IMAGE_URL" &>/dev/null; then
+              echo ""
+              echo "Success! Artifact found."
+              exit 0
+            fi
+
+            if [[ $i -eq 135 ]]; then
+              break
+            fi
+
+            sleep 20
+          done
+
+          echo ""
+          echo "Artifact not found after 45 minutes. Failing workflow."
+          exit 1
 
   gosec_scan:
     name: Gosec Security Scan (Full)
@@ -288,7 +372,7 @@ jobs:
 
   trivy_scan:
     name: Trivy Security Scan (Full)
-    needs: setup
+    needs: [setup, check-and-wait-for-artifacts]
     runs-on: ubuntu-latest
     outputs:
       trivy_high_found: ${{ steps.scan.outputs.trivy_high_found }}
@@ -623,42 +707,43 @@ jobs:
           base: ${{ github.ref_name }}
           delete-branch: true
 
-      - name: Wait for artifacts from packer workflow
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@v1.2.1
+
+      - name: Download Docker images using ORAS
+        continue-on-error: true
         run: |
-          echo "Waiting for Docker image artifacts to be available..."
-          sleep 60
-
-      - name: Download UI Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download V2V Helper Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: v2v-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download Controller Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: controller-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download VPWNED Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: vpwned-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG="${{ needs.check-and-wait-for-artifacts.outputs.tag }}"
+          
+          echo "Downloading Docker images with tag: $RELEASE_TAG using ORAS"
+          
+          # Create directory for images
+          mkdir -p ./docker-images
+          
+          # Download UI image
+          echo "Downloading UI image: ${{ env.UI_IMG }}:${RELEASE_TAG}"
+          cd ./docker-images
+          oras pull "${{ env.UI_IMG }}:${RELEASE_TAG}" || echo "Failed to download UI image"
+          
+          # Download V2V Helper image
+          echo "Downloading V2V Helper image: ${{ env.V2V_HELPER_IMG }}:${RELEASE_TAG}"
+          oras pull "${{ env.V2V_HELPER_IMG }}:${RELEASE_TAG}" || echo "Failed to download V2V Helper image"
+          
+          # Download Controller image
+          echo "Downloading Controller image: ${{ env.CONTROLLER_IMG }}:${RELEASE_TAG}"
+          oras pull "${{ env.CONTROLLER_IMG }}:${RELEASE_TAG}" || echo "Failed to download Controller image"
+          
+          # Download VPWNED image
+          echo "Downloading VPWNED image: ${{ env.VPWNED_IMG }}:${RELEASE_TAG}"
+          oras pull "${{ env.VPWNED_IMG }}:${RELEASE_TAG}" || echo "Failed to download VPWNED image"
+          
+          cd ..
+          echo "ORAS image download completed"
+          
+          # List downloaded files for verification
+          echo "Downloaded files:"
+          ls -la ./docker-images/
 
       - name: Scan Docker Images
         id: image_scan
