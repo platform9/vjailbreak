@@ -1462,7 +1462,9 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		if err != nil {
 			return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 		}
-		// Use MergeFrom patch to safely modify fields
+		// Migration Plan controller only sets ImportToCinder to true,
+		// the RDMDisk controller ensures that RDM disk is managed and
+		// imported to Cinder
 		patch := client.MergeFrom(rdmDisk.DeepCopy())
 		if !rdmDisk.Spec.ImportToCinder {
 			rdmDisk.Spec.ImportToCinder = true
