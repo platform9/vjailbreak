@@ -392,7 +392,6 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
-	
 	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
 	if err != nil {
 		r.ctxlog.Error(err, "Failed to get migration template and credentials")
@@ -1513,7 +1512,7 @@ func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMw
 	osFamily := strings.ToLower(strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily))
 	
 	if osFamily == "" || osFamily == "unknown" {
-		return fmt.Errorf("VM '%s' has an unknown or unspecified OS type. Please set a valid OS type (windows or linux) before migration.", 
+		return fmt.Errorf("VM '%s' has an unknown or unspecified OS type.", 
 			vmMachine.Spec.VMInfo.Name)
 	}
 	
@@ -1526,7 +1525,7 @@ func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMw
 	}
 	
 	if !valid {
-		return fmt.Errorf("VM '%s' has an unsupported OS type: %s. Only 'windows' or 'linux' are supported.", 
+		return fmt.Errorf("VM '%s' has an unsupported OS type: %s.", 
 			vmMachine.Spec.VMInfo.Name, osFamily)
 	}
 	
