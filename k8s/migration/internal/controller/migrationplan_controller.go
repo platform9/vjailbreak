@@ -1508,12 +1508,12 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 
 // validates that the VM has a valid OS type
 func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
-	validOSTypes := []string{"windows", "linux"}
+	validOSTypes := []string{"windowsGuest", "linuxGuest"}
 	osFamily := strings.ToLower(strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily))
 
 	if osFamily == "" || osFamily == "unknown" {
-		return fmt.Errorf("vm '%s' has an unknown or unspecified OS type",
-			vmMachine.Spec.VMInfo.Name)
+		return fmt.Errorf("vm '%s' has an unknown or unspecified OS type. Valid values are: %v",
+			vmMachine.Spec.VMInfo.Name, validOSTypes)
 	}
 
 	valid := false
@@ -1525,8 +1525,8 @@ func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMw
 	}
 
 	if !valid {
-		return fmt.Errorf("vm '%s' has an unsupported OS type: %s",
-			vmMachine.Spec.VMInfo.Name, osFamily)
+		return fmt.Errorf("vm '%s' has an unsupported OS type: %s. Valid values are: %v",
+			vmMachine.Spec.VMInfo.Name, osFamily, validOSTypes)
 	}
 
 	return nil
