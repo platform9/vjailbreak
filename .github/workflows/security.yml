@@ -6,6 +6,8 @@ on:
       - main
       - harsh/soc2
   pull_request:
+  release:
+    types: [published]
 
 jobs:
   setup:
@@ -293,7 +295,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       trivy_high_found: ${{ steps.scan.outputs.trivy_high_found }}
-      trivy_image_high_found: ${{ steps.image_scan.outputs.trivy_image_high_found }}
       trivy_current_count: ${{ steps.trivy_compare.outputs.current_count }}
       trivy_baseline_count: ${{ steps.trivy_compare.outputs.baseline_count }}
       trivy_added_count: ${{ steps.trivy_compare.outputs.added_count }}
@@ -301,13 +302,6 @@ jobs:
       trivy_baseline_method: ${{ steps.trivy_compare.outputs.baseline_method }}
       trivy_added_details: ${{ steps.trivy_compare.outputs.added_details }}
       trivy_fixed_details: ${{ steps.trivy_compare.outputs.fixed_details }}
-      trivy_image_current_count: ${{ steps.trivy_image_compare.outputs.current_count }}
-      trivy_image_baseline_count: ${{ steps.trivy_image_compare.outputs.baseline_count }}
-      trivy_image_added_count: ${{ steps.trivy_image_compare.outputs.added_count }}
-      trivy_image_fixed_count: ${{ steps.trivy_image_compare.outputs.fixed_count }}
-      trivy_image_baseline_method: ${{ steps.trivy_image_compare.outputs.baseline_method }}
-      trivy_image_added_details: ${{ steps.trivy_image_compare.outputs.added_details }}
-      trivy_image_fixed_details: ${{ steps.trivy_image_compare.outputs.fixed_details }}
     permissions:
       contents: write
       pull-requests: write
@@ -624,362 +618,8 @@ jobs:
           base: ${{ github.ref_name }}
           delete-branch: true
 
-      - name: Wait for artifacts from packer workflow
-        run: |
-          echo "Waiting for Docker image artifacts to be available..."
-          sleep 60
-
-      - name: Download UI Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download V2V Helper Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: v2v-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download Controller Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: controller-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download VPWNED Docker image artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: vpwned-docker-image
-          path: ./docker-images
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Scan Docker Images
-        id: image_scan
-        run: |
-          echo "Running Trivy Docker image scans (HIGH/CRITICAL)..."
-          echo '{"Results":[]}' > tmp/trivy-image-report.json
-          
-          # Initialize vulnerability count
-          image_count=0
-          
-          # List of image files to scan
-          images=("ui-image.tar" "v2v-image.tar" "controller-image.tar" "vpwned-image.tar")
-          image_names=("UI" "V2V-Helper" "Controller" "VPWNED")
-          
-          for i in "${!images[@]}"; do
-            image_file="./docker-images/${images[$i]}"
-            image_name="${image_names[$i]}"
-            
-            if [[ -f "$image_file" ]]; then
-              echo "Loading and scanning $image_name image..."
-              
-              # Load the image
-              docker load -i "$image_file"
-              
-              # Get the loaded image name
-              loaded_image=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep -v "REPOSITORY" | head -1)
-              
-              if [[ -n "$loaded_image" ]]; then
-                echo "Scanning image: $loaded_image"
-                
-                # Scan the image
-                trivy image --format json --severity HIGH,CRITICAL --output "tmp/trivy-${image_name,,}-report.json" "$loaded_image" || true
-                
-                # Count vulnerabilities in this image
-                count=$(jq -e '
-                  (.Results // [])
-                  | map(.Vulnerabilities? // [])
-                  | add
-                  | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-                  | length
-                ' "tmp/trivy-${image_name,,}-report.json" 2>/dev/null || echo 0)
-                
-                echo "$image_name image vulnerabilities: $count"
-                image_count=$((image_count + count))
-                
-                # Merge results into main report
-                jq -s '
-                  .[0] as $main | .[1] as $new |
-                  $main | .Results += ($new.Results // [])
-                ' tmp/trivy-image-report.json "tmp/trivy-${image_name,,}-report.json" > tmp/trivy-image-report-merged.json
-                mv tmp/trivy-image-report-merged.json tmp/trivy-image-report.json
-                
-              else
-                echo "Warning: Could not determine loaded image name for $image_name"
-              fi
-            else
-              echo "Warning: $image_file not found, skipping $image_name scan"
-            fi
-          done
-          
-          echo "Total image vulnerabilities found: $image_count"
-          
-          if [[ "$image_count" -gt 0 ]]; then
-            echo "trivy_image_high_found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "trivy_image_high_found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload Trivy Image Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-image-json-${{ env.SAFE_REF_NAME }}
-          path: tmp/trivy-image-report.json
-
-      - name: Generate Image PR Body (if vulnerabilities found)
-        if: ${{ steps.image_scan.outputs.trivy_image_high_found == 'true' }}
-        run: |
-          echo "# 🐳 Trivy Docker Image Scan Report for branch \`${GITHUB_REF_NAME}\`" > tmp/pr-body-images.md
-          echo "" >> tmp/pr-body-images.md
-          echo "The following HIGH/CRITICAL vulnerabilities were found in the Docker images:" >> tmp/pr-body-images.md
-          echo "" >> tmp/pr-body-images.md
-          
-          jq -r '
-            (.Results // [])
-            | .[]
-            | .Target as $target
-            | (.Vulnerabilities? // [])
-            | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-            | .[]
-            | "* **Image**: \($target)\n  • **Vulnerability ID**: \(.VulnerabilityID)\n  • **Package**: \(.PkgName) \(.InstalledVersion)\n  • **Severity**: \(.Severity)\n  • **Title**: \(.Title)\n"
-          ' tmp/trivy-image-report.json >> tmp/pr-body-images.md
-
-      - name: Debug - List Available Trivy Image Artifacts
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        run: |
-          echo "Looking for Trivy Image artifacts from base SHA: ${{ github.event.pull_request.base.sha }}"
-          echo "Expected Trivy Image artifact: trivy-image-report-${{ github.event.pull_request.base.sha }}"
-          echo "Base branch: ${{ github.event.pull_request.base.ref }}"
-
-      - name: Download Baseline Trivy Image Report (PR only)
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          name: trivy-image-report-${{ github.event.pull_request.base.sha }}
-          path: ./baseline-reports
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: security.yml
-          branch: ${{ github.event.pull_request.base.ref }}
-          workflow_conclusion: ""
-          check_artifacts: true
-          if_no_artifact_found: warn
-          repo: ${{ github.repository }}
-          search_artifacts: true
-
-      - name: Compare Trivy Image Vulnerabilities with Baseline (PR only)
-        if: github.event_name == 'pull_request'
-        id: trivy_image_compare
-        run: |
-          echo "Comparing Trivy image vulnerabilities with baseline..."
-          
-          # Initialize counts
-          current_count=0
-          baseline_count=0
-          added_count=0
-          fixed_count=0
-          baseline_method="none"
-          
-          # Count current vulnerabilities
-          if [[ -f "tmp/trivy-image-report.json" ]]; then
-            current_count=$(jq -e '
-              (.Results // [])
-              | map(.Vulnerabilities? // [])
-              | add
-              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-              | length
-            ' tmp/trivy-image-report.json || echo 0)
-          fi
-          
-          # Try to use artifact baseline first
-          if [[ -f "baseline-reports/trivy-image-report.json" ]]; then
-            echo "✅ Using artifact baseline from main branch for images"
-            baseline_method="artifact"
-            baseline_count=$(jq -e '
-              (.Results // [])
-              | map(.Vulnerabilities? // [])
-              | add
-              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-              | length
-            ' baseline-reports/trivy-image-report.json || echo 0)
-            
-            # Create unique vulnerability identifiers for comparison
-            jq -r '
-              (.Results // [])
-              | .[]
-              | .Target as $target
-              | (.Vulnerabilities? // [])
-              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-              | .[]
-              | "\($target):\(.VulnerabilityID):\(.PkgName)"
-            ' tmp/trivy-image-report.json | sort > tmp/current-image-vulns.txt
-            
-            jq -r '
-              (.Results // [])
-              | .[]
-              | .Target as $target
-              | (.Vulnerabilities? // [])
-              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
-              | .[]
-              | "\($target):\(.VulnerabilityID):\(.PkgName)"
-            ' baseline-reports/trivy-image-report.json | sort > tmp/baseline-image-vulns.txt
-            
-            # Calculate added and fixed vulnerabilities
-            added_count=$(comm -23 tmp/current-image-vulns.txt tmp/baseline-image-vulns.txt | wc -l)
-            fixed_count=$(comm -13 tmp/current-image-vulns.txt tmp/baseline-image-vulns.txt | wc -l)
-            
-          else
-            echo "⚠️ No baseline image artifact found, will scan baseline images if available..."
-            baseline_method="live_scan"
-            
-            # For image scanning, we need the baseline Docker images to be available
-            # This is more complex as we need to build baseline images from base branch
-            # For now, we'll treat all current vulnerabilities as new when no artifact exists
-            echo "Note: Live baseline image scanning requires building images from base branch"
-            echo "This is resource-intensive, so treating all current vulnerabilities as new"
-            added_count=$current_count
-            baseline_count=0
-            fixed_count=0
-            baseline_method="no_baseline"
-          fi
-          
-          echo "Baseline method: $baseline_method"
-          echo "Current Trivy Image HIGH/CRITICAL vulnerabilities: $current_count"
-          echo "Baseline Trivy Image HIGH/CRITICAL vulnerabilities: $baseline_count"
-          echo "Added Trivy Image vulnerabilities: $added_count"
-          echo "Fixed Trivy Image vulnerabilities: $fixed_count"
-          
-          # Generate detailed vulnerability lists
-          added_details=""
-          fixed_details=""
-          
-          if [[ -f "tmp/current-image-vulns.txt" && -f "tmp/baseline-image-vulns.txt" ]]; then
-            # Get added vulnerabilities with details
-            if [[ $added_count -gt 0 ]]; then
-              added_vulns=$(comm -23 tmp/current-image-vulns.txt tmp/baseline-image-vulns.txt)
-              added_details=""
-              while IFS= read -r vuln_id; do
-                if [[ -n "$vuln_id" ]]; then
-                  # Extract target, vuln_id, pkg_name from the identifier
-                  target=$(echo "$vuln_id" | cut -d':' -f1)
-                  vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
-                  pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
-                  
-                  # Get full details from the report
-                  details=$(jq -r --arg target "$target" --arg vuln "$vuln_cve" --arg pkg "$pkg_name" '
-                    (.Results // []) | .[] | select(.Target == $target) | 
-                    (.Vulnerabilities? // []) | .[] | 
-                    select(.VulnerabilityID == $vuln and .PkgName == $pkg and (.Severity == "HIGH" or .Severity == "CRITICAL")) | 
-                    "**Image:** `\(.Target // $target)`\\n**Package:** \(.PkgName) \(.InstalledVersion)\\n**Vulnerability:** \(.VulnerabilityID)\\n**Severity:** \(.Severity)\\n**Title:** \(.Title)\\n"
-                  ' tmp/trivy-image-report.json)
-                  
-                  if [[ -n "$details" ]]; then
-                    added_details="${added_details}${details}\\n"
-                  fi
-                fi
-              done <<< "$added_vulns"
-            fi
-            
-            # Get fixed vulnerabilities with details  
-            if [[ $fixed_count -gt 0 ]]; then
-              fixed_vulns=$(comm -13 tmp/current-image-vulns.txt tmp/baseline-image-vulns.txt)
-              fixed_details=""
-              while IFS= read -r vuln_id; do
-                if [[ -n "$vuln_id" ]]; then
-                  # Extract target, vuln_id, pkg_name from the identifier
-                  target=$(echo "$vuln_id" | cut -d':' -f1)
-                  vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
-                  pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
-                  
-                  # Get full details from the baseline report
-                  details=$(jq -r --arg target "$target" --arg vuln "$vuln_cve" --arg pkg "$pkg_name" '
-                    (.Results // []) | .[] | select(.Target == $target) | 
-                    (.Vulnerabilities? // []) | .[] | 
-                    select(.VulnerabilityID == $vuln and .PkgName == $pkg and (.Severity == "HIGH" or .Severity == "CRITICAL")) | 
-                    "**Image:** `\(.Target // $target)`\\n**Package:** \(.PkgName) \(.InstalledVersion)\\n**Vulnerability:** \(.VulnerabilityID)\\n**Severity:** \(.Severity)\\n**Title:** \(.Title)\\n"
-                  ' baseline-reports/trivy-image-report.json)
-                  
-                  if [[ -n "$details" ]]; then
-                    fixed_details="${fixed_details}${details}\\n"
-                  fi
-                fi
-              done <<< "$fixed_vulns"
-            fi
-          elif [[ "$baseline_method" == "no_baseline" && $added_count -gt 0 ]]; then
-            # When no baseline, all current vulnerabilities are treated as "added"
-            added_details=""
-            jq -r '
-              (.Results // []) | .[] | .Target as $target | 
-              (.Vulnerabilities? // []) | .[] | 
-              select(.Severity == "HIGH" or .Severity == "CRITICAL") | 
-              "**Image:** `\($target)`\\n**Package:** \(.PkgName) \(.InstalledVersion)\\n**Vulnerability:** \(.VulnerabilityID)\\n**Severity:** \(.Severity)\\n**Title:** \(.Title)\\n"
-            ' tmp/trivy-image-report.json | while IFS= read -r details; do
-              if [[ -n "$details" ]]; then
-                added_details="${added_details}${details}\\n"
-              fi
-            done
-          fi
-          
-          # Set outputs
-          echo "current_count=$current_count" >> "$GITHUB_OUTPUT"
-          echo "baseline_count=$baseline_count" >> "$GITHUB_OUTPUT"
-          echo "added_count=$added_count" >> "$GITHUB_OUTPUT"
-          echo "fixed_count=$fixed_count" >> "$GITHUB_OUTPUT"
-          echo "baseline_method=$baseline_method" >> "$GITHUB_OUTPUT"
-          
-          # Set detailed outputs (escape for GitHub Actions)
-          {
-            echo "added_details<<EOF"
-            echo -e "$added_details"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-          
-          {
-            echo "fixed_details<<EOF"
-            echo -e "$fixed_details"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Display Trivy Image Vulnerability Report
-        if: ${{ steps.image_scan.outputs.trivy_image_high_found == 'true' }}
-        run: |
-          echo "=========================================="
-          echo "Trivy Docker Image Vulnerability Report:"
-          echo "=========================================="
-          cat tmp/pr-body-images.md
-          echo "=========================================="
-
-      - name: Store Trivy Image Report as Artifact (Main/Release)
-        if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'release' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-image-report-${{ github.sha }}
-          path: tmp/trivy-image-report.json
-          retention-days: 90
-
-      - name: Create Pull Request for Image Vulnerabilities
-        if: ${{ github.event_name == 'push' && steps.image_scan.outputs.trivy_image_high_found == 'true' }}
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v5
-        with:
-          commit-message: 'chore: Docker image vulnerabilities detected by Trivy (HIGH/CRITICAL)'
-          title: 'Trivy Docker Image Vulnerability Report for branch ${{ github.ref_name }}'
-          body-path: tmp/pr-body-images.md
-          branch: auto/trivy-image-scan/${{ env.SAFE_REF_NAME }}
-          base: ${{ github.ref_name }}
-          delete-branch: true
-
       - name: Fail Job If Vulnerabilities Found
-        if: ${{ steps.scan.outputs.trivy_high_found == 'true' || steps.image_scan.outputs.trivy_image_high_found == 'true' }}
+        if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
         run: exit 1
 
   vulnerability_summary:
@@ -1002,27 +642,18 @@ jobs:
             const trivyAdded = '${{ needs.trivy_scan.outputs.trivy_added_count }}' || '0';
             const trivyFixed = '${{ needs.trivy_scan.outputs.trivy_fixed_count }}' || '0';
             
-            const trivyImageCurrent = '${{ needs.trivy_scan.outputs.trivy_image_current_count }}' || '0';
-            const trivyImageBaseline = '${{ needs.trivy_scan.outputs.trivy_image_baseline_count }}' || '0';
-            const trivyImageAdded = '${{ needs.trivy_scan.outputs.trivy_image_added_count }}' || '0';
-            const trivyImageFixed = '${{ needs.trivy_scan.outputs.trivy_image_fixed_count }}' || '0';
-            
             const gosecMethod = '${{ needs.gosec_scan.outputs.gosec_baseline_method }}' || 'none';
             const trivyMethod = '${{ needs.trivy_scan.outputs.trivy_baseline_method }}' || 'none';
-            const trivyImageMethod = '${{ needs.trivy_scan.outputs.trivy_image_baseline_method }}' || 'none';
             
             // Get detailed vulnerability information (safely encoded)
             const gosecAddedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_added_details) }} || '';
             const gosecFixedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_fixed_details) }} || '';
             const trivyAddedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_added_details) }} || '';
             const trivyFixedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_fixed_details) }} || '';
-            const trivyImageAddedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_image_added_details) }} || '';
-            const trivyImageFixedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_image_fixed_details) }} || '';
-            
-            const totalAdded = parseInt(gosecAdded) + parseInt(trivyAdded) + parseInt(trivyImageAdded);
-            const totalFixed = parseInt(gosecFixed) + parseInt(trivyFixed) + parseInt(trivyImageFixed);
-            const totalCurrent = parseInt(gosecCurrent) + parseInt(trivyCurrent) + parseInt(trivyImageCurrent);
-            const totalBaseline = parseInt(gosecBaseline) + parseInt(trivyBaseline) + parseInt(trivyImageBaseline);
+            const totalAdded = parseInt(gosecAdded) + parseInt(trivyAdded);
+            const totalFixed = parseInt(gosecFixed) + parseInt(trivyFixed);
+            const totalCurrent = parseInt(gosecCurrent) + parseInt(trivyCurrent);
+            const totalBaseline = parseInt(gosecBaseline) + parseInt(trivyBaseline);
             
             // Method indicators
             const getMethodIcon = (method) => {
@@ -1071,11 +702,6 @@ jobs:
             |---------|----------|-------|-------|--------|
             | ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
             
-            #### ${getMethodIcon(trivyImageMethod)} Trivy (Docker Images)
-            | Current | Baseline | Added | Fixed | Method |
-            |---------|----------|-------|-------|--------|
-            | ${trivyImageCurrent} | ${trivyImageBaseline} | ${trivyImageAdded} | ${trivyImageFixed} | ${trivyImageMethod} |
-            
             ### 📋 Baseline Methods
             - **📦 artifact**: Used stored report from main branch
             - **🔄 live_scan**: Scanned base branch in real-time  
@@ -1094,10 +720,6 @@ jobs:
             ${trivyAddedDetails || '*No detailed information available*'}
             ` : ''}
             
-            ${parseInt(trivyImageAdded) > 0 ? `
-            #### Trivy (Docker Images) - ${trivyImageAdded} Added
-            ${trivyImageAddedDetails || '*No detailed information available*'}
-            ` : ''}
             ` : ''}
             
             ${totalFixed > 0 ? `
@@ -1113,10 +735,6 @@ jobs:
             ${trivyFixedDetails || '*No detailed information available*'}
             ` : ''}
             
-            ${parseInt(trivyImageFixed) > 0 ? `
-            #### Trivy (Docker Images) - ${trivyImageFixed} Fixed
-            ${trivyImageFixedDetails || '*No detailed information available*'}
-            ` : ''}
             ` : ''}
             
             ---
