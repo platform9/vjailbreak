@@ -35,13 +35,11 @@ metadata:
   name: vjailbreak-version-checker
   namespace: migration-system
 spec:
-  schedule: "* * * * *"                 # ⏰ every minute
+  schedule: "0 0 * * *"
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 1         # keep only 1 success
-  failedJobsHistoryLimit: 1             # keep only 1 failure
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 300      # delete pod+job after 5 min
+      ttlSecondsAfterFinished: 300
       template:
         spec:
           serviceAccountName: version-checker-sa
@@ -54,18 +52,15 @@ spec:
                 - -c
                 - |
                   set -e
-                  apk add --no-cache curl jq || true
 
-                  if ! curl -s --head https://api.github.com | grep -q "200 OK"; then
-                    echo "[WARN] No internet access. Cannot fetch GitHub tags."
-                    echo "[INFO] Version check skipped."
+                  if ! wget -q --spider --timeout=5 https://api.github.com; then
+                    echo "Internet access required to run version checker. Exiting."
                     exit 0
                   fi
 
-                  curl -LO "https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl" || {
-                    echo "[WARN] Failed to get kubectl due to no internet access. Skipping check."
-                    exit 0
-                  }
+                  apk add --no-cache curl jq >/dev/null 2>&1
+
+                  curl -LO "https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl"
                   chmod +x kubectl && mv kubectl /usr/local/bin/
 
                   CURRENT_VERSION=$(kubectl get configmap version-config -n migration-system -o jsonpath='{.data.version}' || true)
@@ -79,7 +74,7 @@ spec:
                   LATEST_TAG=$(curl -s "https://api.github.com/repos/platform9/vjailbreak/tags" | jq -r '.[0].name' || true)
 
                   if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
-                    echo "[WARN] Could not fetch latest tag from GitHub."
+                    echo "Could not fetch latest tag from GitHub. Exiting."
                     exit 0
                   fi
 
