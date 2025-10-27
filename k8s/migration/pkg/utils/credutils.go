@@ -542,78 +542,97 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
+
 	// Connect and log in to ESX or vCenter
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
 		Reauth:   true,
 	}
+
 	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
 	var c *vim25.Client
+
+	// Initialize map if needed
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
-	} else {
-		if val, ok := vmwareClientMap.Load(mapKey); ok {
-			cachedClient, valid := val.(*vim25.Client)
-			if valid && cachedClient.Client != nil {
-				c = cachedClient
-				sessMgr := session.NewManager(c)
-				userSession, err := sessMgr.UserSession(ctx)
-				if err == nil && userSession != nil {
-					return c, nil
-				}
-				// If the cached client is no longer valid, delete it from the map
-				vmwareClientMap.Delete(fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification))
-				c = new(vim25.Client)
-				vmwareClientMap.Store(mapKey, c)
+	}
+
+	// Check cache for existing authenticated client
+	if val, ok := vmwareClientMap.Load(mapKey); ok {
+		cachedClient, valid := val.(*vim25.Client)
+		if valid && cachedClient != nil && cachedClient.Client != nil {
+			c = cachedClient
+			sessMgr := session.NewManager(c)
+			userSession, err := sessMgr.UserSession(ctx)
+			if err == nil && userSession != nil {
+				// Cached client is still valid, return it
+				return c, nil
 			}
-		} else {
-			c = new(vim25.Client)
-			vmwareClientMap.Store(mapKey, c)
+			// Cached client is no longer valid, remove it
+			vmwareClientMap.Delete(mapKey)
+			c = nil // Will create fresh client below
 		}
 	}
+
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
+
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Ensure we have a client for this attempt
+		if c == nil {
+			c = new(vim25.Client)
+		}
+
 		err = s.Login(ctx, c, nil)
 		lastErr = err
 		ctxlog := log.FromContext(ctx)
 		if err == nil {
-			// Login successful break and check for datacenter
+			// Login successful
 			ctxlog.Info("Login successful", "attempt", attempt)
 			break
 		}
+
 		// Log the error and retry after a delay
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
+
 		// Classify the error
 		classifiedErr := classifyError(err)
-		// If the error is permanent, return the error
+
+		// If the error is permanent, return immediately
 		if _, isPermanent := classifiedErr.(*PermanentValidationError); isPermanent {
+			ctxlog.Info("Permanent authentication failure detected, stopping retries")
 			return nil, classifiedErr
 		}
+
 		// If the error is transient, retry after a delay
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
-			c = nil // Clear the client to avoid re-using it
+			c = nil // Force fresh client on next attempt
 		}
 	}
 
+	// Check if all login attempts failed
 	if lastErr != nil {
 		classifiedErr := classifyError(lastErr)
 		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, classifiedErr)
 	}
+
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
 	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
 	if err != nil {
 		return nil, &PermanentValidationError{Message: "failed to find datacenter", Err: err}
 	}
+
+	// All validations passed - cache the fully validated client
+	vmwareClientMap.Store(mapKey, c)
 
 	return c, nil
 }
