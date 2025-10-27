@@ -531,6 +531,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
+	datacenter := vmwareCredsinfo.Datacenter
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
@@ -550,7 +551,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 
-	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+	mapKey := fmt.Sprintf("%s|%s|%s|%t", host, datacenter, username, disableSSLVerification)
 	var c *vim25.Client
 
 	// Initialize map if needed
@@ -626,7 +627,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
+	_, err = finder.Datacenter(context.Background(), datacenter)
 	if err != nil {
 		return nil, &PermanentValidationError{Message: "failed to find datacenter", Err: err}
 	}
