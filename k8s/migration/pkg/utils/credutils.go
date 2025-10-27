@@ -719,7 +719,11 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
-	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+	log.Info(
+		"Fetched vjailbreak settings for vcenter scan concurrency limit",
+		"vcenter_scan_concurrency_limit",
+		vjailbreakSettings.VCenterScanConcurrencyLimit,
+	)
 
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
@@ -1862,5 +1866,58 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 		log.FromContext(ctx).Error(err, "Error logging out of vCenter")
 		return err
 	}
+	return nil
+}
+
+// CleanupCachedVMwareClient logs out and removes the cached VMware client for the given credentials
+func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
+	ctxlog := log.FromContext(ctx)
+
+	// Get credentials to build the cache key
+	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
+	if err != nil {
+		ctxlog.Info("Could not get credentials for cache cleanup, secret may already be deleted", "error", err.Error())
+		return nil // Don't fail deletion if secret is gone
+	}
+
+	host := vmwareCredsinfo.Host
+	username := vmwareCredsinfo.Username
+	disableSSLVerification := vmwareCredsinfo.Insecure
+
+	// Normalize host to match the cache key format
+	if host[:4] != "http" {
+		host = "https://" + host
+	}
+	if host[len(host)-4:] != sdkPath {
+		host += sdkPath
+	}
+
+	// Build the same map key used in ValidateVMwareCreds
+	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+
+	// Check if there's a cached client
+	if vmwareClientMap != nil {
+		if val, ok := vmwareClientMap.Load(mapKey); ok {
+			cachedClient, valid := val.(*vim25.Client)
+			if valid && cachedClient != nil && cachedClient.Client != nil {
+				ctxlog.Info("Logging out cached VMware client", "host", host, "username", username)
+
+				// Attempt to logout
+				if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, cachedClient); err != nil {
+					ctxlog.Error(err, "Failed to logout cached VMware client, will remove from cache anyway")
+				}
+
+				// Close idle connections
+				cachedClient.CloseIdleConnections()
+			}
+
+			// Remove from cache regardless of logout success
+			vmwareClientMap.Delete(mapKey)
+			ctxlog.Info("Removed VMware client from cache", "host", host)
+		} else {
+			ctxlog.Info("No cached VMware client found for cleanup", "host", host)
+		}
+	}
+
 	return nil
 }
