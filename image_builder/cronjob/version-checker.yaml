@@ -35,11 +35,13 @@ metadata:
   name: vjailbreak-version-checker
   namespace: migration-system
 spec:
-  schedule: "0 0 * * *"
+  schedule: "* * * * *"                 # ⏰ every minute
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1         # keep only 1 success
+  failedJobsHistoryLimit: 1             # keep only 1 failure
   jobTemplate:
     spec:
-      ttlSecondsAfterFinished: 300
+      ttlSecondsAfterFinished: 300      # delete pod+job after 5 min
       template:
         spec:
           serviceAccountName: version-checker-sa
