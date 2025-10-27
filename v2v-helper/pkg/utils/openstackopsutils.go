@@ -512,7 +512,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
 		
-		if subnetID != nil{				
+		if subnet != nil{				
 			fixedIP = append(fixedIP, ports.IP{
 			SubnetID:  subnet.ID,
 			IPAddress: ip,
