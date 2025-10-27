@@ -519,7 +519,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 		fixedIPs := make([]ports.IP, 0)
 		for _, ipPerMac := range ip {
 			subnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac)
-			if err != nil {
+			if err != nil && !fallbackToDHCP {
 				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
 			}
 			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
