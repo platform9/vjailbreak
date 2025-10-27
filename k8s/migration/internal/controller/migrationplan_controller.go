@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/user"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -392,6 +393,22 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	
+	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
+	if err != nil {
+		r.ctxlog.Error(err, "Failed to get migration template and credentials")
+		return ctrl.Result{}, err
+	}
+
+	// Validate VM OS types before proceeding with migration
+	if err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds); err != nil {
+		r.ctxlog.Error(err, "VM validation failed")
+		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, 
+			fmt.Sprintf("Migration plan validation failed: %v", err)); updateErr != nil {
+			r.ctxlog.Error(updateErr, "Failed to update migration plan status")
+		}
+		return ctrl.Result{}, nil
+	}
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch MigrationTemplate CR
 	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
@@ -1488,5 +1505,58 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			return verrors.ErrRDMDiskNotMigrated
 		}
 	}
+	return nil
+}
+
+// validates that the VM has a valid OS type
+func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
+	validOSTypes := []string{"windows", "linux"}
+	osFamily := strings.ToLower(strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily))
+	
+	if osFamily == "" || osFamily == "unknown" {
+		return fmt.Errorf("VM '%s' has an unknown or unspecified OS type. Please set a valid OS type (windows or linux) before migration.", 
+			vmMachine.Spec.VMInfo.Name)
+	}
+	
+	valid := false
+	for _, validOS := range validOSTypes {
+		if osFamily == validOS {
+			valid = true
+			break
+		}
+	}
+	
+	if !valid {
+		return fmt.Errorf("VM '%s' has an unsupported OS type: %s. Only 'windows' or 'linux' are supported.", 
+			vmMachine.Spec.VMInfo.Name, osFamily)
+	}
+	
+	return nil
+}
+
+// validates all VMs in the migration plan
+func (r *MigrationPlanReconciler) validateMigrationPlanVMs(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
+	var invalidVMs []string
+	
+	for i := range migrationplan.Spec.VirtualMachines {
+		for _, vm := range migrationplan.Spec.VirtualMachines[i] {
+			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+			if err != nil {
+				r.ctxlog.Error(err, "Failed to get VM info")
+				return fmt.Errorf("failed to get VM info for %s: %v", vm, err)
+			}
+			
+			if err := r.validateVMOS(vmMachine); err != nil {
+				r.ctxlog.Error(err, "VM OS validation failed")
+				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: %s", vmMachine.Spec.VMInfo.Name, err.Error()))
+			}
+		}
+	}
+	
+	if len(invalidVMs) > 0 {
+		return fmt.Errorf("the following VMs have invalid or unknown OS types and cannot be migrated: %s", 
+			strings.Join(invalidVMs, "; "))
+	}
+	
 	return nil
 }
