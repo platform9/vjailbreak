@@ -43,56 +43,50 @@ spec:
       template:
         spec:
           serviceAccountName: version-checker-sa
-          restartPolicy: OnFailure
+          restartPolicy: Never
           containers:
             - name: version-checker
+              image: quay.io/platform9/vjailbreak:alpine
               command:
                 - /bin/sh
                 - -c
                 - |
                   set -e
-                  
-                  check_internet() {
-                    if ! curl -s --connect-timeout 10 --retry 2 --retry-delay 1 https://api.github.com > /dev/null; then
-                      echo "No internet connection detected. Version check requires internet access."
-                      exit 0
-                    fi
-                  }
-                  
-                  apk add --no-cache curl jq
+                  apk add --no-cache curl jq || true
 
-                  if ! command -v kubectl &> /dev/null; then
-                    if ! curl -LO "https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl"; then
-                      echo "Warning: Could not download kubectl. Version check requires kubectl."
-                      exit 0
-                    fi
-                    chmod +x kubectl
-                    mv kubectl /usr/local/bin/
+                  if ! curl -s --head https://api.github.com | grep -q "200 OK"; then
+                    echo "[WARN] No internet access. Cannot fetch GitHub tags."
+                    echo "[INFO] Version check skipped."
+                    exit 0
                   fi
 
-                  echo "Checking for latest version"
+                  curl -LO "https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl" || {
+                    echo "[WARN] Failed to get kubectl due to no internet access. Skipping check."
+                    exit 0
+                  }
+                  chmod +x kubectl && mv kubectl /usr/local/bin/
+
                   CURRENT_VERSION=$(kubectl get configmap version-config -n migration-system -o jsonpath='{.data.version}' || true)
-                  
+                  echo "Current version: $CURRENT_VERSION"
+
                   if [ -z "$CURRENT_VERSION" ]; then
                     echo "Error: 'version' key not found in ConfigMap. Exiting."
                     exit 0
                   fi
-                  
-                  echo "Current version: $CURRENT_VERSION"
 
-                  check_internet
-
-                  LATEST_TAG=$(curl -s --connect-timeout 15 --retry 2 --retry-delay 1 "https://api.github.com/repos/platform9/vjailbreak/tags" | jq -r '.[0].name' 2>/dev/null || true)
+                  LATEST_TAG=$(curl -s "https://api.github.com/repos/platform9/vjailbreak/tags" | jq -r '.[0].name' || true)
 
                   if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
-                    echo "Warning: Could not fetch latest tag from GitHub."
+                    echo "[WARN] Could not fetch latest tag from GitHub."
                     exit 0
                   fi
+
                   echo "Latest tag on GitHub: $LATEST_TAG"
 
                   CURRENT_SEMVER=${CURRENT_VERSION#v}
                   LATEST_SEMVER=${LATEST_TAG#v}
                   HIGHEST_VERSION=$(printf "%s\n%s" "$CURRENT_SEMVER" "$LATEST_SEMVER" | sort -V | tail -n1)
+
                   if [ "$LATEST_SEMVER" != "$CURRENT_SEMVER" ] && [ "$HIGHEST_VERSION" == "$LATEST_SEMVER" ]; then
                     echo "New version found! Updating ConfigMap..."
                     PATCH_DATA="{\"data\":{\"upgradeAvailable\":\"true\",\"upgradeVersion\":\"$LATEST_TAG\"}}"
@@ -102,4 +96,4 @@ spec:
                     echo "You are on the latest version. No update needed."
                   fi
 
-                  echo "Version Check Complete"
+                  echo "Version Check Complete."
