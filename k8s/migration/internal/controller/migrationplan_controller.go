@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/user"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -411,13 +410,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch MigrationTemplate CR
-	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{}
-	if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
+	migrationtemplate = &vjailbreakv1alpha1.MigrationTemplate{}
+	if err = r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
 		migrationtemplate); err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to get MigrationTemplate '%s'", migrationplan.Spec.MigrationTemplate)
 	}
 	// Fetch VMwareCreds CR
-	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+	vmwcreds = &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
 	}
@@ -450,7 +449,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 	// Migrate RDM disks if any
-	err := r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
+	err = r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
 	if err != nil {
 		return r.handleRDMDiskMigrationError(ctx, migrationplan, err)
 	}
