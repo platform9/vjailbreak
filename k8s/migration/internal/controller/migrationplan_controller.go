@@ -1514,54 +1514,59 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 }
 
 // validates that the VM has a valid OS type
-func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
+func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMwareMachine) (bool, bool, error) {
 	validOSTypes := []string{"windowsGuest", "linuxGuest"}
 	osFamily := strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily)
 
 	if osFamily == "" || osFamily == "unknown" {
-		return fmt.Errorf("vm '%s' has an unknown or unspecified OS type.",
-			vmMachine.Spec.VMInfo.Name)
+		r.ctxlog.Info("VM has unknown or unspecified OS type and will be skipped",
+			"vmName", vmMachine.Spec.VMInfo.Name)
+		return false, true, nil
 	}
 
-	valid := false
 	for _, validOS := range validOSTypes {
 		if osFamily == validOS {
-			valid = true
-			break
+			return true, false, nil
 		}
 	}
 
-	if !valid {
-		return fmt.Errorf("vm '%s' has an unsupported OS type: %s.",
-			vmMachine.Spec.VMInfo.Name, osFamily)
-	}
-
-	return nil
+	return false, false, fmt.Errorf("vm '%s' has an unsupported OS type: %s",
+		vmMachine.Spec.VMInfo.Name, osFamily)
 }
 
 // validates all VMs in the migration plan
 func (r *MigrationPlanReconciler) validateMigrationPlanVMs(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
-	var invalidVMs []string
+	var invalidVMs, skippedVMs []string
 
 	for i := range migrationplan.Spec.VirtualMachines {
 		for _, vm := range migrationplan.Spec.VirtualMachines[i] {
 			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 			if err != nil {
-				r.ctxlog.Error(err, "Failed to get VM info")
-				return fmt.Errorf("failed to get VM info for %s: %v", vm, err)
+				return fmt.Errorf("failed to get VM %s: %v", vm, err)
 			}
-
-			if err := r.validateVMOS(vmMachine); err != nil {
-				r.ctxlog.Error(err, "VM OS validation failed")
-				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: %s", vmMachine.Spec.VMInfo.Name, err.Error()))
+			isValid, isSkippable, err := r.validateVMOS(vmMachine)
+			if err != nil {
+				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: %v", vm, err))
+				continue
+			}
+			if !isValid && isSkippable {
+				skippedVMs = append(skippedVMs, vm)
+				continue
+			}
+			if !isValid {
+				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: unsupported OS type", vm))
+				continue
 			}
 		}
 	}
 
+	if len(skippedVMs) > 0 {
+		r.ctxlog.Info("The following VMs will be skipped due to unknown OS types", "skippedVMs", strings.Join(skippedVMs, ", "))
+	}
+
 	if len(invalidVMs) > 0 {
-		return fmt.Errorf("the following VMs have invalid or unknown OS types and cannot be migrated: %s",
-			strings.Join(invalidVMs, "; "))
+		return fmt.Errorf("the following VMs have invalid OS types and cannot be migrated: %s",
+			strings.Join(invalidVMs, ", "))
 	}
 
 	return nil
-}
