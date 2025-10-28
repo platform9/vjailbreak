@@ -1570,3 +1570,4 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(ctx context.Context, 
 	}
 
 	return nil
+}
