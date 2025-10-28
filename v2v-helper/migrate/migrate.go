@@ -330,14 +330,49 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 	*syncRunning = false
 	return
 }
+func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
+	const defaultInterval = 1
+	const defaultUnit = "hour"
 
-// func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDServer) bool {
-// if *syncRunning {
-// cancelFunc()
-// return true
-// }
-// return false
-// }
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
+		vjailbreakSettings = &k8sutils.VjailbreakSettings{
+			PeriodicSyncInterval: defaultInterval,
+			PeriodicSyncTimeUnit: defaultUnit,
+		}
+	}
+
+	interval := vjailbreakSettings.PeriodicSyncInterval
+	if interval < 1 {
+		interval = defaultInterval
+	}
+
+	var waitTime time.Duration
+	switch vjailbreakSettings.PeriodicSyncTimeUnit {
+	case "second":
+		waitTime = time.Duration(interval) * time.Second
+	case "minute":
+		waitTime = time.Duration(interval) * time.Minute
+	case "hour":
+		waitTime = time.Duration(interval) * time.Hour
+	default:
+		waitTime = time.Duration(interval) * time.Hour
+		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
+	}
+
+	time.Sleep(waitTime)
+	*intervalExhausted = true
+}
+
+func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
+	if *intervalExhausted && !*syncRunning {
+		*intervalExhausted = false
+		go migobj.SetInterval(intervalExhausted)
+		return true
+	}
+	return false
+}
 func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	var ctx context.Context
 	var cancelFunc context.CancelFunc
@@ -345,6 +380,7 @@ func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	nbdserver := migobj.Nbdops
 	syncChan := make(chan error)
 	syncRunning := false
+	intervalExhausted := false
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
@@ -360,7 +396,7 @@ outLoop:
 		case err := <-syncChan:
 			return err
 		default:
-			if !syncRunning {
+			if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
 				ctx, cancelFunc = context.WithCancel(pctx)
 				syncRunning = true
 				go migobj.SyncCBT(ctx, vminfo, syncChan, &syncRunning)
