@@ -51,80 +51,6 @@ const (
 	sdkPath    = "/sdk" // SDK path constant
 )
 
-// Custom error type for credential validation
-type PermanentValidationError struct {
-	Message string
-	Err     error
-}
-
-func (e *PermanentValidationError) Error() string {
-	return e.Message
-}
-
-func (e *PermanentValidationError) Unwrap() error {
-	return e.Err
-}
-
-type TransientValidationError struct {
-	Message string
-	Err     error
-}
-
-func (e *TransientValidationError) Error() string {
-	return e.Message
-}
-
-func (e *TransientValidationError) Unwrap() error {
-	return e.Err
-}
-
-func classifyError(err error) error {
-	if err == nil {
-		return nil
-	}
-	errMsg := strings.ToLower(err.Error())
-
-	// Permanent errors (authentication/authorization failures)
-	if strings.Contains(errMsg, "incorrect user name or password") ||
-		strings.Contains(errMsg, "authentication failed") ||
-		strings.Contains(errMsg, "401") ||
-		strings.Contains(errMsg, "unauthorized") ||
-		strings.Contains(errMsg, "permission denied") ||
-		strings.Contains(errMsg, "access denied") ||
-		strings.Contains(errMsg, "invalid credentials") ||
-		strings.Contains(errMsg, "login failed") ||
-		strings.Contains(errMsg, "bad credentials") {
-		return &PermanentValidationError{
-			Message: "Authentication failed - please check credentials",
-			Err:     err,
-		}
-	}
-
-	// Transient errors (network/temporary issues)
-	if strings.Contains(errMsg, "timeout") ||
-		strings.Contains(errMsg, "connection refused") ||
-		strings.Contains(errMsg, "connection reset") ||
-		strings.Contains(errMsg, "temporary failure") ||
-		strings.Contains(errMsg, "network is unreachable") ||
-		strings.Contains(errMsg, "no route to host") ||
-		strings.Contains(errMsg, "tls handshake") ||
-		strings.Contains(errMsg, "i/o timeout") ||
-		strings.Contains(errMsg, "503") ||
-		strings.Contains(errMsg, "502") ||
-		strings.Contains(errMsg, "server misbehaving") {
-		return &TransientValidationError{
-			Message: "Temporary connection issue - will retry",
-			Err:     err,
-		}
-	}
-
-	// Default to transient for unknown errors (safer to retry)
-	return &TransientValidationError{
-		Message: "Unknown error - will retry",
-		Err:     err,
-	}
-}
-
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	creds := vjailbreakv1alpha1.VMwareCreds{}
@@ -551,7 +477,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 
-	mapKey := fmt.Sprintf("%s|%s|%s|%t", host, datacenter, username, disableSSLVerification)
+	mapKey := string(vmwcreds.UID)
 	var c *vim25.Client
 
 	// Initialize map if needed
@@ -584,6 +510,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
 	var lastErr error
+	ctxlog := log.FromContext(ctx)
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Ensure we have a client for this attempt
 		if c == nil {
@@ -591,29 +519,22 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		}
 
 		err = s.Login(ctx, c, nil)
-		lastErr = err
-		ctxlog := log.FromContext(ctx)
 		if err == nil {
 			// Login successful
 			ctxlog.Info("Login successful", "attempt", attempt)
 			break
+		} else if strings.Contains(err.Error(), "incorrect user name or password") {
+			return nil, fmt.Errorf("authentication failed: invalid username, password. Please verify your credentials")
 		}
 
-		// Log the error and retry after a delay
+		// Save the error and log it
+		lastErr = err
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
 
-		// Classify the error
-		classifiedErr := classifyError(err)
-
-		// If the error is permanent, return immediately
-		if _, isPermanent := classifiedErr.(*PermanentValidationError); isPermanent {
-			ctxlog.Info("Permanent authentication failure detected, stopping retries")
-			return nil, classifiedErr
-		}
-
-		// If the error is transient, retry after a delay
+		// Retry with exponential backoff
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
+			ctxlog.Info("Retrying after delay", "delayMs", delayNum)
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
 			c = nil // Force fresh client on next attempt
 		}
@@ -621,15 +542,14 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 
 	// Check if all login attempts failed
 	if lastErr != nil {
-		classifiedErr := classifyError(lastErr)
-		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, classifiedErr)
+		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, lastErr)
 	}
 
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
 	_, err = finder.Datacenter(context.Background(), datacenter)
 	if err != nil {
-		return nil, &PermanentValidationError{Message: "failed to find datacenter", Err: err}
+		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
 
 	// All validations passed - cache the fully validated client
@@ -1901,42 +1821,16 @@ func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmw
 	}
 
 	host := vmwareCredsinfo.Host
-	username := vmwareCredsinfo.Username
-	disableSSLVerification := vmwareCredsinfo.Insecure
-
-	// Normalize host to match the cache key format
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != sdkPath {
-		host += sdkPath
-	}
 
 	// Build the same map key used in ValidateVMwareCreds
-	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+	mapKey := string(vmwcreds.UID)
 
 	// Check if there's a cached client
 	if vmwareClientMap != nil {
-		if val, ok := vmwareClientMap.Load(mapKey); ok {
-			cachedClient, valid := val.(*vim25.Client)
-			if valid && cachedClient != nil && cachedClient.Client != nil {
-				ctxlog.Info("Logging out cached VMware client", "host", host, "username", username)
-
-				// Attempt to logout
-				if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, cachedClient); err != nil {
-					ctxlog.Error(err, "Failed to logout cached VMware client, will remove from cache anyway")
-				}
-
-				// Close idle connections
-				cachedClient.CloseIdleConnections()
-			}
-
-			// Remove from cache regardless of logout success
-			vmwareClientMap.Delete(mapKey)
-			ctxlog.Info("Removed VMware client from cache", "host", host)
-		} else {
-			ctxlog.Info("No cached VMware client found for cleanup", "host", host)
-		}
+		vmwareClientMap.Delete(mapKey)
+		ctxlog.Info("Removed VMware client from cache", "host", host)
+	} else {
+		ctxlog.Info("No cached VMware client found for cleanup", "host", host)
 	}
 
 	return nil

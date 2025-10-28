@@ -95,22 +95,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-			return ctrl.Result{}, errors.Wrap(
-				errors.Wrap(updateErr, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name())),
-				err.Error())
+			// Log the error but don't return it - we still want to stop reconciling
+			ctxlog.Error(updateErr, "Failed to update status, but stopping reconciliation anyway", "validationError", err.Error())
 		}
-		var permanentErr *utils.PermanentValidationError
-		if errors.As(err, &permanentErr) {
-			ctxlog.Error(permanentErr, "Permanent error validating VMwareCreds", "vmwarecreds", scope.Name())
-			return ctrl.Result{}, nil
-		}
-		var transientErr *utils.TransientValidationError
-		if errors.As(err, &transientErr) {
-			ctxlog.Error(transientErr, "Transient error validating VMwareCreds", "vmwarecreds", scope.Name())
-			return ctrl.Result{}, err
-		}
-		// unknown error type
-		return ctrl.Result{}, err
+		// return nil to stop reconciling
+		return ctrl.Result{Requeue: false}, nil
 	}
 	if c != nil {
 		defer c.CloseIdleConnections()
