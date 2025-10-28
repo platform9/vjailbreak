@@ -399,14 +399,14 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// Validate VM OS types before proceeding with migration
-	if err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds); err != nil {
+	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	if err != nil {
 		r.ctxlog.Error(err, "VM validation failed")
-		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-			fmt.Sprintf("Migration plan validation failed: %v", err)); updateErr != nil {
-			r.ctxlog.Error(updateErr, "Failed to update migration plan status")
-		}
+		_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
+			fmt.Sprintf("Migration plan validation failed: %v", err))
 		return ctrl.Result{}, nil
 	}
+
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch MigrationTemplate CR
 	migrationtemplate = &vjailbreakv1alpha1.MigrationTemplate{}
@@ -435,18 +435,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// vmMachinesArr is created to maintain order in which VM migration is triggered
-	vmMachinesArr := make([]*vjailbreakv1alpha1.VMwareMachine, 0)
-	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, 0)
-	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
-		for _, vm := range parallelvms {
-			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
-			}
-			vmMachinesArr = append(vmMachinesArr, vmMachine)
-			vmMachinesMap[vm] = vmMachine
-		}
+	vmMachinesArr := validVMs
+	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(validVMs))
+	for _, vmMachine := range validVMs {
+		vmMachinesMap[vmMachine.Spec.VMInfo.Name] = vmMachine
 	}
+
 	// Migrate RDM disks if any
 	err = r.migrateRDMdisks(ctx, migrationplan, vmMachinesMap, openstackcreds)
 	if err != nil {
@@ -1535,39 +1529,47 @@ func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMw
 }
 
 // validates all VMs in the migration plan
-func (r *MigrationPlanReconciler) validateMigrationPlanVMs(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
-	var invalidVMs, skippedVMs []string
+func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
+	ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
 
-	for i := range migrationplan.Spec.VirtualMachines {
-		for _, vm := range migrationplan.Spec.VirtualMachines[i] {
+	var (
+		validVMs   []*vjailbreakv1alpha1.VMwareMachine
+		skippedVMs []string
+	)
+
+	for _, vmGroup := range migrationplan.Spec.VirtualMachines {
+		for _, vm := range vmGroup {
 			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 			if err != nil {
-				return fmt.Errorf("failed to get VM %s: %v", vm, err)
+				return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
 			}
-			isValid, isSkippable, err := r.validateVMOS(vmMachine)
+
+			valid, skipped, err := r.validateVMOS(vmMachine)
 			if err != nil {
-				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: %v", vm, err))
-				continue
+				return nil, err
 			}
-			if !isValid && isSkippable {
+			if skipped {
 				skippedVMs = append(skippedVMs, vm)
 				continue
 			}
-			if !isValid {
-				invalidVMs = append(invalidVMs, fmt.Sprintf("%s: unsupported OS type", vm))
-				continue
+			if valid {
+				validVMs = append(validVMs, vmMachine)
 			}
 		}
 	}
 
 	if len(skippedVMs) > 0 {
-		r.ctxlog.Info("The following VMs will be skipped due to unknown OS types", "skippedVMs", strings.Join(skippedVMs, ", "))
+		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMs)
+		r.ctxlog.Info(msg)
+		_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg)
 	}
 
-	if len(invalidVMs) > 0 {
-		return fmt.Errorf("the following VMs have invalid OS types and cannot be migrated: %s",
-			strings.Join(invalidVMs, ", "))
+	if len(validVMs) == 0 {
+		return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 	}
 
-	return nil
+	return validVMs, nil
 }
