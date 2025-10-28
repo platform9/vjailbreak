@@ -1537,7 +1537,6 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
-
 	var (
 		validVMs   []*vjailbreakv1alpha1.VMwareMachine
 		skippedVMs []string
