@@ -402,10 +402,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
 	if err != nil {
 		r.ctxlog.Error(err, "VM validation failed")
-		_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-			fmt.Sprintf("Migration plan validation failed: %v", err))
+		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
+			fmt.Sprintf("Migration plan validation failed: %v", err)); updateErr != nil {
+			r.ctxlog.Error(updateErr, "Failed to update migration plan status after validation error")
+		}
 		return ctrl.Result{}, nil
 	}
+
 
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch MigrationTemplate CR
@@ -1564,7 +1567,9 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	if len(skippedVMs) > 0 {
 		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMs)
 		r.ctxlog.Info(msg)
-		_ = r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg)
+		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg); updateErr != nil {
+			r.ctxlog.Error(updateErr, "Failed to update migration plan status for skipped VMs")
+		}
 	}
 
 	if len(validVMs) == 0 {
