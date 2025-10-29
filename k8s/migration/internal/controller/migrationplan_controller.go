@@ -1451,15 +1451,13 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 	}
 	// Update all RDMDisk CRs that need to be updated
 	for _, rdmDiskCR := range rdmDiskCRToBeUpdated {
-		if rdmDiskCR.Status.Phase == RDMPhaseManaging ||
-			rdmDiskCR.Status.Phase == RDMPhaseManaged ||
-			rdmDiskCR.Status.Phase == RDMPhaseError {
-			log.FromContext(ctx).Info("Skipping update for RDMDisk CR as it is already being managed or in error state",
-				"rdmDiskName", rdmDiskCR.Name, "phase", rdmDiskCR.Status.Phase)
+		if rdmDiskCR.Status.Phase == RDMPhaseManaging || rdmDiskCR.Status.Phase == RDMPhaseManaged || rdmDiskCR.Status.Phase == RDMPhaseError {
+			log.FromContext(ctx).Info("Skipping update for RDMDisk CR as it is already being managed or in error state", "rdmDiskName", rdmDiskCR.Name, "phase", rdmDiskCR.Status.Phase)
 			continue
 		}
 
-		// Use retry to handle resourceVersion conflicts gracefully
+		// Use retry to handle resourceVersion conflicts gracefully,
+		// on error it will re-fetch the latest version and  before retrying update will check importToCinder flag again
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
 			if err := r.Get(ctx, types.NamespacedName{
@@ -1468,7 +1466,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			}, rdmDisk); err != nil {
 				return err
 			}
-
 			// Idempotent guard - check if already marked for import
 			if rdmDisk.Spec.ImportToCinder {
 				log.FromContext(ctx).Info("Skipping patch, already marked for import",
