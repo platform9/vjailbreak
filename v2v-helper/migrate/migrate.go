@@ -379,10 +379,10 @@ func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	var ctx context.Context
 	var cancelFunc context.CancelFunc
 	pctx := context.Background()
-	nbdserver := migobj.Nbdops
+	// nbdserver := migobj.Nbdops
 	syncChan := make(chan error)
 	syncRunning := false
-	intervalExhausted := true
+	// intervalExhausted := true
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
@@ -399,7 +399,8 @@ outLoop:
 		case err := <-syncChan:
 			return err
 		default:
-			if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
+			if !syncRunning {
+				// if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
 				migobj.logMessage("Syncing CBT")
 				ctx, cancelFunc = context.WithCancel(pctx)
 				syncRunning = true
