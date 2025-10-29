@@ -363,6 +363,7 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 
 	time.Sleep(waitTime)
 	*intervalExhausted = true
+	migobj.logMessage("Interval Exhausted")
 }
 
 func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
@@ -371,6 +372,7 @@ func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunni
 		go migobj.SetInterval(intervalExhausted)
 		return true
 	}
+	migobj.logMessage("Sync not exhausted")
 	return false
 }
 func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
@@ -384,6 +386,7 @@ func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
+		migobj.logMessage("Admin Cutover")
 		select {
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
@@ -397,6 +400,7 @@ outLoop:
 			return err
 		default:
 			if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
+				migobj.logMessage("Syncing CBT")
 				ctx, cancelFunc = context.WithCancel(pctx)
 				syncRunning = true
 				go migobj.SyncCBT(ctx, vminfo, syncChan, &syncRunning)
