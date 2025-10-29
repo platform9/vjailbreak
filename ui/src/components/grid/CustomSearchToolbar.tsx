@@ -1,6 +1,6 @@
 import { Box, IconButton, Tooltip, Typography, Menu, MenuItem } from "@mui/material"
 import { GridToolbarQuickFilter } from "@mui/x-data-grid"
-import { RefreshRounded, FilterList as FilterListIcon, CalendarToday as CalendarIcon } from "@mui/icons-material"
+import { RefreshRounded, FilterList as FilterListIcon, CalendarToday as CalendarIcon, Close as CloseIcon } from "@mui/icons-material"
 import { useState } from "react"
 
 interface CustomSearchToolbarProps {
@@ -32,6 +32,9 @@ const CustomSearchToolbar = ({
 
   const statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'];
   const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days'];
+
+  const isDateFilterActive = currentDateFilter !== 'All Time';
+  const isStatusFilterActive = currentStatusFilter !== 'All';
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>, menu: 'status' | 'date') => {
     if (menu === 'status') setStatusAnchorEl(event.currentTarget);
@@ -79,10 +82,16 @@ const CustomSearchToolbar = ({
             <>
               <Tooltip title="Filter by creation date">
                 <IconButton onClick={(e) => handleMenuClick(e, 'date')} size="small">
-                  <CalendarIcon fontSize="small" />
+                  <CalendarIcon fontSize="small" color={isDateFilterActive ? 'primary' : 'inherit'} />
                 </IconButton>
               </Tooltip>
               <Menu anchorEl={dateAnchorEl} open={dateMenuOpen} onClose={handleMenuClose}>
+                {isDateFilterActive && (
+                  <MenuItem onClick={() => handleFilterSelect('All Time', 'date')}>
+                    <CloseIcon fontSize="small" sx={{ mr: 1 }} />
+                    Clear filter
+                  </MenuItem>
+                )}
                 {dateFilterOptions.map((option) => (
                   <MenuItem key={option} selected={option === currentDateFilter} onClick={() => handleFilterSelect(option, 'date')}>
                     {option}
@@ -95,13 +104,19 @@ const CustomSearchToolbar = ({
             <>
               <Tooltip title="Filter by status">
                 <IconButton onClick={(e) => handleMenuClick(e, 'status')} size="small">
-                  <FilterListIcon />
+                  <FilterListIcon color={isStatusFilterActive ? 'primary' : 'inherit'} />
                 </IconButton>
               </Tooltip>
               <Menu
               anchorEl={statusAnchorEl}
               open={statusMenuOpen}
               onClose={handleMenuClose}>
+                {isStatusFilterActive && (
+                  <MenuItem onClick={() => handleFilterSelect('All', 'status')}>
+                    <CloseIcon fontSize="small" sx={{ mr: 1 }} />
+                    Clear filter
+                  </MenuItem>
+                )}
                 {statusFilterOptions.map((option) => (
                   <MenuItem
                   key={option}
@@ -119,11 +134,11 @@ const CustomSearchToolbar = ({
           <div>
             <GridToolbarQuickFilter
               placeholder={placeholder}
-              sx={{
-                "& .MuiInputBase-input": {
-                  textOverflow: "ellipsis",
-                 }
-                }}
+              sx={{ 
+              "& .MuiInputBase-input": {
+                textOverflow: "ellipsis",
+              }
+            }}
             />
           </div>
         </Box>
