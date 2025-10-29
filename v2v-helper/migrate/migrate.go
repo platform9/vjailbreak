@@ -380,7 +380,7 @@ func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	nbdserver := migobj.Nbdops
 	syncChan := make(chan error)
 	syncRunning := false
-	intervalExhausted := false
+	intervalExhausted := true
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
@@ -400,10 +400,6 @@ outLoop:
 				ctx, cancelFunc = context.WithCancel(pctx)
 				syncRunning = true
 				go migobj.SyncCBT(ctx, vminfo, syncChan, &syncRunning)
-			}
-			for nbidx, nbdIdx := range nbdserver {
-				cbtstatus := nbdIdx.GetProgress()
-				migobj.logMessage(fmt.Sprintf("DEBUG : Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, cbtstatus.CopiedSize, cbtstatus.TotalSize, cbtstatus.Duration))
 			}
 		}
 	}
