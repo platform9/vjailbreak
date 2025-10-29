@@ -4,7 +4,6 @@ package utils
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"math"
 	"net/http"
@@ -148,30 +147,6 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 		TenantName: fields["TenantName"],
 		Insecure:   insecure,
 	}, nil
-}
-
-// GetCert retrieves an X.509 certificate from an endpoint
-func GetCert(endpoint string) (*x509.Certificate, error) {
-	conf := &tls.Config{
-		//nolint:gosec // This is required to skip certificate verification
-		InsecureSkipVerify: true,
-	}
-	parsedURL, err := url.Parse(endpoint)
-	if err != nil {
-		return nil, errors.Wrap(err, "error parsing URL")
-	}
-	hostname := parsedURL.Hostname()
-	conn, err := tls.Dial("tcp", hostname+":443", conf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error connecting to %s", hostname)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Log.Info("Error closing connection", "error", err)
-		}
-	}()
-	cert := conn.ConnectionState().PeerCertificates[0]
-	return cert, nil
 }
 
 // VerifyNetworks verifies the existence of specified networks in OpenStack
@@ -429,21 +404,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if openstackCredential.Insecure {
 		tlsConfig.InsecureSkipVerify = true
 	} else {
-		// Get the certificate for the Openstack endpoint
-		caCert, certerr := GetCert(openstackCredential.AuthURL)
-		if certerr != nil {
-			return nil, errors.Wrap(certerr, "failed to get certificate for openstack")
-		}
-		// Trying to fetch the system cert pool and add the Openstack certificate to it
-		caCertPool, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get system cert pool: %w", err)
-		}
-		if caCertPool == nil {
-			caCertPool = x509.NewCertPool()
-		}
-		caCertPool.AddCert(caCert)
-		tlsConfig.RootCAs = caCertPool
+		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
@@ -1212,6 +1173,13 @@ func containsString(slice []string, target string) bool {
 	return false
 }
 
+// Helper to check if Phase is not in managing/managed/error
+func isPhaseUpdatable(phase string) bool {
+	return phase != constants.RDMPhaseManaging &&
+		phase != constants.RDMPhaseManaged &&
+		phase != constants.RDMPhaseError
+}
+
 // syncRDMDisks handles synchronization of RDM disk information between VMInfo and VMwareMachine
 func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, rdmInfo []vjailbreakv1alpha1.RDMDisk) error {
 	// Both have RDM disks - preserve OpenStack related information
@@ -1257,10 +1225,34 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
 				}
 
+				// Update RDM disk CR if existing and new OpenStack volume reference does not match, and existing disk is not in managing, managed or error phase
+				if !reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+					!reflect.DeepEqual(rdmInfo[i].Spec.OpenstackVolumeRef, vjailbreakv1alpha1.OpenStackVolumeRefInfo{}) &&
+					!reflect.DeepEqual(existingDisk.Spec.OpenstackVolumeRef, rdmInfo[i].Spec.OpenstackVolumeRef) &&
+					isPhaseUpdatable(existingDisk.Status.Phase) {
+					existingDisk.Spec.OpenstackVolumeRef = rdmInfo[i].Spec.OpenstackVolumeRef
+				}
+
 				// Add owner VMs if new reference is added
 				for _, ownerVM := range rdmInfo[i].Spec.OwnerVMs {
 					if !slices.Contains(existingDisk.Spec.OwnerVMs, ownerVM) {
 						existingDisk.Spec.OwnerVMs = AppendUnique(existingDisk.Spec.OwnerVMs, ownerVM)
+					}
+				}
+
+				// Ensure owner reference is set to VMwareCreds for existing RDM disks
+				ownerRefExists := false
+				for _, ownerRef := range existingDisk.OwnerReferences {
+					if ownerRef.UID == vmwcreds.UID &&
+						ownerRef.Name == vmwcreds.GetName() &&
+						ownerRef.Kind == "VMwareCreds" {
+						ownerRefExists = true
+						break
+					}
+				}
+				if !ownerRefExists {
+					if err := controllerutil.SetOwnerReference(vmwcreds, &existingDisk, k3sclient.Scheme()); err != nil {
+						return fmt.Errorf("failed to set owner reference on existing RDM disk CR '%s': %w", existingDisk.Name, err)
 					}
 				}
 
@@ -1288,6 +1280,11 @@ func syncRDMDisks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailb
 					OwnerVMs:           rdmInfo[i].Spec.OwnerVMs,
 					OpenstackVolumeRef: rdmInfo[i].Spec.OpenstackVolumeRef,
 				},
+			}
+
+			// Set the owner reference to VMwareCreds so RDM disks are deleted when VMwareCreds is deleted
+			if err := controllerutil.SetOwnerReference(vmwcreds, rdmDiskCR, k3sclient.Scheme()); err != nil {
+				return fmt.Errorf("failed to set owner reference on RDM disk CR '%s': %w", rdmDiskCR.Name, err)
 			}
 			err := k3sclient.Create(ctx, rdmDiskCR)
 			if err != nil {
@@ -1350,18 +1347,19 @@ func populateRDMDiskInfoFromAttributes(ctx context.Context, baseRDMDisk vjailbre
 			diskName := strings.TrimSpace(parts[1])
 			key := parts[2]
 			value := parts[3]
-
-			// Update fields only if new value is provided
-			if strings.TrimSpace(key) == "volumeRef" && value != "" {
-				splotVolRef := strings.Split(value, "=")
-				if len(splotVolRef) != 2 {
-					return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
-				}
-				mp := make(map[string]string)
-				mp[splotVolRef[0]] = splotVolRef[1]
-				log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to")
-				baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
-					VolumeRef: mp,
+			if strings.TrimSpace(baseRDMDisk.Spec.DiskName) == diskName {
+				// Update fields only if new value is provided
+				if strings.TrimSpace(key) == "volumeRef" && value != "" {
+					splitVolRef := strings.Split(value, "=")
+					if len(splitVolRef) != 2 {
+						return vjailbreakv1alpha1.RDMDisk{}, fmt.Errorf("invalid volume reference format: %s", baseRDMDisk.Spec.OpenstackVolumeRef)
+					}
+					mp := make(map[string]string)
+					mp[splitVolRef[0]] = splitVolRef[1]
+					log.Info("Setting OpenStack Volume Ref for RDM disk:", diskName, "to", "value: ", mp, "owner VMs: ", baseRDMDisk.Spec.OwnerVMs)
+					baseRDMDisk.Spec.OpenstackVolumeRef = vjailbreakv1alpha1.OpenstackVolumeRef{
+						VolumeRef: mp,
+					}
 				}
 			}
 		}

@@ -94,6 +94,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             required:
             - datacenter
             type: object

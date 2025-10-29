@@ -1043,6 +1043,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              projectName:
+                description: ProjectName is the name of the project in openstack
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -2174,6 +2177,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             required:
             - datacenter
             type: object
@@ -2667,6 +2673,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
 - apiGroups:
   - ""
   resources:
@@ -3614,6 +3627,23 @@ subjects:
   name: migration-controller-manager
   namespace: migration-system
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-migration-controller-manager-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: migration-controller-manager
+  namespace: migration-system
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -3642,6 +3672,8 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
+  strategy:
+    type: Recreate
   template:
     metadata:
       annotations:
@@ -3665,7 +3697,7 @@ spec:
         env:
         - name: MAX_CONCURRENT_RECONCILES
           value: "5"
-        image: quay.io/platform9/vjailbreak-controller:v0.3.4
+        image: quay.io/platform9/vjailbreak-controller:v0.3.5
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3745,7 +3777,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.4
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.5
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

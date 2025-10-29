@@ -24,6 +24,25 @@ export const getOpenstackCredentials = async (
   const response = await axios.get<OpenstackCreds>({
     endpoint,
   })
+
+  // TODO: REMOVE MOCK DATA - Add mock Cinder backend pools and data copy methods
+  if (response && response.spec) {
+    response.spec.cinderBackendPools = response.spec.cinderBackendPools || [
+      "primera@A600-TDV",
+      "primera@A650-PROD",
+      "ceph@rbd-pool",
+      "netapp@ontap-svm1",
+      "pure@flasharray-x70",
+    ]
+
+    response.spec.dataCopyMethods = response.spec.dataCopyMethods || [
+      "live",
+      "hot",
+      "cold",
+      "warm",
+    ]
+  }
+
   return response
 }
 
@@ -84,13 +103,8 @@ export const createOpenstackCredsWithSecret = async (
 interface IPValidationRequest {
   ip: string[]
   accessInfo: {
-    authUrl: string
-    domainName: string
-    insecure: boolean
-    password: string
-    regionName: string
-    tenantName: string
-    username: string
+    secret_name: string
+    secret_namespace: string
   }
 }
 

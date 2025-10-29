@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -111,6 +112,9 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
 			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
 			VCenterLoginRetryLimit:              constants.VCenterLoginRetryLimit,
+			OpenstackCredsRequeueAfterMinutes:   constants.OpenstackCredsRequeueAfterMinutes,
+			VMwareCredsRequeueAfterMinutes:      constants.VMwareCredsRequeueAfterMinutes,
+			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
 		}, nil
 	}
 
@@ -154,6 +158,18 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"] = strconv.Itoa(constants.VCenterLoginRetryLimit)
 	}
 
+	if vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"] == "" {
+		vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"] = strconv.Itoa(constants.OpenstackCredsRequeueAfterMinutes)
+	}
+
+	if vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"] == "" {
+		vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"] = strconv.Itoa(constants.VMwareCredsRequeueAfterMinutes)
+	}
+
+	if vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] == "" {
+		vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] = strconv.FormatBool(constants.ValidateRDMOwnerVMs)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
@@ -165,5 +181,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
 		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
 		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
+		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
+		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
+		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
 	}, nil
 }

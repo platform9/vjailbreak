@@ -1,5 +1,7 @@
 import { styled, Typography } from '@mui/material'
 import cubeIcon from '../assets/platform9-cube.svg'
+import { useEffect, useState } from 'react'
+import { getDeploymentName } from 'src/api/settings'
 
 const LogoContainer = styled('div')(() => ({
   display: 'flex',
@@ -42,6 +44,21 @@ interface Platform9LogoProps {
 }
 
 export default function Platform9Logo({ collapsed = false }: Platform9LogoProps) {
+  const [depName,setDepname] = useState("")
+   useEffect(() => {
+     const fetchDeploymentName = async () => {
+      try { 
+        const result = await getDeploymentName();
+        setDepname(result);
+        document.title = result;
+      } catch (e) {
+        setDepname("vJailbreak")
+        console.error("Failed to fetch data:", e);
+      } 
+    };
+
+    fetchDeploymentName();
+    }, [])
   return (
     <LogoContainer>
       <CubeIcon
@@ -51,7 +68,7 @@ export default function Platform9Logo({ collapsed = false }: Platform9LogoProps)
       />
       {!collapsed && (
         <BrandText variant="h6">
-          vJailbreak
+          {depName}
         </BrandText>
       )}
     </LogoContainer>

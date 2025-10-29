@@ -11,4 +11,7 @@ type VjailbreakSettings struct {
 	VolumeAvailableWaitIntervalSeconds  int
 	VolumeAvailableWaitRetryLimit       int
 	VCenterLoginRetryLimit              int
+	OpenstackCredsRequeueAfterMinutes   int
+	VMwareCredsRequeueAfterMinutes      int
+	ValidateRDMOwnerVMs                 bool
 }

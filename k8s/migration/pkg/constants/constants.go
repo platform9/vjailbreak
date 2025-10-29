@@ -142,7 +142,10 @@ const (
 	CredsRequeueAfter = 1 * time.Minute
 
 	// OpenstackCredsRequeueAfter is the time to requeue after.
-	OpenstackCredsRequeueAfter = 60 * time.Minute
+	OpenstackCredsRequeueAfterMinutes = 60
+
+	// VMwareCredsRequeueAfter is the time to requeue after.
+	VMwareCredsRequeueAfterMinutes = 60
 
 	// ENVFileLocation is the location of the env file
 	ENVFileLocation = "/etc/pf9/k3s.env"
@@ -206,11 +209,18 @@ const (
 	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
 	PopulateVMwareMachineFlavors = true
 
+	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
+	ValidateRDMOwnerVMs = true
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
 	VCenterLoginRetryLimit = 5
+
+	// ConfigMap settings keys
+	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
+	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
@@ -286,4 +296,12 @@ runcmd:
   - echo "Preparing the node..."
   - cloud-ctl prep-node
   - echo "Node preparation complete. Setup finished successfully."`
+)
+var (
+	// RDMPhaseManaging is the phase for RDMDisk when it is being managed
+	RDMPhaseManaging = "Managing"
+	// RDMPhaseManaged is the phase for RDMDisk when it has been successfully managed
+	RDMPhaseManaged = "Managed"
+	// RDMPhaseError is the phase for RDMDisk when there is an error
+	RDMPhaseError = "Error"
 )

@@ -1043,6 +1043,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              projectName:
+                description: ProjectName is the name of the project in openstack
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -2174,6 +2177,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             required:
             - datacenter
             type: object
@@ -2667,6 +2673,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
 - apiGroups:
   - ""
   resources:
@@ -3609,6 +3622,23 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: migration-manager-role
+subjects:
+- kind: ServiceAccount
+  name: migration-controller-manager
+  namespace: migration-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-migration-controller-manager-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
 subjects:
 - kind: ServiceAccount
   name: migration-controller-manager

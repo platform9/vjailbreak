@@ -55,6 +55,9 @@ export interface OpenstackCredsSpec {
   }
   flavors?: OpenStackFlavor[]
   pcdHostConfig?: PCDHostConfig[]
+  cinderBackendPools?: string[]
+  dataCopyMethods?: string[]
+  projectName?: string
 }
 
 export interface GetOpenstackCredsListMetadata {
@@ -63,9 +66,9 @@ export interface GetOpenstackCredsListMetadata {
 }
 
 export interface SecurityGroupOption {
-  name: string;
-  id: string;
-  requiresIdDisplay: boolean;
+  name: string
+  id: string
+  requiresIdDisplay: boolean
 }
 
 export interface OpenstackCredsStatus {
@@ -74,6 +77,7 @@ export interface OpenstackCredsStatus {
   openstack?: {
     networks?: string[]
     volumeTypes?: string[]
+    volumeBackends?: string[]
     securityGroups?: SecurityGroupOption[]
   }
 }
