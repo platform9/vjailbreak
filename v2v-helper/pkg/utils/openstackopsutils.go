@@ -505,16 +505,20 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	if ip != "" {
 		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
+		
 		subnet, err := osclient.GetSubnet(network.Subnets, ip)
-		if err != nil {
+		fixedIP := []ports.IP{}
+		if err != nil  && !fallbackToDHCP {
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
-		createOpts.FixedIPs = []ports.IP{
-			{
-				SubnetID:  subnet.ID,
-				IPAddress: ip,
-			},
+		
+		if subnet != nil{				
+			fixedIP = append(fixedIP, ports.IP{
+			SubnetID:  subnet.ID,
+			IPAddress: ip,
+		    })
 		}
+		createOpts.FixedIPs = fixedIP
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()

@@ -80,7 +80,7 @@ const CdsIconWrapper = styled('div')({
 
 
 const CustomToolbarWithActions = (props) => {
-  const { rowSelectionModel, onAssignFlavor, onAssignIP, poweredOffSelectionCount, ...toolbarProps } = props;
+  const { rowSelectionModel, onAssignFlavor, onAssignIP, hasRdmVMs, onAssignRdmConfiguration, poweredOffSelectionCount, ...toolbarProps } = props;
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
@@ -98,6 +98,16 @@ const CustomToolbarWithActions = (props) => {
             >
               Assign Flavor ({rowSelectionModel.length})
             </Button>
+            {hasRdmVMs && (
+              <Button
+                variant="text"
+                color="secondary"
+                onClick={onAssignRdmConfiguration}
+                size="small"
+              >
+                Configure RDM ({rowSelectionModel.length})
+              </Button>
+            )}
             {poweredOffSelectionCount > 0 && (
               <Button
                 variant="text"
@@ -1201,7 +1211,7 @@ export default function VmsSelectionStep({
     <VmsSelectionStepContainer>
       <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
       <FieldsContainer>
-        {/* {rdmValidation.hasRdmVMs && (
+        {rdmValidation.hasRdmVMs && (
           <Alert severity="info" sx={{ mb: 2 }}>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
@@ -1212,7 +1222,7 @@ export default function VmsSelectionStep({
               </Typography>
             </Box>
           </Alert>
-        )} */}
+        )}
         <FormControl error={!!error} required>
           <Paper sx={{ width: "100%", height: 389 }}>
             <DataGrid
