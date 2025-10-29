@@ -240,7 +240,7 @@ func (migobj *Migrate) WaitforCutover() error {
 	return nil
 }
 
-func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan chan error, syncRunning *bool) {
+func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
 	envURL := migobj.URL
@@ -249,9 +249,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 	thumbprint := migobj.Thumbprint
 	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
-		*syncRunning = false
-		syncChan <- errors.Wrap(err, "failed to get snapshot")
-		return
+		return errors.Wrap(err, "failed to get snapshot")
 	}
 
 	var changedAreas types.DiskChangeInfo
@@ -259,9 +257,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 	for idx := range vminfo.VMDisks {
 		changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 		if err != nil {
-			*syncRunning = false
-			syncChan <- errors.Wrap(err, "failed to get changed disk areas")
-			return
+			return errors.Wrap(err, "failed to get changed disk areas")
 		}
 
 		if len(changedAreas.ChangedArea) == 0 {
@@ -272,16 +268,12 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 			utils.PrintLog("Restarting NBD server")
 			err = nbdops[idx].StopNBDServer()
 			if err != nil {
-				*syncRunning = false
-				syncChan <- errors.Wrap(err, "failed to stop NBD server")
-				return
+				return errors.Wrap(err, "failed to stop NBD server")
 			}
 
 			err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk, migobj.EventReporter)
 			if err != nil {
-				*syncRunning = false
-				syncChan <- errors.Wrap(err, "failed to start NBD server")
-				return
+				return errors.Wrap(err, "failed to start NBD server")
 			}
 			// sleep for 2 seconds to allow the NBD server to start
 			time.Sleep(2 * time.Second)
@@ -299,15 +291,14 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 			if err != nil {
 				changedBlockCopySuccess = false
 			}
+
 			duration := time.Since(startTime)
 
 			migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
 
 			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 			if err != nil {
-				*syncRunning = false
-				syncChan <- errors.Wrap(err, "failed to update disk info")
-				return
+				return errors.Wrap(err, "failed to update disk info")
 			}
 			if !changedBlockCopySuccess {
 				migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
@@ -317,95 +308,44 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 	}
 	err = vmops.CleanUpSnapshots(false)
 	if err != nil {
-		*syncRunning = false
-		syncChan <- errors.Wrap(err, "failed to cleanup snapshot of source VM")
-		return
+		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
 	}
 	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
-		*syncRunning = false
-		syncChan <- errors.Wrap(err, "failed to take snapshot of source VM")
-		return
+		return errors.Wrap(err, "failed to take snapshot of source VM")
 	}
-	*syncRunning = false
-	return
+	return nil
 }
 func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
 	const defaultUnit = "hour"
-
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
-		vjailbreakSettings = &k8sutils.VjailbreakSettings{
-			PeriodicSyncInterval: defaultInterval,
-			PeriodicSyncTimeUnit: defaultUnit,
-		}
-	}
-
-	interval := vjailbreakSettings.PeriodicSyncInterval
-	if interval < 1 {
-		interval = defaultInterval
-	}
-
-	var waitTime time.Duration
-	switch vjailbreakSettings.PeriodicSyncTimeUnit {
-	case "second":
-		waitTime = time.Duration(interval) * time.Second
-	case "minute":
-		waitTime = time.Duration(interval) * time.Minute
-	case "hour":
-		waitTime = time.Duration(interval) * time.Hour
-	default:
-		waitTime = time.Duration(interval) * time.Hour
-		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
-	}
-
-	time.Sleep(waitTime)
-	*intervalExhausted = true
-	migobj.logMessage("Interval Exhausted")
 }
 
-func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
-	if *intervalExhausted && !*syncRunning {
-		*intervalExhausted = false
-		go migobj.SetInterval(intervalExhausted)
-		return true
-	}
-	migobj.logMessage("Sync not exhausted")
-	return false
-}
-func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
-	var ctx context.Context
-	var cancelFunc context.CancelFunc
-	pctx := context.Background()
-	// nbdserver := migobj.Nbdops
-	syncChan := make(chan error)
-	syncRunning := false
-	// intervalExhausted := true
+func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
+	nbdserver := migobj.Nbdops
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
-		migobj.logMessage("Admin Cutover")
+		migobj.logMessage("DEBUG : Waiting for Admin Cutover conditions to be met")
 		select {
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
-				migobj.logMessage("Cutover conditions met")
-				if syncRunning {
-					cancelFunc()
-				}
 				break outLoop
 			}
-		case err := <-syncChan:
-			return err
+			migobj.logMessage(fmt.Sprintf("Label: %s", label))
+			migobj.logMessage("Cutover conditions met")
+
 		default:
-			if !syncRunning {
-				// if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
-				migobj.logMessage("Syncing CBT")
-				ctx, cancelFunc = context.WithCancel(pctx)
-				syncRunning = true
-				go migobj.SyncCBT(ctx, vminfo, syncChan, &syncRunning)
+			migobj.logMessage("Periodic Sync")
+			err := migobj.SyncCBT(ctx, vminfo)
+			if err != nil {
+				return errors.Wrap(err, "failed to sync CBT")
 			}
+			for nbidx, nbdIdx := range nbdserver {
+				copiedSize, totalSize, duration := nbdIdx.GetProgress()
+				migobj.logMessage(fmt.Sprintf("Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, copiedSize, totalSize, duration))
+			}
+			migobj.logMessage("Periodic Sync completed")
 		}
 	}
 	return nil
@@ -500,7 +440,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			}
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
-				if err := migobj.WaitforAdminCutover(vminfo); err != nil {
+				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
