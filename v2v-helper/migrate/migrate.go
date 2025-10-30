@@ -339,11 +339,17 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 				duration := time.Since(startTime)
 				if migobj.MigrationType == "cold" {
-                    migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s", idx, vminfo.VMDisks[idx].Path, duration))
-                    break
-                }
-				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+					migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s", idx, vminfo.VMDisks[idx].Path, duration))
+				} else {
+					migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+				}
 			}
+
+			if migobj.MigrationType == "cold" {
+                utils.PrintLog("Cold migration: full disk copy complete. Breaking replication loop.")
+                break
+            }
+
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(); err != nil {
