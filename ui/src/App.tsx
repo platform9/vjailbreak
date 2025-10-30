@@ -1,12 +1,13 @@
 import { styled } from "@mui/material"
-import { useState } from "react"
-import { Route, Routes, useLocation, Navigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { Route, Routes, useLocation, Navigate, useNavigate } from "react-router-dom"
 import "./assets/reset.css"
 import AppBar from "./components/AppBar"
 import RouteCompatibility from "./components/RouteCompatibility"
 import MigrationFormDrawer from "./features/migration/MigrationForm"
 import RollingMigrationFormDrawer from "./features/migration/RollingMigrationForm"
 import { useMigrationsQuery } from "./hooks/api/useMigrationsQuery"
+import { useNodesQuery } from "./hooks/api/useNodesQuery"
 import { useVmwareCredentialsQuery } from "./hooks/api/useVmwareCredentialsQuery"
 import { useOpenstackCredentialsQuery } from "./hooks/api/useOpenstackCredentialsQuery"
 import DashboardLayout from "./pages/dashboard/DashboardLayout"
@@ -39,6 +40,7 @@ const AppContent = styled("div")(({ theme }) => ({
 
 function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
 
