@@ -338,6 +338,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to copy disk")
 				}
 				duration := time.Since(startTime)
+				if migobj.MigrationType == "cold" {
+                    migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s", idx, vminfo.VMDisks[idx].Path, duration))
+                    break
+                }
 				migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
 			}
 			if adminInitiatedCutover {

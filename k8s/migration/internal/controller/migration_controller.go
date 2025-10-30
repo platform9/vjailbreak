@@ -275,16 +275,6 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 		return err
 	}
 
-	// Fetch the MigrationPlan to determine the migration type
-	migrationPlan := &vjailbreakv1alpha1.MigrationPlan{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      scope.Migration.Spec.MigrationPlan,
-		Namespace: scope.Migration.Namespace,
-	}, migrationPlan); err != nil {
-		scope.Logger.Error(err, "Failed to get MigrationPlan for phase setup", "planName", scope.Migration.Spec.MigrationPlan)
-		return errors.Wrap(err, "failed to get MigrationPlan for phase setup")
-	}
-
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending}
@@ -323,9 +313,6 @@ loop:
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingChangedBlocksWithIteration) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks]:
-			if migrationPlan.Spec.MigrationStrategy.Type == "cold" {
-				continue
-			}
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
