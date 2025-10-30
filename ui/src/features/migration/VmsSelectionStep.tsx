@@ -591,19 +591,23 @@ export default function VmsSelectionStep({
   useEffect(() => {
     const selectedClusterName = (() => {
       if (!vmwareCluster) return undefined;
-      const parts = vmwareCluster.split(":");
+      const parts = vmwareCluster.includes(":")
+        ? vmwareCluster.split(":")
+        : [vmwareCluster];
       const clusterName = parts[parts.length - 1]?.trim();
-      return clusterName && clusterName.toUpperCase() !== "NO CLUSTER"
-        ? clusterName.trim()
-        : undefined;
+      if (!clusterName) return undefined;
+      if (clusterName.toUpperCase() === "NO CLUSTER") return "ALL";
+      return clusterName;
     })();
-  
-    const filteredVmList = selectedClusterName
-      ? vmList.filter((vm) => {
-          const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"] ?? "";
-          return labelValue.toLowerCase() === selectedClusterName.toLowerCase();
-        })
-      : vmList;
+    
+    const filteredVmList =
+      !selectedClusterName || selectedClusterName === "ALL"
+        ? vmList
+        : vmList.filter((vm) => {
+            const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"] ?? "";
+            return labelValue.toLowerCase() === selectedClusterName.toLowerCase();
+          });
+
   
     const initialVmsWithFlavor = filteredVmList.map((vm) => {
       let flavor = "";
@@ -611,42 +615,40 @@ export default function VmsSelectionStep({
         const foundFlavor = openstackFlavors.find((f) => f.id === vm.targetFlavorId);
         flavor = foundFlavor ? foundFlavor.name : vm.targetFlavorId;
       }
-      const flavorNotFound = !!(openstackCredName && vm.labels?.[openstackCredName] === "NOT_FOUND");
-  
+
+      // Check for NOT_FOUND label for OpenStack credentials
+      const flavorNotFound = openstackCredName ? vm.labels?.[openstackCredName] === "NOT_FOUND" : false;
+
+      // Map power state from vmState   
       const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
-  
+
+      // Create comma-separated IP string from networkInterfaces
       const allIPs = vm.networkInterfaces
         ? vm.networkInterfaces
-            .map((nic) => nic.ipAddress)
-            .filter((ip) => ip && ip.trim() !== "")
-            .join(", ")
+          .map(nic => nic.ipAddress)
+          .filter(ip => ip && ip.trim() !== "")
+          .join(", ")
         : vm.ipAddress || "";
-  
+
+      // Use assigned OS family if available, otherwise use the VM's detected OS family  
       const assignedOsFamily = vmOSAssignments[vm.name];
       const finalOsFamily = assignedOsFamily || vm.osFamily;
   
       return {
         ...vm,
-        ipAddress: allIPs || "—",
+        ipAddress: allIPs || "—", // Update the main IP field to contain comma-separated IPs
         isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
         flavor,
         flavorNotFound,
         powerState,
-        osFamily: finalOsFamily,
-        ipValidationStatus: "pending" as const,
-        ipValidationMessage: "",
-      } as VmDataWithFlavor;
+        osFamily: finalOsFamily, // Use the assigned OS family or fallback to detected
+        ipValidationStatus: 'pending' as const,
+        ipValidationMessage: '',
+      }
     });
   
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [
-    vmList,
-    migratedVms,
-    openstackFlavors,
-    openstackCredName,
-    vmOSAssignments,
-    vmwareCluster,
-  ]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments, vmwareCluster]);
     
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
