@@ -297,7 +297,18 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 
 			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 			if err != nil {
-				changedBlockCopySuccess = false
+				select {
+				case <-ctx.Done():
+					err = vmops.CleanUpSnapshots(false)
+					changedBlockCopySuccess = false
+					if err != nil {
+						syncChan <- errors.Wrap(err, "failed to cleanup snapshot of source VM")
+					}
+				default:
+					syncChan <- errors.Wrap(err, "failed to copy changed blocks")
+				}
+				*syncRunning = false
+				return
 			}
 
 			duration := time.Since(startTime)
@@ -332,7 +343,21 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 }
 func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
-	const defaultUnit = "hour"
+	const defaultUnit = "minute"
+
+	time.Sleep(time.Duration(defaultInterval) * time.Minute)
+	*intervalExhausted = true
+	migobj.logMessage("Interval Exhausted")
+}
+
+func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
+	if *intervalExhausted && !*syncRunning {
+		*intervalExhausted = false
+		go migobj.SetInterval(intervalExhausted)
+		return true
+	}
+	migobj.logMessage("Sync not exhausted")
+	return false
 }
 
 func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
@@ -343,6 +368,7 @@ func (migobj *Migrate) WaitforAdminCutover(vminfo vm.VMInfo) error {
 	nbdserver := migobj.Nbdops
 	syncChan := make(chan error)
 	syncRunning := false
+	intervalExhausted := true
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 outLoop:
 	for {
@@ -359,7 +385,7 @@ outLoop:
 		case err := <-syncChan:
 			return err
 		default:
-			if !syncRunning {
+			if migobj.DecideReschedule(cancelFunc, &syncRunning, nbdserver, &intervalExhausted) {
 				migobj.logMessage("Periodic Sync")
 				go migobj.SyncCBT(ctx, vminfo, syncChan, &syncRunning)
 				syncRunning = true
