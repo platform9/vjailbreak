@@ -52,6 +52,11 @@ opnestack cli version >= 6.2.1
 - [Volume Backend Pool List](https://docs.openstack.org/python-openstackclient/latest/cli/command-objects/volume-backend.html#volume-backend-pool-list)
 
 
+## RDM Validation settings
+
+In vjailbreak setting configmap we have a setting called `VALIDATE_RDM_OWNER_VMS` whose default value is `true`.  
+
+This setting manadates all VM linked to RDM disk must be migrated in a single migration plan, to disable it set  `VALIDATE_RDM_OWNER_VMS` to false
 
 ## On VMware 
 
@@ -59,15 +64,21 @@ Perform the following steps on each VM from the cluster you are planning to migr
 
 - Add the following annotation to the VMware Notes field for the VM:
   ```
-  VJB_RDM:Hard Disk 5:volumeRef:source-name=abac111
+  VJB_RDM:{Name of Hardisk}:volumeRef:source-name=abac111
   ```
-  Replace `Hard Disk 5` with the RDM disk name and `abac111` with the actual source details.
+  - VJB_RDM – Key prefix indicating this entry is an RDM (Raw Device Mapping) LUN reference. 
+  - {Name of Hardisk} - Name of the RDM disk attached to the VM. Replace this placeholder with the actual disk name.
+  Disk Name is case sensitive.
+  - volumeRef – Denotes the reference section for the volume configuration.
+  source-name=abac111 – Specifies the LUN reference.
+  The key can be either source-id or source-name.
+   
+    The value is the LUN identifier (ID or Name) used to map the disk.
+    To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
 
-- To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
-
-  ```bash
-  openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
-  ```
+    ```bash
+    openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
+    ```
 
 **Note: Not all SAN arrays are supported by the OpenStack block storage client, in such cases above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
 
@@ -196,6 +207,14 @@ status:
 
 
 ### Rollback Plan - If Migration Fails
+
+### ⚠️ Caution:
+Once an RDM disk is managed in OpenStack or PCD, do not delete the corresponding volume from PCD/OpenStack during a rollback.
+Deleting the volume will also remove the associated LUN reference from the storage array, resulting in irreversible data loss.
+
+To unmanage an RDM disk safely, use the following command instead of deleting it directly:
+
+```openstack volume delete <volume-id> --remote```
 
 1. Delete VMs created in PCD or OpenStack.
 2. Remove the managed volume from OpenStack without deleting it from the SAN array:
