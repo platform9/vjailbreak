@@ -341,11 +341,39 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 	}
 	*syncRunning = false
 }
+
 func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
-	const defaultUnit = "minute"
+	const defaultUnit = "hour"
 
-	time.Sleep(time.Duration(defaultInterval) * time.Minute)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
+		vjailbreakSettings = &k8sutils.VjailbreakSettings{
+			PeriodicSyncInterval: defaultInterval,
+			PeriodicSyncTimeUnit: defaultUnit,
+		}
+	}
+
+	interval := vjailbreakSettings.PeriodicSyncInterval
+	if interval < 1 {
+		interval = defaultInterval
+	}
+
+	var waitTime time.Duration
+	switch vjailbreakSettings.PeriodicSyncTimeUnit {
+	case "second":
+		waitTime = time.Duration(interval) * time.Second
+	case "minute":
+		waitTime = time.Duration(interval) * time.Minute
+	case "hour":
+		waitTime = time.Duration(interval) * time.Hour
+	default:
+		waitTime = time.Duration(interval) * time.Hour
+		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
+	}
+
+	time.Sleep(waitTime)
 	*intervalExhausted = true
 	migobj.logMessage("Interval Exhausted")
 }
@@ -353,6 +381,7 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
 	if *intervalExhausted && !*syncRunning {
 		*intervalExhausted = false
+		migobj.logMessage("Rescheduling Sync")
 		go migobj.SetInterval(intervalExhausted)
 		return true
 	}
@@ -376,8 +405,10 @@ outLoop:
 		select {
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
-				cancelFunc()
-				syncRunning = false
+				// wait for sync to finish
+				for syncRunning {
+					continue
+				}
 				break outLoop
 			}
 			migobj.logMessage(fmt.Sprintf("Label: %s", label))
