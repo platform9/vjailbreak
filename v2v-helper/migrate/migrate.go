@@ -406,9 +406,10 @@ outLoop:
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
 				// wait for sync to finish
-				for syncRunning {
-					continue
-				}
+for syncRunning {
+	time.Sleep(100 * time.Millisecond)
+	continue
+}
 				break outLoop
 			}
 			migobj.logMessage(fmt.Sprintf("Label: %s", label))
