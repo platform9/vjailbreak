@@ -596,17 +596,15 @@ export default function VmsSelectionStep({
         : [vmwareCluster];
       const clusterName = parts[parts.length - 1]?.trim();
       if (!clusterName) return undefined;
-      if (clusterName.toUpperCase() === "NO CLUSTER") return "ALL";
-      return clusterName;
+      return clusterName.toUpperCase() === "NO CLUSTER" ? null : clusterName;
     })();
     
-    const filteredVmList =
-      !selectedClusterName || selectedClusterName === "ALL"
-        ? vmList
-        : vmList.filter((vm) => {
-            const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"] ?? "";
-            return labelValue.toLowerCase() === selectedClusterName.toLowerCase();
-          });
+    const filteredVmList = vmList.filter((vm) => {
+      const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"]?.toLowerCase() || '';
+      if (selectedClusterName === undefined) return true;
+      if (selectedClusterName === null) return !labelValue;
+      return labelValue === selectedClusterName.toLowerCase();
+    });
 
   
     const initialVmsWithFlavor = filteredVmList.map((vm) => {
@@ -619,7 +617,7 @@ export default function VmsSelectionStep({
       // Check for NOT_FOUND label for OpenStack credentials
       const flavorNotFound = openstackCredName ? vm.labels?.[openstackCredName] === "NOT_FOUND" : false;
 
-      // Map power state from vmState   
+      // Map power state from vmState 
       const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
 
       // Create comma-separated IP string from networkInterfaces
@@ -630,10 +628,10 @@ export default function VmsSelectionStep({
           .join(", ")
         : vm.ipAddress || "";
 
-      // Use assigned OS family if available, otherwise use the VM's detected OS family  
+      // Use assigned OS family if available, otherwise use the VM's detected OS family
       const assignedOsFamily = vmOSAssignments[vm.name];
       const finalOsFamily = assignedOsFamily || vm.osFamily;
-  
+
       return {
         ...vm,
         ipAddress: allIPs || "—", // Update the main IP field to contain comma-separated IPs
@@ -644,12 +642,12 @@ export default function VmsSelectionStep({
         osFamily: finalOsFamily, // Use the assigned OS family or fallback to detected
         ipValidationStatus: 'pending' as const,
         ipValidationMessage: '',
-      }
+      };
     });
   
     setVmsWithFlavor(initialVmsWithFlavor);
   }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments, vmwareCluster]);
-    
+
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
     if (vmsWithFlavor.length === 0) return;
