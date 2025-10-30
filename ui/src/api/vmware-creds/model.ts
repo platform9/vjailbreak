@@ -34,6 +34,7 @@ export interface VMwareCredsSpec {
     name: string
   }
   datacenter?: string
+  hostName?: string
 }
 
 export interface GetVmwareCredsListMetadata {

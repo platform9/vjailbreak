@@ -132,7 +132,7 @@ export default function MaasConfigDetailsModal({
             fullWidth
         >
             <DialogTitle>
-                BMConfig Details
+                Bare Metal Configuration Details
             </DialogTitle>
             <DialogContent dividers>
                 {loading ? (
@@ -153,7 +153,7 @@ export default function MaasConfigDetailsModal({
                                 <Grid item xs={12} md={8}>
                                     <DetailItem>
                                         <Typography variant="subtitle2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                                            MAAS URL
+                                            Bare Metal Provider URL
                                         </Typography>
                                         <Typography variant="body1">
                                             {config.spec.apiUrl || 'Not specified'}

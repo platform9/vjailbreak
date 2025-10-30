@@ -21,8 +21,9 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/migrateutils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
@@ -62,9 +63,11 @@ type Migrate struct {
 	TargetAvailabilityZone  string
 	AssignedIP              string
 	SecurityGroups          []string
+	RDMDisks                []string
 	UseFlavorless           bool
 	TenantName              string
 	Reporter                *reporter.Reporter
+	FallbackToDHCP          bool
 }
 
 type MigrationTimes struct {
@@ -102,8 +105,13 @@ func (migobj *Migrate) logMessage(message string) {
 func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Creating volumes in OpenStack")
+
 	for idx, vmdisk := range vminfo.VMDisks {
-		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx])
+		setRDMLabel := false
+		if len(vminfo.RDMDisks) > 0 {
+			setRDMLabel = true
+		}
+		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to create volume")
 		}
@@ -308,7 +316,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 	}
 
-	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
 	}
@@ -342,6 +350,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
+			}
+			if err := migobj.WaitforCutover(); err != nil {
+				return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 			}
 		} else {
 			migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
@@ -410,12 +421,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				if err := migobj.WaitforCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
-				}
-				if err := migobj.WaitforAdminCutover(); err != nil {
-					return vminfo, errors.Wrap(err, "failed to start Admin initated Cutover")
-				}
 				utils.PrintLog("Shutting down source VM and performing final copy")
 				err = vmops.VMPowerOff()
 				if err != nil {
@@ -492,7 +497,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// create XML for conversion
-	err = migrateutils.GenerateXMLConfig(vminfo)
+	err = vmutils.GenerateXMLConfig(vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate XML")
 	}
@@ -802,7 +807,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	utils.PrintLog(fmt.Sprintf("Using security group IDs: %v", securityGroupIDs))
 
 	// Get vjailbreak settings
-	vjailbreakSettings, err := utils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
@@ -1047,8 +1052,10 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		time.Sleep(time.Until(migobj.MigrationTimes.DataCopyStart))
 		migobj.logMessage("Data copy start time reached")
 	}
+	fmt.Println("Starting VM Migration with RDM disks : ", migobj.RDMDisks)
 	// Get Info about VM
-	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype)
+	vminfo, err := migobj.VMops.GetVMInfo(migobj.Ostype, migobj.RDMDisks)
+
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
@@ -1094,21 +1101,10 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "failed to live replicate disks")
 	}
-	// Import LUN and MigrateRDM disk
-	for idx, rdmDisk := range vminfo.RDMDisks {
-		volumeID, err := migobj.cinderManage(rdmDisk)
-		if err != nil {
-			migobj.cleanup(vminfo, fmt.Sprintf("failed to import LUN: %s", err))
-			return errors.Wrap(err, "failed to import LUN")
-		}
-		vminfo.RDMDisks[idx].VolumeId = volumeID
-	}
-
-	vcenterSettings, err := utils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
-
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
@@ -1165,26 +1161,6 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
 	return nil
-}
-
-// cinderManage imports a LUN into OpenStack Cinder and returns the volume ID.
-func (migobj *Migrate) cinderManage(rdmDisk vm.RDMDisk) (string, error) {
-	openstackops := migobj.Openstackclients
-	migobj.logMessage(fmt.Sprintf("Importing LUN: %s", rdmDisk.DiskName))
-	volume, err := openstackops.CinderManage(rdmDisk, "volume 3.8")
-	if err != nil || volume == nil {
-		return "", errors.Wrap(err, "failed to import LUN")
-	} else if volume.ID == "" {
-		return "", errors.Errorf("failed to import LUN: received empty volume ID")
-	}
-	migobj.logMessage(fmt.Sprintf("LUN imported successfully, waiting for volume %s to become available", volume.ID))
-	// Wait for the volume to become available
-	err = openstackops.WaitForVolume(volume.ID)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to wait for volume to become available")
-	}
-	migobj.logMessage(fmt.Sprintf("Volume %s is now available", volume.ID))
-	return volume.ID, nil
 }
 
 func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string, []string, error) {
@@ -1245,7 +1221,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if migobj.AssignedIP != "" {
 				ip = migobj.AssignedIP
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

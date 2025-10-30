@@ -460,6 +460,8 @@ spec:
                       type: string
                     type: array
                 type: object
+              fallbackToDHCP:
+                type: boolean
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -545,6 +547,10 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
+              retryCount:
+                description: Migration RetryCount is the number of times the migration
+                  has been retried
+                type: integer
             required:
             - migrationMessage
             - migrationStatus
@@ -1037,6 +1043,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              projectName:
+                description: ProjectName is the name of the project in openstack
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -1340,7 +1349,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: RDMDisk is the Schema for the rdmdisks API.
+        description: RDMDisk is the Schema for the RDMDisks API.
         properties:
           apiVersion:
             description: |-
@@ -1386,10 +1395,6 @@ spec:
                     type: object
                   volumeType:
                     type: string
-                required:
-                - cinderBackendPool
-                - source
-                - volumeType
                 type: object
               ownerVMs:
                 items:
@@ -1401,7 +1406,6 @@ spec:
             - diskName
             - diskSize
             - displayName
-            - openstackVolumeRef
             - ownerVMs
             - uuid
             type: object
@@ -2173,6 +2177,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             required:
             - datacenter
             type: object
@@ -2399,42 +2406,7 @@ spec:
                     description: RDMDisks is the list of RDM disks for the virtual
                       machine
                     items:
-                      description: RDMDiskInfo contains information about a Raw Device
-                        Mapping (RDM) disk
-                      properties:
-                        diskName:
-                          description: DiskName is the name of the disk
-                          type: string
-                        diskSize:
-                          description: DiskSize is the size of the disk in GB
-                          format: int64
-                          type: integer
-                        displayName:
-                          description: DisplayName is the display name of the disk
-                          type: string
-                        openstackVolumeRef:
-                          description: OpenstackVolumeRef contains OpenStack volume
-                            reference information
-                          properties:
-                            cinderBackendPool:
-                              description: CinderBackendPool is the cinder backend
-                                pool of the disk
-                              type: string
-                            volumeRef:
-                              additionalProperties:
-                                type: string
-                              description: VolumeRef is the reference to the OpenStack
-                                volume
-                              type: object
-                            volumeType:
-                              description: VolumeType is the volume type of the disk
-                              type: string
-                          type: object
-                        uuid:
-                          description: UUID (VML id) is the unique identifier of the
-                            disk
-                          type: string
-                      type: object
+                      type: string
                     type: array
                   vmState:
                     description: VMState is the state of the virtual machine
@@ -2671,8 +2643,11 @@ rules:
   - ""
   resources:
   - configmaps
+  - namespaces
   - pods
   - secrets
+  - serviceaccounts
+  - services
   verbs:
   - create
   - delete
@@ -2698,6 +2673,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
 - apiGroups:
   - ""
   resources:
@@ -2734,6 +2716,33 @@ rules:
   - batch
   resources:
   - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete
@@ -3618,6 +3627,23 @@ subjects:
   name: migration-controller-manager
   namespace: migration-system
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-migration-controller-manager-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: migration-controller-manager
+  namespace: migration-system
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -3631,6 +3657,150 @@ spec:
   selector:
     app: vpwned-sdk
   type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+    control-plane: controller-manager
+  name: migration-controller-manager
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: controller-manager
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+      containers:
+      - args:
+        - --leader-elect=false
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        env:
+        - name: MAX_CONCURRENT_RECONCILES
+          value: "5"
+        image: quay.io/platform9/vjailbreak-controller:v0.3.5
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /etc/pf9/k3s
+          name: master-token
+        - mountPath: /home/ubuntu
+          name: vddk
+        - mountPath: /etc/hosts
+          name: hosts-file
+          readOnly: true
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      securityContext:
+        runAsGroup: 0
+        runAsUser: 0
+      serviceAccountName: migration-controller-manager
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /var/lib/rancher/k3s/server
+          type: Directory
+        name: master-token
+      - hostPath:
+          path: /home/ubuntu
+          type: Directory
+        name: vddk
+      - hostPath:
+          path: /etc/hosts
+          type: File
+        name: hosts-file
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: vpwned-sdk
+  name: migration-vpwned-sdk
+  namespace: migration-system
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: vpwned-sdk
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: vpwned-sdk
+    spec:
+      containers:
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.5
+        imagePullPolicy: IfNotPresent
+        name: vpwned
+        ports:
+        - containerPort: 3001
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/hosts
+          name: hosts-file
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccountName: migration-controller-manager
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /etc/hosts
+          type: File
+        name: hosts-file
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -3653,4 +3823,3 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
----

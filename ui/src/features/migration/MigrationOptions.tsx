@@ -6,6 +6,7 @@ import {
   styled,
   TextField,
 } from "@mui/material"
+import customTypography from "../../theme/typography"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
@@ -26,8 +27,6 @@ import AccordionSummary from "@mui/material/AccordionSummary"
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
-  OS_TYPES,
-  OS_TYPES_OPTIONS,
   VM_CUTOVER_OPTIONS,
 } from "./constants"
 
@@ -43,11 +42,12 @@ const Fields = styled("div")(({ theme }) => ({
   marginTop: theme.spacing(2),
 }))
 
-const CustomTextField = styled(TextField)({
+const CustomTextField = styled(TextField)(() => ({
   "& .MuiOutlinedInput-root": {
-    fontFamily: "Monospace",
+    // Use monospace variant for input fields (larger, more readable)
+    ...customTypography.monospace,
   },
-})
+}))
 
 // Intefaces
 interface MigrationOptionsPropsInterface {
@@ -81,7 +81,6 @@ export default function MigrationOptions({
   useEffect(() => {
     onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
-    onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -97,7 +96,10 @@ export default function MigrationOptions({
           : params.dataCopyStartTime
     }
 
-    return dayjs(minDate).add(1, "minute")
+    // Disabled selection of time in the past
+    const computedMin = dayjs(minDate).add(1, "minute")
+    const now = dayjs()
+    return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
   return (
@@ -195,6 +197,7 @@ export default function MigrationOptions({
                 onChange={onChange}
                 disabled={!selectedMigrationOptions.dataCopyStartTime}
                 required={!!selectedMigrationOptions.dataCopyStartTime}
+                disablePast
               />
             </Fields>
 
@@ -244,6 +247,7 @@ export default function MigrationOptions({
                     required={
                       params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                     }
+                    disablePast
                   />
                   <TimePicker
                     label="Cutover End Time"
@@ -256,6 +260,7 @@ export default function MigrationOptions({
                       params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                     }
                     minDateTime={getMinEndTime()}
+                    disablePast
                     helperText="Should be greater than data copy/cutover start time"
                   />
                 </Fields>
@@ -291,34 +296,6 @@ export default function MigrationOptions({
               />
             </Fields>
 
-            <Fields>
-              <FormControlLabel
-                id="os-family"
-                label="OS Family"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.osFamily}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions("osFamily")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions?.osFamily}
-                value={params?.osFamily || OS_TYPES.AUTO_DETECT}
-                onChange={(e) => {
-                  onChange("osFamily")(e.target.value)
-                }}
-              >
-                {OS_TYPES_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Fields>
 
             {/* Pre and Post Web Hooks */}
             {/* {PrePostWebHooksList.map((hook) => (

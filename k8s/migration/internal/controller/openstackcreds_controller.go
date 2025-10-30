@@ -20,19 +20,21 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	migrationutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -41,8 +43,9 @@ import (
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
 type OpenstackCredsReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Local  bool
+	Scheme                  *runtime.Scheme
+	Local                   bool
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
@@ -163,9 +166,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 	}
+	// Get vjailbreak settings to get requeue after time
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: constants.CredsRequeueAfter}, nil
+	return ctrl.Result{Requeue: true, RequeueAfter: time.Duration(vjailbreakSettings.OpenstackCredsRequeueAfterMinutes) * time.Minute}, nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) error {
@@ -219,9 +227,11 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Get max concurrent reconciles from vjailbreak settings configmap
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
@@ -269,7 +279,7 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	}
 
 	// Get vjailbreak settings to check if we should populate VMwareMachine flavors
-	vjailbreakSettings, err := migrationutils.GetVjailbreakSettings(ctx, r.Client)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get vjailbreak settings")
 		return errors.Wrap(err, "failed to get vjailbreak settings")

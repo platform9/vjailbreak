@@ -70,6 +70,8 @@ spec:
                       type: string
                     type: array
                 type: object
+              fallbackToDHCP:
+                type: boolean
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -155,6 +157,10 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
+              retryCount:
+                description: Migration RetryCount is the number of times the migration
+                  has been retried
+                type: integer
             required:
             - migrationMessage
             - migrationStatus

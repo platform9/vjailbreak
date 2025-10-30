@@ -7,6 +7,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import customTypography from "../../theme/typography"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
@@ -28,8 +29,6 @@ import { OpenstackCreds } from "src/api/openstack-creds/model";
 import {
   CUTOVER_TYPES,
   DATA_COPY_OPTIONS,
-  OS_TYPES,
-  OS_TYPES_OPTIONS,
   VM_CUTOVER_OPTIONS,
 } from "./constants"
 
@@ -47,11 +46,11 @@ const Fields = styled("div")(() => ({
   gridGap: "12px",
 }))
 
-const CustomTextField = styled(TextField)({
+const CustomTextField = styled(TextField)(() => ({
   "& .MuiOutlinedInput-root": {
-    fontFamily: "Monospace",
+    ...customTypography.monospace,
   },
-})
+}))
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
@@ -90,7 +89,6 @@ export default function MigrationOptionsAlt({
   useEffect(() => {
     onChange("dataCopyMethod")("cold")
     onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
-    onChange("osFamily")(OS_TYPES.AUTO_DETECT)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -106,7 +104,10 @@ export default function MigrationOptionsAlt({
           : params.dataCopyStartTime
     }
 
-    return dayjs(minDate).add(1, "minute")
+    // Disabled selection of time in the past
+    const computedMin = dayjs(minDate).add(1, "minute")
+    const now = dayjs()
+    return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
   const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
@@ -193,6 +194,7 @@ export default function MigrationOptionsAlt({
                 onChange={onChange}
                 disabled={!selectedMigrationOptions.dataCopyStartTime}
                 required={!!selectedMigrationOptions.dataCopyStartTime}
+                disablePast
               />
             </Fields>
 
@@ -240,6 +242,7 @@ export default function MigrationOptionsAlt({
                       required={
                         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                       }
+                      disablePast
                     />
                     <TimePicker
                       label="Cutover End Time"
@@ -252,13 +255,168 @@ export default function MigrationOptionsAlt({
                         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
                       }
                       minDateTime={getMinEndTime()}
+                      disablePast
                       helperText="Should be greater than data copy/cutover start time"
                     />
                   </Fields>
                 )}
             </Fields>
 
+            <Fields sx={{ gridGap: "0" }}>
+              {/* Retry on failure */}
+              <FormControlLabel
+                label="Retry On Failure"
+                control={
+                  <Checkbox
+                    checked={params?.retryOnFailure || false}
+                    onChange={(e) => {
+                      onChange("retryOnFailure")(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                Select this option to retry the migration incase of failure
+              </Typography>
+            </Fields>
+
+            <Fields sx={{ gridGap: "0" }}>
+              <FormControlLabel
+                label="Disconnect Source VM Network"
+                control={
+                  <Checkbox
+                    checked={params?.disconnectSourceNetwork || false}
+                    onChange={(e) => {
+                      onChange("disconnectSourceNetwork")(e.target.checked);
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                Disconnect NICs on the source VM to prevent IP conflicts.
+              </Typography>
+            </Fields>
+
+            <Fields sx={{ gridGap: "0" }}>
+              <FormControlLabel
+                label="Fallback to DHCP"
+                control={
+                  <Checkbox
+                    checked={params?.fallbackToDHCP || false}
+                    onChange={(e) => {
+                      onChange("fallbackToDHCP")(e.target.checked);
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                Migrated VM will use IP from DHCP if static IP cannot be preserved.
+              </Typography>
+            </Fields>
+
             <Fields>
+              <FormControlLabel
+                label="Rename VMware VM"
+                control={
+                  <Checkbox
+                    checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        renameVm: isChecked,
+                        suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
+                      });
+                      onChange("postMigrationAction")({
+                        ...params.postMigrationAction,
+                        renameVm: isChecked,
+                        suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
+                      });
+                    }}
+                  />
+                }
+              />
+              <TextField
+                size="small"
+                label="VM Rename Suffix"
+                disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
+                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+                onChange={(e) => {
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    suffix: e.target.value
+                  });
+                }}
+                placeholder="_migrated_to_pcd"
+              />
+              <Typography variant="caption">
+                This suffix will be appended to the source VM name after migration.
+              </Typography>
+            </Fields>
+
+            <Fields>
+              <FormControlLabel
+                label="Move to Folder in VMware"
+                control={
+                  <Checkbox
+                    checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      updateSelectedMigrationOptions("postMigrationAction")({
+                        ...selectedMigrationOptions.postMigrationAction,
+                        moveToFolder: isChecked,
+                        folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
+                      });
+                      onChange("postMigrationAction")({
+                        ...params.postMigrationAction,
+                        moveToFolder: isChecked,
+                        folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
+                      });
+                    }}
+                  />
+                }
+              />
+              <TextField
+                size="small"
+                label="Folder Name"
+                disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+                onChange={(e) => {
+                  onChange("postMigrationAction")({
+                    ...params.postMigrationAction,
+                    folderName: e.target.value
+                  });
+                }}
+                placeholder="vjailbreakedVMs"
+              />
+              <Typography variant="caption">
+                This folder name will be used to organize the migrated VMs in vCenter.
+              </Typography>
+            </Fields>
+
+            {isPCD && (
+              <Fields sx={{ gridGap: "0" }}>
+                <FormControlLabel
+                  label="Use Dynamic Hotplug-Enabled Flavors"
+                  control={
+                    <Checkbox
+                      checked={params?.useFlavorless || false}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
+                        onChange("useFlavorless")(isChecked);
+                      }}
+                    />
+                  }
+                />
+                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                  This will use the base flavor ID specified in PCD.
+                </Typography>
+              </Fields>
+            )}
+
+            {/* Post Migration Script - moved to the end */}
+            <Fields sx={{ gridColumn: "1 / -1" }}>
               <FormControlLabel
                 label="Post Migration Script"
                 control={
@@ -287,171 +445,6 @@ export default function MigrationOptionsAlt({
                 placeholder="Enter your post-migration script here..."
               />
             </Fields>
-
-            <Fields>
-              <FormControlLabel
-                id="os-family"
-                label="OS Family"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.osFamily}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions("osFamily")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions?.osFamily}
-                value={params?.osFamily || OS_TYPES.AUTO_DETECT}
-                onChange={(e) => {
-                  onChange("osFamily")(e.target.value)
-                }}
-              >
-                {OS_TYPES_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Fields>
-
-            <Fields sx={{ gridGap: "0" }}>
-              {/* Retry on failure */}
-              <FormControlLabel
-                label="Retry On Failure"
-                control={
-                  <Checkbox
-                    checked={params?.retryOnFailure || false}
-                    onChange={(e) => {
-                      onChange("retryOnFailure")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                Select this option to retry the migration incase of failure
-              </Typography>
-            </Fields>
-            <Fields>
-              <FormControlLabel
-                label="Rename VMware VM"
-                control={
-                  <Checkbox
-                    checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
-                        ...selectedMigrationOptions.postMigrationAction,
-                        renameVm: isChecked,
-                        suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
-                      });
-                      onChange("postMigrationAction")({
-                        ...params.postMigrationAction,
-                        renameVm: isChecked,
-                        suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
-                      });
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    suffix: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                This suffix will be appended to the source VM name after migration.
-              </Typography>
-            </Fields>
-
-            <Fields>
-              <FormControlLabel
-                label="Move to Folder in VMware"
-                control={
-                  <Checkbox
-                    checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
-                        ...selectedMigrationOptions.postMigrationAction,
-                        moveToFolder: isChecked,
-                        folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
-                      });
-                      onChange("postMigrationAction")({
-                        ...params.postMigrationAction,
-                        moveToFolder: isChecked,
-                        folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
-                      });
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    folderName: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                This folder name will be used to organize the migrated VMs in vCenter.
-              </Typography>
-              </Fields>
-        
-              <Fields sx={{ gridGap: "0" }}>
-                <FormControlLabel
-                  label="Disconnect Source VM Network"
-                  control={
-                    <Checkbox
-                      checked={params?.disconnectSourceNetwork || false}
-                      onChange={(e) => {
-                        onChange("disconnectSourceNetwork")(e.target.checked);
-                      }}
-                    />
-                  }
-                />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  Disconnect NICs on the source VM to prevent IP conflicts.
-                </Typography>
-              </Fields>
-
-            {isPCD && (
-              <Fields sx={{ gridGap: "0" }}>
-                <FormControlLabel
-                  label="Use Dynamic Hotplug-Enabled Flavors"
-                  control={
-                    <Checkbox
-                      checked={params?.useFlavorless || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
-                        onChange("useFlavorless")(isChecked);
-                      }}
-                    />
-                  }
-                />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  This will use the base flavor ID specified in PCD.
-                </Typography>
-              </Fields>
-
-            )}
             {/*
             Pre and Post Web Hooks
 // ...

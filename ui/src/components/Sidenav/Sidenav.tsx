@@ -22,6 +22,10 @@ import Platform9Logo from '../Platform9Logo'
 import { UpgradeModal } from '../UpgradeModal';
 import UpgradeIcon from '@mui/icons-material/Upgrade';
 import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import { useMigrationsQuery } from '../../hooks/api/useMigrationsQuery'
+import { Phase } from '../../api/migrations/model'
 
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
@@ -358,6 +362,7 @@ export default function Sidenav({
 }: SidenavProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const theme = useTheme()
 
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidenav-collapsed')
@@ -369,6 +374,27 @@ export default function Sidenav({
 
   const { data: versionInfo } = useVersionQuery();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { data: migrations } = useMigrationsQuery(undefined, {
+    refetchInterval: 3000,
+    refetchOnMount: true,
+  })
+
+  // checking if there's any active migrations
+  const activePhases = new Set<Phase>([
+    Phase.Pending,
+    Phase.Validating,
+    Phase.AwaitingDataCopyStart,
+    Phase.CopyingBlocks,
+    Phase.CopyingChangedBlocks,
+    Phase.ConvertingDisk,
+    Phase.AwaitingCutOverStartTime,
+    Phase.AwaitingAdminCutOver,
+    Phase.Unknown,
+  ])
+
+  const hasActiveMigrations = Array.isArray(migrations)
+    ? migrations.some((m) => activePhases.has(m.status?.phase as Phase))
+    : false
 
   useEffect(() => {
     if (controlledCollapsed === undefined) {
@@ -445,27 +471,52 @@ export default function Sidenav({
         <VersionDisplay collapsed={isCollapsed} />
         {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
           isCollapsed ? (
-            <Tooltip title={`Upgrade Available`} placement="right" arrow>
-              <Button
-                color="primary"
-                variant="contained"
-                sx={{ mt: 2, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
-                onClick={() => setIsUpgradeModalOpen(true)}
-              >
-                <UpgradeIcon />
-              </Button>
+            <Tooltip 
+              title={
+                <Typography variant="body2">
+                  {hasActiveMigrations ? "Migrations are in progress, can't upgrade" : 'Upgrade Available'}
+                </Typography>
+              } 
+              placement="right" 
+              arrow
+              slotProps={{ tooltip: { sx: { ...theme.typography.body2 } } }}
+            >
+              <span>
+                <Button
+                  color="primary"
+                  variant="contained"
+                  sx={{ mt: 2, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
+                  onClick={() => setIsUpgradeModalOpen(true)}
+                  disabled={hasActiveMigrations}
+                >
+                  <UpgradeIcon />
+                </Button>
+              </span>
             </Tooltip>
           ) : (
-            <Button
-              color="primary"
-              variant="contained"
-              fullWidth
-              sx={{ mt: 1, fontWeight: 600 }}
-              startIcon={<UpgradeIcon />}
-              onClick={() => setIsUpgradeModalOpen(true)}
+            <Tooltip
+              title={hasActiveMigrations ? (
+                <Typography variant="body2">Migrations are in progress, can't upgrade</Typography>
+              ) : ''}
+              placement="top"
+              arrow
+              disableHoverListener={!hasActiveMigrations}
+              slotProps={{ tooltip: { sx: { ...theme.typography.body2 } } }}
             >
-              Upgrade Available
-            </Button>
+              <span>
+                <Button
+                  color="primary"
+                  variant="contained"
+                  fullWidth
+                  sx={{ mt: 1, fontWeight: 600 }}
+                  startIcon={<UpgradeIcon />}
+                  onClick={() => setIsUpgradeModalOpen(true)}
+                  disabled={hasActiveMigrations}
+                >
+                  Upgrade Available
+                </Button>
+              </span>
+            </Tooltip>
           )
         )}
         <UpgradeModal show={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} />

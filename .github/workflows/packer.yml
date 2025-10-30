@@ -443,12 +443,6 @@ jobs:
         with:
           go-version: ">=1.22.5"
 
-      - name: Generate Controller Manifests
-        run: |
-          make -C ./k8s/migration/ build-installer
-          cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
-          cp -r ./k8s/kube-prometheus image_builder/deploy/
-
       - name: setup-oras
         uses: oras-project/setup-oras@v1.2.1
 
@@ -495,6 +489,16 @@ jobs:
           sudo mkdir -p ./image_builder/images
           sudo chmod +x ./image_builder/scripts/download_images.sh
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
+
+      - name: Generate Controller Manifests
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          make -C ./k8s/migration/ build-installer
+          cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
+          cp -r ./k8s/kube-prometheus image_builder/deploy/
+          mkdir -p image_builder/deploy/cert-manager
+          cp image_builder/cert-manager-manifests/cert-manager.yaml image_builder/deploy/cert-manager/
+          cp k8s/cert-manager/00-selfsigned-issuer.yaml image_builder/deploy/cert-manager/
           
       - name: Copy opensource.txt to image_builder
         if: env.release_found == 'true' || env.is_nightly == 'true'

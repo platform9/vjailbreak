@@ -21,6 +21,8 @@ spec:
     matchLabels:
       control-plane: controller-manager
   replicas: 1
+  strategy:
+    type: Recreate
   template:
     metadata:
       annotations:
@@ -58,6 +60,9 @@ spec:
       containers:
       - command:
         - /manager
+        env:
+          - name: MAX_CONCURRENT_RECONCILES
+            value: "5"
         args:
           - --leader-elect=false
           - --health-probe-bind-address=:8081

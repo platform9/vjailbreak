@@ -93,7 +93,7 @@ function App() {
             <Route path="agents" element={<AgentsPage />} />
             <Route path="credentials" element={<CredentialsPage />} />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
-            <Route path="maas-config" element={<MaasConfigPage />} />
+            <Route path="baremetal-config" element={<MaasConfigPage />} />
           </Route>
           <Route path="/onboarding" element={<Onboarding />} />
         </Routes>
