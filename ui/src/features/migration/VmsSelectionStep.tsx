@@ -153,6 +153,7 @@ interface VmsSelectionStepProps {
   vmwareCredName?: string;
   openstackCredName?: string;
   openstackCredentials?: OpenstackCreds;
+  vmwareCluster?: string;
 }
 
 export default function VmsSelectionStep({
@@ -166,6 +167,7 @@ export default function VmsSelectionStep({
   vmwareCredName,
   openstackCredName,
   openstackCredentials,
+  vmwareCluster,
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
   const { track } = useAmplitude({ component: "VmsSelectionStep" });
@@ -555,6 +557,12 @@ export default function VmsSelectionStep({
   });
 
   useEffect(() => {
+    if (open && vmwareCluster !== undefined) {
+      refreshVMList();
+    }
+  }, [vmwareCluster]);
+
+  useEffect(() => {
     const fetchMigratedVms = async () => {
       if (!open) return;
 
@@ -581,15 +589,29 @@ export default function VmsSelectionStep({
   }, [open, vmList]);
 
   useEffect(() => {
-    const initialVmsWithFlavor = vmList.map(vm => {
+    const selectedClusterName = (() => {
+      if (!vmwareCluster) return undefined;
+      const parts = vmwareCluster.includes(":")
+        ? vmwareCluster.split(":")
+        : [vmwareCluster];
+      const clusterName = parts[parts.length - 1]?.trim();
+      if (!clusterName) return undefined;
+      return clusterName.toUpperCase() === "NO CLUSTER" ? null : clusterName;
+    })();
+    
+    const filteredVmList = vmList.filter((vm) => {
+      const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"]?.toLowerCase() || '';
+      if (selectedClusterName === undefined) return true;
+      if (selectedClusterName === null) return !labelValue;
+      return labelValue === selectedClusterName.toLowerCase();
+    });
+
+  
+    const initialVmsWithFlavor = filteredVmList.map((vm) => {
       let flavor = "";
       if (vm.targetFlavorId) {
-        const foundFlavor = openstackFlavors.find(f => f.id === vm.targetFlavorId);
-        if (foundFlavor) {
-          flavor = foundFlavor.name;
-        } else {
-          flavor = vm.targetFlavorId;
-        }
+        const foundFlavor = openstackFlavors.find((f) => f.id === vm.targetFlavorId);
+        flavor = foundFlavor ? foundFlavor.name : vm.targetFlavorId;
       }
 
       // Check for NOT_FOUND label for OpenStack credentials
@@ -622,8 +644,9 @@ export default function VmsSelectionStep({
         ipValidationMessage: '',
       };
     });
+  
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments, vmwareCluster]);
 
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
