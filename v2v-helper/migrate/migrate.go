@@ -346,33 +346,22 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
 	const defaultUnit = "hour"
 
-	// vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
-	// if err != nil {
-	// 	migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
-	// 	vjailbreakSettings = &k8sutils.VjailbreakSettings{
-	// 		PeriodicSyncInterval: defaultInterval,
-	// 		PeriodicSyncTimeUnit: defaultUnit,
-	// 	}
-	// }
-	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Failed to get migration params: %v, using defaults", err))
-		migrationParams = &utils.MigrationParams{
-			PeriodicSyncInterval: strconv.Itoa(defaultInterval),
+		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
+		vjailbreakSettings = &k8sutils.VjailbreakSettings{
+			PeriodicSyncInterval: defaultInterval,
 			PeriodicSyncTimeUnit: defaultUnit,
 		}
 	}
-	interval, err := strconv.Atoi(migrationParams.PeriodicSyncInterval)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Failed to convert interval to int: %v, using defaults", err))
-		interval = defaultInterval
-	}
+
+	interval := vjailbreakSettings.PeriodicSyncInterval
 	if interval < 1 {
 		interval = defaultInterval
 	}
 
 	var waitTime time.Duration
-	switch migrationParams.PeriodicSyncTimeUnit {
+	switch vjailbreakSettings.PeriodicSyncTimeUnit {
 	case "second":
 		waitTime = time.Duration(interval) * time.Second
 	case "minute":
@@ -381,7 +370,7 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 		waitTime = time.Duration(interval) * time.Hour
 	default:
 		waitTime = time.Duration(interval) * time.Hour
-		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", migrationParams.PeriodicSyncTimeUnit))
+		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
 	}
 
 	time.Sleep(waitTime)
@@ -417,10 +406,9 @@ outLoop:
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
 				// wait for sync to finish
-for syncRunning {
-	time.Sleep(100 * time.Millisecond)
-	continue
-}
+				for syncRunning {
+					continue
+				}
 				break outLoop
 			}
 			migobj.logMessage(fmt.Sprintf("Label: %s", label))
