@@ -3,6 +3,8 @@ export interface VjailbreakSettings {
   data: {
 
     CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: string
+    PERIODIC_SYNC_INTERVAL: string
+    PERIODIC_SYNC_TIME_UNIT: string
     CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: string
     DEFAULT_MIGRATION_METHOD: string
     DEPLOYMENT_NAME: string

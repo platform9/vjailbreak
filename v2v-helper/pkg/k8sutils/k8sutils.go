@@ -103,6 +103,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data == nil {
 		return &VjailbreakSettings{
 			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+			PeriodicSyncInterval:                constants.PeriodicSyncInterval,
+			PeriodicSyncTimeUnit:                constants.PeriodicSyncTimeUnit,
 			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
 			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
 			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
@@ -125,7 +127,12 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
-
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"] = strconv.Itoa(constants.PeriodicSyncInterval)
+	}
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_TIME_UNIT"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_TIME_UNIT"] = constants.PeriodicSyncTimeUnit
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
 	}
@@ -172,6 +179,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		PeriodicSyncInterval:                atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"]),
+		PeriodicSyncTimeUnit:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_TIME_UNIT"],
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
 		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
 		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],

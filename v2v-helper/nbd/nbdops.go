@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -31,12 +32,17 @@ type NBDOperations interface {
 	StopNBDServer() error
 	CopyDisk(ctx context.Context, dest string, diskindex int) error
 	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
+	GetProgress() (int64, int64, time.Duration)
 }
 
 type NBDServer struct {
 	cmd          *exec.Cmd
 	tmp_dir      string
 	progresschan chan string
+	TotalSize    int64
+	StartTime    time.Time
+	CopiedSize   int64
+	Duration     time.Duration
 }
 
 type BlockStatusData struct {
@@ -44,6 +50,8 @@ type BlockStatusData struct {
 	Length int64
 	Flags  uint32
 }
+
+// copiedsize,totalsize,start time,current time
 
 const MaxChunkSize = 64 * 1024 * 1024
 
@@ -364,7 +372,9 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 	}
 	return nil
 }
-
+func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
+	return nbdserver.CopiedSize, nbdserver.TotalSize, nbdserver.Duration
+}
 func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
@@ -400,8 +410,13 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	// Goroutine for updating progress
 	go func() {
 		copiedsize := int64(0)
+		startTime := time.Now()
+		nbdserver.StartTime = startTime
+		nbdserver.TotalSize = totalsize
 		for progress := range incrementalcopyprogress {
 			copiedsize += progress
+			nbdserver.CopiedSize = copiedsize
+			nbdserver.Duration = time.Since(startTime)
 			prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
 			utils.PrintLog(prog)
 			nbdserver.progresschan <- prog
