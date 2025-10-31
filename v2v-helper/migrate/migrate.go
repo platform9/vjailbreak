@@ -346,22 +346,33 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
 	const defaultUnit = "hour"
 
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	// vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	// if err != nil {
+	// 	migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
+	// 	vjailbreakSettings = &k8sutils.VjailbreakSettings{
+	// 		PeriodicSyncInterval: defaultInterval,
+	// 		PeriodicSyncTimeUnit: defaultUnit,
+	// 	}
+	// }
+	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
-		vjailbreakSettings = &k8sutils.VjailbreakSettings{
-			PeriodicSyncInterval: defaultInterval,
+		migobj.logMessage(fmt.Sprintf("Failed to get migration params: %v, using defaults", err))
+		migrationParams = &utils.MigrationParams{
+			PeriodicSyncInterval: strconv.Itoa(defaultInterval),
 			PeriodicSyncTimeUnit: defaultUnit,
 		}
 	}
-
-	interval := vjailbreakSettings.PeriodicSyncInterval
+	interval, err := strconv.Atoi(migrationParams.PeriodicSyncInterval)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Failed to convert interval to int: %v, using defaults", err))
+		interval = defaultInterval
+	}
 	if interval < 1 {
 		interval = defaultInterval
 	}
 
 	var waitTime time.Duration
-	switch vjailbreakSettings.PeriodicSyncTimeUnit {
+	switch migrationParams.PeriodicSyncTimeUnit {
 	case "second":
 		waitTime = time.Duration(interval) * time.Second
 	case "minute":
@@ -370,7 +381,7 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 		waitTime = time.Duration(interval) * time.Hour
 	default:
 		waitTime = time.Duration(interval) * time.Hour
-		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
+		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", migrationParams.PeriodicSyncTimeUnit))
 	}
 
 	time.Sleep(waitTime)

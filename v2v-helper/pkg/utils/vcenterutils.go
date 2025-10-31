@@ -39,6 +39,8 @@ type MigrationParams struct {
 	SecurityGroups          string
 	RDMDisks                string
 	FallbackToDHCP          bool
+	PeriodicSyncInterval    string
+	PeriodicSyncTimeUnit    string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -79,5 +81,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
 		RDMDisks:                string(configMap.Data["RDM_DISK_NAMES"]),
 		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
+		PeriodicSyncInterval:    string(configMap.Data["PERIODIC_SYNC_INTERVAL"]),
+		PeriodicSyncTimeUnit:    string(configMap.Data["PERIODIC_SYNC_TIME_UNIT"]),
 	}, nil
 }
