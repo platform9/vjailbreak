@@ -156,9 +156,7 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling deletion of VMwareCreds '%s' object", scope.Name()))
 
 	// Cleanup cached VMware client and logout
-	if err := utils.CleanupCachedVMwareClient(ctx, r.Client, scope.VMwareCreds); err != nil {
-		ctxlog.Error(err, "Failed to cleanup cached VMware client, continuing with deletion")
-	}
+	utils.CleanupCachedVMwareClient(ctx, r.Client, scope.VMwareCreds)
 
 	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
 	if err != nil {

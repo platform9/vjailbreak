@@ -1810,14 +1810,14 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 }
 
 // CleanupCachedVMwareClient logs out and removes the cached VMware client for the given credentials
-func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) error {
+func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
 	ctxlog := log.FromContext(ctx)
 
 	// Get credentials to build the cache key
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Info("Could not get credentials for cache cleanup, secret may already be deleted", "error", err.Error())
-		return nil // Don't fail deletion if secret is gone
+		return
 	}
 
 	host := vmwareCredsinfo.Host
@@ -1833,5 +1833,4 @@ func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmw
 		ctxlog.Info("No cached VMware client found for cleanup", "host", host)
 	}
 
-	return nil
 }
