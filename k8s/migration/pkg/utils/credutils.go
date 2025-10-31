@@ -659,11 +659,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
-	log.Info(
-		"Fetched vjailbreak settings for vcenter scan concurrency limit",
-		"vcenter_scan_concurrency_limit",
-		vjailbreakSettings.VCenterScanConcurrencyLimit,
-	)
+	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
 
 	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
