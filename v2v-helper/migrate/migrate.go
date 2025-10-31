@@ -345,11 +345,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 			}
 
-			if migobj.MigrationType == "cold" {
-                utils.PrintLog("Cold migration: full disk copy complete. Breaking replication loop.")
-                break
-            }
-
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(); err != nil {
@@ -380,7 +375,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				}
 
 				if len(changedAreas.ChangedArea) == 0 {
-					migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+					if migobj.MigrationType != "cold" {
+						migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+					}
 				} else {
 					migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
 
