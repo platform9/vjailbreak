@@ -534,7 +534,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		// Retry with exponential backoff
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
-			ctxlog.Info("Retrying after delay", "delayMs", delayNum)
+			ctxlog.Info("Retrying login after delay", "delayMs", delayNum)
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
 			c = nil // Force fresh client on next attempt
 		}
