@@ -108,7 +108,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		ctxlog.Info("VMware credentials validation failed", "name", scope.Name(), "error", err.Error())
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
 		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
-
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
 			if apierrors.IsNotFound(updateErr) {
 				ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
@@ -124,7 +123,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{Requeue: false}, nil
 	}
-
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
@@ -136,7 +134,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
-
 	// Cleanup VMware client connections when done
 	if c != nil {
 		defer c.CloseIdleConnections()
@@ -146,15 +143,12 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 			}
 		}()
 	}
-
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-
 	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
-
 	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
@@ -176,7 +170,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
-
 	return ctrl.Result{RequeueAfter: time.Duration(vjailbreakSettings.VMwareCredsRequeueAfterMinutes) * time.Minute}, nil
 }
 
@@ -184,7 +177,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 
-	// Cleanup cached VMware client and logout
+	// Cleanup cached VMware client
 	utils.CleanupCachedVMwareClient(ctx, r.Client, scope.VMwareCreds)
 
 	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)

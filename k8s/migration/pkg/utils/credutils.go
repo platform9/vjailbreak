@@ -452,7 +452,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
-
 	host := vmwareCredsinfo.Host
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
@@ -469,22 +468,18 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.User = url.UserPassword(username, password)
-
 	// Connect and log in to ESX or vCenter
 	s := &cache.Session{
 		URL:      u,
 		Insecure: disableSSLVerification,
 		Reauth:   true,
 	}
-
 	mapKey := string(vmwcreds.UID)
 	var c *vim25.Client
-
 	// Initialize map if needed
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
 	}
-
 	// Check cache for existing authenticated client
 	if val, ok := vmwareClientMap.Load(mapKey); ok {
 		cachedClient, valid := val.(*vim25.Client)
@@ -501,23 +496,19 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 			c = nil // Will create fresh client below
 		}
 	}
-
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
-
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
 	var lastErr error
 	ctxlog := log.FromContext(ctx)
-
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Ensure we have a client for this attempt
 		if c == nil {
 			c = new(vim25.Client)
 		}
-
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
@@ -526,11 +517,9 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		} else if strings.Contains(err.Error(), "incorrect user name or password") {
 			return nil, fmt.Errorf("authentication failed: invalid username, password. Please verify your credentials")
 		}
-
 		// Save the error and log it
 		lastErr = err
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
-
 		// Retry with exponential backoff
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
@@ -539,22 +528,18 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 			c = nil // Force fresh client on next attempt
 		}
 	}
-
 	// Check if all login attempts failed
 	if lastErr != nil {
 		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, lastErr)
 	}
-
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
 	_, err = finder.Datacenter(context.Background(), datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
-
 	// All validations passed - cache the fully validated client
 	vmwareClientMap.Store(mapKey, c)
-
 	return c, nil
 }
 
@@ -1805,22 +1790,18 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	return nil
 }
 
-// CleanupCachedVMwareClient logs out and removes the cached VMware client for the given credentials
+// CleanupCachedVMwareClient removes the cached VMware client for the given credentials. It's a best effort approach to avoid stale clients.
 func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
 	ctxlog := log.FromContext(ctx)
-
 	// Get credentials to build the cache key
 	vmwareCredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Info("Could not get credentials for cache cleanup, secret may already be deleted", "error", err.Error())
 		return
 	}
-
 	host := vmwareCredsinfo.Host
-
 	// Build the same map key used in ValidateVMwareCreds
 	mapKey := string(vmwcreds.UID)
-
 	// Check if there's a cached client
 	if vmwareClientMap != nil {
 		vmwareClientMap.Delete(mapKey)
@@ -1828,5 +1809,4 @@ func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmw
 	} else {
 		ctxlog.Info("No cached VMware client found for cleanup", "host", host)
 	}
-
 }
