@@ -29,6 +29,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -36,7 +37,6 @@ import (
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/vmware/govmomi/vim25"
 )
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -67,22 +67,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Log object state at the start of reconciliation
-	ctxlog.Info("📋 Starting reconciliation",
-		"name", vmwcreds.Name,
-		"uid", vmwcreds.UID,
-		"resourceVersion", vmwcreds.ResourceVersion,
-		"deletionTimestamp", vmwcreds.DeletionTimestamp,
-		"isBeingDeleted", !vmwcreds.DeletionTimestamp.IsZero(),
-		"currentStatus", vmwcreds.Status.VMwareValidationStatus)
-	if err := r.Get(ctx, req.NamespacedName, vmwcreds); err != nil {
-		if apierrors.IsNotFound(err) {
-			ctxlog.Info("Received ignorable event for a recently deleted VMWareCreds.")
-			return ctrl.Result{}, nil
-		}
-		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading VMWareCreds '%s' object", vmwcreds.Name))
-		return ctrl.Result{}, err
-	}
 	scope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
 		Logger:      ctxlog,
 		Client:      r.Client,
@@ -109,85 +93,51 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
 	// Check if validation has already failed - don't retry validation on every reconcile
+	// This prevents spamming vCenter with failed auth attempts on periodic RequeueAfter
 	if scope.VMwareCreds.Status.VMwareValidationStatus == string(corev1.PodFailed) {
 		ctxlog.Info("VMwareCreds validation already marked as Failed, skipping re-validation",
 			"name", scope.Name(),
 			"message", scope.VMwareCreds.Status.VMwareValidationMessage)
-		// Don't requeue - validation already failed and status is set
 		return ctrl.Result{Requeue: false}, nil
 	}
 
-	// Check if validation has already succeeded - skip validation but continue with reconciliation
-	var c *vim25.Client
-	var err error
+	// Validate credentials (whether first time or periodic check)
+	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
+	c, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
+	if err != nil {
+		ctxlog.Info("VMware credentials validation failed", "name", scope.Name(), "error", err.Error())
+		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
+		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
 
-	if scope.VMwareCreds.Status.VMwareValidationStatus == "Succeeded" {
-		ctxlog.V(1).Info("VMwareCreds validation already succeeded, skipping re-validation", "name", scope.Name())
-		// Get a client for the rest of the reconciliation logic
-		c, err = utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
-		if err != nil {
-			// If validation now fails (credentials changed?), update status
-			ctxlog.Info("Previously validated credentials now failing, updating status", "name", scope.Name(), "error", err.Error())
-			scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
-			scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
-			if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-				if apierrors.IsNotFound(updateErr) {
-					return ctrl.Result{}, nil
-				}
-				if apierrors.IsConflict(updateErr) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				ctxlog.Error(updateErr, "Failed to update status due to unexpected error")
-			}
-			return ctrl.Result{Requeue: false}, nil
-		}
-	} else {
-		// Only validate if status is empty or unknown
-		ctxlog.Info("Performing VMware credentials validation", "name", scope.Name(), "currentStatus", scope.VMwareCreds.Status.VMwareValidationStatus)
-		c, err = utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
-		if err != nil {
-			ctxlog.Info("VMware credentials validation failed, attempting to update status", "name", scope.Name(), "error", err.Error())
-			// Update the status of the VMwareCreds object
-			scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
-			scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
-
-			if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-				// Check if the object was deleted or has conflicts
-				if apierrors.IsNotFound(updateErr) {
-					ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name(), "validationError", err.Error())
-					return ctrl.Result{}, nil
-				}
-				if apierrors.IsConflict(updateErr) {
-					ctxlog.Info("VMwareCreds object has conflicts, will retry on next reconcile", "name", scope.Name(), "validationError", err.Error())
-					return ctrl.Result{Requeue: true}, nil
-				}
-				// For other errors (like UID mismatch), log details and stop reconciling
-				ctxlog.Error(updateErr, "Failed to update status due to unexpected error",
-					"validationError", err.Error(),
-					"objectUID", scope.VMwareCreds.UID,
-					"objectResourceVersion", scope.VMwareCreds.ResourceVersion,
-					"objectDeletionTimestamp", scope.VMwareCreds.DeletionTimestamp)
-			} else {
-				ctxlog.Info("Successfully updated status to Failed", "name", scope.Name())
-			}
-			// return nil to stop reconciling
-			return ctrl.Result{Requeue: false}, nil
-		}
-
-		// First time validation succeeded - update status
-		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
-		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
-		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-			// Handle NotFound gracefully - object may have been deleted
-			if apierrors.IsNotFound(err) {
+		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
+			if apierrors.IsNotFound(updateErr) {
 				ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
 				return ctrl.Result{}, nil
 			}
-			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
+			if apierrors.IsConflict(updateErr) {
+				ctxlog.Info("VMwareCreds object has conflicts, will retry on next reconcile", "name", scope.Name())
+				return ctrl.Result{Requeue: true}, nil
+			}
+			ctxlog.Error(updateErr, "Failed to update status due to unexpected error")
+		} else {
+			ctxlog.Info("Successfully updated status to Failed", "name", scope.Name())
 		}
+		return ctrl.Result{Requeue: false}, nil
 	}
 
+	// Validation succeeded - update status
+	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
+	}
+
+	// Cleanup VMware client connections when done
 	if c != nil {
 		defer c.CloseIdleConnections()
 		defer func() {
@@ -233,13 +183,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 // nolint:unparam
 func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
-	ctxlog.Info("⚠️  DELETION TRIGGERED - Reconciling deletion of VMwareCreds object",
-		"name", scope.Name(),
-		"uid", scope.VMwareCreds.UID,
-		"deletionTimestamp", scope.VMwareCreds.DeletionTimestamp,
-		"lastStatus", scope.VMwareCreds.Status.VMwareValidationStatus,
-		"lastMessage", scope.VMwareCreds.Status.VMwareValidationMessage,
-		"finalizers", scope.VMwareCreds.Finalizers)
 
 	// Cleanup cached VMware client and logout
 	utils.CleanupCachedVMwareClient(ctx, r.Client, scope.VMwareCreds)
@@ -254,7 +197,7 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 		controllerutil.RemoveFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 	}
 
-	ctxlog.Info("✅ Successfully completed deletion of VMwareCreds", "name", scope.Name())
+	ctxlog.Info("Successfully completed deletion of VMwareCreds", "name", scope.Name())
 	return ctrl.Result{}, nil
 }
 
@@ -262,5 +205,6 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 func (r *VMwareCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VMwareCreds{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
