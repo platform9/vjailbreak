@@ -1457,7 +1457,8 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		}
 
 		// Use retry to handle resourceVersion conflicts gracefully,
-		// on error it will re-fetch the latest version and  before retrying update will check importToCinder flag again
+		// on error it will re-fetch the latest version and before
+		// retrying update will check importToCinder flag again.
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
 			if err := r.Get(ctx, types.NamespacedName{
@@ -1468,11 +1469,14 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			}
 			// Idempotent guard - check if already marked for import
 			if rdmDisk.Spec.ImportToCinder {
-				log.FromContext(ctx).Info("Skipping patch, already marked for import",
+				log.FromContext(ctx).Info("Skipping update, already marked for import",
 					"rdmDisk", rdmDisk.Name)
 				return nil
 			}
 
+			// Migration Plan controller only sets ImportToCinder to
+			// true, the RDMDisk controller ensures that RDM disk is
+			// managed and imported to Cinder
 			rdmDisk.Spec.ImportToCinder = true
 			rdmDisk.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
 
@@ -1480,12 +1484,13 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				if apierrors.IsConflict(err) {
 					log.FromContext(ctx).Info("Conflict detected while updating RDMDisk — another controller updated it first",
 						"rdmDisk", rdmDisk.Name)
-					return err // RetryOnConflict will re-fetch and retry
+					// RetryOnConflict will re-fetch and retry
+					return err
 				}
 				return fmt.Errorf("failed to update RDMDisk CR: %w", err)
 			}
 
-			log.FromContext(ctx).Info("Patched RDMDisk CR to import into Cinder",
+			log.FromContext(ctx).Info("Updated RDMDisk CR to import into Cinder",
 				"rdmDisk", rdmDisk.Name,
 				"openstackCreds", openstackcreds.GetName())
 
@@ -1494,7 +1499,7 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 
 		if err != nil {
 			// if still failing after retries, bubble up
-			return fmt.Errorf("failed to patch RDMDisk CR after retries: %w", err)
+			return err
 		}
 	}
 
