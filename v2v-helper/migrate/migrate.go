@@ -241,12 +241,16 @@ func (migobj *Migrate) WaitforCutover() error {
 }
 
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan chan error, syncRunning *bool) {
+	migobj.logMessage("Starting CBT sync process")
+	defer migobj.logMessage("CBT sync process completed")
+
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
 	envURL := migobj.URL
 	envUserName := migobj.UserName
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
+
 	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		syncChan <- errors.Wrap(err, "failed to get snapshot")
@@ -346,22 +350,31 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	const defaultInterval = 1
 	const defaultUnit = "hour"
 
+	migobj.logMessage("Setting up sync interval")
+
+	// Get sync interval settings
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Failed to get vjailbreak settings: %v, using defaults", err))
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default interval (%d %s)",
+			err, defaultInterval, defaultUnit))
 		vjailbreakSettings = &k8sutils.VjailbreakSettings{
 			PeriodicSyncInterval: defaultInterval,
 			PeriodicSyncTimeUnit: defaultUnit,
 		}
 	}
 
+	// Validate and set interval
 	interval := vjailbreakSettings.PeriodicSyncInterval
 	if interval < 1 {
+		migobj.logMessage(fmt.Sprintf("WARNING: Invalid interval %d, using default %d", interval, defaultInterval))
 		interval = defaultInterval
 	}
 
+	// Calculate wait time based on unit
 	var waitTime time.Duration
-	switch vjailbreakSettings.PeriodicSyncTimeUnit {
+	unit := strings.ToLower(vjailbreakSettings.PeriodicSyncTimeUnit)
+
+	switch unit {
 	case "second":
 		waitTime = time.Duration(interval) * time.Second
 	case "minute":
@@ -369,23 +382,27 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 	case "hour":
 		waitTime = time.Duration(interval) * time.Hour
 	default:
+		migobj.logMessage(fmt.Sprintf("WARNING: Invalid time unit '%s', defaulting to 'hour'", unit))
 		waitTime = time.Duration(interval) * time.Hour
-		migobj.logMessage(fmt.Sprintf("Invalid interval unit: %s, using hours", vjailbreakSettings.PeriodicSyncTimeUnit))
 	}
 
+	migobj.logMessage(fmt.Sprintf("Waiting for next sync in %d %s(s)", interval, unit))
+
+	// Sleep for the calculated duration
 	time.Sleep(waitTime)
+
+	// Mark interval as exhausted
 	*intervalExhausted = true
-	migobj.logMessage("Interval Exhausted")
+	migobj.logMessage(fmt.Sprintf("Sync interval of %d %s(s) has elapsed", interval, unit))
 }
 
 func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
 	if *intervalExhausted && !*syncRunning {
 		*intervalExhausted = false
-		migobj.logMessage("Rescheduling Sync")
+		migobj.logMessage("Previous interval completed and no sync in progress - rescheduling next sync")
 		go migobj.SetInterval(intervalExhausted)
 		return true
 	}
-	migobj.logMessage("Sync not exhausted")
 	return false
 }
 
@@ -425,7 +442,6 @@ outLoop:
 				copiedSize, totalSize, duration := nbdIdx.GetProgress()
 				migobj.logMessage(fmt.Sprintf("Disk %d Copied Size: %d, Total Size: %d, Duration: %s", nbidx, copiedSize, totalSize, duration))
 			}
-			migobj.logMessage("Periodic Sync completed")
 		}
 	}
 	return nil
