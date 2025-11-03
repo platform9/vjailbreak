@@ -85,8 +85,14 @@ func CleanupMigrationLogs(migrationName string) {
 // RunCommandWithLogFile runs a command with output redirected to a log file
 // and ensures the log file is properly closed after execution
 func RunCommandWithLogFile(cmd *exec.Cmd) error {
-	// First ensure output is directed to a log file
-	AddDebugOutputToFile(cmd)
+	return RunCommandWithLogFileRedacted(cmd, cmd.String())
+}
+
+// RunCommandWithLogFileRedacted runs a command with output redirected to a log file
+// using a redacted command string for logging, and ensures the log file is properly closed
+func RunCommandWithLogFileRedacted(cmd *exec.Cmd, cmdString string) error {
+	// First ensure output is directed to a log file with redacted command
+	AddDebugOutputToFileWithCommand(cmd, cmdString)
 
 	// Run the command
 	err := cmd.Run()

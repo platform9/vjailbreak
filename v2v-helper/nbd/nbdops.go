@@ -171,7 +171,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
-	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmd.String()))
+	cmdString := cmd.String()
+	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
 		lastProgress := 0
@@ -190,8 +191,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 		}
 	}()
-	// Use the helper function to ensure log file is closed after command execution
-	err = utils.RunCommandWithLogFile(cmd)
+	// Use the helper function with command string to ensure log file is closed after command execution
+	err = utils.RunCommandWithLogFileRedacted(cmd, cmdString)
 	if err != nil {
 		// retry once with debug enabled, to get more details
 		cmd.Stdout = os.Stdout
