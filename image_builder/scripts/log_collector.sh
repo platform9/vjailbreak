@@ -327,57 +327,12 @@ collect_version_info() {
 
 collect_v2v_helper_info() {
     print_info "Collecting v2v-helper pod information"
-    set +e 
+    set +e
     if command -v  kubectl &> /dev/null; then
         local pod=$(sudo kubectl get pods -n "$NAMESPACE" --sort-by=.metadata.creationTimestamp 2>/dev/null | grep "^v2v-helper-" | tail -1 | awk '{print $1}')
         if [ -n "$pod" ]; then
             print_info "Collecting info from v2v-helper pod: $pod"
             sudo kubectl describe pod -n "$NAMESPACE" "$pod" > "$OUTPUT_DIR/system-info/v2v-helper-pod-describe.txt" 2>&1 || true
-            print_info "  - Collecting RPM package list from v2v-helper pod"
-            sudo kubectl exec -n "$NAMESPACE" "$pod" -- rpm -qa 2>/dev/null | sort > "$OUTPUT_DIR/versions/v2v-helper-packages.txt" 2>&1 || print_warn "Failed to get rpm list from $pod"
-            print_info "  - Collecting tool versions from v2v-helper pod"
-            {
-                echo "=== Tool Versions from v2v-helper Pod: $pod ==="
-                echo "Collected: $(date)"
-                echo ""
-
-                echo "=== nbdkit ==="
-                sudo kubectl exec -n "$NAMESPACE" "$pod" -- nbdkit --version 2>/dev/null || echo "Not available"
-                echo ""
-
-                echo "=== nbdcopy/libnbd ==="
-                sudo kubectl exec -n "$NAMESPACE" "$pod" -- nbdcopy --version 2>/dev/null || echo "Not available"
-                echo ""
-
-                echo "=== virt-v2v ==="
-                sudo kubectl exec -n "$NAMESPACE" "$pod" -- virt-v2v --version 2>/dev/null || echo "Not available"
-                echo ""
-
-                echo "=== libguestfs ==="
-                if sudo kubectl exec -n "$NAMESPACE" "$pod" -- guestfish --version 2>/dev/null; then
-                    echo ""
-                elif sudo kubectl exec -n "$NAMESPACE" "$pod" -- libguestfs-test-tool --version 2>/dev/null; then
-                    echo ""
-                elif sudo kubectl exec -n "$NAMESPACE" "$pod" -- rpm -q libguestfs 2>/dev/null; then
-                    echo ""
-                else
-                    echo "Not available"
-                fi
-                echo ""
-
-                echo "=== qemu-img ==="
-                sudo kubectl exec -n "$NAMESPACE" "$pod" -- qemu-img --version 2>/dev/null | head -1 || echo "Not available"
-                echo ""
-
-                echo "=== VDDK (from pod filesystem) ==="
-                if sudo kubectl exec -n "$NAMESPACE" "$pod" -- ls /home/fedora/vmware-vix-disklib-distrib 2>/dev/null | grep -q "lib"; then
-                    echo "VDDK directory found: /home/fedora/vmware-vix-disklib-distrib"
-                    sudo kubectl exec -n "$NAMESPACE" "$pod" -- ls -la /home/fedora/vmware-vix-disklib-distrib 2>/dev/null | head -20 || true
-                else
-                    echo "VDDK directory not found or not accessible"
-                fi
-                echo ""
-            } > "$OUTPUT_DIR/versions/v2v-helper-tool-versions.txt" 2>&1
         else
             print_warn "No v2v-helper pods found"
         fi
