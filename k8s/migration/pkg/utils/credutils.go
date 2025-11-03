@@ -475,29 +475,29 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 	var c *vim25.Client
+	mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
+
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
-	} else {
-		mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
-		if val, ok := vmwareClientMap.Load(mapKey); ok {
-			cachedClient, valid := val.(*vim25.Client)
-			if valid && cachedClient != nil {
-				c = cachedClient
-				sessMgr := session.NewManager(c)
+	}
+
+	if val, ok := vmwareClientMap.Load(mapKey); ok {
+		cachedClient, valid := val.(*vim25.Client)
+		if valid && cachedClient != nil && cachedClient.ServiceContent.SessionManager != nil {
+			sessMgr := session.NewManager(cachedClient)
+			if sessMgr != nil {
 				userSession, err := sessMgr.UserSession(ctx)
 				if err == nil && userSession != nil {
-					return c, nil
+					return cachedClient, nil
 				}
-				// If the cached client is no longer valid, delete it from the map
-				vmwareClientMap.Delete(fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification))
-				c = new(vim25.Client)
-				vmwareClientMap.Store(mapKey, c)
 			}
-		} else {
-			c = new(vim25.Client)
-			vmwareClientMap.Store(mapKey, c)
 		}
+		vmwareClientMap.Delete(mapKey)
 	}
+
+	c = new(vim25.Client)
+	vmwareClientMap.Store(mapKey, c)
+
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
@@ -508,6 +508,12 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
+			finder := find.NewFinder(c, false)
+			_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to find datacenter: %w", err)
+			}
+
 			return c, nil
 		}
 		ctxlog := log.FromContext(ctx)
@@ -519,14 +525,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		}
 	}
 
-	// Check if the datacenter exists
-	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
-	}
-
-	return c, nil
+	vmwareClientMap.Delete(mapKey)
+	return nil, fmt.Errorf("failed to authenticate to vCenter after %d attempts: %w", maxRetries, err)
 }
 
 // GetVMwNetworks gets the networks of a VM
