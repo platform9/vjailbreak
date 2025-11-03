@@ -124,10 +124,9 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		file,
 	)
 
-	// Log the command
+	// Log the command with password redacted
 	cmdstring := ""
 	for _, arg := range cmd.Args {
-
 		if strings.Contains(arg, password) {
 			cmdstring += "password=[REDACTED] "
 		} else {
@@ -135,7 +134,8 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		}
 	}
 
-	utils.AddDebugOutputToFile(cmd)
+	// Use the redacted command string for logging
+	utils.AddDebugOutputToFileWithCommand(cmd, cmdstring)
 
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdstring))
 	err = cmd.Start()

@@ -98,6 +98,10 @@ func RunCommandWithLogFile(cmd *exec.Cmd) error {
 }
 
 func AddDebugOutputToFile(cmd *exec.Cmd) {
+	AddDebugOutputToFileWithCommand(cmd, cmd.String())
+}
+
+func AddDebugOutputToFileWithCommand(cmd *exec.Cmd, cmdString string) {
 	migrationName, err := GetMigrationObjectName()
 	if err != nil {
 		return
@@ -173,7 +177,6 @@ func AddDebugOutputToFile(cmd *exec.Cmd) {
 
 	// Write a separator for this command to make logs more readable
 	timePrefix := time.Now().Format("2006-01-02 15:04:05")
-	cmdString := cmd.String()
 	logFile.WriteString(fmt.Sprintf("\n\n==== %s: COMMAND: %s ====\n\n", timePrefix, cmdString))
 
 	// Redirect command output to this file
