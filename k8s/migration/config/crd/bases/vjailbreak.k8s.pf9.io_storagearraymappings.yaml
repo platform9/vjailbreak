@@ -24,9 +24,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          It defines mappings between VMware datastores and backend storage arrays,
-          enabling array-level xcopy operations for efficient VM migration.
+        description: It defines mappings between VMware datastores and backend storage
+          arrays,
         properties:
           apiVersion:
             description: |-
