@@ -131,6 +131,7 @@ rules:
   - pcdhosts
   - rdmdisks
   - rollingmigrationplans
+  - storagearraymappings
   - storagemappings
   - vjailbreaknodes
   - vmwareclusters
@@ -159,6 +160,7 @@ rules:
   - pcdhosts/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
+  - storagearraymappings/finalizers
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
@@ -179,6 +181,7 @@ rules:
   - pcdhosts/status
   - rdmdisks/status
   - rollingmigrationplans/status
+  - storagearraymappings/status
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
