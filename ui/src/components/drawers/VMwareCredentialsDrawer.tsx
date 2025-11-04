@@ -6,7 +6,7 @@ import Footer from "src/components/forms/Footer";
 import { createVMwareCredsWithSecretFlow, deleteVMwareCredsWithSecretFlow } from "src/api/helpers";
 import axios from "axios";
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery";
-import { TextField, FormControl, InputAdornment, IconButton, FormLabel, CircularProgress, FormControlLabel, Switch } from "@mui/material";
+import { TextField, FormControl, InputAdornment, IconButton, FormLabel, CircularProgress, FormControlLabel, Switch, Tooltip } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
 import { isValidName } from "src/utils";
@@ -17,6 +17,7 @@ import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit";
 import { useErrorHandler } from "src/hooks/useErrorHandler";
 import { useAmplitude } from "src/hooks/useAmplitude";
 import { AMPLITUDE_EVENTS } from "src/types/amplitude";
+import InfoOutlined from "@mui/icons-material/InfoOutlined";
 
 interface VMwareCredentialsDrawerProps {
     open: boolean;
@@ -317,6 +318,21 @@ export default function VMwareCredentialsDrawer({
                             required
                             fullWidth
                             size="small"
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <Tooltip
+                                            title="Enter vCenter Server as https://vcenter-url.com or vcenter-fqdn"
+                                            arrow
+                                            placement="left"
+                                        >
+                                            <IconButton size="small" tabIndex={-1}>
+                                                <InfoOutlined fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </InputAdornment>
+                                ),
+                            }}
                             sx={{ mb: 2 }}
                         />
 
