@@ -257,6 +257,15 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "StorageMapping")
 		return err
 	}
+	if err := (&controller.StorageArrayMappingReconciler{
+		BaseReconciler: controller.BaseReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StorageArrayMapping")
+		return err
+	}
 	if err := (&controller.NetworkMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
 			Client: mgr.GetClient(),
