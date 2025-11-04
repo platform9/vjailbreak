@@ -322,7 +322,7 @@ export default function VMwareCredentialsDrawer({
                                 endAdornment: (
                                     <InputAdornment position="end">
                                         <Tooltip
-                                            title="Enter vCenter Server as https://vcenter-url.com or vcenter-fqdn"
+                                            title="Enter vCenter Server as http://vCenter-url.com or https://vCenter-url.com or vCenter-fqdn"
                                             arrow
                                             placement="left"
                                         >
