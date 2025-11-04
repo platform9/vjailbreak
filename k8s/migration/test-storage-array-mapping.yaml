@@ -1,0 +1,60 @@
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: StorageArrayMapping
+metadata:
+  name: test-pure-mapping
+  namespace: default
+spec:
+  arrays:
+    - name: pure-array-01
+      type: pure
+      managementEndpoint: 10.0.0.100
+      credentialsSecret: pure-creds
+      iscsi:
+        targets:
+          - 10.0.0.101
+          - 10.0.0.102
+        port: 3260
+  datastores:
+    - name: datastore1
+      arrayName: pure-array-01
+      arrayType: pure
+    - name: datastore2
+      arrayName: pure-array-01
+      arrayType: pure
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: StorageArrayMapping
+metadata:
+  name: test-netapp-mapping
+  namespace: default
+spec:
+  arrays:
+    - name: netapp-cluster-01
+      type: netapp
+      managementEndpoint: 10.0.1.100
+      credentialsSecret: netapp-creds
+      iscsi:
+        targets:
+          - 10.0.1.101
+          - 10.0.1.102
+        port: 3260
+  datastores:
+    - name: netapp-datastore1
+      arrayName: netapp-cluster-01
+      arrayType: netapp
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: StorageArrayMapping
+metadata:
+  name: test-invalid-mapping
+  namespace: default
+spec:
+  arrays:
+    - name: pure-array-01
+      type: pure
+      managementEndpoint: 10.0.0.100
+      credentialsSecret: pure-creds
+  datastores:
+    - name: datastore1
+      arrayName: nonexistent-array
+      arrayType: pure
