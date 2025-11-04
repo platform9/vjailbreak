@@ -2,8 +2,7 @@ package k8sutils
 
 type VjailbreakSettings struct {
 	ChangedBlocksCopyIterationThreshold int
-	PeriodicSyncInterval                int
-	PeriodicSyncTimeUnit                string
+	PeriodicSyncInterval                string
 	VMActiveWaitIntervalSeconds         int
 	VMActiveWaitRetryLimit              int
 	DefaultMigrationMethod              string

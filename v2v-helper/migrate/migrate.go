@@ -347,53 +347,38 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo, syncChan c
 }
 
 func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
-	const defaultInterval = 1
-	const defaultUnit = "hour"
+	const defaultInterval = "1h"
 
 	migobj.logMessage("Setting up sync interval")
 
 	// Get sync interval settings
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
-		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default interval (%d %s)",
-			err, defaultInterval, defaultUnit))
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default interval (%s)",
+			err, defaultInterval))
 		vjailbreakSettings = &k8sutils.VjailbreakSettings{
 			PeriodicSyncInterval: defaultInterval,
-			PeriodicSyncTimeUnit: defaultUnit,
 		}
 	}
 
 	// Validate and set interval
-	interval := vjailbreakSettings.PeriodicSyncInterval
-	if interval < 1 {
-		migobj.logMessage(fmt.Sprintf("WARNING: Invalid interval %d, using default %d", interval, defaultInterval))
-		interval = defaultInterval
-	}
-
+	interval := strings.ToLower(vjailbreakSettings.PeriodicSyncInterval)
 	// Calculate wait time based on unit
-	var waitTime time.Duration
-	unit := strings.ToLower(vjailbreakSettings.PeriodicSyncTimeUnit)
+	waitTime, err := time.ParseDuration(interval)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse interval %s, using default interval (%s)", interval, defaultInterval))
+		interval = defaultInterval
+		waitTime, _ = time.ParseDuration(interval)
 
-	switch unit {
-	case "second":
-		waitTime = time.Duration(interval) * time.Second
-	case "minute":
-		waitTime = time.Duration(interval) * time.Minute
-	case "hour":
-		waitTime = time.Duration(interval) * time.Hour
-	default:
-		migobj.logMessage(fmt.Sprintf("WARNING: Invalid time unit '%s', defaulting to 'hour'", unit))
-		waitTime = time.Duration(interval) * time.Hour
 	}
-
-	migobj.logMessage(fmt.Sprintf("Waiting for next sync in %d %s(s)", interval, unit))
+	migobj.logMessage(fmt.Sprintf("Waiting for next sync in %s", interval))
 
 	// Sleep for the calculated duration
 	time.Sleep(waitTime)
 
 	// Mark interval as exhausted
 	*intervalExhausted = true
-	migobj.logMessage(fmt.Sprintf("Sync interval of %d %s(s) has elapsed", interval, unit))
+	migobj.logMessage(fmt.Sprintf("Sync interval of %s has elapsed", interval))
 }
 
 func (migobj *Migrate) DecideReschedule(cancelFunc context.CancelFunc, syncRunning *bool, nbdserver []nbd.NBDOperations, intervalExhausted *bool) bool {
