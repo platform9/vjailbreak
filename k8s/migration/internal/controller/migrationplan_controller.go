@@ -44,6 +44,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1454,28 +1455,54 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			log.FromContext(ctx).Info("Skipping update for RDMDisk CR as it is already being managed or in error state", "rdmDiskName", rdmDiskCR.Name, "phase", rdmDiskCR.Status.Phase)
 			continue
 		}
-		rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
-		err := r.Get(ctx, types.NamespacedName{
-			Name:      strings.TrimSpace(rdmDiskCR.Name),
-			Namespace: migrationplan.Namespace,
-		}, rdmDisk)
-		if err != nil {
-			return fmt.Errorf("failed to get RDMDisk CR: %w", err)
-		}
-		// Migration Plan controller only sets ImportToCinder to true,
-		// the RDMDisk controller ensures that RDM disk is managed and
-		// imported to Cinder
-		patch := client.MergeFrom(rdmDisk.DeepCopy())
-		if !rdmDisk.Spec.ImportToCinder {
+
+		// Use retry to handle resourceVersion conflicts gracefully,
+		// on error it will re-fetch the latest version and before
+		// retrying update will check importToCinder flag again.
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
+			if err := r.Get(ctx, types.NamespacedName{
+				Name:      strings.TrimSpace(rdmDiskCR.Name),
+				Namespace: migrationplan.Namespace,
+			}, rdmDisk); err != nil {
+				return err
+			}
+			// Idempotent guard - check if already marked for import
+			if rdmDisk.Spec.ImportToCinder {
+				log.FromContext(ctx).Info("Skipping update, already marked for import",
+					"rdmDisk", rdmDisk.Name)
+				return nil
+			}
+
+			// Migration Plan controller only sets ImportToCinder to
+			// true, the RDMDisk controller ensures that RDM disk is
+			// managed and imported to Cinder
 			rdmDisk.Spec.ImportToCinder = true
 			rdmDisk.Spec.OpenstackVolumeRef.OpenstackCreds = openstackcreds.GetName()
+
+			if err := r.Update(ctx, rdmDisk); err != nil {
+				if apierrors.IsConflict(err) {
+					log.FromContext(ctx).Info("Conflict detected while updating RDMDisk — another controller updated it first",
+						"rdmDisk", rdmDisk.Name)
+					// RetryOnConflict will re-fetch and retry
+					return err
+				}
+				return fmt.Errorf("failed to update RDMDisk CR: %w", err)
+			}
+
+			log.FromContext(ctx).Info("Updated RDMDisk CR to import into Cinder",
+				"rdmDisk", rdmDisk.Name,
+				"openstackCreds", openstackcreds.GetName())
+
+			return nil
+		})
+
+		if err != nil {
+			// if still failing after retries, bubble up
+			return err
 		}
-		if err := r.Patch(ctx, rdmDisk, patch); err != nil {
-			return fmt.Errorf("failed to patch RDMDisk CR: %w", err)
-		}
-		log.FromContext(ctx).Info("Patched RDMDisk CR to import into Cinder",
-			"rdmDisk", rdmDisk.Name, "openstackCreds", openstackcreds.GetName())
 	}
+
 	// Wait for 25 seconds after updating disk details and before checking RDM disk status
 	time.Sleep(25 * time.Second)
 
