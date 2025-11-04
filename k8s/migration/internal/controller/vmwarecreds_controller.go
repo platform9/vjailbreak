@@ -29,7 +29,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -91,15 +90,6 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
-
-	// Check if validation has already failed - don't retry validation on every reconcile
-	// This prevents spamming vCenter with failed auth attempts on periodic RequeueAfter
-	if scope.VMwareCreds.Status.VMwareValidationStatus == string(corev1.PodFailed) {
-		ctxlog.Info("VMwareCreds validation already marked as Failed, skipping re-validation",
-			"name", scope.Name(),
-			"message", scope.VMwareCreds.Status.VMwareValidationMessage)
-		return ctrl.Result{Requeue: false}, nil
-	}
 
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
@@ -198,6 +188,5 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 func (r *VMwareCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VMwareCreds{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }

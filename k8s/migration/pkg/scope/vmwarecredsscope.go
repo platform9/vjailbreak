@@ -7,7 +7,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 	"github.com/go-logr/logr"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,16 +43,6 @@ type VMwareCredsScope struct {
 func (s *VMwareCredsScope) Close() error {
 	err := s.Client.Update(context.TODO(), s.VMwareCreds, &client.UpdateOptions{})
 	if err != nil {
-		// Ignore not found errors - the object may have been deleted
-		if apierrors.IsNotFound(err) {
-			s.Logger.V(4).Info("VMwareCreds object not found during Close, ignoring", "name", s.Name())
-			return nil
-		}
-		// Ignore conflict errors - another reconciliation may have updated the object
-		if apierrors.IsConflict(err) {
-			s.Logger.V(4).Info("VMwareCreds object conflict during Close, ignoring", "name", s.Name())
-			return nil
-		}
 		return err
 	}
 	return nil
