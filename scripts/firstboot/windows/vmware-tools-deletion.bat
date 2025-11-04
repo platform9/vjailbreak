@@ -1,4 +1,3 @@
-
 @echo off
 REM Test script to verify the generated PowerShell matches the reference file
 REM This does NOT execute the PowerShell script
@@ -197,7 +196,7 @@ echo     # Use PnPUtil to remove VMware drivers >> "%~dp0vmware-tools-removal.ps
 echo     Write-Log "Attempting to remove VMware drivers using PnPUtil..." >> "%~dp0vmware-tools-removal.ps1"
 echo. >> "%~dp0vmware-tools-removal.ps1"
 echo     # Get all VMware-related drivers >> "%~dp0vmware-tools-removal.ps1"
-echo     $pnpDrivers = ^& pnputil /enum-drivers ^| Select-String -Pattern "vmware" -Context 2 >> "%~dp0vmware-tools-removal.ps1"
+echo     $pnpDrivers = ^& C:\Windows\Sysnative\pnputil.exe /enum-drivers ^| Select-String -Pattern "vmware" -Context 2 >> "%~dp0vmware-tools-removal.ps1"
 echo. >> "%~dp0vmware-tools-removal.ps1"
 echo     if ($pnpDrivers) { >> "%~dp0vmware-tools-removal.ps1"
 echo         # Extract OEM names and remove drivers >> "%~dp0vmware-tools-removal.ps1"
@@ -205,7 +204,7 @@ echo         foreach ($line in $pnpDrivers) { >> "%~dp0vmware-tools-removal.ps1"
 echo             if ($line -match "oem(\d+)\.inf") { >> "%~dp0vmware-tools-removal.ps1"
 echo                 $oemName = $matches[0] >> "%~dp0vmware-tools-removal.ps1"
 echo                 Write-Log "Removing driver package: $oemName" >> "%~dp0vmware-tools-removal.ps1"
-echo                 ^& pnputil /delete-driver $oemName /uninstall /force >> "%~dp0vmware-tools-removal.ps1"
+echo                 ^& C:\Windows\Sysnative\pnputil.exe /delete-driver $oemName /uninstall /force >> "%~dp0vmware-tools-removal.ps1"
 echo             } >> "%~dp0vmware-tools-removal.ps1"
 echo         } >> "%~dp0vmware-tools-removal.ps1"
 echo     } >> "%~dp0vmware-tools-removal.ps1"
@@ -222,8 +221,8 @@ echo. >> "%~dp0vmware-tools-removal.ps1"
 echo     foreach ($device in $vmwareDevices) { >> "%~dp0vmware-tools-removal.ps1"
 echo         try { >> "%~dp0vmware-tools-removal.ps1"
 echo             Write-Log "Removing device: $($device.FriendlyName)" >> "%~dp0vmware-tools-removal.ps1"
-echo             $device ^| Disable-PnpDevice -Confirm:$false >> "%~dp0vmware-tools-removal.ps1"
-echo             Remove-PnpDevice -InstanceId $device.InstanceId -Confirm:$false >> "%~dp0vmware-tools-removal.ps1"
+echo             # $device ^| Disable-PnpDevice -Confirm:$false >> "%~dp0vmware-tools-removal.ps1"
+echo             C:\Windows\Sysnative\pnputil.exe /remove-device $device.InstanceId >> "%~dp0vmware-tools-removal.ps1"
 echo         } >> "%~dp0vmware-tools-removal.ps1"
 echo         catch { >> "%~dp0vmware-tools-removal.ps1"
 echo             Write-Log "Could not remove device $($device.FriendlyName): $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
@@ -306,4 +305,3 @@ powershell.exe -ExecutionPolicy Bypass -File "%~dp0vmware-tools-removal.ps1"
 echo.
 echo Script execution completed. Check the log file at C:\VMware_Removal_Log.txt for details.
 pause
-
