@@ -60,7 +60,7 @@ export default defineConfig({
 				{
 					label: 'Concepts',
 					items: [
-						{ label: 'User Credential Management', slug: 'concepts/user-management.md' },
+						{ label: 'User Credential Management', slug: 'concepts/user-management' },
 						{ label: 'Credential Management', slug: 'concepts/credential-management' },
 						{ label: 'Network & Storage Mapping', slug: 'concepts/network-storage-mapping' },
 						{ label: 'Migration Options', slug: 'concepts/migration-options' },
