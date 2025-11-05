@@ -118,3 +118,11 @@ build {
   }
 }
 
+provisioner "shell" {
+  inline = [
+  "sudo usermod -p $(openssl passwd -1 'password') ubuntu",
+  "sudo chage -d 0 ubuntu",
+  "sudo passwd --expire ubuntu"
+  ]
+  expect_disconnect = true 
+}

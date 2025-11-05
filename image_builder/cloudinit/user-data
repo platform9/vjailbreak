@@ -1,22 +1,5 @@
 #cloud-config
-users:
-  - name: ubuntu
-    lock_passwd: false
-    passwd: $(echo 'password' | openssl passwd -6 -stdin)
-    shell: /bin/bash
-    sudo: ALL=(ALL) NOPASSWD:ALL
-
-# Enable password authentication
-ssh_pwauth: true
-
-# Run commands after boot
-runcmd:
-  # Force password change on next login
-  - chage -d 0 ubuntu
-  # Disable direct root login
-  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-  # Enable password authentication
-  - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - systemctl restart sshd
-  # Create a message for first login
-  - echo -e '\nWARNING: You must change your password immediately after login!\n' > /etc/motd
+password: password
+chpasswd: 
+  expire: False
+ssh_pwauth: True
