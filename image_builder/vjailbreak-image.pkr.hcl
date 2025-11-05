@@ -93,6 +93,9 @@ build {
 
   provisioner "shell" {
     inline = [
+    "sudo usermod -p $(openssl passwd -1 "password") ubuntu",
+    "sudo chage -d 0 ubuntu",
+    "sudo passwd --expire ubuntu",
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
