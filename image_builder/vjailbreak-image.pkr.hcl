@@ -92,7 +92,6 @@ build {
   }
 provisioner "shell" {
   inline = [
-    "sudo useradd -m -s /bin/bash ubuntu",
     "echo 'ubuntu:$(openssl passwd -1 password)' | sudo chpasswd -e",
     "sudo mkdir -p /home/ubuntu/.ssh",
     "sudo chown -R ubuntu:ubuntu /home/mynewuser/.ssh",
