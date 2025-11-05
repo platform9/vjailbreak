@@ -91,7 +91,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ctxlog.Error(err, "RDMDisk resource not found, likely deleted", "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
-	ctxlog.V(1).Info("Reconciling RDMDisk", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase)
+	ctxlog.V(1).Info("Reconciling RDMDisk", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase, "importToCinder", rdmDisk.Spec.ImportToCinder)
 
 	switch rdmDisk.Status.Phase {
 	case "":
@@ -216,7 +216,7 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			log.Error(err, "unable to update RDMDisk status with volume ID")
 			return ctrl.Result{}, err
 		}
-		log.Info("Successfully imported LUN to Cinder", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase)
+		log.Info("Successfully imported LUN to Cinder", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase, "importToCinder", rdmDisk.Spec.ImportToCinder)
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, nil
