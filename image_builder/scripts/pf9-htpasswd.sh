@@ -10,6 +10,21 @@ Usage:
   vjbctl user list
   vjbctl user refresh
 
+  vjbctl support-bundle [OPTIONS]
+
+Support Bundle Options:
+  --vms <vm1,vm2>           Filter logs for specific VMs (comma-separated)
+  --vms-file <file.csv>     Read VM names from CSV file
+  --date <timestamp>        Filter logs from specific date (Unix timestamp or YYYY-MM-DD)
+  --debug                   Include debug logs
+  --output-dir <path>       Custom output directory
+  --namespace <name>        Kubernetes namespace (default: migration-system)
+
+Examples:
+  vjbctl support-bundle
+  vjbctl support-bundle --vms migration-vm-1,migration-vm-2
+  vjbctl support-bundle --vms-file vms.csv --date 2025-10-27
+
 Notes:
   - Stores/reads entries in $HTPASSWD_FILE as username:$apr1$salt$hash (openssl apr1)
   - You may be prompted for passwords and confirmation.
@@ -160,6 +175,27 @@ list_users() {
   awk -F: 'NF>=2 {print $1}' "$HTPASSWD_FILE"
 }
 
+run_support_bundle() {
+  # Find the log_collector.sh script
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local log_collector="${script_dir}/log_collector.sh"
+
+  if [[ ! -f "$log_collector" ]]; then
+    # Try alternate locations
+    if [[ -f "/usr/local/bin/log_collector.sh" ]]; then
+      log_collector="/usr/local/bin/log_collector.sh"
+    elif [[ -f "/opt/pf9/log_collector.sh" ]]; then
+      log_collector="/opt/pf9/log_collector.sh"
+    else
+      echo "Error: log_collector.sh not found. Please ensure it's installed." >&2
+      return 1
+    fi
+  fi
+
+  # Execute the log collector with all passed arguments
+  bash "$log_collector" "$@"
+}
+
 _pf9_ht_main() {
   local no_restart=0
   local args=()
@@ -177,6 +213,10 @@ _pf9_ht_main() {
 
   local ns="${1:-}"; shift || true
   case "$ns" in
+    support-bundle)
+      # Pass all remaining arguments to the support bundle script
+      run_support_bundle "$@"
+      ;;
     user)
       local sub="${1:-}"; shift || true
       case "$sub" in

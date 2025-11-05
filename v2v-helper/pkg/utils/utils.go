@@ -69,6 +69,15 @@ func GetMigrationConfigMapName() (string, error) {
 	return fmt.Sprintf("migration-config-%s", vmK8sName), nil
 }
 
+// GetFirstbootConfigMapName is function that returns the name of the secret
+func GetFirstbootConfigMapName() (string, error) {
+	vmK8sName, err := GetVMwareMachineName()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("firstboot-config-%s", vmK8sName), nil
+}
+
 func GetVMwareMachineName() (string, error) {
 	vmK8sName := os.Getenv("VMWARE_MACHINE_OBJECT_NAME")
 	if vmK8sName == "" {
