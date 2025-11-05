@@ -1,5 +1,5 @@
 #cloud-config
 password: password
 chpasswd: 
-  expire: False
+  expire: True
 ssh_pwauth: True
