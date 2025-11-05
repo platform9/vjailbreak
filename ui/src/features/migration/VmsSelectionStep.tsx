@@ -154,6 +154,7 @@ interface VmsSelectionStepProps {
   openstackCredName?: string;
   openstackCredentials?: OpenstackCreds;
   vmwareCluster?: string;
+  vmwareClusterDisplayName?: string;
 }
 
 export default function VmsSelectionStep({
@@ -168,6 +169,7 @@ export default function VmsSelectionStep({
   openstackCredName,
   openstackCredentials,
   vmwareCluster,
+  vmwareClusterDisplayName,
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
   const { track } = useAmplitude({ component: "VmsSelectionStep" });
@@ -233,6 +235,13 @@ export default function VmsSelectionStep({
   const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>>({});
   const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, Record<number, string>>>({});
   const [assigningIPs, setAssigningIPs] = useState(false);
+
+  const clusterName = React.useMemo(() => {
+    if (!vmwareCluster) return undefined;
+    const parts = vmwareCluster.split(':');
+    // The value is "credName:datacenter:clusterName"
+    return parts.length === 3 ? parts[2] : undefined;
+  }, [vmwareCluster]);
 
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
@@ -553,7 +562,9 @@ export default function VmsSelectionStep({
     openstackCredsValidated,
     enabled: open,
     sessionId,
-    vmwareCredName
+    vmwareCredName,
+    clusterName,
+    vmwareClusterDisplayName,
   });
 
   useEffect(() => {
@@ -589,29 +600,15 @@ export default function VmsSelectionStep({
   }, [open, vmList]);
 
   useEffect(() => {
-    const selectedClusterName = (() => {
-      if (!vmwareCluster) return undefined;
-      const parts = vmwareCluster.includes(":")
-        ? vmwareCluster.split(":")
-        : [vmwareCluster];
-      const clusterName = parts[parts.length - 1]?.trim();
-      if (!clusterName) return undefined;
-      return clusterName.toUpperCase() === "NO CLUSTER" ? null : clusterName;
-    })();
-    
-    const filteredVmList = vmList.filter((vm) => {
-      const labelValue = vm.labels?.["vjailbreak.k8s.pf9.io/vmware-cluster"]?.toLowerCase() || '';
-      if (selectedClusterName === undefined) return true;
-      if (selectedClusterName === null) return !labelValue;
-      return labelValue === selectedClusterName.toLowerCase();
-    });
-
-  
-    const initialVmsWithFlavor = filteredVmList.map((vm) => {
+    const initialVmsWithFlavor = vmList.map(vm => {
       let flavor = "";
       if (vm.targetFlavorId) {
-        const foundFlavor = openstackFlavors.find((f) => f.id === vm.targetFlavorId);
-        flavor = foundFlavor ? foundFlavor.name : vm.targetFlavorId;
+        const foundFlavor = openstackFlavors.find(f => f.id === vm.targetFlavorId);
+        if (foundFlavor) {
+          flavor = foundFlavor.name;
+        } else {
+          flavor = vm.targetFlavorId;
+        }
       }
 
       // Check for NOT_FOUND label for OpenStack credentials
@@ -644,9 +641,8 @@ export default function VmsSelectionStep({
         ipValidationMessage: '',
       };
     });
-  
     setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments, vmwareCluster]);
+  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments]);
 
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {

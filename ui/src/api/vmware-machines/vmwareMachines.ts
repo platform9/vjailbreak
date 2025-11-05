@@ -10,14 +10,20 @@ export const getVMwareMachines = async (
 ): Promise<VMwareMachineList> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwaremachines`
 
-  // Use label selector if vmwareCredName is provided
-  const config = vmwareCredName
-    ? {
-        params: {
-          labelSelector: `vjailbreak.k8s.pf9.io/vmwarecreds=${vmwareCredName}`,
-        },
-      }
-    : undefined
+  const labelSelectors: string[] = []
+
+  if (vmwareCredName) {
+    labelSelectors.push(`vjailbreak.k8s.pf9.io/vmwarecreds=${vmwareCredName}`)
+  }
+
+  const config =
+    labelSelectors.length > 0
+      ? {
+          params: {
+            labelSelector: labelSelectors.join(','),
+          },
+        }
+      : undefined
 
   const response = await axios.get<VMwareMachineList>({
     endpoint,

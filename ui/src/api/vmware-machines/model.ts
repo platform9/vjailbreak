@@ -11,6 +11,7 @@ export interface VMwareVM {
   osFamily?: string
   networkInterfaces?: VmNetworkInterface[]
   rdmDisks?: string[]
+  clusterName?: string
 }
 
 export interface VmNetworkInterface {
