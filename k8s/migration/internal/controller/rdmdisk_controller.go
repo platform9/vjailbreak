@@ -91,6 +91,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ctxlog.Error(err, "RDMDisk resource not found, likely deleted", "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
+	ctxlog.V(1).Info("Reconciling RDMDisk", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase)
 
 	switch rdmDisk.Status.Phase {
 	case "":
@@ -198,7 +199,6 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			NetworkingClient:   openstackClient.NetworkingClient,
 			K8sClient:          r.Client,
 		}
-		log.V(1).Info("Importing LUN to Cinder", "RDMDisk", rdmDisk.Name, "resourceVersion", rdmDisk.ResourceVersion, "phase", rdmDisk.Status.Phase)
 		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, *rdmDisk, blockStorageAPIVersion)
 		if err != nil {
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", MigrationFailed, "FailedToImportLUNToCinder", err)
@@ -214,15 +214,6 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 		if err := r.Status().Update(ctx, rdmDisk); err != nil {
 			log.Error(err, "unable to update RDMDisk status with volume ID")
 			return ctrl.Result{}, err
-		}
-		// Re-fetch again to get the NEW resourceVersion after update - for logging delete later
-		updatedRDMDisk := &vjailbreakv1alpha1.RDMDisk{}
-		if err := r.Get(ctx, req.NamespacedName, updatedRDMDisk); err != nil {
-			log.Error(err, "unable to get updated RDMDisk status")
-		} else {
-			log.V(1).Info("Successfully updated RDMDisk status",
-				"CinderVolumeID", volumeID,
-				"resourceVersion", updatedRDMDisk.ResourceVersion) // Old version
 		}
 		return ctrl.Result{}, nil
 	}
