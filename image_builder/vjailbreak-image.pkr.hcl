@@ -94,7 +94,7 @@ provisioner "shell" {
   inline = [
     "echo 'ubuntu:$(openssl passwd -1 password)' | sudo chpasswd -e",
     "sudo mkdir -p /home/ubuntu/.ssh",
-    "sudo chown -R ubuntu:ubuntu /home/mynewuser/.ssh",
+    "sudo chown -R ubuntu:ubuntu /home/ubuntu/.ssh",
     "sudo chmod 700 /home/ubuntu/.ssh"
   ]
 }
