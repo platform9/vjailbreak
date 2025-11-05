@@ -839,7 +839,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 
 // CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, vm string) (*corev1.ConfigMap, error) {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration, vm string) (*corev1.ConfigMap, error) {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
@@ -848,7 +848,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
-	configMapName := fmt.Sprintf("firstboot-config-%s", vmname)
+	configMapName := utils.GetFirstbootConfigMapName(vmname)
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -862,7 +862,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
 			},
 		}
-		err = r.createResource(ctx, migrationplan, configMap)
+		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 			return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
@@ -1230,7 +1230,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
-		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, vm)
+		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, migrationobj, vm)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
