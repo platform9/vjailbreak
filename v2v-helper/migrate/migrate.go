@@ -379,18 +379,16 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 	intervalExhausted := true
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 	for {
-		migobj.logMessage("DEBUG : Waiting for Admin Cutover conditions to be met")
 		select {
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
 				// wait for sync to finish
+				migobj.logMessage("Cutover conditions met")
 				return nil
 			}
-			migobj.logMessage(fmt.Sprintf("Label: %s", label))
-			migobj.logMessage("Cutover conditions met")
 		default:
 			if migobj.DecideReschedule(&intervalExhausted) {
-				migobj.logMessage("Periodic Sync")
+				migobj.logMessage("Periodic Sync Initiated")
 				err = migobj.SyncCBT(ctx, vminfo)
 				if err != nil {
 					return err
