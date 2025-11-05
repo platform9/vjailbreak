@@ -33,6 +33,11 @@ func GetMigrationConfigMapName(vmname string) string {
 	return fmt.Sprintf("migration-config-%s", vmname)
 }
 
+// GetFirstbootConfigMapName generates a config map name for a migration
+func GetFirstbootConfigMapName(vmname string) string {
+	return fmt.Sprintf("firstboot-config-%s", vmname)
+}
+
 // ConvertToK8sName converts a name to be Kubernetes-compatible
 func ConvertToK8sName(name string) (string, error) {
 	// Convert to lowercase
