@@ -48,9 +48,9 @@ set_default_password() {
   
   log "Setting default password for ubuntu user..."
   
-  # sudo usermod -p $(openssl passwd -1 "password") ubuntu
-  # sudo chage -d 0 ubuntu
-  # sudo passwd --expire ubuntu
+   sudo usermod -p $(openssl passwd -1 "password") ubuntu
+   sudo chage -d 0 ubuntu
+   sudo passwd --expire ubuntu
   if grep -qE '^\s*PasswordAuthentication' /etc/ssh/sshd_config; then
     sudo sed -i 's/^\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   else
