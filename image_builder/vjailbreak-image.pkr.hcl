@@ -116,8 +116,6 @@ build {
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
     ]
   }
-}
-
 provisioner "shell" {
   inline = [
   "sudo usermod -p $(openssl passwd -1 'password') ubuntu",
@@ -125,4 +123,5 @@ provisioner "shell" {
   "sudo passwd --expire ubuntu"
   ]
   expect_disconnect = true 
+}
 }
