@@ -169,7 +169,7 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 
 	// Cleanup cached VMware client
-	utils.CleanupCachedVMwareClient(ctx, r.Client, scope.VMwareCreds)
+	utils.CleanupCachedVMwareClient(ctx, scope.VMwareCreds)
 
 	err := utils.DeleteDependantObjectsForVMwareCreds(ctx, scope)
 	if err != nil {
