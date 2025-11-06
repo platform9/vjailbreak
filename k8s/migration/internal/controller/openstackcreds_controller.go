@@ -260,10 +260,10 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to get Openstack credentials from secret")
 	}
 
-	if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName {
-		ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
-		scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
-	}
+if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
+	ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+	scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+}
 
 	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
