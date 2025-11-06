@@ -118,7 +118,7 @@ build {
     "sudo chmod 644 /etc/pf9/env",
     "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
-    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
     "sudo bash /tmp/user_setup_daemon.sh",
     ]
   }
