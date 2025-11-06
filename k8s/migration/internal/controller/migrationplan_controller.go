@@ -419,9 +419,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to get MigrationTemplate '%s'", migrationplan.Spec.MigrationTemplate)
 	}
 	// Fetch VMwareCreds CR
-	vmwcreds = &vjailbreakv1alpha1.VMwareCreds{}
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
+	return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
 	}
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -1576,7 +1575,7 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 				return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
 			}
 
-			valid, skipped, err := r.validateVMOS(vmMachine)
+			_, skipped, err := r.validateVMOS(vmMachine)
 			if err != nil {
 				return nil, err
 			}
@@ -1584,9 +1583,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 				skippedVMs = append(skippedVMs, vm)
 				continue
 			}
-			if valid {
-				validVMs = append(validVMs, vmMachine)
-			}
+
+			validVMs = append(validVMs, vmMachine)
 		}
 	}
 
