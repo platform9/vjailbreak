@@ -515,7 +515,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 			ctxlog.Info("Login successful", "attempt", attempt)
 			break
 		} else if strings.Contains(err.Error(), "incorrect user name or password") {
-			return nil, fmt.Errorf("authentication failed: invalid username, password. Please verify your credentials")
+			return nil, fmt.Errorf("authentication failed: invalid username or password. Please verify your credentials")
 		}
 		// Save the error and log it
 		lastErr = err
@@ -1791,7 +1791,7 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 }
 
 // CleanupCachedVMwareClient removes the cached VMware client for the given credentials. It's a best effort approach to avoid stale clients.
-func CleanupCachedVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
+func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
 	ctxlog := log.FromContext(ctx)
 	mapKey := string(vmwcreds.UID)
 	if vmwareClientMap != nil {
