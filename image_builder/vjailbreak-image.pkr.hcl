@@ -52,6 +52,10 @@ build {
     destination = "/tmp/pf9-htpasswd.sh"
   }
   provisioner "file" {
+    source      = "${path.root}/scripts/user_setup_daemon.sh"
+    destination = "/tmp/user_setup_daemon.sh"
+  }
+  provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
     destination = "/tmp/k3s.env"
   }
@@ -90,7 +94,6 @@ build {
     source      = "${path.root}/opensource.txt"
     destination = "/tmp/opensource.txt"
   }
-
   provisioner "shell" {
     inline = [
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
@@ -113,8 +116,10 @@ build {
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
+    "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
-    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
+    "sudo bash /tmp/user_setup_daemon.sh",
     ]
   }
 }
