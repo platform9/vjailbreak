@@ -3730,222 +3730,6 @@ func (x *ValidateOpenstackIpResponse) GetReason() []string {
 	return nil
 }
 
-type RevalidateCredentialsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevalidateCredentialsRequest) Reset() {
-	*x = RevalidateCredentialsRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevalidateCredentialsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevalidateCredentialsRequest) ProtoMessage() {}
-
-func (x *RevalidateCredentialsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevalidateCredentialsRequest.ProtoReflect.Descriptor instead.
-func (*RevalidateCredentialsRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{56}
-}
-
-func (x *RevalidateCredentialsRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *RevalidateCredentialsRequest) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *RevalidateCredentialsRequest) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-type RevalidateCredentialsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevalidateCredentialsResponse) Reset() {
-	*x = RevalidateCredentialsResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevalidateCredentialsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevalidateCredentialsResponse) ProtoMessage() {}
-
-func (x *RevalidateCredentialsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevalidateCredentialsResponse.ProtoReflect.Descriptor instead.
-func (*RevalidateCredentialsResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{57}
-}
-
-func (x *RevalidateCredentialsResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-type InjectEnvVariablesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HttpProxy     string                 `protobuf:"bytes,1,opt,name=http_proxy,json=httpProxy,proto3" json:"http_proxy,omitempty"`
-	HttpsProxy    string                 `protobuf:"bytes,2,opt,name=https_proxy,json=httpsProxy,proto3" json:"https_proxy,omitempty"`
-	NoProxy       string                 `protobuf:"bytes,3,opt,name=no_proxy,json=noProxy,proto3" json:"no_proxy,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InjectEnvVariablesRequest) Reset() {
-	*x = InjectEnvVariablesRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InjectEnvVariablesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InjectEnvVariablesRequest) ProtoMessage() {}
-
-func (x *InjectEnvVariablesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InjectEnvVariablesRequest.ProtoReflect.Descriptor instead.
-func (*InjectEnvVariablesRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{58}
-}
-
-func (x *InjectEnvVariablesRequest) GetHttpProxy() string {
-	if x != nil {
-		return x.HttpProxy
-	}
-	return ""
-}
-
-func (x *InjectEnvVariablesRequest) GetHttpsProxy() string {
-	if x != nil {
-		return x.HttpsProxy
-	}
-	return ""
-}
-
-func (x *InjectEnvVariablesRequest) GetNoProxy() string {
-	if x != nil {
-		return x.NoProxy
-	}
-	return ""
-}
-
-type InjectEnvVariablesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InjectEnvVariablesResponse) Reset() {
-	*x = InjectEnvVariablesResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InjectEnvVariablesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InjectEnvVariablesResponse) ProtoMessage() {}
-
-func (x *InjectEnvVariablesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InjectEnvVariablesResponse.ProtoReflect.Descriptor instead.
-func (*InjectEnvVariablesResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{59}
-}
-
-func (x *InjectEnvVariablesResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *InjectEnvVariablesResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
 type CleanupStepRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Step          string                 `protobuf:"bytes,1,opt,name=step,proto3" json:"step,omitempty"`
@@ -4048,6 +3832,891 @@ func (x *CleanupStepResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+// Storage Array APIs
+type StorageAccessInfo struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Hostname            string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Username            string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	Password            string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	SkipSslVerification bool                   `protobuf:"varint,4,opt,name=skip_ssl_verification,json=skipSslVerification,proto3" json:"skip_ssl_verification,omitempty"`
+	VendorType          string                 `protobuf:"bytes,5,opt,name=vendor_type,json=vendorType,proto3" json:"vendor_type,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *StorageAccessInfo) Reset() {
+	*x = StorageAccessInfo{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorageAccessInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorageAccessInfo) ProtoMessage() {}
+
+func (x *StorageAccessInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorageAccessInfo.ProtoReflect.Descriptor instead.
+func (*StorageAccessInfo) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *StorageAccessInfo) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *StorageAccessInfo) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *StorageAccessInfo) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *StorageAccessInfo) GetSkipSslVerification() bool {
+	if x != nil {
+		return x.SkipSslVerification
+	}
+	return false
+}
+
+func (x *StorageAccessInfo) GetVendorType() string {
+	if x != nil {
+		return x.VendorType
+	}
+	return ""
+}
+
+type VolumeInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Size          int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	Id            string                 `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	SerialNumber  string                 `protobuf:"bytes,4,opt,name=serial_number,json=serialNumber,proto3" json:"serial_number,omitempty"`
+	Naa           string                 `protobuf:"bytes,5,opt,name=naa,proto3" json:"naa,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VolumeInfo) Reset() {
+	*x = VolumeInfo{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VolumeInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VolumeInfo) ProtoMessage() {}
+
+func (x *VolumeInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VolumeInfo.ProtoReflect.Descriptor instead.
+func (*VolumeInfo) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *VolumeInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VolumeInfo) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *VolumeInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VolumeInfo) GetSerialNumber() string {
+	if x != nil {
+		return x.SerialNumber
+	}
+	return ""
+}
+
+func (x *VolumeInfo) GetNaa() string {
+	if x != nil {
+		return x.Naa
+	}
+	return ""
+}
+
+type MappingContextEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Values        []string               `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MappingContextEntry) Reset() {
+	*x = MappingContextEntry{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MappingContextEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MappingContextEntry) ProtoMessage() {}
+
+func (x *MappingContextEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MappingContextEntry.ProtoReflect.Descriptor instead.
+func (*MappingContextEntry) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *MappingContextEntry) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *MappingContextEntry) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type ValidateStorageCredsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo    *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateStorageCredsRequest) Reset() {
+	*x = ValidateStorageCredsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateStorageCredsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateStorageCredsRequest) ProtoMessage() {}
+
+func (x *ValidateStorageCredsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateStorageCredsRequest.ProtoReflect.Descriptor instead.
+func (*ValidateStorageCredsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ValidateStorageCredsRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+type ValidateStorageCredsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateStorageCredsResponse) Reset() {
+	*x = ValidateStorageCredsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateStorageCredsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateStorageCredsResponse) ProtoMessage() {}
+
+func (x *ValidateStorageCredsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateStorageCredsResponse.ProtoReflect.Descriptor instead.
+func (*ValidateStorageCredsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *ValidateStorageCredsResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ValidateStorageCredsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type CreateInitiatorGroupRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo         *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	InitiatorGroupName string                 `protobuf:"bytes,2,opt,name=initiator_group_name,json=initiatorGroupName,proto3" json:"initiator_group_name,omitempty"`
+	HbaIdentifiers     []string               `protobuf:"bytes,3,rep,name=hba_identifiers,json=hbaIdentifiers,proto3" json:"hba_identifiers,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CreateInitiatorGroupRequest) Reset() {
+	*x = CreateInitiatorGroupRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInitiatorGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInitiatorGroupRequest) ProtoMessage() {}
+
+func (x *CreateInitiatorGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInitiatorGroupRequest.ProtoReflect.Descriptor instead.
+func (*CreateInitiatorGroupRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *CreateInitiatorGroupRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+func (x *CreateInitiatorGroupRequest) GetInitiatorGroupName() string {
+	if x != nil {
+		return x.InitiatorGroupName
+	}
+	return ""
+}
+
+func (x *CreateInitiatorGroupRequest) GetHbaIdentifiers() []string {
+	if x != nil {
+		return x.HbaIdentifiers
+	}
+	return nil
+}
+
+type CreateInitiatorGroupResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Success        bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message        string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	MappingContext []*MappingContextEntry `protobuf:"bytes,3,rep,name=mapping_context,json=mappingContext,proto3" json:"mapping_context,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CreateInitiatorGroupResponse) Reset() {
+	*x = CreateInitiatorGroupResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInitiatorGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInitiatorGroupResponse) ProtoMessage() {}
+
+func (x *CreateInitiatorGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInitiatorGroupResponse.ProtoReflect.Descriptor instead.
+func (*CreateInitiatorGroupResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *CreateInitiatorGroupResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CreateInitiatorGroupResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *CreateInitiatorGroupResponse) GetMappingContext() []*MappingContextEntry {
+	if x != nil {
+		return x.MappingContext
+	}
+	return nil
+}
+
+type MapVolumeRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo         *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	InitiatorGroupName string                 `protobuf:"bytes,2,opt,name=initiator_group_name,json=initiatorGroupName,proto3" json:"initiator_group_name,omitempty"`
+	Volume             *VolumeInfo            `protobuf:"bytes,3,opt,name=volume,proto3" json:"volume,omitempty"`
+	MappingContext     []*MappingContextEntry `protobuf:"bytes,4,rep,name=mapping_context,json=mappingContext,proto3" json:"mapping_context,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *MapVolumeRequest) Reset() {
+	*x = MapVolumeRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapVolumeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapVolumeRequest) ProtoMessage() {}
+
+func (x *MapVolumeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapVolumeRequest.ProtoReflect.Descriptor instead.
+func (*MapVolumeRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *MapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+func (x *MapVolumeRequest) GetInitiatorGroupName() string {
+	if x != nil {
+		return x.InitiatorGroupName
+	}
+	return ""
+}
+
+func (x *MapVolumeRequest) GetVolume() *VolumeInfo {
+	if x != nil {
+		return x.Volume
+	}
+	return nil
+}
+
+func (x *MapVolumeRequest) GetMappingContext() []*MappingContextEntry {
+	if x != nil {
+		return x.MappingContext
+	}
+	return nil
+}
+
+type MapVolumeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Volume        *VolumeInfo            `protobuf:"bytes,3,opt,name=volume,proto3" json:"volume,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapVolumeResponse) Reset() {
+	*x = MapVolumeResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapVolumeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapVolumeResponse) ProtoMessage() {}
+
+func (x *MapVolumeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapVolumeResponse.ProtoReflect.Descriptor instead.
+func (*MapVolumeResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *MapVolumeResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MapVolumeResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *MapVolumeResponse) GetVolume() *VolumeInfo {
+	if x != nil {
+		return x.Volume
+	}
+	return nil
+}
+
+type UnmapVolumeRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo         *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	InitiatorGroupName string                 `protobuf:"bytes,2,opt,name=initiator_group_name,json=initiatorGroupName,proto3" json:"initiator_group_name,omitempty"`
+	Volume             *VolumeInfo            `protobuf:"bytes,3,opt,name=volume,proto3" json:"volume,omitempty"`
+	MappingContext     []*MappingContextEntry `protobuf:"bytes,4,rep,name=mapping_context,json=mappingContext,proto3" json:"mapping_context,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *UnmapVolumeRequest) Reset() {
+	*x = UnmapVolumeRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnmapVolumeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnmapVolumeRequest) ProtoMessage() {}
+
+func (x *UnmapVolumeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnmapVolumeRequest.ProtoReflect.Descriptor instead.
+func (*UnmapVolumeRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *UnmapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+func (x *UnmapVolumeRequest) GetInitiatorGroupName() string {
+	if x != nil {
+		return x.InitiatorGroupName
+	}
+	return ""
+}
+
+func (x *UnmapVolumeRequest) GetVolume() *VolumeInfo {
+	if x != nil {
+		return x.Volume
+	}
+	return nil
+}
+
+func (x *UnmapVolumeRequest) GetMappingContext() []*MappingContextEntry {
+	if x != nil {
+		return x.MappingContext
+	}
+	return nil
+}
+
+type UnmapVolumeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnmapVolumeResponse) Reset() {
+	*x = UnmapVolumeResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnmapVolumeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnmapVolumeResponse) ProtoMessage() {}
+
+func (x *UnmapVolumeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnmapVolumeResponse.ProtoReflect.Descriptor instead.
+func (*UnmapVolumeResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *UnmapVolumeResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UnmapVolumeResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type GetMappedGroupsRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo     *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	Volume         *VolumeInfo            `protobuf:"bytes,2,opt,name=volume,proto3" json:"volume,omitempty"`
+	MappingContext []*MappingContextEntry `protobuf:"bytes,3,rep,name=mapping_context,json=mappingContext,proto3" json:"mapping_context,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetMappedGroupsRequest) Reset() {
+	*x = GetMappedGroupsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMappedGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMappedGroupsRequest) ProtoMessage() {}
+
+func (x *GetMappedGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMappedGroupsRequest.ProtoReflect.Descriptor instead.
+func (*GetMappedGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *GetMappedGroupsRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+func (x *GetMappedGroupsRequest) GetVolume() *VolumeInfo {
+	if x != nil {
+		return x.Volume
+	}
+	return nil
+}
+
+func (x *GetMappedGroupsRequest) GetMappingContext() []*MappingContextEntry {
+	if x != nil {
+		return x.MappingContext
+	}
+	return nil
+}
+
+type GetMappedGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []string               `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMappedGroupsResponse) Reset() {
+	*x = GetMappedGroupsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMappedGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMappedGroupsResponse) ProtoMessage() {}
+
+func (x *GetMappedGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMappedGroupsResponse.ProtoReflect.Descriptor instead.
+func (*GetMappedGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *GetMappedGroupsResponse) GetGroups() []string {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type ResolveCinderVolumeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessInfo    *StorageAccessInfo     `protobuf:"bytes,1,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	VolumeName    string                 `protobuf:"bytes,2,opt,name=volume_name,json=volumeName,proto3" json:"volume_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveCinderVolumeRequest) Reset() {
+	*x = ResolveCinderVolumeRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveCinderVolumeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveCinderVolumeRequest) ProtoMessage() {}
+
+func (x *ResolveCinderVolumeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveCinderVolumeRequest.ProtoReflect.Descriptor instead.
+func (*ResolveCinderVolumeRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *ResolveCinderVolumeRequest) GetAccessInfo() *StorageAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+func (x *ResolveCinderVolumeRequest) GetVolumeName() string {
+	if x != nil {
+		return x.VolumeName
+	}
+	return ""
+}
+
+type ResolveCinderVolumeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Volume        *VolumeInfo            `protobuf:"bytes,3,opt,name=volume,proto3" json:"volume,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveCinderVolumeResponse) Reset() {
+	*x = ResolveCinderVolumeResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveCinderVolumeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveCinderVolumeResponse) ProtoMessage() {}
+
+func (x *ResolveCinderVolumeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveCinderVolumeResponse.ProtoReflect.Descriptor instead.
+func (*ResolveCinderVolumeResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *ResolveCinderVolumeResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ResolveCinderVolumeResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ResolveCinderVolumeResponse) GetVolume() *VolumeInfo {
+	if x != nil {
+		return x.Volume
+	}
+	return nil
 }
 
 var File_sdk_proto_v1_api_proto protoreflect.FileDescriptor
@@ -4356,7 +5025,74 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x13CleanupStepResponse\x12\x12\n" +
 	"\x04step\x18\x01 \x01(\tR\x04step\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*j\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xbc\x01\n" +
+	"\x11StorageAccessInfo\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
+	"\bpassword\x18\x03 \x01(\tR\bpassword\x122\n" +
+	"\x15skip_ssl_verification\x18\x04 \x01(\bR\x13skipSslVerification\x12\x1f\n" +
+	"\vvendor_type\x18\x05 \x01(\tR\n" +
+	"vendorType\"{\n" +
+	"\n" +
+	"VolumeInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\x12#\n" +
+	"\rserial_number\x18\x04 \x01(\tR\fserialNumber\x12\x10\n" +
+	"\x03naa\x18\x05 \x01(\tR\x03naa\"?\n" +
+	"\x13MappingContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
+	"\x06values\x18\x02 \x03(\tR\x06values\"V\n" +
+	"\x1bValidateStorageCredsRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\"R\n" +
+	"\x1cValidateStorageCredsResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xb1\x01\n" +
+	"\x1bCreateInitiatorGroupRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\x120\n" +
+	"\x14initiator_group_name\x18\x02 \x01(\tR\x12initiatorGroupName\x12'\n" +
+	"\x0fhba_identifiers\x18\x03 \x03(\tR\x0ehbaIdentifiers\"\x95\x01\n" +
+	"\x1cCreateInitiatorGroupResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12A\n" +
+	"\x0fmapping_context\x18\x03 \x03(\v2\x18.api.MappingContextEntryR\x0emappingContext\"\xe9\x01\n" +
+	"\x10MapVolumeRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\x120\n" +
+	"\x14initiator_group_name\x18\x02 \x01(\tR\x12initiatorGroupName\x12'\n" +
+	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume\x12A\n" +
+	"\x0fmapping_context\x18\x04 \x03(\v2\x18.api.MappingContextEntryR\x0emappingContext\"p\n" +
+	"\x11MapVolumeResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12'\n" +
+	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume\"\xeb\x01\n" +
+	"\x12UnmapVolumeRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\x120\n" +
+	"\x14initiator_group_name\x18\x02 \x01(\tR\x12initiatorGroupName\x12'\n" +
+	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume\x12A\n" +
+	"\x0fmapping_context\x18\x04 \x03(\v2\x18.api.MappingContextEntryR\x0emappingContext\"I\n" +
+	"\x13UnmapVolumeResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xbd\x01\n" +
+	"\x16GetMappedGroupsRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\x12'\n" +
+	"\x06volume\x18\x02 \x01(\v2\x0f.api.VolumeInfoR\x06volume\x12A\n" +
+	"\x0fmapping_context\x18\x03 \x03(\v2\x18.api.MappingContextEntryR\x0emappingContext\"1\n" +
+	"\x17GetMappedGroupsResponse\x12\x16\n" +
+	"\x06groups\x18\x01 \x03(\tR\x06groups\"v\n" +
+	"\x1aResolveCinderVolumeRequest\x127\n" +
+	"\vaccess_info\x18\x01 \x01(\v2\x16.api.StorageAccessInfoR\n" +
+	"accessInfo\x12\x1f\n" +
+	"\vvolume_name\x18\x02 \x01(\tR\n" +
+	"volumeName\"z\n" +
+	"\x1bResolveCinderVolumeResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12'\n" +
+	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume*j\n" +
 	"\vPowerStatus\x12\x0f\n" +
 	"\vPOWERED_OFF\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -4610,7 +5346,7 @@ func file_sdk_proto_v1_api_proto_init() {
 			NumEnums:      2,
 			NumMessages:   62,
 			NumExtensions: 0,
-			NumServices:   4,
+			NumServices:   5,
 		},
 		GoTypes:           file_sdk_proto_v1_api_proto_goTypes,
 		DependencyIndexes: file_sdk_proto_v1_api_proto_depIdxs,
