@@ -17,6 +17,9 @@
     },
     {
       "name": "VailbreakProxy"
+    },
+    {
+      "name": "StorageArray"
     }
   ],
   "consumes": [
@@ -598,38 +601,6 @@
         ]
       }
     },
-    "/vpw/v1/revalidate_credentials": {
-      "post": {
-        "operationId": "VailbreakProxy_RevalidateCredentials",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/apiRevalidateCredentialsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/apiRevalidateCredentialsRequest"
-            }
-          }
-        ],
-        "tags": [
-          "VailbreakProxy"
-        ]
-      }
-    },
     "/vpw/v1/set_resource_bm2pxeboot": {
       "post": {
         "operationId": "BMProvider_SetResourceBM2PXEBoot",
@@ -691,6 +662,198 @@
         ],
         "tags": [
           "BMProvider"
+        ]
+      }
+    },
+    "/vpw/v1/storage/initiator_group": {
+      "post": {
+        "operationId": "StorageArray_CreateOrUpdateInitiatorGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCreateInitiatorGroupResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCreateInitiatorGroupRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/map_volume": {
+      "post": {
+        "operationId": "StorageArray_MapVolumeToGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiMapVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiMapVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/mapped_groups": {
+      "post": {
+        "operationId": "StorageArray_GetMappedGroups",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetMappedGroupsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiGetMappedGroupsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/resolve_volume": {
+      "post": {
+        "operationId": "StorageArray_ResolveCinderVolume",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiResolveCinderVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiResolveCinderVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/unmap_volume": {
+      "post": {
+        "operationId": "StorageArray_UnmapVolumeFromGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUnmapVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUnmapVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/validate": {
+      "post": {
+        "operationId": "StorageArray_ValidateCredentials",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiValidateStorageCredsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiValidateStorageCredsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
         ]
       }
     },
@@ -1093,6 +1256,41 @@
         }
       }
     },
+    "apiCreateInitiatorGroupRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "hbaIdentifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiCreateInitiatorGroupResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
     "apiDeployMachineRequest": {
       "type": "object",
       "properties": {
@@ -1118,6 +1316,35 @@
         },
         "message": {
           "type": "string"
+        }
+      }
+    },
+    "apiGetMappedGroupsRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiGetMappedGroupsResponse": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1279,6 +1506,55 @@
         }
       }
     },
+    "apiMapVolumeRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiMapVolumeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        }
+      }
+    },
+    "apiMappingContextEntry": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "apiOpenstackAccessInfo": {
       "type": "object",
       "properties": {
@@ -1383,25 +1659,28 @@
         }
       }
     },
-    "apiRevalidateCredentialsRequest": {
+    "apiResolveCinderVolumeRequest": {
       "type": "object",
       "properties": {
-        "name": {
-          "type": "string"
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
         },
-        "namespace": {
-          "type": "string"
-        },
-        "kind": {
+        "volumeName": {
           "type": "string"
         }
       }
     },
-    "apiRevalidateCredentialsResponse": {
+    "apiResolveCinderVolumeResponse": {
       "type": "object",
       "properties": {
+        "success": {
+          "type": "boolean"
+        },
         "message": {
           "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
         }
       }
     },
@@ -1467,6 +1746,27 @@
         }
       }
     },
+    "apiStorageAccessInfo": {
+      "type": "object",
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "skipSslVerification": {
+          "type": "boolean"
+        },
+        "vendorType": {
+          "type": "string"
+        }
+      },
+      "title": "Storage Array APIs"
+    },
     "apiTargetAccessInfo": {
       "type": "object",
       "properties": {
@@ -1520,6 +1820,38 @@
       }
     },
     "apiUnCordonHostResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUnmapVolumeRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiUnmapVolumeResponse": {
       "type": "object",
       "properties": {
         "success": {
@@ -1647,6 +1979,25 @@
         }
       }
     },
+    "apiValidateStorageCredsRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        }
+      }
+    },
+    "apiValidateStorageCredsResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiValidationResult": {
       "type": "object",
       "properties": {
@@ -1677,6 +2028,27 @@
       "type": "object",
       "properties": {
         "version": {
+          "type": "string"
+        }
+      }
+    },
+    "apiVolumeInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "format": "int64"
+        },
+        "id": {
+          "type": "string"
+        },
+        "serialNumber": {
+          "type": "string"
+        },
+        "naa": {
           "type": "string"
         }
       }
