@@ -25,7 +25,7 @@ source "qemu" "vjailbreak-image" {
   cpus                 = 2
   memory               = 2048
   efi_boot             = false
-  shutdown_command     = "echo 'password' | sudo -S shutdown -P now"
+  shutdown_command     = "echo 'password' | sudo -S chage -d 0 ubuntu && sudo passwd --expire ubuntu && sudo shutdown -P now"
   boot_wait            = "10s"
 
   http_directory = "${path.root}/cloudinit/"
