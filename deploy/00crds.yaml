@@ -487,6 +487,9 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayOffload:
+                    default: false
+                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string
@@ -1710,6 +1713,9 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayOffload:
+                    default: false
+                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string
@@ -2391,7 +2397,16 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
-                      type: string
+                      properties:
+                        capacityGB:
+                          type: integer
+                        datastore:
+                          type: string
+                        datastoreId:
+                          type: string
+                        name:
+                          type: string
+                      type: object
                     type: array
                   esxiName:
                     description: ESXiName is the name of the ESXi host
