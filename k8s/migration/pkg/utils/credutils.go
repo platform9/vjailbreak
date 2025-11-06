@@ -1583,8 +1583,8 @@ var rdmSemaphore = &sync.Mutex{}
 func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
-	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
-	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
+	networks := make([]string, 0, 4)               // Pre-allocate with estimated capacity
+	disks := make([]vjailbreakv1alpha1.Disk, 0, 8) // Pre-allocate with estimated capacity
 	var clusterName string
 	rdmForVM := make([]string, 0)
 	log := scope.Logger
@@ -1679,7 +1679,15 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			}
 
 			datastores = AppendUnique(datastores, ds.Name)
-			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
+
+			disk := vjailbreakv1alpha1.Disk{
+				Name:        disk.DeviceInfo.GetDescription().Label,
+				CapacityGB:  int(disk.CapacityInKB / 1024 / 1024),
+				Datastore:   ds.Name,
+				DatastoreId: dsref.Value,
+			}
+
+			disks = append(disks, disk)
 		}
 	}
 	// Get the host name and parent (cluster) information
