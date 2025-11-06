@@ -452,11 +452,11 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vCenter credentials from secret: %w", err)
 	}
-
 	host := vmwareCredsinfo.Host
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
+	datacenter := vmwareCredsinfo.Datacenter
 	if host[:4] != "http" {
 		host = "https://" + host
 	}
@@ -474,28 +474,26 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Insecure: disableSSLVerification,
 		Reauth:   true,
 	}
+	mapKey := string(vmwcreds.UID)
 	var c *vim25.Client
+	// Initialize map if needed
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
-	} else {
-		mapKey := fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification)
-		if val, ok := vmwareClientMap.Load(mapKey); ok {
-			cachedClient, valid := val.(*vim25.Client)
-			if valid && cachedClient != nil {
-				c = cachedClient
-				sessMgr := session.NewManager(c)
-				userSession, err := sessMgr.UserSession(ctx)
-				if err == nil && userSession != nil {
-					return c, nil
-				}
-				// If the cached client is no longer valid, delete it from the map
-				vmwareClientMap.Delete(fmt.Sprintf("%s|%s|%t", host, username, disableSSLVerification))
-				c = new(vim25.Client)
-				vmwareClientMap.Store(mapKey, c)
+	}
+	// Check cache for existing authenticated client
+	if val, ok := vmwareClientMap.Load(mapKey); ok {
+		cachedClient, valid := val.(*vim25.Client)
+		if valid && cachedClient != nil && cachedClient.Client != nil {
+			c = cachedClient
+			sessMgr := session.NewManager(c)
+			userSession, err := sessMgr.UserSession(ctx)
+			if err == nil && userSession != nil {
+				// Cached client is still valid, return it
+				return c, nil
 			}
-		} else {
-			c = new(vim25.Client)
-			vmwareClientMap.Store(mapKey, c)
+			// Cached client is no longer valid, remove it
+			vmwareClientMap.Delete(mapKey)
+			c = nil // Will create fresh client below
 		}
 	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
@@ -504,28 +502,44 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
+	var lastErr error
+	ctxlog := log.FromContext(ctx)
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Ensure we have a client for this attempt
+		if c == nil {
+			c = new(vim25.Client)
+		}
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
-			return c, nil
+			ctxlog.Info("Login successful", "attempt", attempt)
+			break
+		} else if strings.Contains(err.Error(), "incorrect user name or password") {
+			return nil, fmt.Errorf("authentication failed: invalid username or password. Please verify your credentials")
 		}
-		ctxlog := log.FromContext(ctx)
-		// Log the error and retry after a delay
+		// Save the error and log it
+		lastErr = err
 		ctxlog.Info("Login attempt failed", "attempt", attempt, "error", err)
+		// Retry with exponential backoff
 		if attempt < maxRetries {
 			delayNum := math.Pow(2, float64(attempt)) * 500
+			ctxlog.Info("Retrying login after delay", "delayMs", delayNum)
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
+			c = nil // Force fresh client on next attempt
 		}
 	}
-
+	// Check if all login attempts failed
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, lastErr)
+	}
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), vmwareCredsinfo.Datacenter)
+	_, err = finder.Datacenter(context.Background(), datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datacenter: %w", err)
 	}
-
+	// All validations passed - cache the fully validated client
+	vmwareClientMap.Store(mapKey, c)
 	return c, nil
 }
 
@@ -1774,4 +1788,14 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 		return err
 	}
 	return nil
+}
+
+// CleanupCachedVMwareClient removes the cached VMware client for the given credentials. It's a best effort approach to avoid stale clients.
+func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
+	ctxlog := log.FromContext(ctx)
+	mapKey := string(vmwcreds.UID)
+	if vmwareClientMap != nil {
+		vmwareClientMap.Delete(mapKey)
+		ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
+	}
 }
