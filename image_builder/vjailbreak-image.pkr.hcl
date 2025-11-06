@@ -119,7 +119,7 @@ build {
     "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
-    "sudo sh /tmp/user_setup_daemon.sh",
+    "sudo bash /tmp/user_setup_daemon.sh",
     ]
   }
 }
