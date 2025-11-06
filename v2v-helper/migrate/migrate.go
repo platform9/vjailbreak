@@ -312,9 +312,10 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 						}
 					default:
 						if retries >= maxRetries {
-							return errors.Wrap(err, "failed to copy changed blocks")
+							return errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
 						} else {
 							retries++
+							migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
 							// In case if the whole migration is cancelled through context this routine should not be sleeping
 							select {
 							case <-ctx.Done():
