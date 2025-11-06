@@ -70,6 +70,51 @@ func GetOpenstackCredsInfo(ctx context.Context, k3sclient client.Client, credsNa
 	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
 }
 
+// GetArrayCredsInfo retrieves storage array credentials from a secret
+func GetArrayCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.ArrayCredsInfo, error) {
+	creds := vjailbreakv1alpha1.ArrayCreds{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, errors.Wrapf(err, "failed to get storage array credentials '%s'", credsName)
+	}
+	return GetArrayCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+}
+
+// GetArrayCredentialsFromSecret retrieves storage array credentials from a secret
+func GetArrayCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.ArrayCredsInfo, error) {
+	secret := &corev1.Secret{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
+	}
+
+	if secret.Data == nil {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, fmt.Errorf("no data in secret '%s'", secretName)
+	}
+
+	hostname := string(secret.Data["ARRAY_HOSTNAME"])
+	username := string(secret.Data["ARRAY_USERNAME"])
+	password := string(secret.Data["ARRAY_PASSWORD"])
+	insecureStr := string(secret.Data["ARRAY_INSECURE"])
+
+	if hostname == "" {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, errors.Errorf("ARRAY_HOSTNAME is missing in secret '%s'", secretName)
+	}
+	if username == "" {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, errors.Errorf("ARRAY_USERNAME is missing in secret '%s'", secretName)
+	}
+	if password == "" {
+		return vjailbreakv1alpha1.ArrayCredsInfo{}, errors.Errorf("ARRAY_PASSWORD is missing in secret '%s'", secretName)
+	}
+
+	skipSSL := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
+
+	return vjailbreakv1alpha1.ArrayCredsInfo{
+		Hostname:            hostname,
+		Username:            username,
+		Password:            password,
+		SkipSSLVerification: skipSSL,
+	}, nil
+}
+
 // GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
 func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
 	secret := &corev1.Secret{}
