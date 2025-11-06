@@ -119,6 +119,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds
   - bmconfigs
   - clustermigrations
   - esximigrations
@@ -148,6 +149,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/finalizers
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
@@ -167,6 +169,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/status
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status

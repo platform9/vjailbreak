@@ -29,7 +29,7 @@ type VMInfo struct {
 	// Datastores is the list of datastores for the virtual machine
 	Datastores []string `json:"datastores,omitempty"`
 	// Disks is the list of disks for the virtual machine
-	Disks []string `json:"disks,omitempty"`
+	Disks []Disk `json:"disks,omitempty"`
 	// Networks is the list of networks for the virtual machine
 	Networks []string `json:"networks,omitempty"`
 	// IPAddress is the IP address of the virtual machine
@@ -54,6 +54,13 @@ type VMInfo struct {
 	NetworkInterfaces []NIC `json:"networkInterfaces,omitempty"`
 	// GuestNetworks is the list of network interfaces for the virtual machine as reported by the guest
 	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
+}
+
+type Disk struct {
+	Name        string `json:"name,omitempty"`
+	CapacityGB  int    `json:"capacityGB,omitempty"`
+	Datastore   string `json:"datastore,omitempty"`
+	DatastoreId string `json:"datastoreId,omitempty"`
 }
 
 // NIC represents a Virtual ethernet card in the virtual machine.
