@@ -152,10 +152,10 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
 		}
 		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
-		if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.ProjectName {
-            ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.ProjectName)
-            scope.OpenstackCreds.Spec.ProjectName = openstackCredential.ProjectName
-        }
+		if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName {
+			ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+			scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+		}
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
