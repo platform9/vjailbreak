@@ -78,6 +78,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationplans,verbs=get;list;watch;create;update;patch;delete
@@ -88,6 +89,16 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/finalizers,verbs=update
+
+// GetVjailbreakSettings retrieves the vjailbreak-settings ConfigMap from the specified namespace
+func (r *MigrationPlanReconciler) GetVjailbreakSettings(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := r.Get(ctx, client.ObjectKey{Name: "vjailbreak-settings", Namespace: namespace}, configMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vjailbreak-settings ConfigMap: %w", err)
+	}
+	return configMap, nil
+}
 
 // Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
 func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -916,7 +927,11 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
 		}
 	}
-
+	vjailbreakSettings, err := r.GetVjailbreakSettings(ctx, migrationplan.Namespace)
+	if err != nil {
+		r.ctxlog.Error(err, "failed to get vjailbreak settings")
+		vjailbreakSettings.Data["PERIODIC_SYNC_INTERVAL"] = constants.PeriodicSyncInterval
+	}
 	// Create MigrationConfigMap
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
@@ -944,6 +959,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
 				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
+				"PERIODIC_SYNC_INTERVAL":     vjailbreakSettings.Data["PERIODIC_SYNC_INTERVAL"],
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
