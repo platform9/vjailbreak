@@ -185,6 +185,8 @@ const (
 	// ConfigMap default values
 	ChangedBlocksCopyIterationThreshold = 20
 
+	PeriodicSyncInterval = 1
+	PeriodicSyncTimeUnit = "hour"
 	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
 	VMActiveWaitIntervalSeconds = 20
 
