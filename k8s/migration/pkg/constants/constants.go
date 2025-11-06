@@ -33,6 +33,9 @@ const (
 	// VMwareCredsControllerName is the name of the vmware credentials controller
 	VMwareCredsControllerName = "vmwarecreds-controller" //nolint:gosec // not a password string
 
+	// ArrayCredsControllerName is the name of the storage array credentials controller
+	ArrayCredsControllerName = "arraycreds-controller" //nolint:gosec // not a password string
+
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
@@ -113,6 +116,9 @@ const (
 
 	// VMwareCredsFinalizer is the finalizer for vmware credentials
 	VMwareCredsFinalizer = "vmwarecreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ArrayCredsFinalizer is the finalizer for storage array credentials
+	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
