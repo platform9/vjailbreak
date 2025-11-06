@@ -69,21 +69,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  periodicSyncEnabled:
-                    description: PeriodicSyncEnabled is a boolean to enable periodic
-                      sync
-                    type: boolean
-                  periodicSyncInterval:
-                    description: PeriodicSyncInterval is the interval at which the
-                      migration plan should be synced
-                    type: string
-                type: object
-              assignedIPsPerVM:
-                additionalProperties:
-                  type: string
-                description: |-
-                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -97,6 +82,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
@@ -116,6 +103,10 @@ spec:
                     enum:
                     - hot
                     - cold
+                    type: string
+                  vendorType:
+                    enum:
+                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -143,12 +134,13 @@ spec:
                   suffix:
                     type: string
                 type: object
+              retry:
+                description: Retry the migration if it fails
+                type: boolean
               securityGroups:
                 items:
                   type: string
                 type: array
-              serverGroup:
-                type: string
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -174,6 +166,10 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
+              retryCount:
+                description: Migration RetryCount is the number of times the migration
+                  has been retried
+                type: integer
             required:
             - migrationMessage
             - migrationStatus

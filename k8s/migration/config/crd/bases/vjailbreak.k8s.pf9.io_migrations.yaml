@@ -55,11 +55,10 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
-              assignedIP:
-                description: |-
-                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
-                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
-                type: string
+              arrayOffload:
+                description: ArrayOffload specifies whether to use array offload for
+                  data copy
+                type: boolean
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -73,6 +72,9 @@ spec:
                 type: string
               podRef:
                 description: PodRef is the name of the pod
+                type: string
+              vendorType:
+                description: VendorType specifies the vendor type of the storage system
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare

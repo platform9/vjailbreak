@@ -45,6 +45,10 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 	// +kubebuilder:default:=false
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
+	// +kubebuilder:validation:Enum=pure
+	VendorType string `json:"vendorType,omitempty"`
+	// +kubebuilder:validation:Type=string
+	ArrayCredsRef string `json:"arrayCredsRef,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process
@@ -56,10 +60,6 @@ type AdvancedOptions struct {
 	GranularNetworks []string `json:"granularNetworks,omitempty"`
 	// GranularPorts is a list of ports to be migrated
 	GranularPorts []string `json:"granularPorts,omitempty"`
-	// PeriodicSyncInterval is the interval at which the migration plan should be synced
-	PeriodicSyncInterval string `json:"periodicSyncInterval,omitempty"`
-	// PeriodicSyncEnabled is a boolean to enable periodic sync
-	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine
@@ -78,11 +78,7 @@ type MigrationPlanSpec struct {
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
-	ServerGroup     string     `json:"serverGroup,omitempty"`
 	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
-	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
-	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
@@ -91,6 +87,8 @@ type MigrationPlanSpecPerVM struct {
 	MigrationTemplate string `json:"migrationTemplate"`
 	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
+	// Retry the migration if it fails
+	Retry bool `json:"retry,omitempty"`
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
@@ -106,6 +104,8 @@ type MigrationPlanStatus struct {
 	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
+	// Migration RetryCount is the number of times the migration has been retried
+	RetryCount int `json:"retryCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

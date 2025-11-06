@@ -12,6 +12,290 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: arraycreds.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ArrayCreds
+    listKind: ArrayCredsList
+    plural: arraycreds
+    singular: arraycreds
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.vendorType
+      name: Vendor
+      type: string
+    - jsonPath: .spec.openstackMapping.volumeType
+      name: VolumeType
+      type: string
+    - jsonPath: .spec.openstackMapping.cinderBackendName
+      name: Backend
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.arrayValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ArrayCreds is the Schema for the storage array credentials API that defines authentication
+          and connection details for storage arrays. It provides a secure way to store and validate
+          storage array credentials for use in migration operations, supporting multiple vendors including
+          Pure Storage, NetApp ONTAP, HPE Alletra, and others.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ArrayCredsSpec defines the desired state of ArrayCreds
+            properties:
+              autoDiscovered:
+                description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
+                  from OpenStack
+                type: boolean
+              openstackMapping:
+                description: OpenStackMapping is the openstack mapping for this array
+                properties:
+                  cinderBackendName:
+                    description: |-
+                      CinderBackendName is the Cinder backend name for this mapping
+                      This is the backend configured in cinder.conf (e.g., "pure-01")
+                    type: string
+                  cinderBackendPool:
+                    description: CinderBackendPool is the pool name within the backend
+                      (optional)
+                    type: string
+                  volumeType:
+                    description: VolumeType is the Cinder volume type associated with
+                      this mapping
+                    type: string
+                required:
+                - cinderBackendName
+                - volumeType
+                type: object
+              secretRef:
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  storage array credentials
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vendorType:
+                description: VendorType is the storage array vendor type (e.g., pure,
+                  ontap, hpalletra)
+                type: string
+            required:
+            - vendorType
+            type: object
+          status:
+            description: ArrayCredsStatus defines the observed state of ArrayCreds
+            properties:
+              arrayValidationMessage:
+                description: ArrayValidationMessage is the message associated with
+                  the storage array validation
+                type: string
+              arrayValidationStatus:
+                description: |-
+                  ArrayValidationStatus is the status of the storage array validation
+                  Possible values: Pending, Succeeded, Failed, AwaitingCredentials
+                type: string
+              dataStore:
+                description: DataStore is the list of datastores associated with this
+                  array
+                items:
+                  description: DatastoreInfo holds datastore information including
+                    backing device NAA
+                  properties:
+                    backingNAA:
+                      type: string
+                    backingUUID:
+                      type: string
+                    capacity:
+                      format: int64
+                      type: integer
+                    freeSpace:
+                      format: int64
+                      type: integer
+                    moID:
+                      type: string
+                    name:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - backingNAA
+                  - backingUUID
+                  - capacity
+                  - freeSpace
+                  - moID
+                  - name
+                  - type
+                  type: object
+                type: array
+              phase:
+                description: |-
+                  Phase indicates the current phase of the ArrayCreds
+                  Possible values: Discovered, Configured, Validated, Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: arraycredsmappings.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ArrayCredsMapping
+    listKind: ArrayCredsMappingList
+    plural: arraycredsmappings
+    singular: arraycredsmapping
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validationStatus
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ArrayCredsMapping is the Schema for the arraycredsmappings API that defines
+          mappings between VMware datastores and ArrayCreds for vendor-based storage migration
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ArrayCredsMappingSpec defines the desired state of ArrayCredsMapping including
+              mappings between VMware datastores and ArrayCreds for vendor-based data copy
+            properties:
+              mappings:
+                description: Mappings is a list of datastore to ArrayCreds mappings
+                items:
+                  description: DatastoreArrayCredsMapping represents a mapping between
+                    a VMware datastore and ArrayCreds
+                  properties:
+                    source:
+                      description: Source is the name of the source datastore in VMware
+                      type: string
+                    target:
+                      description: Target is the name of the ArrayCreds resource to
+                        use for this datastore
+                      type: string
+                  required:
+                  - source
+                  - target
+                  type: object
+                type: array
+            required:
+            - mappings
+            type: object
+          status:
+            description: ArrayCredsMappingStatus defines the observed state of ArrayCredsMapping
+            properties:
+              validationMessage:
+                description: |-
+                  ValidationMessage provides detailed validation information including
+                  information about available ArrayCreds and any validation errors
+                type: string
+              validationStatus:
+                description: |-
+                  ValidationStatus indicates the validation status of the ArrayCreds mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: bmconfigs.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -459,21 +743,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  periodicSyncEnabled:
-                    description: PeriodicSyncEnabled is a boolean to enable periodic
-                      sync
-                    type: boolean
-                  periodicSyncInterval:
-                    description: PeriodicSyncInterval is the interval at which the
-                      migration plan should be synced
-                    type: string
-                type: object
-              assignedIPsPerVM:
-                additionalProperties:
-                  type: string
-                description: |-
-                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -487,6 +756,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
@@ -506,6 +777,10 @@ spec:
                     enum:
                     - hot
                     - cold
+                    type: string
+                  vendorType:
+                    enum:
+                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -533,12 +808,13 @@ spec:
                   suffix:
                     type: string
                 type: object
+              retry:
+                description: Retry the migration if it fails
+                type: boolean
               securityGroups:
                 items:
                   type: string
                 type: array
-              serverGroup:
-                type: string
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -564,6 +840,10 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
+              retryCount:
+                description: Migration RetryCount is the number of times the migration
+                  has been retried
+                type: integer
             required:
             - migrationMessage
             - migrationStatus
@@ -630,11 +910,10 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
-              assignedIP:
-                description: |-
-                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
-                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
-                type: string
+              arrayOffload:
+                description: ArrayOffload specifies whether to use array offload for
+                  data copy
+                type: boolean
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -648,6 +927,9 @@ spec:
                 type: string
               podRef:
                 description: PodRef is the name of the pod
+                type: string
+              vendorType:
+                description: VendorType specifies the vendor type of the storage system
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
@@ -782,6 +1064,11 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
               including source/destination environments and mappings
             properties:
+              arrayCredsMapping:
+                description: |-
+                  ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
+                  This is used for vendor-based data copy method
+                type: string
               destination:
                 description: Destination is the destination details for the virtual
                   machine
@@ -813,9 +1100,19 @@ spec:
                 required:
                 - vmwareRef
                 type: object
+              storageCopyMethod:
+                default: normal
+                description: |-
+                  StorageCopyMethod indicates the method to use for storage migration
+                  Valid values: "normal" (default), "vendor-based"
+                enum:
+                - normal
+                - vendor-based
+                type: string
               storageMapping:
-                description: StorageMapping is the reference to the StorageMapping
-                  resource that defines source to destination storage mappings
+                description: |-
+                  StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
+                  This is used for normal data copy method
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
@@ -825,10 +1122,6 @@ spec:
                 description: UseFlavorless indicates if the migration should use flavorless
                   VM creation for PCD.
                 type: boolean
-              useGPUFlavor:
-                description: UseGPUFlavor indicates if the migration should filter
-                  and use GPU-enabled flavors.
-                type: boolean
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine
@@ -837,7 +1130,6 @@ spec:
             - destination
             - networkMapping
             - source
-            - storageMapping
             type: object
         type: object
     served: true
@@ -1005,15 +1297,6 @@ spec:
                     disk:
                       description: Disk is the amount of root disk, measured in GB.
                       type: integer
-                    extra_specs:
-                      additionalProperties:
-                        type: string
-                      description: |-
-                        Properties is a dictionary of the flavor’s extra-specs key-and-value
-                        pairs. This will only be included if the user is allowed by policy to
-                        index flavor extra_specs
-                        New in version 2.61
-                      type: object
                     id:
                       description: ID is the flavor's unique ID.
                       type: string
@@ -1038,7 +1321,6 @@ spec:
                   - OS-FLV-EXT-DATA:ephemeral
                   - description
                   - disk
-                  - extra_specs
                   - id
                   - name
                   - os-flavor-access:is_public
@@ -1148,25 +1430,6 @@ spec:
                       - id
                       - name
                       - requiresIdDisplay
-                      type: object
-                    type: array
-                  serverGroups:
-                    items:
-                      description: ServerGroupInfo holds the server group name, ID,
-                        and policy information
-                      properties:
-                        id:
-                          type: string
-                        members:
-                          type: integer
-                        name:
-                          type: string
-                        policy:
-                          type: string
-                      required:
-                      - id
-                      - name
-                      - policy
                       type: object
                     type: array
                   volumeBackends:
@@ -1599,14 +1862,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  periodicSyncEnabled:
-                    description: PeriodicSyncEnabled is a boolean to enable periodic
-                      sync
-                    type: boolean
-                  periodicSyncInterval:
-                    description: PeriodicSyncInterval is the interval at which the
-                      migration plan should be synced
-                    type: string
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
@@ -1713,6 +1968,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
@@ -1732,6 +1989,10 @@ spec:
                     enum:
                     - hot
                     - cold
+                    type: string
+                  vendorType:
+                    enum:
+                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -1759,6 +2020,9 @@ spec:
                   suffix:
                     type: string
                 type: object
+              retry:
+                description: Retry the migration if it fails
+                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -2476,10 +2740,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  useGPU:
-                    description: UseGPU is a flag to indicate if the virtual machine
-                      uses GPU
-                    type: boolean
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
@@ -2731,15 +2991,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps/status
-  - pods/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ""
-  resources:
   - events
   verbs:
   - get
@@ -2761,6 +3012,14 @@ rules:
   verbs:
   - get
   - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -2827,6 +3086,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds
   - bmconfigs
   - clustermigrations
   - esximigrations
@@ -2856,6 +3116,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/finalizers
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
@@ -2875,6 +3136,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/status
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
@@ -3770,10 +4032,7 @@ spec:
         env:
         - name: MAX_CONCURRENT_RECONCILES
           value: "5"
-        envFrom:
-        - configMapRef:
-            name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.3.7
+        image: quay.io/platform9/vjailbreak-controller:v0.3.5
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3853,10 +4112,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - envFrom:
-        - configMapRef:
-            name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.3.7
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.5
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -3865,12 +4121,11 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
-
         volumeMounts:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
