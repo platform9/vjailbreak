@@ -117,6 +117,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			VMwareCredsRequeueAfterMinutes:      constants.VMwareCredsRequeueAfterMinutes,
 			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
 			MaxRetries:                          constants.MaxRetries,
+			RetryCap:                            constants.RetryCap,
 		}, nil
 	}
 
@@ -139,7 +140,9 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
 		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
 	}
-
+	if vjailbreakSettingsCM.Data["RETRY_CAP"] == "" {
+		vjailbreakSettingsCM.Data["RETRY_CAP"] = constants.RetryCap
+	}
 	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
 		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
 	}

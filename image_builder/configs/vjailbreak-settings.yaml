@@ -20,3 +20,4 @@ data:
   VALIDATE_RDM_OWNER_VMS: "true" # validate RDM owner VMs before migration
   DEPLOYMENT_NAME: vJailbreak
   MAX_RETRIES: "3" # max number of retries for CBT sync
+  RETRY_CAP: "3h" # max retry interval for CBT sync

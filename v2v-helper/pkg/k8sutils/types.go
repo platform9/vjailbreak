@@ -16,4 +16,5 @@ type VjailbreakSettings struct {
 	VMwareCredsRequeueAfterMinutes      int
 	ValidateRDMOwnerVMs                 bool
 	MaxRetries                          int
+	RetryCap                            string
 }

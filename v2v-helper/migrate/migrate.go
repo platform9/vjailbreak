@@ -239,18 +239,25 @@ func (migobj *Migrate) WaitforCutover() error {
 	}
 	return nil
 }
-func (migobj *Migrate) GetMaxRetries() int {
+func (migobj *Migrate) GetRetryLimits() (int, time.Duration) {
 	const defaultMaxRetries = 3
+	const defaultInterval = 3 * time.Hour
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default max retries (%d)",
 			err, defaultMaxRetries))
-		return defaultMaxRetries
+		return defaultMaxRetries, defaultInterval
 	}
-	return vjailbreakSettings.MaxRetries
+	retryCap, err := time.ParseDuration(vjailbreakSettings.RetryCap)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse retry cap: %v, using default retry cap (%s)",
+			err, defaultInterval))
+		retryCap = defaultInterval
+	}
+	return vjailbreakSettings.MaxRetries, retryCap
 }
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
-	const capInterval = 3 * time.Hour
+	maxRetries, capInterval := migobj.GetRetryLimits()
 	migobj.logMessage("Starting CBT sync process")
 	defer migobj.logMessage("CBT sync process completed")
 	vmops := migobj.VMops
@@ -294,7 +301,6 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			// 11. Copy Changed Blocks over
 			changedBlockCopySuccess := true
 			retries := 0
-			maxRetries := migobj.GetMaxRetries()
 			waitTime := 1 * time.Minute
 			migobj.logMessage("Copying changed blocks")
 			for {
