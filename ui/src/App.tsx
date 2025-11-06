@@ -10,6 +10,7 @@ import DashboardLayout from "./pages/dashboard/DashboardLayout"
 import MigrationsPage from "./pages/dashboard/MigrationsPage"
 import AgentsPage from "./pages/dashboard/AgentsPage"
 import CredentialsPage from "./pages/dashboard/CredentialsPage"
+import StorageManagementPage from "./pages/dashboard/StorageManagementPage"
 import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
@@ -69,6 +70,7 @@ function App() {
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />
             <Route path="credentials" element={<CredentialsPage />} />
+            <Route path="storage-management" element={<StorageManagementPage />} />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
           </Route>

@@ -26,7 +26,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vCenter credentials")
 	}
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, vmwarecreds.Datacenter)
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, vmwarecreds.Datacenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
@@ -293,7 +293,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 	}
 
 	// Get finder for vCenter
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, vmwareCredsInfo.Datacenter)
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, vmwareCredsInfo.Datacenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
