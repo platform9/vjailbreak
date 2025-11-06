@@ -329,7 +329,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	return nil
 }
 
-func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
+func (migobj *Migrate) getSyncDuration() time.Duration {
 	const defaultInterval = "1h"
 
 	migobj.logMessage("Setting up sync interval")
@@ -354,45 +354,45 @@ func (migobj *Migrate) SetInterval(intervalExhausted *bool) {
 		waitTime, _ = time.ParseDuration(interval)
 
 	}
-	migobj.logMessage(fmt.Sprintf("Waiting for next sync in %s", interval))
-
-	// Sleep for the calculated duration
-	time.Sleep(waitTime)
-
-	// Mark interval as exhausted
-	*intervalExhausted = true
-	migobj.logMessage(fmt.Sprintf("Sync interval of %s has elapsed", interval))
-}
-
-func (migobj *Migrate) DecideReschedule(intervalExhausted *bool) bool {
-	if *intervalExhausted {
-		*intervalExhausted = false
-		migobj.logMessage("Previous interval completed and no sync in progress - rescheduling next sync")
-		go migobj.SetInterval(intervalExhausted)
-		return true
-	}
-	return false
+	return waitTime
 }
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
-	var err error
-	intervalExhausted := true
+	var syncInterval time.Duration
 	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
 	for {
+		syncInterval = migobj.getSyncDuration()
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case label := <-migobj.PodLabelWatcher:
 			if label == "yes" {
-				// wait for sync to finish
-				migobj.logMessage("Cutover conditions met")
+				migobj.logMessage("Admin cutover triggered")
 				return nil
 			}
 		default:
-			if migobj.DecideReschedule(&intervalExhausted) {
-				migobj.logMessage("Periodic Sync Initiated")
-				err = migobj.SyncCBT(ctx, vminfo)
-				if err != nil {
-					return err
-				}
+			// Perform sync
+			migobj.logMessage(fmt.Sprintf("Starting periodic sync (interval: %s)", syncInterval))
+			start := time.Now()
+			if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+				return err
+			}
+			elapsed := time.Since(start)
+			// If sync took longer than interval → run next sync immediately
+			if elapsed >= syncInterval {
+				migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
+				continue
+			}
+			// Otherwise wait remaining time
+			waitTime := syncInterval - elapsed
+			migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-migobj.PodLabelWatcher:
+				return nil // admin triggered cutover during wait
+			case <-time.After(waitTime):
+				// wait completed → loop and sync again
 			}
 		}
 	}
