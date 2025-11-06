@@ -653,7 +653,7 @@ export default function MigrationFormDrawer({
     });
   }, [selectedMigrationOptions, params, fieldErrors]);
 
-  // VM validation - ensure powered-off VMs have IP and OS assigned
+  // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
       return { hasError: false, errorMessage: "" };
@@ -665,22 +665,24 @@ export default function MigrationFormDrawer({
       return powerState === "powered-off";
     });
 
-    if (poweredOffVMs.length === 0) {
-      return { hasError: false, errorMessage: "" };
-    }
+    const poweredOnVMs = params.vms.filter(vm => {
+      // Determine power state - check different possible property names
+      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
+      return powerState === "powered-on";
+    });
 
-    // Check for VMs without IP addresses
+    // Check for powered-off VMs without IP addresses
     const vmsWithoutIPs = poweredOffVMs.filter(vm =>
       !vm.ipAddress || vm.ipAddress === "—" || vm.ipAddress.trim() === ""
     );
 
-    // Check for VMs without OS assignment
-    const vmsWithoutOS = poweredOffVMs.filter(vm =>
+    // Check for powered-ON VMs without OS assignment or with Unknown OS
+    const vmsWithoutOS = poweredOnVMs.filter(vm =>
       !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
     );
 
     if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
-      let errorMessage = "Cannot proceed with Migration: ";
+      let errorMessage = "Cannot proceed with migration: ";
       const issues: string[] = [];
 
       if (vmsWithoutIPs.length > 0) {
@@ -688,10 +690,10 @@ export default function MigrationFormDrawer({
       }
 
       if (vmsWithoutOS.length > 0) {
-        issues.push(`${vmsWithoutOS.length} powered-off VM${vmsWithoutOS.length === 1 ? '' : 's'} missing OS assignment`);
+        issues.push(`We could not detect the operating system for ${vmsWithoutOS.length} powered-on VM${vmsWithoutOS.length === 1 ? '' : 's'}`);
       }
 
-      errorMessage += issues.join(" and ") + ". Please assign IP addresses and OS to all powered-off VMs before continuing.";
+      errorMessage += issues.join(" and ") + ". Please assign the required information before continuing.";
 
       return { hasError: true, errorMessage };
     }
