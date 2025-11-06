@@ -25,7 +25,7 @@ source "qemu" "vjailbreak-image" {
   cpus                 = 2
   memory               = 2048
   efi_boot             = false
-  shutdown_command     = "echo 'password' | sudo -S chage -d 0 ubuntu && sudo passwd --expire ubuntu && sudo shutdown -P now"
+  shutdown_command     = "echo 'password' | sudo -S shutdown -P now"
   boot_wait            = "10s"
 
   http_directory = "${path.root}/cloudinit/"
@@ -50,6 +50,10 @@ build {
   provisioner "file" {
     source      = "${path.root}/scripts/pf9-htpasswd.sh"
     destination = "/tmp/pf9-htpasswd.sh"
+  }
+  provisioner "file" {
+    source      = "${path.root}/scripts/user_setup_daemon.sh"
+    destination = "/tmp/user_setup_daemon.sh"
   }
   provisioner "file" {
     source      = "${path.root}/configs/k3s.env"
@@ -112,8 +116,10 @@ build {
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
+    "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab"
+    "sudo sh /tmp/user_setup_daemon.sh",
     ]
   }
 }
