@@ -324,12 +324,16 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		if len(entries) == 0 {
 			continue
 		}
-		id := fmt.Sprintf("vj%d", idx)
+		id := fmt.Sprintf("ens%d", idx)
 		idx++
 		b.WriteString(fmt.Sprintf("    %s:\n", id))
 		b.WriteString("      match:\n")
 		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-		b.WriteString("      dhcp4: false\n")
+		if idx == 0 {
+			b.WriteString("      dhcp4: true\n")
+		} else {
+			b.WriteString("      dhcp4: false\n")
+		}
 		b.WriteString("      addresses:\n")
 		for _, e := range entries {
 			// default prefix to 24 if zero
@@ -347,13 +351,6 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 			}
 		}
 
-		// Add default route to the first interface only
-		if idx == 0 {
-			b.WriteString("      routes:\n")
-			b.WriteString("        - to: 0.0.0.0/0\n")
-			b.WriteString("          via: 10.9.0.1\n")
-			b.WriteString("          metric: 100\n")
-		}
 	}
 	netplanYAML := b.String()
 
