@@ -193,7 +193,10 @@ func (p *PureStorageProvider) GetMappedGroups(targetVolume storage.Volume, conte
 }
 
 // ResolveCinderVolumeToVolume resolves a Cinder volume name to a storage Volume/LUN
-func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeName string) (storage.Volume, error) {
+func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage.Volume, error) {
+	// Get volume by name
+	// Pure driver adds prefix volume and suffix -cinder to the volume name
+	volumeName := fmt.Sprintf("volume-%s-cinder", volumeID)
 	v, err := p.client.Volumes.GetVolume(volumeName, nil)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("failed to get volume %s: %w", volumeName, err)
