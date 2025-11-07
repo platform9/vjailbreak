@@ -1393,7 +1393,11 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress))
+			addressesOfPort := []string{}
+			for _, fixedIP := range port.FixedIPs {
+				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
+			}
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
