@@ -831,74 +831,13 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return errors.Errorf("failed to get version ID")
 			}
 			if isNetplanSupported(versionID) {
-				// Add explicit netplan with all static IPs per NIC
-				utils.PrintLog("Adding netplan with static IPs per NIC")
-				// Build netplan YAML using MAC-based match and multiple addresses
-				// Collect addresses per MAC from GuestNetworks if present; fallback to NetworkInterfaces
-				type ipEntry struct {
-					ip     string
-					prefix int32
+				// Add Wildcard Netplan
+				utils.PrintLog("Adding wildcard netplan")
+				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
+				if err != nil {
+					return errors.Wrap(err, "failed to add wildcard netplan")
 				}
-				macToIPs := make(map[string][]ipEntry)
-				macToDNS := make(map[string][]string)
-				if len(vminfo.GuestNetworks) > 0 {
-					for _, gn := range vminfo.GuestNetworks {
-						if strings.Contains(gn.IP, ":") { // skip IPv6 here
-							continue
-						}
-						macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
-						if len(gn.DNS) > 0 {
-							macToDNS[gn.MAC] = gn.DNS
-						}
-					}
-				} else if len(vminfo.NetworkInterfaces) > 0 {
-					for _, ni := range vminfo.NetworkInterfaces {
-						if ni.IPAddress != "" && !strings.Contains(ni.IPAddress, ":") {
-							// Prefix unknown here; default to /24 as a safe placeholder if not provided downstream
-							macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
-						}
-					}
-				}
-
-				// Construct YAML
-				var b strings.Builder
-				b.WriteString("network:\n")
-				b.WriteString("  version: 2\n")
-				b.WriteString("  renderer: networkd\n")
-				b.WriteString("  ethernets:\n")
-				idx := 0
-				for mac, entries := range macToIPs {
-					if len(entries) == 0 {
-						continue
-					}
-					id := fmt.Sprintf("vj%d", idx)
-					idx++
-					b.WriteString(fmt.Sprintf("    %s:\n", id))
-					b.WriteString("      match:\n")
-					b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-					b.WriteString("      dhcp4: false\n")
-					b.WriteString("      addresses:\n")
-					for _, e := range entries {
-						// default prefix to 24 if zero
-						prefix := e.prefix
-						if prefix == 0 {
-							prefix = 24
-						}
-						b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
-					}
-					if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
-						b.WriteString("      nameservers:\n")
-						b.WriteString("        addresses:\n")
-						for _, d := range dns {
-							b.WriteString(fmt.Sprintf("          - %s\n", d))
-						}
-					}
-				}
-				netplanYAML := b.String()
-				if err := virtv2v.AddNetplanConfig(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, netplanYAML); err != nil {
-					return errors.Wrap(err, "failed to add netplan config")
-				}
-				utils.PrintLog("Netplan config added successfully")
+				utils.PrintLog("Wildcard netplan added successfully")
 			} else {
 				utils.PrintLog("Ubuntu version does not support netplan, going to use udev rules")
 				// Since netplan is not supported need to get the ip,mac and network interface mapping
