@@ -30,11 +30,19 @@ virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stab
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
 
-# Download cert-manager manifests
 CERT_MANAGER_VERSION="v1.16.1"
+cert_manager_controller="quay.io/jetstack/cert-manager-controller:${CERT_MANAGER_VERSION}"
+cert_manager_webhook="quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}"
+cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}"
+
+# Download cert-manager manifests
 CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+MANIFEST_PATH="image_builder/cert-manager-manifests/cert-manager.yaml"
 mkdir -p image_builder/cert-manager-manifests
-curl -L "${CERT_MANAGER_URL}" -o image_builder/cert-manager-manifests/cert-manager.yaml
+curl -L "${CERT_MANAGER_URL}" -o "${MANIFEST_PATH}"
+
+sed -i 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' "${MANIFEST_PATH}"
+
 
 # Download and export images
 images=(
@@ -54,6 +62,9 @@ images=(
   "$grafana"
   "$alpine"
   "$vpwned"
+  "$cert_manager_controller"
+  "$cert_manager_webhook"
+  "$cert_manager_cainjector"
 )
 
 for img in "${images[@]}"; do
