@@ -186,7 +186,7 @@ if [ "$IS_MASTER" == "true" ]; then
       sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
       check_command "Applying cert-manager manifests"
       log "Waiting for cert-manager deployments to become available"
-      kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
+      sudo kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
       check_command "Waiting for cert-manager deployments"
       if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
           sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
