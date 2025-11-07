@@ -10,7 +10,6 @@ import { MigrationPlan } from "src/api/migration-plans/model"
 import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
 import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
 import {
-  getMigrationTemplate,
   patchMigrationTemplate,
   postMigrationTemplate,
   deleteMigrationTemplate,
@@ -231,11 +230,7 @@ export default function MigrationFormDrawer({
     enabled: vmwareCredsValidated && openstackCredsValidated
   });
 
-  // Polling Conditions - Poll when we have a migration template but it's not fully populated with networks/volumes
-  const shouldPollMigrationTemplate = migrationTemplate?.metadata?.name &&
-    (!migrationTemplate?.status?.openstack?.networks ||
-      !migrationTemplate?.status?.openstack?.volumeTypes)
-
+  // Polling Conditions
   const shouldPollMigrationPlan =
     !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
 
@@ -318,38 +313,6 @@ export default function MigrationFormDrawer({
     params.useFlavorless,
     pcdData
   ])
-
-  // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
-  const fetchMigrationTemplate = async () => {
-    try {
-      const updatedMigrationTemplate = await getMigrationTemplate(
-        migrationTemplate!.metadata!.name
-      )
-      setMigrationTemplate(updatedMigrationTemplate)
-    } catch (err) {
-      console.error("Error retrieving migration templates", err)
-      getFieldErrorsUpdater("migrationTemplate")(
-        "Error retrieving migration templates"
-      )
-    }
-  }
-
-  useInterval(
-    async () => {
-      if (shouldPollMigrationTemplate) {
-        try {
-          fetchMigrationTemplate()
-        } catch (err) {
-          console.error("Error retrieving migration templates", err)
-          getFieldErrorsUpdater("migrationTemplate")(
-            "Error retrieving migration templates"
-          )
-        }
-      }
-    },
-    THREE_SECONDS,
-    shouldPollMigrationTemplate
-  )
 
   useEffect(() => {
     if (vmwareCredsValidated && openstackCredsValidated) return
@@ -582,29 +545,62 @@ export default function MigrationFormDrawer({
     setSubmitting(true)
     setError(null)
 
-    // Create NetworkMapping
-    const networkMappings = await createNetworkMapping(params.networkMappings)
+    try {
+      // Create NetworkMapping
+      const networkMappings = await createNetworkMapping(params.networkMappings)
 
-    // Create StorageMapping
-    const storageMappings = await createStorageMapping(params.storageMappings)
+      // Create StorageMapping
+      const storageMappings = await createStorageMapping(params.storageMappings)
 
-    if (!networkMappings || !storageMappings) {
+      if (!networkMappings || !storageMappings) {
+        setSubmitting(false)
+        return
+      }
+
+      // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
+      const updatedMigrationTemplate = await updateMigrationTemplate(
+        migrationTemplate,
+        networkMappings,
+        storageMappings
+      )
+
+      if (!updatedMigrationTemplate) {
+        setSubmitting(false)
+        setError({
+          title: "Error updating migration template",
+          message: "Failed to update migration template. Please try again.",
+        })
+        return
+      }
+
+      // Create MigrationPlan
+      const migrationPlanResource = await createMigrationPlan(
+        updatedMigrationTemplate
+      )
+      setMigrationPlan(migrationPlanResource)
+    } catch (err) {
+      console.error("Error submitting migration form", err)
       setSubmitting(false)
-      return
+
+      reportError(err as Error, {
+        context: 'migration-form-submission',
+        metadata: {
+          action: 'submit-migration-form',
+          hasNetworkMappings: !!params.networkMappings,
+          hasStorageMappings: !!params.storageMappings,
+          hasMigrationTemplate: !!migrationTemplate,
+        }
+      })
+
+      setError({
+        title: "Error submitting migration",
+        message: axios.isAxiosError(err)
+          ? err?.response?.data?.message || err.message
+          : err instanceof Error
+            ? err.message
+            : "An unexpected error occurred",
+      })
     }
-
-    // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
-    const updatedMigrationTemplate = await updateMigrationTemplate(
-      migrationTemplate,
-      networkMappings,
-      storageMappings
-    )
-
-    // Create MigrationPlan
-    const migrationPlanResource = await createMigrationPlan(
-      updatedMigrationTemplate
-    )
-    setMigrationPlan(migrationPlanResource)
   }, [
     params.networkMappings,
     params.storageMappings,
@@ -612,7 +608,8 @@ export default function MigrationFormDrawer({
     createNetworkMapping,
     createStorageMapping,
     updateMigrationTemplate,
-    createMigrationPlan
+    createMigrationPlan,
+    reportError
   ]);
 
   useInterval(
@@ -781,7 +778,7 @@ export default function MigrationFormDrawer({
       })
       onClose()
     }
-  }, [migrationTemplate, vmwareCredentials, openstackCredentials, queryClient, sessionId, onClose, params.vmwareCreds, params.openstackCreds])
+  }, [migrationTemplate, vmwareCredentials, openstackCredentials, queryClient, sessionId, onClose, params.vmwareCreds, params.openstackCreds, reportError])
 
   // Handle keyboard events
   useKeyboardSubmit({
@@ -803,6 +800,13 @@ export default function MigrationFormDrawer({
     >
       <Header title="Migration Form" icon={<MigrationIcon />} />
       <DrawerContent>
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
+            <strong>{error.title}</strong>
+            <br />
+            {error.message}
+          </Alert>
+        )}
         <Box sx={{ display: "grid", gap: 4 }}>
           {/* Step 1 */}
           <SourceDestinationClusterSelection
