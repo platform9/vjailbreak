@@ -21,6 +21,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
@@ -39,6 +40,7 @@ type OpenstackOperations interface {
 	GetFlavor(flavorId string) (*flavors.Flavor, error)
 	GetNetwork(networkname string) (*networks.Network, error)
 	GetPort(portID string) (*ports.Port, error)
+	GetSubnet(network []string, ip string) (*subnets.Subnet, error)
 	CreatePort(networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
 	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
