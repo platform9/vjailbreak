@@ -320,7 +320,6 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	b.WriteString("  renderer: networkd\n")
 	b.WriteString("  ethernets:\n")
 	idx := 0
-
 	for mac, entries := range macToIPs {
 		if len(entries) == 0 {
 			continue
@@ -346,6 +345,14 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 			for _, d := range dns {
 				b.WriteString(fmt.Sprintf("          - %s\n", d))
 			}
+		}
+
+		// Add default route to the first interface only
+		if idx == 0 {
+			b.WriteString("      routes:\n")
+			b.WriteString("        - to: 0.0.0.0/0\n")
+			b.WriteString("          via: 10.9.0.1\n")
+			b.WriteString("          metric: 100\n")
 		}
 	}
 	netplanYAML := b.String()
