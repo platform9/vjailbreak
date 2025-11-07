@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+export PATH := /usr/local/go/bin:$(PATH)
 
 RELEASE_VER=$(BUILD_VERSION)
 GIT_SHA    := $(shell git rev-parse --short HEAD)
