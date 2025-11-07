@@ -320,20 +320,17 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	b.WriteString("  renderer: networkd\n")
 	b.WriteString("  ethernets:\n")
 	idx := 0
+
 	for mac, entries := range macToIPs {
 		if len(entries) == 0 {
 			continue
 		}
-		id := fmt.Sprintf("ens%d", idx)
+		id := fmt.Sprintf("vj%d", idx)
 		idx++
 		b.WriteString(fmt.Sprintf("    %s:\n", id))
 		b.WriteString("      match:\n")
 		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-		if idx == 0 {
-			b.WriteString("      dhcp4: true\n")
-		} else {
-			b.WriteString("      dhcp4: false\n")
-		}
+		b.WriteString("      dhcp4: false\n")
 		b.WriteString("      addresses:\n")
 		for _, e := range entries {
 			// default prefix to 24 if zero
@@ -350,12 +347,9 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 				b.WriteString(fmt.Sprintf("          - %s\n", d))
 			}
 		}
-
 	}
 	netplanYAML := b.String()
-
 	var ans string
-
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
 	if err != nil {
