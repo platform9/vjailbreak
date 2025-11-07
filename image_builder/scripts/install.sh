@@ -181,6 +181,21 @@ if [ "$IS_MASTER" == "true" ]; then
   check_command "Creating config map from env file"
   log "Config map created successfully."
 
+  log "Installing cert-manager"
+  if [ -d "/etc/pf9/yamls/cert-manager" ]; then
+      sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
+      check_command "Applying cert-manager manifests"
+      log "Waiting for cert-manager deployments to become available"
+      kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
+      check_command "Waiting for cert-manager deployments"
+      if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
+          sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
+          check_command "Applying private CA setup"
+      fi
+    else
+      log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
+  fi
+
 else
   log "Setting up K3s Worker..."
 
@@ -218,20 +233,6 @@ else
   log "K3s worker setup completed."
   sleep 20 
 
-fi
-log "Installing cert-manager"
-if [ -d "/etc/pf9/yamls/cert-manager" ]; then
-    sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
-    check_command "Applying cert-manager manifests"
-    log "Waiting for cert-manager deployments to become available"
-    kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
-    check_command "Waiting for cert-manager deployments"
-    if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
-        sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
-        check_command "Applying private CA setup"
-    fi
-  else
-    log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
 fi
 log "removing the cron job"
 # Remove cron job to ensure this runs only once 
