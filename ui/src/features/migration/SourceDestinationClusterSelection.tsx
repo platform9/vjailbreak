@@ -111,8 +111,15 @@ export default function SourceDestinationClusterSelection({
             onChange("vmwareCreds")({
                 existingCredName: credName,
             });
+
+            const sourceItem = sourceData.find(item => item.credName === credName);
+            const cluster = sourceItem?.clusters.find(c => c.id === value);
+            
+            onChange("vmwareClusterDisplayName")(cluster?.displayName || "");
+
         } else {
             onChange("vmwareCreds")({});
+            onChange("vmwareClusterDisplayName")("");
         }
     };
 
