@@ -106,7 +106,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// ConfigMap default values
 	ChangedBlocksCopyIterationThreshold = 20
-
+	PeriodicSyncInterval                = "1h"
 	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
 	VMActiveWaitIntervalSeconds = 20
 
