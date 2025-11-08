@@ -100,31 +100,6 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 				break
 			}
 		}
-
-		// Check WWNs (Fibre Channel)
-		for _, wwn := range h.Wwn {
-			for _, hostAdapter := range hbaIdentifiers {
-				if !strings.HasPrefix(hostAdapter, "fc.") {
-					continue
-				}
-				adapterWWPN, err := fcUIDToWWPN(hostAdapter)
-				if err != nil {
-					klog.Warningf("Failed to extract WWPN from adapter %s: %s", hostAdapter, err)
-					continue
-				}
-
-				// Format WWNs consistently for comparison
-				formattedHostWwn := strings.ReplaceAll(strings.ToUpper(wwn), ":", "")
-				formattedAdapterWwpn := strings.ReplaceAll(adapterWWPN, ":", "")
-
-				klog.Infof("Comparing ESX adapter WWPN %s with Pure host WWN %s", formattedAdapterWwpn, formattedHostWwn)
-				if formattedAdapterWwpn == formattedHostWwn {
-					klog.Infof("Match found. Adding host %s to mapping context.", h.Name)
-					matchedHosts = append(matchedHosts, h.Name)
-					break
-				}
-			}
-		}
 	}
 
 	if len(matchedHosts) == 0 {
@@ -216,28 +191,4 @@ func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage
 // WhoAmI returns the provider name
 func (p *PureStorageProvider) WhoAmI() string {
 	return "pure"
-}
-
-// fcUIDToWWPN extracts the WWPN (port name) from an ESXi fcUid string.
-// The expected input is of the form: 'fc.WWNN:WWPN' where the WWNN and WWPN
-// are not separated with colons every byte (2 hex chars) like 00:00:00:00:00:00:00:00
-func fcUIDToWWPN(fcUid string) (string, error) {
-	if !strings.HasPrefix(fcUid, "fc.") {
-		return "", fmt.Errorf("fcUid %q doesn't start with 'fc.'", fcUid)
-	}
-	parts := strings.Split(fcUid[3:], ":")
-	if len(parts) != 2 || len(parts[1]) == 0 {
-		return "", fmt.Errorf("fcUid %q is not in the expected fc.WWNN:WWPN format", fcUid)
-	}
-
-	wwpn := strings.ToUpper(parts[1])
-	if len(wwpn)%2 != 0 {
-		return "", fmt.Errorf("WWPN %q length isn't even", wwpn)
-	}
-
-	var formattedParts []string
-	for i := 0; i < len(wwpn); i += 2 {
-		formattedParts = append(formattedParts, wwpn[i:i+2])
-	}
-	return strings.Join(formattedParts, ":"), nil
 }
