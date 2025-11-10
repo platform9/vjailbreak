@@ -79,9 +79,10 @@ type Host struct {
 	RolesStatusDetails map[string]string      `json:"roles_status_details,omitempty"`
 	RoleStatus         string                 `json:"role_status,omitempty"`
 	RoleSettings       map[string]interface{} `json:"role_settings,omitempty"`
-	HypervisorInfo     struct {
-		HypervisorType string `json:"hypervisor_type"`
-	} `json:"hypervisor_info,omitempty"`
+	// HypervisorInfo     struct {
+	// 	HypervisorType string `json:"hypervisor_type"`
+	// } `json:"hypervisor_info,omitempty"`
+	HypervisorInfo     json.RawMessage `json:"hypervisor_info,omitempty"`
 	RawExtensionData json.RawMessage   `json:"-"`
 	CAPIExtension    PF9CAPIExtensions `json:"-"`
 	Extensions       struct {
