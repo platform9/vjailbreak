@@ -342,7 +342,15 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 	// Get sync interval settings
 	interval := migrationParams.PeriodicSyncInterval
 	if interval == "" {
-		interval = defaultInterval
+		vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+		if err != nil {
+			migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default interval (%s)",
+				err, defaultInterval))
+		}
+		interval = vjailbreakSettings.PeriodicSyncInterval
+		if interval == "" {
+			interval = defaultInterval
+		}
 	}
 	// Calculate wait time based on unit
 	waitTime, err := time.ParseDuration(interval)
