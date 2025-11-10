@@ -29,7 +29,7 @@ type VCenterOperations interface {
 	getDatacenters(ctx context.Context) ([]*object.Datacenter, error)
 	GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error)
 	RunCommandOnEsxi(ctx context.Context, host object.HostSystem, command []string) ([]esx.Values, error)
-	GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) ([]*object.Datastore, error)
+	GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error)
 }
 
 type VCenterClient struct {
@@ -269,7 +269,7 @@ func (vcclient *VCenterClient) RunCommandOnEsxi(ctx context.Context, host object
 }
 
 // GetDataStore gives the datastore object for the name
-func (vcclient *VCenterClient) GetDataStore(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error) {
+func (vcclient *VCenterClient) GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error) {
 	datastoreRef, err := vcclient.VCFinder.Datastore(ctx, datastore)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find datastore '%s': %v", datastore, err)
