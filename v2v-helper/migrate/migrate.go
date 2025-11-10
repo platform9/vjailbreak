@@ -722,6 +722,15 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", err
 	}
 	
+	// Run generate-mount-persistence.sh script with --force-uuid option
+	migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
+	if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
+		// Don't fail the migration, just log the warning
+	} else {
+		migobj.logMessage("Successfully ran generate-mount-persistence.sh script")
+	}
+	
 	return finalBootIndex, finalOsPath, osRelease, nil
 }
 

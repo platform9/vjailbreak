@@ -655,3 +655,60 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	// Return original error if not a missing file issue
 	return "", err
 }
+
+// RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
+// during guest inspection phase for Linux migrations
+func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	
+	// Script should be available in the container at /home/fedora/scripts/
+	scriptPath := "/home/fedora/scripts/generate-mount-persistence.sh"
+	
+	// Check if script exists in the container
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
+	}
+	
+	log.Printf("Running generate-mount-persistence.sh with --force-uuid option")
+	
+	// Upload the script to the guest VM
+	var uploadErr error
+	var uploadOutput string
+	
+	if useSingleDisk {
+		command := fmt.Sprintf("upload %s /tmp/generate-mount-persistence.sh", scriptPath)
+		uploadOutput, uploadErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
+	}
+	
+	if uploadErr != nil {
+		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
+	}
+	
+	log.Printf("Successfully uploaded generate-mount-persistence.sh to guest")
+	
+	// Make the script executable and run it with --force-uuid
+	var runErr error
+	var runOutput string
+	
+	if useSingleDisk {
+		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
+		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "sh"
+		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh", "--force-uuid")
+	}
+	
+	if runErr != nil {
+		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
+		// Don't return error, just log warning as this is not critical
+		return nil
+	}
+	
+	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
+	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+	
+	return nil
+}
