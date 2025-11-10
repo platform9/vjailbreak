@@ -833,7 +833,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if isNetplanSupported(versionID) {
 				// Add Wildcard Netplan
 				utils.PrintLog("Adding wildcard netplan")
-				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces)
+				// err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces)
+				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 				if err != nil {
 					return errors.Wrap(err, "failed to add wildcard netplan")
 				}
