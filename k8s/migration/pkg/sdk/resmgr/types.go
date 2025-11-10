@@ -85,62 +85,63 @@ type Host struct {
 	HypervisorInfo     json.RawMessage `json:"hypervisor_info,omitempty"`
 	RawExtensionData json.RawMessage   `json:"-"`
 	CAPIExtension    PF9CAPIExtensions `json:"-"`
-	Extensions       struct {
-		IPAddress struct {
-			Status string   `json:"status"`
-			Data   []string `json:"data"`
-		} `json:"ip_address,omitempty"`
-		CPUStats struct {
-			Status string `json:"status"`
-			Data   struct {
-				LoadAverage string `json:"load_average"`
-			} `json:"data"`
-		} `json:"cpu_stats,omitempty"`
-		ResourceUsage struct {
-			Status string `json:"status"`
-			Data   struct {
-				Disk struct {
-					Percent float64 `json:"percent"`
-					Total   int64   `json:"total"`
-					Used    int64   `json:"used"`
-				} `json:"disk"`
-				Memory struct {
-					Percent   float64 `json:"percent"`
-					Total     int64   `json:"total"`
-					Available int64   `json:"available"`
-				} `json:"memory"`
-				CPU struct {
-					Percent float64 `json:"percent"`
-					Total   int64   `json:"total"`
-					Used    float64 `json:"used"`
-				} `json:"cpu"`
-			} `json:"data"`
-		} `json:"resource_usage,omitempty"`
-		Interfaces struct {
-			Status string `json:"status"`
-			Data   struct {
-				IfaceIP    map[string]string `json:"iface_ip"`
-				OVSBridges []string          `json:"ovs_bridges"`
-				IfaceInfo  map[string]struct {
-					MAC    string `json:"mac"`
-					Ifaces []struct {
-						Addr      string `json:"addr"`
-						Netmask   string `json:"netmask"`
-						Broadcast string `json:"broadcast,omitempty"`
-					} `json:"ifaces"`
-				} `json:"iface_info"`
-				IntfList []string `json:"intf_list"`
-			} `json:"data"`
-		} `json:"interfaces,omitempty"`
-		VolumesPresent struct {
-			Status string `json:"status"`
-			Data   []struct {
-				Name string `json:"name"`
-				Size string `json:"size"`
-				Free string `json:"free"`
-			} `json:"data"`
-		} `json:"volumes_present,omitempty"`
-	} `json:"extensions,omitempty"`
+	// Extensions       struct {
+	// 	IPAddress struct {
+	// 		Status string   `json:"status"`
+	// 		Data   []string `json:"data"`
+	// 	} `json:"ip_address,omitempty"`
+	// 	CPUStats struct {
+	// 		Status string `json:"status"`
+	// 		Data   struct {
+	// 			LoadAverage string `json:"load_average"`
+	// 		} `json:"data"`
+	// 	} `json:"cpu_stats,omitempty"`
+	// 	ResourceUsage struct {
+	// 		Status string `json:"status"`
+	// 		Data   struct {
+	// 			Disk struct {
+	// 				Percent float64 `json:"percent"`
+	// 				Total   int64   `json:"total"`
+	// 				Used    int64   `json:"used"`
+	// 			} `json:"disk"`
+	// 			Memory struct {
+	// 				Percent   float64 `json:"percent"`
+	// 				Total     int64   `json:"total"`
+	// 				Available int64   `json:"available"`
+	// 			} `json:"memory"`
+	// 			CPU struct {
+	// 				Percent float64 `json:"percent"`
+	// 				Total   int64   `json:"total"`
+	// 				Used    float64 `json:"used"`
+	// 			} `json:"cpu"`
+	// 		} `json:"data"`
+	// 	} `json:"resource_usage,omitempty"`
+	// 	Interfaces struct {
+	// 		Status string `json:"status"`
+	// 		Data   struct {
+	// 			IfaceIP    map[string]string `json:"iface_ip"`
+	// 			OVSBridges []string          `json:"ovs_bridges"`
+	// 			IfaceInfo  map[string]struct {
+	// 				MAC    string `json:"mac"`
+	// 				Ifaces []struct {
+	// 					Addr      string `json:"addr"`
+	// 					Netmask   string `json:"netmask"`
+	// 					Broadcast string `json:"broadcast,omitempty"`
+	// 				} `json:"ifaces"`
+	// 			} `json:"iface_info"`
+	// 			IntfList []string `json:"intf_list"`
+	// 		} `json:"data"`
+	// 	} `json:"interfaces,omitempty"`
+	// 	VolumesPresent struct {
+	// 		Status string `json:"status"`
+	// 		Data   []struct {
+	// 			Name string `json:"name"`
+	// 			Size string `json:"size"`
+	// 			Free string `json:"free"`
+	// 		} `json:"data"`
+	// 	} `json:"volumes_present,omitempty"`
+	// } `json:"extensions,omitempty"`
+	Extensions       json.RawMessage `json:"extensions,omitempty"`
 	Message      interface{} `json:"message,omitempty"`
 	HostconfigID string      `json:"hostconfig_id,omitempty"`
 }
@@ -205,4 +206,17 @@ type bundle struct {
 
 type assignHypervisor struct {
 	ClusterName string `json:"hostcluster"`
+}
+
+type ResmgrExtensionsData struct {
+	Interfaces struct {
+		Data struct {
+			IfaceInfo map[string]struct {
+				MAC    string `json:"mac"`
+				Ifaces []struct {
+					Addr string `json:"addr"`
+				} `json:"ifaces"`
+			} `json:"iface_info"`
+		} `json:"data"`
+	} `json:"interfaces"`
 }
