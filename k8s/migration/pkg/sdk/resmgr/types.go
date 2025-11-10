@@ -208,8 +208,8 @@ type assignHypervisor struct {
 	ClusterName string `json:"hostcluster"`
 }
 
-// Manually parse the 'extensions' json.RawMessage which can be either a full JSON object or an empty string.
-type ResmgrExtensionsData struct {
+// ExtensionsData defines the need from the 'extensions' field of a resmgr.Host.
+type ExtensionsData struct {
 	Interfaces struct {
 		Data struct {
 			IfaceInfo map[string]struct {

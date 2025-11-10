@@ -212,7 +212,7 @@ func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, host resmgr.Host) vjailbreakv1alpha1.PCDHost {
 	// Create a new PCDHost
 	interfaces := []vjailbreakv1alpha1.PCDHostInterface{}
-	var extData resmgr.ResmgrExtensionsData
+	var extData resmgr.ExtensionsData
 	err := json.Unmarshal(host.Extensions, &extData)
 	if err == nil {
 		for name, itface := range extData.Interfaces.Data.IfaceInfo {
