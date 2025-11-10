@@ -230,7 +230,6 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 				})
 			}
 		}
-	}
 	pcdHost := vjailbreakv1alpha1.PCDHost{
 		ObjectMeta: metav1.ObjectMeta{
 			// Use the host ID as the name to ensure uniqueness
