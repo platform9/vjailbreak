@@ -51,28 +51,29 @@ type Host struct {
 		OSInfo           string      `json:"os_info"`
 		Responding       bool        `json:"responding"`
 		LastResponseTime interface{} `json:"last_response_time"`
-		CPUInfo          struct {
-			CPUSockets int `json:"cpu_sockets"`
-			CPUCores   int `json:"cpu_cores"`
-			CPUThreads struct {
-				Total   int     `json:"total"`
-				PerCore float64 `json:"per_core"`
-			} `json:"cpu_threads"`
-			CPUCapacity struct {
-				Total     string `json:"total"`
-				PerSocket string `json:"per_socket"`
-				PerCore   string `json:"per_core"`
-				PerThread string `json:"per_thread"`
-			} `json:"cpu_capacity"`
-			CPUArch   string `json:"cpu_arch"`
-			CPUVendor string `json:"cpu_vendor"`
-			CPUModel  struct {
-				ModelID   int    `json:"model_id"`
-				ModelName string `json:"model_name"`
-			} `json:"cpu_model"`
-			CPUFeatures     []string `json:"cpu_features"`
-			VirtualPhysical string   `json:"virtual/physical"`
-		} `json:"cpu_info,omitempty"`
+		// CPUInfo          struct {
+		// 	CPUSockets int `json:"cpu_sockets"`
+		// 	CPUCores   int `json:"cpu_cores"`
+		// 	CPUThreads struct {
+		// 		Total   int     `json:"total"`
+		// 		PerCore float64 `json:"per_core"`
+		// 	} `json:"cpu_threads"`
+		// 	CPUCapacity struct {
+		// 		Total     string `json:"total"`
+		// 		PerSocket string `json:"per_socket"`
+		// 		PerCore   string `json:"per_core"`
+		// 		PerThread string `json:"per_thread"`
+		// 	} `json:"cpu_capacity"`
+		// 	CPUArch   string `json:"cpu_arch"`
+		// 	CPUVendor string `json:"cpu_vendor"`
+		// 	CPUModel  struct {
+		// 		ModelID   int    `json:"model_id"`
+		// 		ModelName string `json:"model_name"`
+		// 	} `json:"cpu_model"`
+		// 	CPUFeatures     []string `json:"cpu_features"`
+		// 	VirtualPhysical string   `json:"virtual/physical"`
+		// } `json:"cpu_info,omitempty"`
+		CPUInfo          json.RawMessage `json:"cpu_info,omitempty"`
 	} `json:"info,omitempty"`
 	Roles              []string               `json:"roles,omitempty"`
 	RolesStatusDetails map[string]string      `json:"roles_status_details,omitempty"`
