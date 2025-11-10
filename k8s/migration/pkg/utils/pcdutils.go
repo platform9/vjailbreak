@@ -213,9 +213,9 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 	// Create a new PCDHost
 	interfaces := []vjailbreakv1alpha1.PCDHostInterface{}
 	var extData resmgr.ResmgrExtensionsData
-	if len(host.Extensions) > 0 && string(host.Extensions) != "\"\"" {
-		if json.Unmarshal(host.Extensions, &extData) == nil {
-			for name, itface := range extData.Interfaces.Data.IfaceInfo {
+	err := json.Unmarshal(host.Extensions, &extData)
+	if err == nil {
+		for name, itface := range extData.Interfaces.Data.IfaceInfo {
 				// Collect all IP addresses from the interface
 				ipAddresses := []string{}
 				for _, iface := range itface.Ifaces {
