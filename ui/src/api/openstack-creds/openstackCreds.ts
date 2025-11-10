@@ -69,6 +69,19 @@ export const deleteOpenstackCredentials = async (
   return response
 }
 
+export const updateOpenstackCredential = async (
+  name: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
+  data: OpenstackCreds
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds/${name}`
+  const response = await axios.put<OpenstackCreds>({
+    endpoint,
+    data,
+  })
+  return response
+}
+
 // Create OpenStack credentials with secret reference
 export const createOpenstackCredsWithSecret = async (
   name: string,

@@ -81,6 +81,9 @@ type OpenstackCredsSpec struct {
 
 	// ProjectName is the name of the project in openstack
 	ProjectName string `json:"projectName,omitempty"`
+
+	// RevalidateTimestamp is a field to trigger a manual re-validation
+	RevalidateTimestamp string `json:"revalidateTimestamp,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

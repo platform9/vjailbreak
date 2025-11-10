@@ -49,6 +49,19 @@ export const deleteVmwareCredentials = async (
   return response
 }
 
+export const updateVmwareCredential = async (
+  name: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
+  data: VMwareCreds
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds/${name}`
+  const response = await axios.put<VMwareCreds>({
+    endpoint,
+    data,
+  })
+  return response
+}
+
 // Create VMware credentials with secret reference
 export const createVMwareCredsWithSecret = async (
   name: string,

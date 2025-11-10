@@ -43,6 +43,8 @@ type VMwareCredsSpec struct {
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 	// VcenterHost is the vCenter host
 	VcenterHost string `json:"vcenterHost,omitempty"`
+	// RevalidateTimestamp is a field to trigger a manual re-validation
+	RevalidateTimestamp string `json:"revalidateTimestamp,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds

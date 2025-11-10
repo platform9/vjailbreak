@@ -1046,6 +1046,9 @@ spec:
               projectName:
                 description: ProjectName is the name of the project in openstack
                 type: string
+              revalidateTimestamp:
+                description: RevalidateTimestamp is a field to trigger a manual re-validation
+                type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   OpenStack credentials
@@ -2132,6 +2135,9 @@ spec:
             properties:
               datacenter:
                 description: DataCenter is the datacenter for the virtual machine
+                type: string
+              revalidateTimestamp:
+                description: RevalidateTimestamp is a field to trigger a manual re-validation
                 type: string
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
