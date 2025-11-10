@@ -20,7 +20,6 @@ import (
 	"time"
 	"unicode"
 
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -286,18 +285,17 @@ func GetOsRelease(path string) (string, error) {
 }
 
 /*
- */
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC) error {
-	// Add wildcard to netplan
-	type ipEntry struct {
-		ip     string
-		prefix int32
-	}
-	macToIPs := make(map[string][]ipEntry)
-	macToDNS := make(map[string][]string)
-	if len(guestNetworks) > 0 {
-		for _, gn := range guestNetworks {
-			if strings.Contains(gn.IP, ":") { // skip IPv6 here
+	func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC) error {
+		// Add wildcard to netplan
+		type ipEntry struct {
+			ip     string
+			prefix int32
+		}
+		macToIPs := make(map[string][]ipEntry)
+		macToDNS := make(map[string][]string)
+		if len(guestNetworks) > 0 {
+			for _, gn := range guestNetworks {
+				if strings.Contains(gn.IP, ":") { // skip IPv6 here
 				continue
 			}
 			macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
@@ -305,53 +303,86 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 				macToDNS[gn.MAC] = gn.DNS
 			}
 		}
-	} else if len(networkInterfaces) > 0 {
-		for _, ni := range networkInterfaces {
-			if ni.IPAddress != "" && !strings.Contains(ni.IPAddress, ":") {
-				// Prefix unknown here; default to /24 as a safe placeholder if not provided downstream
-				macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
+		} else if len(networkInterfaces) > 0 {
+			for _, ni := range networkInterfaces {
+				if ni.IPAddress != "" && !strings.Contains(ni.IPAddress, ":") {
+					// Prefix unknown here; default to /24 as a safe placeholder if not provided downstream
+					macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
+				}
 			}
 		}
-	}
-	// Construct YAML
-	var b strings.Builder
-	b.WriteString("network:\n")
-	b.WriteString("  version: 2\n")
-	b.WriteString("  renderer: networkd\n")
-	b.WriteString("  ethernets:\n")
-	idx := 0
 
-	for mac, entries := range macToIPs {
-		if len(entries) == 0 {
-			continue
-		}
-		id := fmt.Sprintf("vj%d", idx)
-		idx++
-		b.WriteString(fmt.Sprintf("    %s:\n", id))
-		b.WriteString("      match:\n")
-		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-		b.WriteString("      dhcp4: false\n")
-		b.WriteString("      addresses:\n")
-		for _, e := range entries {
-			// default prefix to 24 if zero
-			prefix := e.prefix
-			if prefix == 0 {
-				prefix = 24
+		// Construct YAML
+		var b strings.Builder
+		b.WriteString("network:\n")
+		b.WriteString("  version: 2\n")
+		b.WriteString("  renderer: networkd\n")
+		b.WriteString("  ethernets:\n")
+		idx := 0
+
+		for mac, entries := range macToIPs {
+			if len(entries) == 0 {
+				continue
 			}
-			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
-		}
-		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
-			b.WriteString("      nameservers:\n")
-			b.WriteString("        addresses:\n")
-			for _, d := range dns {
-				b.WriteString(fmt.Sprintf("          - %s\n", d))
+			id := fmt.Sprintf("vj%d", idx)
+			idx++
+			b.WriteString(fmt.Sprintf("    %s:\n", id))
+			b.WriteString("      match:\n")
+			b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
+			b.WriteString("      dhcp4: false\n")
+			b.WriteString("      addresses:\n")
+			for _, e := range entries {
+				// default prefix to 24 if zero
+				prefix := e.prefix
+				if prefix == 0 {
+					prefix = 24
+				}
+				b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
+			}
+			if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
+				b.WriteString("      nameservers:\n")
+				b.WriteString("        addresses:\n")
+				for _, d := range dns {
+					b.WriteString(fmt.Sprintf("          - %s\n", d))
+				}
 			}
 		}
+		netplanYAML := b.String()
+		var ans string
+		// Create the netplan file
+		err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
+		if err != nil {
+			return fmt.Errorf("failed to create netplan file: %s", err)
+		}
+		log.Println("Created local netplan file")
+		log.Println("Uploading netplan file to disk")
+		// Upload it to the disk
+		os.Setenv("LIBGUESTFS_BACKEND", "direct")
+		if useSingleDisk {
+			command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+			ans, err = RunCommandInGuest(diskPath, command, true)
+		} else {
+			command := "upload"
+			ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+		}
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
+			return err
+		}
+		return nil
 	}
-	netplanYAML := b.String()
+*/
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	// Add wildcard to netplan
 	var ans string
+	netplan := `[Match]
+Name=en*
+
+[Network]
+DHCP=yes`
+
 	// Create the netplan file
-	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
+	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create netplan file: %s", err)
 	}
@@ -372,7 +403,6 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	}
 	return nil
 }
-
 func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 	// Create the firstboot script
 	firstbootscriptpath := fmt.Sprintf("/home/fedora/%s.sh", firstbootscriptname)
