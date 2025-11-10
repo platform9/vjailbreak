@@ -5,6 +5,7 @@ import {
   fetchRdmDisksMap,
   mapToVmDataWithRdm,
 } from "src/api/rdm-disks/rdmDiskUtils"
+import { VMwareMachine } from "src/api/vmware-machines/model"
 
 export const VMWARE_MACHINES_BASE_KEY = "vmwaremachines"
 
@@ -14,6 +15,8 @@ interface UseVMwareMachinesQueryProps {
   enabled?: boolean
   sessionId?: string
   vmwareCredName?: string
+  clusterName?: string
+  vmwareClusterDisplayName?: string
 }
 
 export const useVMwareMachinesQuery = ({
@@ -22,6 +25,8 @@ export const useVMwareMachinesQuery = ({
   enabled = true,
   sessionId = "default",
   vmwareCredName,
+  clusterName,
+  vmwareClusterDisplayName,
 }: UseVMwareMachinesQueryProps = {}) => {
   const areCredsValidated = vmwareCredsValidated && openstackCredsValidated
   const queryEnabled = enabled && areCredsValidated
@@ -32,6 +37,7 @@ export const useVMwareMachinesQuery = ({
     vmwareCredsValidated,
     openstackCredsValidated,
     vmwareCredName,
+    clusterName,
   ]
 
   return useQuery({
@@ -45,8 +51,16 @@ export const useVMwareMachinesQuery = ({
         fetchRdmDisksMap(),
       ])
 
+      let filteredItems: VMwareMachine[] = vmResponse.items;
+      
+      if (vmwareClusterDisplayName && vmwareClusterDisplayName !== "NO CLUSTER") {
+        filteredItems = vmResponse.items.filter(vm => 
+          vm.spec.vms.clusterName === vmwareClusterDisplayName
+        );
+      }
+
       // Use RDM-aware mapping function
-      return mapToVmDataWithRdm(vmResponse.items, rdmDisksMap)
+      return mapToVmDataWithRdm(filteredItems, rdmDisksMap)
     },
     enabled: queryEnabled,
     refetchOnWindowFocus: false,

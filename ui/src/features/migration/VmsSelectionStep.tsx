@@ -153,6 +153,8 @@ interface VmsSelectionStepProps {
   vmwareCredName?: string;
   openstackCredName?: string;
   openstackCredentials?: OpenstackCreds;
+  vmwareCluster?: string;
+  vmwareClusterDisplayName?: string;
 }
 
 export default function VmsSelectionStep({
@@ -166,6 +168,8 @@ export default function VmsSelectionStep({
   vmwareCredName,
   openstackCredName,
   openstackCredentials,
+  vmwareCluster,
+  vmwareClusterDisplayName,
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
   const { track } = useAmplitude({ component: "VmsSelectionStep" });
@@ -231,6 +235,13 @@ export default function VmsSelectionStep({
   const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>>({});
   const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, Record<number, string>>>({});
   const [assigningIPs, setAssigningIPs] = useState(false);
+
+  const clusterName = React.useMemo(() => {
+    if (!vmwareCluster) return undefined;
+    const parts = vmwareCluster.split(':');
+    // The value is "credName:datacenter:clusterName"
+    return parts.length === 3 ? parts[2] : undefined;
+  }, [vmwareCluster]);
 
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
@@ -551,8 +562,16 @@ export default function VmsSelectionStep({
     openstackCredsValidated,
     enabled: open,
     sessionId,
-    vmwareCredName
+    vmwareCredName,
+    clusterName,
+    vmwareClusterDisplayName,
   });
+
+  useEffect(() => {
+    if (open && vmwareCluster !== undefined) {
+      refreshVMList();
+    }
+  }, [vmwareCluster]);
 
   useEffect(() => {
     const fetchMigratedVms = async () => {
