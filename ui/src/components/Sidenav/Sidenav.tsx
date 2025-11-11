@@ -26,7 +26,7 @@ import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import { useMigrationsQuery } from '../../hooks/api/useMigrationsQuery'
 import { Phase } from '../../api/migrations/model'
-import { THIRTY_SECONDS } from 'src/constants'
+import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
@@ -363,7 +363,13 @@ export default function Sidenav({
   const { data: versionInfo } = useVersionQuery()
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
   const { data: migrations } = useMigrationsQuery(undefined, {
-    refetchInterval: THIRTY_SECONDS,
+    refetchInterval: (query) => {
+      // if we're not on the migrations page, don't refetch
+      if (activeItem !== '/dashboard/migrations') return Infinity
+      const migrations = query?.state?.data || []
+      const hasPendingMigration = !!migrations.find((m) => m.status === undefined)
+      return hasPendingMigration ? FIVE_SECONDS : THIRTY_SECONDS
+    },
     refetchOnMount: true
   })
 
