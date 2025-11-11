@@ -359,11 +359,11 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	if useSingleDisk {
-		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+		command := `upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml`
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	}
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
