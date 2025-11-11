@@ -394,7 +394,7 @@ DHCP=yes`
 		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 		ans, err = RunCommandInGuest(diskPath, command, true)
 		command_get_mac := "ls /sys/class/net"
-		macs, err1 := RunCommandInGuest(diskPath, command_get_mac, true)
+		macs, err1 := RunCommandInGuest(diskPath, command_get_mac, false)
 		if err1 != nil {
 			log.Printf("failed to run command (%s): %v: %s", "ls", err, strings.TrimSpace(ans))
 		}
