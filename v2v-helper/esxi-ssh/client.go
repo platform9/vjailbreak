@@ -150,10 +150,12 @@ func (c *Client) ExecuteCommandWithProgress(command string, outputChan chan<- st
 		return fmt.Errorf("failed to start command: %w", err)
 	}
 
-	// Read output in goroutines
+	// Read output in goroutines with proper cleanup
 	done := make(chan error, 1)
+	outputDone := make(chan struct{})
 
 	go func() {
+		defer func() { outputDone <- struct{}{} }()
 		buf := make([]byte, 1024)
 		for {
 			n, err := stdout.Read(buf)
@@ -167,6 +169,7 @@ func (c *Client) ExecuteCommandWithProgress(command string, outputChan chan<- st
 	}()
 
 	go func() {
+		defer func() { outputDone <- struct{}{} }()
 		buf := make([]byte, 1024)
 		for {
 			n, err := stderr.Read(buf)
@@ -184,7 +187,13 @@ func (c *Client) ExecuteCommandWithProgress(command string, outputChan chan<- st
 		done <- session.Wait()
 	}()
 
-	return <-done
+	cmdErr := <-done
+
+	// Wait for output goroutines to finish
+	<-outputDone
+	<-outputDone
+
+	return cmdErr
 }
 
 // OpenTunnel creates an SSH tunnel for data transfer

@@ -319,6 +319,7 @@ func (c *Client) StreamDisk(ctx context.Context, diskPath string, writer io.Writ
 	buf := make([]byte, options.BufferSize)
 	totalRead := int64(0)
 
+readLoop:
 	for {
 		select {
 		case <-ctx.Done():
@@ -353,16 +354,17 @@ func (c *Client) StreamDisk(ctx context.Context, diskPath string, writer io.Writ
 				if options.ProgressChan != nil {
 					options.ProgressChan <- *progress
 				}
-				break
+				break readLoop
 			}
 
 			if err != nil {
 				return fmt.Errorf("failed to read disk data: %w", err)
 			}
-		}
 
-		if totalRead >= diskInfo.SizeBytes {
-			break
+			// Check if we've read all expected data
+			if totalRead >= diskInfo.SizeBytes {
+				break readLoop
+			}
 		}
 	}
 
@@ -472,7 +474,11 @@ func parseSize(sizeStr string) (int64, error) {
 	scanner.Split(bufio.ScanWords)
 
 	if scanner.Scan() {
-		value, _ = strconv.ParseFloat(scanner.Text(), 64)
+		var err error
+		value, err = strconv.ParseFloat(scanner.Text(), 64)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse size value: %w", err)
+		}
 	}
 	if scanner.Scan() {
 		unit = strings.ToUpper(scanner.Text())
