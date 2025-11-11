@@ -134,6 +134,9 @@ export default function OpenstackCredentialsDrawer({
         setError(null);
 
         try {
+
+            const projectName = rcFileValues.OS_PROJECT_NAME || rcFileValues.OS_TENANT_NAME;
+            
             // Use the new helper function that encapsulates the entire flow
             const response = await createOpenstackCredsWithSecretFlow(
                 credentialName,
@@ -143,10 +146,11 @@ export default function OpenstackCredentialsDrawer({
                     OS_USERNAME: rcFileValues.OS_USERNAME,
                     OS_PASSWORD: rcFileValues.OS_PASSWORD,
                     OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
-                    OS_TENANT_NAME: rcFileValues.OS_TENANT_NAME,
+                    OS_TENANT_NAME: projectName,
                     OS_INSECURE: insecure
                 },
-                isPcd
+                isPcd,
+                projectName
             );
 
             setCreatedCredentialName(response.metadata.name);
