@@ -459,6 +459,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -1551,6 +1555,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
@@ -2665,6 +2673,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - get
@@ -2686,14 +2703,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - pods/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:

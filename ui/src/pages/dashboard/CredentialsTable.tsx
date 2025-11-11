@@ -17,11 +17,9 @@ import WarningIcon from '@mui/icons-material/Warning';
 import AddIcon from '@mui/icons-material/Add';
 import CredentialsIcon from '@mui/icons-material/VpnKey';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
-import { VmwareCredential } from "src/components/forms/VmwareCredentialsForm";
-import { OpenstackCredential } from "src/components/forms/OpenstackCredentialsForm";
 import ConfirmationDialog from "src/components/dialogs/ConfirmationDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { VMWARE_CREDS_QUERY_KEY } from "src/hooks/api/useVmwareCredentialsQuery";
@@ -42,7 +40,7 @@ interface CredentialItem {
     name: string;
     type: 'VMware' | 'OpenStack';
     status: string;
-    credObject: VmwareCredential | OpenstackCredential;
+    credObject: VMwareCreds | OpenstackCreds;
     onRevalidate: (id: string, type: 'VMware' | 'OpenStack', name: string) => void;
     onDelete: (id: string, type: 'VMware' | 'OpenStack') => void;
 }
@@ -85,10 +83,19 @@ const columns: GridColDef[] = [
         flex: 1,
         width: 150,
         sortable: false,
-        renderCell: (params) => (
+        renderCell: (params) => {
+            const validationState = params.row.validationState;
+            return (
             <Box>
-                <Tooltip title="Re-validate credential">
-                    {params.row.isValidating ? (
+                <Tooltip 
+                title={
+                    validationState === 'error' 
+                    ? "Re-validation failed. Click to retry." 
+                    : "Re-validate credential"
+                }
+            >
+                <span > 
+                    {validationState === 'loading' ? (
                         <IconButton aria-label="validating" disabled>
                             <CircularProgress size={24} />
                         </IconButton>
@@ -102,10 +109,11 @@ const columns: GridColDef[] = [
                             }}
                             aria-label="re-validate credential"
                         >
-                            <SyncIcon /> 
+                            {validationState === 'error' ? <WarningIcon color="error" /> : <SyncIcon />}
                         </IconButton>
                     )}
-                </Tooltip>
+                </span>
+            </Tooltip>
                 <Tooltip title="Delete credential">
                     <IconButton
                         onClick={(e) => {
@@ -120,7 +128,8 @@ const columns: GridColDef[] = [
                     </IconButton>
                 </Tooltip>
             </Box>
-        ),
+            )
+    },
     },
 ];
 
@@ -223,7 +232,8 @@ export default function CredentialsTable() {
     const [deleting, setDeleting] = useState(false);
     const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false);
     const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false);
-    const [validatingCreds, setValidatingCreds] = useState<Record<string, boolean>>({});
+    const [validatingCreds, setValidatingCreds] = useState<Record<string, 'loading' | 'error' | 'idle'>>({});
+    const activeTimersRef = useRef<Set<NodeJS.Timeout>>(new Set());
 
     // Force refetch when the component mounts
     useEffect(() => {
@@ -235,6 +245,15 @@ export default function CredentialsTable() {
         refetchVmware();
         refetchOpenstack();
     }, [refetchVmware, refetchOpenstack]);
+
+    useEffect(() => {
+        return () => {
+            activeTimersRef.current.forEach((timerId) => {
+                clearTimeout(timerId);
+            });
+            activeTimersRef.current.clear();
+        };
+    }, []);
 
     // Handle deletion of a credential
     const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
@@ -253,8 +272,8 @@ export default function CredentialsTable() {
                 name: credential.metadata.name,
                 type,
                 status: type === 'VMware'
-                    ? (credential as VmwareCredential).status?.vmwareValidationStatus || 'Unknown'
-                    : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
+                    ? (credential as VMwareCreds).status?.vmwareValidationStatus || 'Unknown'
+                    : (credential as OpenstackCreds).status?.openstackValidationStatus || 'Unknown',
                 credObject: credential,
                 onRevalidate: handleRevalidate,
                 onDelete: handleDeleteCredential,
@@ -330,58 +349,61 @@ export default function CredentialsTable() {
     }, []);
 
     const handleRevalidate = useCallback(async (id: string, type: 'VMware' | 'OpenStack', name: string) => {
-        setValidatingCreds(prev => ({ ...prev, [id]: true }));
+        setValidatingCreds(prev => ({ ...prev, [id]: 'loading' }));
 
         try {
-            let credToUpdate: VmwareCredential | OpenstackCredential | undefined;
             let namespace = 'migration-system';
 
             if (type === 'VMware') {
-                credToUpdate = vmwareCredentials?.find(c => c.metadata.name === name);
-            } else {
-                credToUpdate = openstackCredentials?.find(c => c.metadata.name === name);
-            }
+                const credToUpdate = vmwareCredentials?.find(c => c.metadata.name === name);
+                if (!credToUpdate) {
+                    throw new Error("Credential not found");
+                }
+                namespace = credToUpdate.metadata.namespace || 'migration-system';
 
-            if (!credToUpdate) {
-                throw new Error("Credential not found");
-            }
+                const updatedSpec = {
+                    ...credToUpdate.spec,
+                    revalidateTimestamp: new Date().toISOString()
+                };
 
-            namespace = credToUpdate.metadata.namespace || 'migration-system';
-
-            const updatedSpec = {
-                ...credToUpdate.spec,
-                revalidateTimestamp: new Date().toISOString()
-            };
-
-            if (type === 'VMware') {
-                const payload = {
-                    ...(credToUpdate as any),
-                    apiVersion: (credToUpdate as any).apiVersion || "vjailbreak.k8s.pf9.io/v1alpha1",
-                    kind: (credToUpdate as any).kind || "VMwareCreds",
+                const payload: VMwareCreds = {
+                    ...credToUpdate, 
                     spec: updatedSpec,
-                } as VMwareCreds;
-
+                };
+                
                 await updateVmwareCredential(name, namespace, payload);
-
+            
             } else {
-                const payload = {
-                    ...(credToUpdate as any),
-                    apiVersion: (credToUpdate as any).apiVersion || "vjailbreak.k8s.pf9.io/v1alpha1",
-                    kind: (credToUpdate as any).kind || "OpenstackCreds",
-                    spec: updatedSpec,
-                } as OpenstackCreds;
+                const credToUpdate = openstackCredentials?.find(c => c.metadata.name === name);
+                if (!credToUpdate) {
+                    throw new Error("Credential not found");
+                }
+                namespace = credToUpdate.metadata.namespace || 'migration-system';
 
+                const updatedSpec = {
+                    ...credToUpdate.spec,
+                    revalidateTimestamp: new Date().toISOString()
+                };
+
+                const payload: OpenstackCreds = {
+                    ...credToUpdate,
+                    spec: updatedSpec,
+                };
+                
                 await updateOpenstackCredential(name, namespace, payload);
             }
 
-            setTimeout(() => {
+            const timerId = setTimeout(() => {
                 if (type === 'VMware') {
                     refetchVmware();
                 } else {
                     refetchOpenstack();
                 }
-                setValidatingCreds(prev => ({ ...prev, [id]: false }));
+                setValidatingCreds(prev => ({ ...prev, [id]: 'idle' }));
+                activeTimersRef.current.delete(timerId);
             }, 3000);
+            
+            activeTimersRef.current.add(timerId);
 
         } catch (error) {
             console.error(`Failed to revalidate ${name}:`, error);
@@ -393,11 +415,11 @@ export default function CredentialsTable() {
                     action: 'revalidate-credential'
                 }
             });
-            setValidatingCreds(prev => ({ ...prev, [id]: false }));
+            setValidatingCreds(prev => ({ ...prev, [id]: 'error' }));
         }
     }, [refetchVmware, refetchOpenstack, reportError, vmwareCredentials, openstackCredentials]);
 
-    const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VmwareCredential) => ({
+    const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VMwareCreds) => ({
         id: `vmware-${cred.metadata.name}`,
         name: cred.metadata.name,
         type: 'VMware' as const,
@@ -407,7 +429,7 @@ export default function CredentialsTable() {
         onDelete: handleDeleteCredential,
     })) || [];
 
-    const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
+    const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCreds) => ({
         id: `openstack-${cred.metadata.name}`,
         name: cred.metadata.name,
         type: 'OpenStack' as const,
@@ -422,7 +444,7 @@ export default function CredentialsTable() {
 
     const rowsWithActions = allCredentials.map(row => ({
         ...row,
-        isValidating: validatingCreds[row.id] || false,
+        validationState: validatingCreds[row.id] || 'idle',
         onDelete: handleDeleteCredential
     }));
 
