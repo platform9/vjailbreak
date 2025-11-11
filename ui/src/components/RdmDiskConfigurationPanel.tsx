@@ -18,6 +18,7 @@ import {
 // Icons removed since source fields are now readonly
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import { formatDiskSize } from 'src/utils'
 
 interface RdmDiskConfiguration {
     uuid: string
@@ -115,18 +116,6 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                 if (!config) return null
 
                 const ownerVMs = disk.spec.ownerVMs
-                const formatDiskSize = (sizeInBytes: number): string => {
-                    const sizeInMB = sizeInBytes / (1024 * 1024)
-                    const sizeInGB = sizeInBytes / (1024 * 1024 * 1024)
-                    
-                    if (sizeInGB >= 1) {
-                        // Show one decimal place for GB
-                        return `${sizeInGB.toFixed(1)} GB`
-                    } else {
-                        // Show MB for disks smaller than 1 GB
-                        return `${Math.round(sizeInMB)} MB`
-                    }
-                }
 
                 const diskSizeDisplay = formatDiskSize(disk.spec.diskSize)
 
