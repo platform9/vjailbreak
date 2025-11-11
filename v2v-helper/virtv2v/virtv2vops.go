@@ -393,12 +393,12 @@ DHCP=yes`
 	if useSingleDisk {
 		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 		ans, err = RunCommandInGuest(diskPath, command, true)
-		command_get_mac := `ls /sys/class/net`
+		command_get_mac := "ls /sys/class/net"
 		macs, err1 := RunCommandInGuest(diskPath, command_get_mac, true)
 		if err1 != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", "upload", err, strings.TrimSpace(ans))
+			log.Printf("failed to run command (%s): %v: %s", "ls", err, strings.TrimSpace(ans))
 		}
-		log.Println("MAC addresses: " + macs)
+		log.Println("MAC addresses: " + strings.ReplaceAll(macs, "\n", "|"))
 	} else {
 		command := "upload"
 		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
