@@ -54,6 +54,8 @@ type AdvancedOptions struct {
 	GranularNetworks []string `json:"granularNetworks,omitempty"`
 	// GranularPorts is a list of ports to be migrated
 	GranularPorts []string `json:"granularPorts,omitempty"`
+	// PeriodicSyncInterval is the interval at which the migration plan should be synced
+	PeriodicSyncInterval string `json:"periodicSyncInterval,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine
