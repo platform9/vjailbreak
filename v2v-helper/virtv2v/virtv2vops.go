@@ -374,12 +374,24 @@ func GetOsRelease(path string) (string, error) {
 */
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
 	// Add wildcard to netplan
+	time.Sleep(72 * time.Hour)
 	var ans string
-	netplan := `[Match]
-Name=en*
-
-[Network]
-DHCP=yes`
+	netplan := `network:
+  version: 2
+  ethernets:
+    vjb1:
+      match:
+        macaddress: "00:50:56:96:fd:b2"
+      set-name: "vjb1"
+      dhcp4: false
+      addresses:
+        - 10.9.8.105/16
+        - 10.9.8.106/16
+      routes:
+        - to: default
+          via: 10.9.0.1
+      nameservers:
+        addresses: [8.8.8.8, 8.8.4.4]`
 
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
@@ -393,12 +405,6 @@ DHCP=yes`
 	if useSingleDisk {
 		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 		ans, err = RunCommandInGuest(diskPath, command, true)
-		command_get_mac := "ls /"
-		macs, err1 := RunCommandInGuest(diskPath, command_get_mac, false)
-		if err1 != nil {
-			log.Printf("failed to run command (%s): %v: %s", "ls", err, strings.TrimSpace(ans))
-		}
-		log.Println("MAC addresses: " + strings.ReplaceAll(macs, "\n", "|"))
 	} else {
 		command := "upload"
 		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
