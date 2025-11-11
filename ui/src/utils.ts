@@ -130,10 +130,3 @@ export const formatDiskSize = (bytes: number): string => {
   const size = bytes / Math.pow(1024, i);
   return `${parseFloat(size.toFixed(1))} ${units[i]}`;
 };
-
-    units.length - 1
-  );
-  const size = bytes / Math.pow(1024, i);
-  
-  return `${size.toFixed(1)} ${units[i]}`;
-};
