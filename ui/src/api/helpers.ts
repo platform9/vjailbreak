@@ -119,7 +119,8 @@ export const createOpenstackCredsWithSecretFlow = async (
     OS_INSECURE?: boolean
   },
   isPcd: boolean = false,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+  projectName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
 ) => {
   const secretName = `${credName}-openstack-secret`
 
@@ -141,6 +142,7 @@ export const createOpenstackCredsWithSecretFlow = async (
       secretRef: {
         name: secretName,
       },
+      projectName: projectName,
     },
   }
 
