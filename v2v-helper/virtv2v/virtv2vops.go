@@ -285,7 +285,7 @@ func GetOsRelease(path string) (string, error) {
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC, gatewayIP map[string]string) error {
 	// Add wildcard to netplan
 	type ipEntry struct {
 		ip     string
@@ -319,13 +319,12 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	b.WriteString("  renderer: networkd\n")
 	b.WriteString("  ethernets:\n")
 	idx := 0
-
+	routesAdded := false
 	for mac, entries := range macToIPs {
 		if len(entries) == 0 {
 			continue
 		}
 		id := fmt.Sprintf("vj%d", idx)
-		idx++
 		b.WriteString(fmt.Sprintf("    %s:\n", id))
 		b.WriteString("      match:\n")
 		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
@@ -339,6 +338,14 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 			}
 			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
 		}
+		if !routesAdded {
+			if gateway, ok := gatewayIP[mac]; ok {
+				b.WriteString("      routes:\n")
+				b.WriteString("        - to: default\n")
+				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+			}
+			routesAdded = true
+		}
 		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
 			b.WriteString("      nameservers:\n")
 			b.WriteString("        addresses:\n")
@@ -346,8 +353,13 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 				b.WriteString(fmt.Sprintf("          - %s\n", d))
 			}
 		}
+		idx++
+	}
+	if !routesAdded {
+		log.Println("WARNING: No gateway found")
 	}
 	netplanYAML := b.String()
+	log.Println("DEBUG : Netplan YAML:", netplanYAML)
 	var ans string
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
