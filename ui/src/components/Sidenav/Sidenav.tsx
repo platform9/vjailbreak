@@ -19,13 +19,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from '../../types/navigation'
 import { useVersionQuery } from '../../hooks/api/useVersionQuery'
 import Platform9Logo from '../Platform9Logo'
-import { UpgradeModal } from '../UpgradeModal';
-import UpgradeIcon from '@mui/icons-material/Upgrade';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+import { UpgradeModal } from '../UpgradeModal'
+import UpgradeIcon from '@mui/icons-material/Upgrade'
+import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
+import { useTheme } from '@mui/material/styles'
 import { useMigrationsQuery } from '../../hooks/api/useMigrationsQuery'
 import { Phase } from '../../api/migrations/model'
+import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
@@ -44,12 +45,12 @@ const ToggleButtonCollapsed = styled(IconButton)(({ theme }) => ({
   boxShadow: theme.shadows[2],
   transition: theme.transitions.create(['left', 'box-shadow'], {
     easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen,
+    duration: theme.transitions.duration.enteringScreen
   }),
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
-    boxShadow: theme.shadows[4],
-  },
+    boxShadow: theme.shadows[4]
+  }
 }))
 
 const StyledDrawer = styled(Drawer, {
@@ -63,7 +64,7 @@ const StyledDrawer = styled(Drawer, {
     width: collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH,
     transition: theme.transitions.create('width', {
       easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
+      duration: theme.transitions.duration.enteringScreen
     }),
     overflow: 'hidden',
     overflowX: 'hidden',
@@ -71,11 +72,11 @@ const StyledDrawer = styled(Drawer, {
     borderRight: `1px solid ${theme.palette.divider}`,
     backgroundColor: theme.palette.background.default,
     '&::-webkit-scrollbar': {
-      display: 'none',
+      display: 'none'
     },
     scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
-  },
+    msOverflowStyle: 'none'
+  }
 }))
 
 const DrawerHeader = styled('div')(({ theme }) => ({
@@ -86,7 +87,7 @@ const DrawerHeader = styled('div')(({ theme }) => ({
   ...theme.mixins.toolbar,
   minHeight: '80px !important',
   borderBottom: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
-  marginBottom: theme.spacing(1),
+  marginBottom: theme.spacing(1)
 }))
 
 const BrandContainer = styled(Box, {
@@ -99,10 +100,9 @@ const BrandContainer = styled(Box, {
   paddingLeft: collapsed ? 0 : theme.spacing(2),
   transition: theme.transitions.create(['justify-content', 'padding-left'], {
     easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen,
-  }),
+    duration: theme.transitions.duration.enteringScreen
+  })
 }))
-
 
 const VersionBadge = styled(Box, {
   shouldForwardProp: (prop) => prop !== 'collapsed'
@@ -115,7 +115,7 @@ const VersionBadge = styled(Box, {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  padding: collapsed ? theme.spacing(0.5, 1) : 0,
+  padding: collapsed ? theme.spacing(0.5, 1) : 0
 }))
 
 const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
@@ -123,11 +123,9 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
 
   if (isLoading) {
     const content = (
-      <VersionBadge collapsed={collapsed}>
-        {collapsed ? '...' : 'Loading version...'}
-      </VersionBadge>
+      <VersionBadge collapsed={collapsed}>{collapsed ? '...' : 'Loading version...'}</VersionBadge>
     )
-    
+
     if (collapsed) {
       return (
         <Tooltip title="Loading version..." placement="right" arrow>
@@ -144,7 +142,7 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
         {collapsed ? 'v?' : 'Version: Unable to load'}
       </VersionBadge>
     )
-    
+
     if (collapsed) {
       return (
         <Tooltip title="Version: Unable to load" placement="right" arrow>
@@ -163,7 +161,7 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
 
   if (collapsed) {
     return (
-      <Tooltip 
+      <Tooltip
         title={
           <Box>
             Version: {versionInfo?.version}
@@ -173,8 +171,8 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
               </Box>
             )}
           </Box>
-        } 
-        placement="right" 
+        }
+        placement="right"
         arrow
       >
         {content}
@@ -184,7 +182,6 @@ const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
 
   return content
 }
-
 
 const StyledListItemButton = styled(ListItemButton, {
   shouldForwardProp: (prop) => prop !== 'active' && prop !== 'collapsed'
@@ -199,7 +196,7 @@ const StyledListItemButton = styled(ListItemButton, {
   overflow: 'hidden',
   cursor: 'pointer',
   transition: theme.transitions.create(['background-color', 'transform'], {
-    duration: theme.transitions.duration.shorter,
+    duration: theme.transitions.duration.shorter
   }),
   ...(active && {
     backgroundColor: alpha(theme.palette.primary.main, 0.08),
@@ -211,30 +208,30 @@ const StyledListItemButton = styled(ListItemButton, {
       top: 0,
       bottom: 0,
       width: 3,
-      backgroundColor: theme.palette.primary.main,
+      backgroundColor: theme.palette.primary.main
     },
     '& .MuiListItemIcon-root': {
-      color: theme.palette.primary.main,
-    },
+      color: theme.palette.primary.main
+    }
   }),
   '&:hover': {
     backgroundColor: alpha(theme.palette.primary.main, 0.04),
-    transform: 'translateX(2px)',
-  },
+    transform: 'translateX(2px)'
+  }
 }))
 
 const StyledListItemIcon = styled(ListItemIcon, {
   shouldForwardProp: (prop) => prop !== 'collapsed'
 })<{ collapsed?: boolean }>(({ collapsed }) => ({
   minWidth: collapsed ? 0 : 56,
-  justifyContent: 'center',
+  justifyContent: 'center'
 }))
 
 const NavigationBadge = styled(Chip)(({ theme }) => ({
   fontSize: '0.6rem',
   height: '16px',
   fontWeight: 600,
-  marginLeft: theme.spacing(1),
+  marginLeft: theme.spacing(1)
 }))
 
 const ToggleButton = styled(IconButton)(({ theme }) => ({
@@ -251,12 +248,12 @@ const ToggleButton = styled(IconButton)(({ theme }) => ({
   boxShadow: theme.shadows[2],
   transition: theme.transitions.create(['left', 'box-shadow'], {
     easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen,
+    duration: theme.transitions.duration.enteringScreen
   }),
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
-    boxShadow: theme.shadows[4],
-  },
+    boxShadow: theme.shadows[4]
+  }
 }))
 
 interface NavigationItemProps {
@@ -267,7 +264,6 @@ interface NavigationItemProps {
 }
 
 function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: NavigationItemProps) {
-
   const handleClick = () => {
     if (!item.disabled) {
       onClick(item)
@@ -281,11 +277,7 @@ function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: Navig
       onClick={handleClick}
       disabled={item.disabled}
     >
-      {item.icon && (
-        <StyledListItemIcon collapsed={isCollapsed}>
-          {item.icon}
-        </StyledListItemIcon>
-      )}
+      {item.icon && <StyledListItemIcon collapsed={isCollapsed}>{item.icon}</StyledListItemIcon>}
       {!isCollapsed && (
         <ListItemText
           primary={
@@ -301,16 +293,14 @@ function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: Navig
                   />
                 )}
               </Box>
-              {item.external && (
-                <OpenInNew sx={{ fontSize: '0.875rem', opacity: 0.7 }} />
-              )}
+              {item.external && <OpenInNew sx={{ fontSize: '0.875rem', opacity: 0.7 }} />}
             </Box>
           }
           sx={{
             opacity: isCollapsed ? 0 : 1,
             '& .MuiTypography-root': {
-              fontSize: '0.875rem',
-            },
+              fontSize: '0.875rem'
+            }
           }}
         />
       )}
@@ -331,9 +321,7 @@ function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: Navig
                 variant={item.badge.variant}
               />
             )}
-            {item.external && (
-              <OpenInNew sx={{ fontSize: '0.75rem' }} />
-            )}
+            {item.external && <OpenInNew sx={{ fontSize: '0.75rem' }} />}
           </Box>
         }
         placement="right"
@@ -358,7 +346,7 @@ export default function Sidenav({
   isCollapsed: controlledCollapsed,
   onToggleCollapse,
   onItemClick,
-  activeItem: controlledActiveItem,
+  activeItem: controlledActiveItem
 }: SidenavProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -372,11 +360,17 @@ export default function Sidenav({
   const isCollapsed = controlledCollapsed ?? internalCollapsed
   const activeItem = controlledActiveItem ?? location.pathname
 
-  const { data: versionInfo } = useVersionQuery();
-  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { data: versionInfo } = useVersionQuery()
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
   const { data: migrations } = useMigrationsQuery(undefined, {
-    refetchInterval: 3000,
-    refetchOnMount: true,
+    refetchInterval: (query) => {
+      // if we're not on the migrations page, don't refetch
+      if (activeItem !== '/dashboard/migrations') return Infinity
+      const migrations = query?.state?.data || []
+      const hasPendingMigration = !!migrations.find((m) => m.status === undefined)
+      return hasPendingMigration ? FIVE_SECONDS : THIRTY_SECONDS
+    },
+    refetchOnMount: true
   })
 
   // checking if there's any active migrations
@@ -389,7 +383,7 @@ export default function Sidenav({
     Phase.ConvertingDisk,
     Phase.AwaitingCutOverStartTime,
     Phase.AwaitingAdminCutOver,
-    Phase.Unknown,
+    Phase.Unknown
   ])
 
   const hasActiveMigrations = Array.isArray(migrations)
@@ -401,7 +395,6 @@ export default function Sidenav({
       localStorage.setItem('sidenav-collapsed', JSON.stringify(internalCollapsed))
     }
   }, [internalCollapsed, controlledCollapsed])
-
 
   const handleToggleCollapse = () => {
     if (onToggleCollapse) {
@@ -422,11 +415,11 @@ export default function Sidenav({
   }
 
   const getActiveItem = (currentPath: string): string => {
-    const exactMatch = items.find(item => item.path === currentPath)
+    const exactMatch = items.find((item) => item.path === currentPath)
     if (exactMatch) return exactMatch.path
 
-    const partialMatch = items.find(item =>
-      currentPath.startsWith(item.path) && item.path !== '/dashboard'
+    const partialMatch = items.find(
+      (item) => currentPath.startsWith(item.path) && item.path !== '/dashboard'
     )
     return partialMatch?.path || currentPath
   }
@@ -441,22 +434,22 @@ export default function Sidenav({
         </BrandContainer>
       </DrawerHeader>
 
-      <List sx={{
-        pt: 1,
-        overflow: 'hidden',
-        '&::-webkit-scrollbar': {
-          display: 'none',
-        },
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
-      }}>
+      <List
+        sx={{
+          pt: 1,
+          overflow: 'hidden',
+          '&::-webkit-scrollbar': {
+            display: 'none'
+          },
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none'
+        }}
+      >
         {items
-          .filter(item => !item.hidden)
+          .filter((item) => !item.hidden)
           .map((item) => (
             <Box key={item.id}>
-              {item.id === 'monitoring' && (
-                <Divider sx={{ my: 1, mx: 2 }} />
-              )}
+              {item.id === 'monitoring' && <Divider sx={{ my: 1, mx: 2 }} />}
               <NavigationItemComponent
                 item={item}
                 isActive={currentActiveItem === item.path}
@@ -469,15 +462,18 @@ export default function Sidenav({
 
       <Box sx={{ mt: 'auto', mb: 1.5, px: 2, position: 'relative' }}>
         <VersionDisplay collapsed={isCollapsed} />
-        {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
-          isCollapsed ? (
-            <Tooltip 
+        {versionInfo?.upgradeAvailable &&
+          versionInfo?.upgradeVersion &&
+          (isCollapsed ? (
+            <Tooltip
               title={
                 <Typography variant="body2">
-                  {hasActiveMigrations ? "Migrations are in progress, can't upgrade" : 'Upgrade Available'}
+                  {hasActiveMigrations
+                    ? "Migrations are in progress, can't upgrade"
+                    : 'Upgrade Available'}
                 </Typography>
-              } 
-              placement="right" 
+              }
+              placement="right"
               arrow
               slotProps={{ tooltip: { sx: { ...theme.typography.body2 } } }}
             >
@@ -495,9 +491,13 @@ export default function Sidenav({
             </Tooltip>
           ) : (
             <Tooltip
-              title={hasActiveMigrations ? (
-                <Typography variant="body2">Migrations are in progress, can't upgrade</Typography>
-              ) : ''}
+              title={
+                hasActiveMigrations ? (
+                  <Typography variant="body2">Migrations are in progress, can't upgrade</Typography>
+                ) : (
+                  ''
+                )
+              }
               placement="top"
               arrow
               disableHoverListener={!hasActiveMigrations}
@@ -517,8 +517,7 @@ export default function Sidenav({
                 </Button>
               </span>
             </Tooltip>
-          )
-        )}
+          ))}
         <UpgradeModal show={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} />
       </Box>
     </Box>
@@ -526,10 +525,7 @@ export default function Sidenav({
 
   return (
     <Box sx={{ position: 'relative' }}>
-      <StyledDrawer
-        variant="permanent"
-        collapsed={isCollapsed}
-      >
+      <StyledDrawer variant="permanent" collapsed={isCollapsed}>
         {drawerContent}
       </StyledDrawer>
 
