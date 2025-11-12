@@ -18,6 +18,7 @@ import {
 // Icons removed since source fields are now readonly
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import { formatDiskSize } from 'src/utils'
 
 interface RdmDiskConfiguration {
     uuid: string
@@ -115,7 +116,8 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                 if (!config) return null
 
                 const ownerVMs = disk.spec.ownerVMs
-                const diskSizeGB = Math.round(disk.spec.diskSize / (1024 * 1024 * 1024))
+
+                const diskSizeDisplay = formatDiskSize(disk.spec.diskSize)
 
                 return (
                     <Card key={disk.metadata.name} sx={{ mb: 2 }}>
@@ -125,7 +127,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                                     {disk.spec.displayName}
                                 </Typography>
                                 <Chip
-                                    label={`${diskSizeGB} GB`}
+                                    label={diskSizeDisplay}
                                     size="small"
                                     color="secondary"
                                     variant="outlined"
