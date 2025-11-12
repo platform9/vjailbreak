@@ -592,7 +592,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
 	// Pre-allocate networks slice to avoid append allocations
 	networks := make([]string, 0)
-	c, finder, err := getFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -632,7 +632,7 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 // GetVMwDatastore gets the datastores of a VM
 func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	c, finder, err := getFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -691,7 +691,7 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 	}
 	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
 
-	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -1516,7 +1516,7 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 	vminfoMu.Unlock()
 }
 
-func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+func GetFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)

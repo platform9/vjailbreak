@@ -45,6 +45,8 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 	// +kubebuilder:default:=false
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
+	// +kubebuilder:validation:Enum=pure
+	VendorType string `json:"vendorType,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process

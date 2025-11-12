@@ -40,6 +40,17 @@ type ArrayCredsSpec struct {
 
 	// SecretRef is the reference to the Kubernetes secret holding storage array credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+
+	// OpenStackMapping is the openstack mapping for this array
+	OpenStackMapping openstackMapping `json:"openstackMapping,omitempty"`
+}
+
+type openstackMapping struct {
+	// Volume type is the Cinder volume type associated with this mapping
+	VolumeType string `json:"volumeType"`
+	// CinderBackendName is the Cinder backend name for this mapping
+	// This is the backend configured in cinder.conf (e.g., "pure-01")
+	CinderBackendName string `json:"cinderBackendName"`
 }
 
 // ArrayCredsStatus defines the observed state of ArrayCreds
@@ -48,6 +59,8 @@ type ArrayCredsStatus struct {
 	ArrayValidationStatus string `json:"arrayValidationStatus,omitempty"`
 	// ArrayValidationMessage is the message associated with the storage array validation
 	ArrayValidationMessage string `json:"arrayValidationMessage,omitempty"`
+	// DataStores is the list of datastores associated with this array
+	DataStores []string `json:"dataStores,omitempty"`
 }
 
 // +kubebuilder:object:root=true
