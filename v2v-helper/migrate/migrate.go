@@ -239,8 +239,25 @@ func (migobj *Migrate) WaitforCutover() error {
 	}
 	return nil
 }
-
+func (migobj *Migrate) GetRetryLimits() (int, time.Duration) {
+	const defaultMaxRetries = 3
+	const defaultInterval = 3 * time.Hour
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default max retries (%d)",
+			err, defaultMaxRetries))
+		return defaultMaxRetries, defaultInterval
+	}
+	retryCap, err := time.ParseDuration(vjailbreakSettings.RetryCap)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse retry cap: %v, using default retry cap (%s)",
+			err, defaultInterval))
+		retryCap = defaultInterval
+	}
+	return vjailbreakSettings.MaxRetries, retryCap
+}
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
+	maxRetries, capInterval := migobj.GetRetryLimits()
 	migobj.logMessage("Starting CBT sync process")
 	defer migobj.logMessage("CBT sync process completed")
 	vmops := migobj.VMops
@@ -283,30 +300,53 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 			// 11. Copy Changed Blocks over
 			changedBlockCopySuccess := true
+			retries := 0
+			waitTime := 1 * time.Minute
 			migobj.logMessage("Copying changed blocks")
+			for {
+				startTime := time.Now()
+				migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d attempt %d at %s", idx, retries, startTime))
 
-			// incremental block copy
-
-			startTime := time.Now()
-			migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
-
-			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					err = vmops.CleanUpSnapshots(false)
-					changedBlockCopySuccess = false
-					if err != nil {
-						return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+				err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+				if err != nil {
+					select {
+					case <-ctx.Done():
+						err = vmops.CleanUpSnapshots(false)
+						changedBlockCopySuccess = false
+						if err != nil {
+							return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+						}
+					default:
+						if retries >= maxRetries {
+							return errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+						} else {
+							retries++
+							migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
+							// In case if the whole migration is cancelled through context this routine should not be sleeping
+							select {
+							case <-ctx.Done():
+								err = vmops.CleanUpSnapshots(false)
+								changedBlockCopySuccess = false
+								if err != nil {
+									return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+								}
+							case <-time.After(waitTime):
+								waitTime = waitTime * 2
+								if waitTime > capInterval {
+									waitTime = capInterval
+								}
+								continue
+							}
+						}
 					}
-				default:
-					return errors.Wrap(err, "failed to copy changed blocks")
 				}
+
+				duration := time.Since(startTime)
+
+				migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
+
+				break
 			}
-
-			duration := time.Since(startTime)
-
-			migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
 
 			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 			if err != nil {

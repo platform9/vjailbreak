@@ -116,13 +116,17 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			OpenstackCredsRequeueAfterMinutes:   constants.OpenstackCredsRequeueAfterMinutes,
 			VMwareCredsRequeueAfterMinutes:      constants.VMwareCredsRequeueAfterMinutes,
 			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
+			MaxRetries:                          constants.MaxRetries,
+			RetryCap:                            constants.RetryCap,
 		}, nil
 	}
 
 	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
 		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
 	}
-
+	if vjailbreakSettingsCM.Data["MAX_RETRIES"] == "" {
+		vjailbreakSettingsCM.Data["MAX_RETRIES"] = strconv.Itoa(constants.MaxRetries)
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
@@ -136,7 +140,9 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
 		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
 	}
-
+	if vjailbreakSettingsCM.Data["RETRY_CAP"] == "" {
+		vjailbreakSettingsCM.Data["RETRY_CAP"] = constants.RetryCap
+	}
 	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
 		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
 	}
