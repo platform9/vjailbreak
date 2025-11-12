@@ -61,6 +61,7 @@ type VMInfo struct {
 	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
+	GatewayIP         map[string]string
 }
 
 type NIC struct {
@@ -239,6 +240,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		OSType:            ostype,
 		NetworkInterfaces: vmwareMachine.Spec.VMInfo.NetworkInterfaces,
 		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
+		GatewayIP:         make(map[string]string),
 	}
 	return vminfo, nil
 }
