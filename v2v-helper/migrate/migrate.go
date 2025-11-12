@@ -833,7 +833,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if isNetplanSupported(versionID) {
 				// Add Wildcard Netplan
 				utils.PrintLog("Adding wildcard netplan")
-				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces)
+				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP)
 				// err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 				if err != nil {
 					return errors.Wrap(err, "failed to add wildcard netplan")
@@ -1390,7 +1390,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if migobj.AssignedIP != "" {
 				ip = []string{migobj.AssignedIP}
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
@@ -1403,6 +1403,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			portids = append(portids, port.ID)
 			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
 		}
+		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
 }
