@@ -1,6 +1,6 @@
 module github.com/platform9/vjailbreak/v2v-helper
 
-go 1.24.0
+go 1.24.3
 
 require (
 	github.com/golang/mock v1.6.0
@@ -11,7 +11,7 @@ require (
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0
-	golang.org/x/sys v0.35.0
+	golang.org/x/sys v0.37.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.1
@@ -39,14 +39,16 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/platform9/vjailbreak/v2v-helper/esxi-ssh v0.0.0-00010101000000-000000000000 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/net v0.45.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/term v0.34.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
@@ -62,3 +64,5 @@ require (
 )
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../k8s/migration
+
+replace github.com/platform9/vjailbreak/v2v-helper/esxi-ssh => ./esxi-ssh
