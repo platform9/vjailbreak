@@ -50,6 +50,22 @@ spec:
           spec:
             description: ArrayCredsSpec defines the desired state of ArrayCreds
             properties:
+              openstackMapping:
+                description: OpenStackMapping is the openstack mapping for this array
+                properties:
+                  cinderBackendName:
+                    description: |-
+                      CinderBackendName is the Cinder backend name for this mapping
+                      This is the backend configured in cinder.conf (e.g., "pure-01")
+                    type: string
+                  volumeType:
+                    description: Volume type is the Cinder volume type associated
+                      with this mapping
+                    type: string
+                required:
+                - cinderBackendName
+                - volumeType
+                type: object
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   storage array credentials
@@ -112,6 +128,12 @@ spec:
                 description: ArrayValidationStatus is the status of the storage array
                   validation
                 type: string
+              dataStores:
+                description: DataStores is the list of datastores associated with
+                  this array
+                items:
+                  type: string
+                type: array
             type: object
         type: object
     served: true

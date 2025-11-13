@@ -55,6 +55,10 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              arrayOffload:
+                description: ArrayOffload specifies whether to use array offload for
+                  data copy
+                type: boolean
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -68,6 +72,9 @@ spec:
                 type: string
               podRef:
                 description: PodRef is the name of the pod
+                type: string
+              vendorType:
+                description: VendorType specifies the vendor type of the storage system
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare

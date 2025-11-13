@@ -189,6 +189,10 @@ spec:
                     - hot
                     - cold
                     type: string
+                  vendorType:
+                    enum:
+                    - pure
+                    type: string
                   vmCutoverEnd:
                     format: date-time
                     type: string

@@ -5,6 +5,7 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_migrations.yaml
 - bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml
 - bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml
+- bases/vjailbreak.k8s.pf9.io_arraycreds.yaml
 - bases/vjailbreak.k8s.pf9.io_networkmappings.yaml
 - bases/vjailbreak.k8s.pf9.io_storagemappings.yaml
 - bases/vjailbreak.k8s.pf9.io_migrationplans.yaml
