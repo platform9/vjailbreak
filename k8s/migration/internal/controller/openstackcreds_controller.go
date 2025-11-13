@@ -116,6 +116,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	annotations := scope.OpenstackCreds.GetAnnotations()
 	_, revalidateRequested := annotations[RevalidateAnnotationKey]
 
+	// nolint:dupl
 	defer func() {
 		if revalidateRequested {
 			ctxlog.Info("Re-validation complete, cleaning up annotation")

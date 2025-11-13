@@ -19,7 +19,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CredentialsIcon from '@mui/icons-material/VpnKey';
 import SyncIcon from '@mui/icons-material/Sync';
 import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery";
 import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery";
 import { VmwareCredential } from "src/components/forms/VmwareCredentialsForm";
@@ -138,6 +138,7 @@ const getColumns = (
           </Tooltip>
 
           <Tooltip title="Delete credential">
+            <span>
               <IconButton
                 onClick={(e) => {
                   e.stopPropagation();
@@ -148,6 +149,7 @@ const getColumns = (
               >
                 <DeleteIcon />
               </IconButton>
+            </span>
           </Tooltip>
         </Box>
       );
@@ -235,7 +237,8 @@ export default function CredentialsTable() {
     undefined,
     {
       staleTime: 0,
-      refetchOnMount: true
+      refetchOnMount: true,
+      refetchInterval: 5000,
     }
   );
 
@@ -243,7 +246,8 @@ export default function CredentialsTable() {
     undefined,
     {
       staleTime: 0,
-      refetchOnMount: true
+      refetchOnMount: true,
+      refetchInterval: 5000,
     }
   );
 
@@ -256,6 +260,7 @@ export default function CredentialsTable() {
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false);
 
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null);
+  const revalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { mutate: revalidate } = useMutation({
     mutationFn: revalidateCredentials,
@@ -263,10 +268,8 @@ export default function CredentialsTable() {
       toast.success(
         `Re-validation started for ${variables.name}. Status will update shortly.`,
       );
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY });
-        queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY });
-      }, 500);
+      queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY });
     },
     onError: (error: any, variables) => {
       const errorMsg =
@@ -283,11 +286,70 @@ export default function CredentialsTable() {
           credentialKind: variables.kind,
         },
       });
-    },
-    onSettled: () => {
+      if (revalidationTimeoutRef.current) {
+        clearTimeout(revalidationTimeoutRef.current);
+        revalidationTimeoutRef.current = null;
+      }
       setRevalidatingId(null);
     },
   });
+
+  const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VmwareCredential) => ({
+    id: `vmware-${cred.metadata.name}`,
+    name: cred.metadata.name,
+    type: 'VMware' as const,
+    status: cred.status?.vmwareValidationStatus || 'Unknown',
+    credObject: cred,
+  })) || [];
+
+  const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
+    id: `openstack-${cred.metadata.name}`,
+    name: cred.metadata.name,
+    type: 'OpenStack' as const,
+    status: cred.status?.openstackValidationStatus || 'Unknown',
+    credObject: cred,
+  })) || [];
+
+  const allCredentials = [...vmwareItems, ...openstackItems];
+
+  useEffect(() => {
+    if (revalidatingId) {
+      const revalidatingItem = allCredentials.find(
+        (cred) => cred.id === revalidatingId,
+      );
+  
+      if (revalidatingItem) {
+        const status = revalidatingItem.status.toLowerCase();
+        if (status !== 'validating') {
+          if (revalidationTimeoutRef.current) {
+            clearTimeout(revalidationTimeoutRef.current);
+            revalidationTimeoutRef.current = null;
+          }
+  
+          if (status === 'succeeded') {
+            toast.success(`Successfully revalidated ${revalidatingItem.name}.`);
+          } else if (status === 'failed') {
+            toast.error(`Revalidation failed for ${revalidatingItem.name}.`);
+          }
+          setRevalidatingId(null);
+        }
+      } else {
+        if (revalidationTimeoutRef.current) {
+          clearTimeout(revalidationTimeoutRef.current);
+          revalidationTimeoutRef.current = null;
+        }
+        setRevalidatingId(null);
+      }
+    }
+  
+    return () => {
+      if (revalidationTimeoutRef.current) {
+        clearTimeout(revalidationTimeoutRef.current);
+        revalidationTimeoutRef.current = null;
+      }
+    };
+  }, [allCredentials, revalidatingId]);
+
 
   // Force refetch when the component mounts
   useEffect(() => {
@@ -333,7 +395,17 @@ export default function CredentialsTable() {
       return;
     }
 
+    if (revalidationTimeoutRef.current) {
+      clearTimeout(revalidationTimeoutRef.current);
+    }
+
     setRevalidatingId(row.id);
+
+    revalidationTimeoutRef.current = setTimeout(() => {
+      toast.error(`Revalidation for ${row.name} timed out. Please check logs.`);
+      setRevalidatingId(null);
+      revalidationTimeoutRef.current = null;
+    }, 120000);
 
     revalidate({
       name: credObject.metadata.name,
@@ -407,24 +479,6 @@ export default function CredentialsTable() {
     return `${baseMessage}: ${error}`;
   }, []);
 
-  const vmwareItems: CredentialItem[] = vmwareCredentials?.map((cred: VmwareCredential) => ({
-    id: `vmware-${cred.metadata.name}`,
-    name: cred.metadata.name,
-    type: 'VMware' as const,
-    status: cred.status?.vmwareValidationStatus || 'Unknown',
-    credObject: cred,
-  })) || [];
-
-  const openstackItems: CredentialItem[] = openstackCredentials?.map((cred: OpenstackCredential) => ({
-    id: `openstack-${cred.metadata.name}`,
-    name: cred.metadata.name,
-    type: 'OpenStack' as const,
-    status: cred.status?.openstackValidationStatus || 'Unknown',
-    credObject: cred,
-  })) || [];
-
-  // Combine both credential types
-  const allCredentials = [...vmwareItems, ...openstackItems];
 
   const tableColumns = getColumns(
     handleDeleteCredential,

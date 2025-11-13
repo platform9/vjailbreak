@@ -39,6 +39,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )
 
+// RevalidateAnnotationKey is the annotation key used to trigger an revalidation of creds.
 const RevalidateAnnotationKey = "vjailbreak.k8s.pf9.io/revalidate-timestamp"
 
 // VMwareCredsReconciler reconciles a VMwareCreds object
@@ -97,6 +98,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	annotations := scope.VMwareCreds.GetAnnotations()
 	_, revalidateRequested := annotations[RevalidateAnnotationKey]
 
+	// nolint:dupl
 	defer func() {
 		if revalidateRequested {
 			ctxlog.Info("Re-validation complete, cleaning up annotation")
