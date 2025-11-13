@@ -116,9 +116,7 @@ spec:
                         machine.
                       properties:
                         ipAddress:
-                          items:
-                            type: string
-                          type: array
+                          type: string
                         mac:
                           type: string
                         network:

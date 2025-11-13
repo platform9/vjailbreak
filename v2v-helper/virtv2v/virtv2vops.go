@@ -305,12 +305,17 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		}
 	} else if len(networkInterfaces) > 0 {
 		for _, ni := range networkInterfaces {
-			for _, ip := range ni.IPAddress {
-				if !strings.Contains(ip, ":") {
-					// Prefix unknown here; default to /24 as a safe placeholder if not provided downstream
-					macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ip, prefix: 24})
-				}
+			if strings.Contains(ni.IPAddress, ":") { // skip IPv6 here
+				continue
 			}
+			macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
+
+			// for _, ip := range ni.IPAddress {
+			// 	if !strings.Contains(ip, ":") {
+			// 		// Prefix unknown here; default to /24 as a safe placeholder if not provided downstream
+			// 		macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ip, prefix: 24})
+			// 	}
+			// }
 		}
 	}
 
