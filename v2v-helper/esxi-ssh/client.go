@@ -53,6 +53,7 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 		// but in a production environment with higher security requirements, consider
 		// implementing proper host key verification using ssh.FixedHostKey().
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         30 * time.Second,
 	}
 
 	addr := net.JoinHostPort(hostname, "22")
