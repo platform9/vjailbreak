@@ -359,7 +359,6 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		log.Println("WARNING: No gateway found")
 	}
 	netplanYAML := b.String()
-	log.Println("DEBUG : Netplan YAML:", netplanYAML)
 	var ans string
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
