@@ -42,8 +42,9 @@ func (c *Client) ListDatastores() ([]DatastoreInfo, error) {
 			continue
 		}
 
-		if strings.HasPrefix(line, "(vim.Datastore.Summary)") {
+		if strings.HasPrefix(line, "(vim.Datastore.Summary)") && strings.Contains(line, "{") {
 			// New datastore entry - save previous one if exists
+			// Only process if it's a real datastore entry (contains opening brace)
 			if currentDS != nil {
 				datastores = append(datastores, *currentDS)
 			}
@@ -249,48 +250,54 @@ func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
 		return nil, fmt.Errorf("not connected to ESXi host")
 	}
 
-	// Use vmkfstools to get disk info
-	output, err := c.ExecuteCommand(fmt.Sprintf("vmkfstools -q %s", diskPath))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get disk info: %w", err)
-	}
-
 	diskInfo := &DiskInfo{
 		Path: diskPath,
 		Name: filepath.Base(diskPath),
 	}
 
-	// Parse vmkfstools output
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-
-		// Extract disk type
-		if strings.Contains(line, "Disk Type:") {
-			if strings.Contains(line, "thin") {
+	// Read VMDK descriptor to find the actual disk file and type
+	descriptor, err := c.ExecuteCommand(fmt.Sprintf("cat %s 2>/dev/null || true", diskPath))
+	if err == nil && descriptor != "" {
+		// Parse descriptor for createType
+		lowerDesc := strings.ToLower(descriptor)
+		if strings.Contains(lowerDesc, "createtype") {
+			if strings.Contains(lowerDesc, "monolithicsparse") || strings.Contains(lowerDesc, "thin") {
 				diskInfo.ProvisionType = "thin"
-			} else if strings.Contains(line, "thick") {
+			} else if strings.Contains(lowerDesc, "monolithicflat") {
 				diskInfo.ProvisionType = "thick"
-			} else if strings.Contains(line, "eagerzeroedthick") {
+			} else if strings.Contains(lowerDesc, "eagerzeroedthick") {
 				diskInfo.ProvisionType = "eagerzeroedthick"
 			}
 		}
 
-		// Extract size
-		if strings.Contains(line, "geometry") {
-			// Parse geometry line to get size
-			if matches := regexp.MustCompile(`(\d+)\s+sectors`).FindStringSubmatch(line); len(matches) > 1 {
-				sectors, _ := strconv.ParseInt(matches[1], 10, 64)
-				diskInfo.SizeBytes = sectors * 512 // 512 bytes per sector
+		// Find the -flat.vmdk file reference to get actual size
+		// Look for lines like: RW 8388608 VMFS "disk-flat.vmdk"
+		for _, line := range strings.Split(descriptor, "\n") {
+			if strings.Contains(line, "-flat.vmdk") || strings.Contains(line, "VMFS") {
+				// Extract the extent size (in sectors)
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					if sectors, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+						diskInfo.SizeBytes = sectors * 512 // 512 bytes per sector
+						break
+					}
+				}
 			}
 		}
 	}
 
-	// Get actual file size as fallback
+	// If we still don't have a size, try to get the -flat.vmdk file size directly
 	if diskInfo.SizeBytes == 0 {
-		sizeOutput, err := c.ExecuteCommand(fmt.Sprintf("stat -c %%s %s 2>/dev/null || stat -f %%z %s", diskPath, diskPath))
-		if err == nil {
-			if size, err := strconv.ParseInt(strings.TrimSpace(sizeOutput), 10, 64); err == nil {
-				diskInfo.SizeBytes = size
+		// Try to find the corresponding -flat.vmdk file
+		flatPath := strings.Replace(diskPath, ".vmdk", "-flat.vmdk", 1)
+		output, err := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>/dev/null || true", flatPath))
+		if err == nil && output != "" {
+			// Parse ls output: -rw-------    1 root     root     107374182400 Dec  6 10:30 disk-flat.vmdk
+			fields := strings.Fields(output)
+			if len(fields) >= 5 {
+				if size, err := strconv.ParseInt(fields[4], 10, 64); err == nil {
+					diskInfo.SizeBytes = size
+				}
 			}
 		}
 	}
