@@ -18,6 +18,7 @@ type ESXiOperations interface {
 	// Datastore operations
 	ListDatastores() ([]DatastoreInfo, error)
 	GetDatastoreInfo(datastoreName string) (*DatastoreInfo, error)
+	ListStorageDevices() ([]StorageDeviceInfo, error)
 
 	// VM operations
 	ListVMs() ([]VMInfo, error)

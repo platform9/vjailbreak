@@ -36,3 +36,15 @@ type DatastoreInfo struct {
 	Capacity  int64
 	FreeSpace int64
 }
+
+type StorageDeviceInfo struct {
+	DeviceID     string // e.g., naa.600508b1001c1234567890abcdef1234
+	DisplayName  string
+	Size         int64  // Size in bytes
+	DeviceType   string // Direct-Access, CD-ROM, etc.
+	Vendor       string
+	Model        string
+	IsLocal      bool
+	IsSSD        bool
+	DevfsPath    string // /vmfs/devices/disks/naa.xxx
+}
