@@ -39,6 +39,8 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )
 
+const RevalidateAnnotationKey = "vjailbreak.k8s.pf9.io/revalidate-timestamp"
+
 // VMwareCredsReconciler reconciles a VMwareCreds object
 type VMwareCredsReconciler struct {
 	client.Client
@@ -92,6 +94,18 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
+	annotations := scope.VMwareCreds.GetAnnotations()
+	_, revalidateRequested := annotations[RevalidateAnnotationKey]
+
+	if revalidateRequested {
+		ctxlog.Info("Re-validation requested, setting status to Validating")
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Validating"
+		scope.VMwareCreds.Status.VMwareValidationMessage = "Re-validation triggered by user."
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, "Failed to update status to Validating, will proceed with validation anyway")
+		}
+	}
+
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
 	c, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
@@ -112,49 +126,61 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		} else {
 			ctxlog.Info("Successfully updated status to Failed", "name", scope.Name())
 		}
-		return ctrl.Result{Requeue: false}, nil
-	}
-	// Validation succeeded - update status
-	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
-	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
-	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-		if apierrors.IsNotFound(err) {
-			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
-	}
-	// Cleanup VMware client connections when done
-	if c != nil {
-		defer c.CloseIdleConnections()
-		defer func() {
-			if err := utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c); err != nil {
-				ctxlog.Error(err, "Failed to logout VMware client")
+	} else {
+		// Validation succeeded - update status
+		ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+		scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+		scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			if apierrors.IsNotFound(err) {
+				ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
+				return ctrl.Result{}, nil
 			}
-		}()
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
+		}
 	}
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
+	if err == nil {
+		// Cleanup VMware client connections when done
+		if c != nil {
+			defer c.CloseIdleConnections()
+			defer func() {
+				if err := utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c); err != nil {
+					ctxlog.Error(err, "Failed to logout VMware client")
+				}
+			}()
+		}
+		ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
+		controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+		err = utils.CreateVMwareClustersAndHosts(ctx, scope)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
+		}
+		vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
+		}
+		err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating RDM disk CR for VMwareCreds '%s'", scope.Name()))
+		}
+		err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
+		}
+		err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
+		}
 	}
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating RDM disk CR for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
+
+	if revalidateRequested {
+		ctxlog.Info("Re-validation complete, removing annotation")
+		delete(annotations, RevalidateAnnotationKey)
+		scope.VMwareCreds.SetAnnotations(annotations)
+		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+			ctxlog.Error(err, "Failed to remove re-validation annotation")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
@@ -189,6 +215,9 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 func (r *VMwareCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VMwareCreds{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.Or(
+			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
+		)).
 		Complete(r)
 }

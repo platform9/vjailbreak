@@ -504,12 +504,29 @@ message ValidateOpenstackIpResponse {
     repeated string reason = 2;
 }
 
+message RevalidateCredentialsRequest {
+  string name = 1;
+  string namespace = 2;
+  string kind = 3;
+}
+
+message RevalidateCredentialsResponse {
+  string message = 1;
+}
+
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/validate_openstack_ip"
             body: "*"
         };
+    }
+
+    rpc RevalidateCredentials(RevalidateCredentialsRequest) returns (RevalidateCredentialsResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/revalidate_credentials"
+        body: "*"
+      };
     }
 }
 

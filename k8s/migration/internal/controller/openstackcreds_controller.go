@@ -40,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+const RevalidateAnnotationKey = "vjailbreak.k8s.pf9.io/revalidate-timestamp"
+
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
 type OpenstackCredsReconciler struct {
 	client.Client
@@ -120,6 +122,17 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
+	annotations := scope.OpenstackCreds.GetAnnotations()
+	_, revalidateRequested := annotations[RevalidateAnnotationKey]
+
+	if revalidateRequested {
+		ctxlog.Info("Re-validation requested, setting status to Validating")
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Validating"
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Re-validation triggered by user."
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Failed to update status to Validating, will proceed with validation anyway")
+		}
+	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
@@ -164,6 +177,16 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	if revalidateRequested {
+		ctxlog.Info("Re-validation complete, removing annotation")
+		delete(annotations, RevalidateAnnotationKey)
+		scope.OpenstackCreds.SetAnnotations(annotations)
+		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Failed to remove re-validation annotation")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
@@ -224,7 +247,10 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Get max concurrent reconciles from vjailbreak settings configmap
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.Or(
+			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
+		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -260,10 +286,10 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to get Openstack credentials from secret")
 	}
 
-if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
-	ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
-	scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
-}
+	if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
+		ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+		scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+	}
 
 	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)

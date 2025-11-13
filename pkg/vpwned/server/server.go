@@ -17,10 +17,34 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var grpcServer *grpc.Server
 var httpServer *http.Server
+
+func CreateInClusterClient() (client.Client, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	scheme := k8sruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
+	clientset, err := client.New(config, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return clientset, nil
+}
 
 // sets up the swagger UI server for Rest API's
 func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
@@ -56,6 +80,10 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 
 // setup grpc server
 func startgRPCServer(ctx context.Context, network, port string) error {
+	k8sClient, err := CreateInClusterClient()
+	if err != nil {
+		logrus.Fatalf("Failed to create in-cluster K8s client: %v", err)
+	}
 	grpcServer = grpc.NewServer()
 
 	//Register all services here
@@ -63,7 +91,7 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
 	api.RegisterVCenterServer(grpcServer, &targetVcenterGRPC{})
 	api.RegisterBMProviderServer(grpcServer, &providersGRPC{})
-	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{})
+	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{K8sClient: k8sClient})
 	reflection.Register(grpcServer)
 	connection, err := net.Listen(network, port)
 	if err != nil {

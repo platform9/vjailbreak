@@ -36,6 +36,7 @@ import {
   getTrackingBehavior,
 } from "src/config/amplitude"
 import { trackEvent } from "src/services/amplitudeService"
+import axios from "./axios"
 
 export interface TrackingContext {
   component?: string
@@ -196,6 +197,23 @@ export const deleteOpenStackCredsWithSecretFlow = async (
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
     throw error
   }
+}
+
+export interface RevalidateCredentialsRequest {
+  name: string
+  namespace: string
+  kind: "VmwareCreds" | "OpenstackCreds"
+}
+
+export interface RevalidateCredentialsResponse {
+  message: string
+}
+
+export const revalidateCredentials = (data: RevalidateCredentialsRequest) => {
+  return axios.post<RevalidateCredentialsResponse>({
+    endpoint: "/vpw/v1/revalidate_credentials",
+    data,
+  })
 }
 
 // Simplified API call tracking
