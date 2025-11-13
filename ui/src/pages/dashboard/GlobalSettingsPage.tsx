@@ -6,7 +6,6 @@ import {
   CircularProgress,
   FormControl,
   FormHelperText,
-  InputLabel,
   MenuItem,
   Paper,
   Select,
@@ -27,24 +26,28 @@ import {
 } from 'src/api/settings/settings'
 
 // Styled components
-const StyledPaper = styled(Paper)({
+const StyledPaper = styled(Paper)(({ theme }) => ({
   width: '100%',
-  padding: 24,
-  boxSizing: 'border-box'
-})
+  height: 'calc(100vh - 96px)', // leave space for app header
+  padding: theme.spacing(4),
+  boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column'
+  //overflowY: 'auto'
+}))
 
 const Footer = styled(Box)(({ theme }) => ({
   display: 'flex',
   justifyContent: 'flex-end',
   gap: theme.spacing(2),
-  marginTop: theme.spacing(1),
+  marginTop: theme.spacing(3),
   paddingTop: theme.spacing(2),
   borderTop: `1px solid ${theme.palette.divider}`
 }))
-
 /* ------------------------
    Types & Defaults
    -----------------------*/
+
 type SettingsForm = {
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: number
   PERIODIC_SYNC_INTERVAL: string
@@ -183,18 +186,48 @@ const NumberField = ({
   error,
   onChange
 }: NumberFieldProps) => (
-  <TextField
-    fullWidth
-    size="small"
-    type="number"
-    inputProps={{ min }}
-    label={label}
-    name={String(name)}
-    value={Number.isFinite(value) ? value : ''}
-    onChange={onChange}
-    error={!!error}
-    helperText={error || helper}
-  />
+  <Box display="flex" flexDirection="column" gap={0.5}>
+    <Typography variant="body2" fontWeight={500}>
+      {label}
+    </Typography>
+    <TextField
+      fullWidth
+      size="small"
+      type="number"
+      inputProps={{ min }}
+      name={String(name)}
+      value={Number.isFinite(value) ? value : ''}
+      onChange={onChange}
+      error={!!error}
+      helperText={error || helper}
+    />
+  </Box>
+)
+
+// create a TextFeild which should similar like Number field which having label on top of field
+type TextFieldProps = {
+  label: string
+  name: keyof SettingsForm
+  value: string
+  helper?: string
+  error?: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+}
+const CustomTextField = ({ label, name, value, helper, error, onChange }: TextFieldProps) => (
+  <Box display="flex" flexDirection="column" gap={0.5}>
+    <Typography variant="body2" fontWeight={500}>
+      {label}
+    </Typography>
+    <TextField
+      fullWidth
+      size="small"
+      name={String(name)}
+      value={value}
+      onChange={onChange}
+      error={!!error}
+      helperText={error || helper}
+    />
+  </Box>
 )
 
 type IntervalFieldProps = {
@@ -206,18 +239,21 @@ type IntervalFieldProps = {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 const IntervalField = ({ label, name, value, helper, error, onChange }: IntervalFieldProps) => (
-  <TextField
-    fullWidth
-    size="small"
-    label={label}
-    name={String(name)}
-    value={value}
-    onChange={onChange}
-    error={!!error}
-    helperText={error || helper || 'e.g. 30s, 5m, 1h, 2d'}
-  />
+  <Box display="flex" flexDirection="column" gap={0.5}>
+    <Typography variant="body2" fontWeight={500}>
+      {label}
+    </Typography>
+    <TextField
+      fullWidth
+      size="small"
+      name={String(name)}
+      value={value}
+      onChange={onChange}
+      error={!!error}
+      helperText={error || helper || 'e.g. 30s, 5m, 1h, 2d'}
+    />
+  </Box>
 )
-
 /* ------------------------
    Main component
    -----------------------*/
@@ -390,48 +426,160 @@ export default function GlobalSettingsPage() {
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // make the form occupy full viewport height so footer can stick to bottom
-          minHeight: 'calc(94vh - 92px)', // subtract small padding so it fits within page
-          gap: 0
+          minHeight: 'calc(96vh - 92px)'
         }}
       >
-        <Box>
-          <Typography variant="h6" gutterBottom>
+        {/* Header */}
+        {/* <Box sx={{ mb: 3 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
             Global Settings
           </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Configure global cluster & migration related defaults. Changes apply cluster-wide.
+          </Typography>
+        </Box> */}
 
-          <Box sx={{ mt: 2 }}>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-                gap: 2
-              }}
-            >
-              <NumberField
-                label="Changed Blocks Copy Iteration Threshold"
-                name="CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"
-                value={form.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
-                onChange={onNumber}
-                error={numberError('CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD')}
-              />
+        {/* General Settings section (3-columns) */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            General Settings
+          </Typography>
 
-              <IntervalField
-                label="Periodic Sync Interval"
-                name="PERIODIC_SYNC_INTERVAL"
-                value={form.PERIODIC_SYNC_INTERVAL}
-                onChange={onText}
-                error={errors.PERIODIC_SYNC_INTERVAL}
-              />
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+              gap: 2
+            }}
+          >
+            <CustomTextField
+              label="Deployment Name"
+              name="DEPLOYMENT_NAME"
+              value={form.DEPLOYMENT_NAME}
+              onChange={onText}
+              error={errors.DEPLOYMENT_NAME}
+            />
 
-              <FormControl fullWidth size="small" error={!!errors.DEFAULT_MIGRATION_METHOD}>
-                <InputLabel>Default Migration Method</InputLabel>
+            <NumberField
+              label="Changed Blocks Copy Iteration Threshold"
+              name="CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"
+              value={form.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
+              onChange={onNumber}
+              error={numberError('CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD')}
+            />
+
+            <IntervalField
+              label="Periodic Sync Interval"
+              name="PERIODIC_SYNC_INTERVAL"
+              value={form.PERIODIC_SYNC_INTERVAL}
+              onChange={onText}
+              error={errors.PERIODIC_SYNC_INTERVAL}
+            />
+          </Box>
+        </Box>
+
+        {/* Retry & Interval Settings */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Retry & Interval Settings
+          </Typography>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+              gap: 2
+            }}
+          >
+            <NumberField
+              label="VM Active Wait Interval (sec)"
+              name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
+              value={form.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
+              onChange={onNumber}
+              error={numberError('VM_ACTIVE_WAIT_INTERVAL_SECONDS')}
+            />
+
+            <NumberField
+              label="VM Active Retry Limit"
+              name="VM_ACTIVE_WAIT_RETRY_LIMIT"
+              value={form.VM_ACTIVE_WAIT_RETRY_LIMIT}
+              onChange={onNumber}
+              error={numberError('VM_ACTIVE_WAIT_RETRY_LIMIT')}
+            />
+
+            <NumberField
+              label="Volume Wait Interval (sec)"
+              name="VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"
+              value={form.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
+              onChange={onNumber}
+              error={numberError('VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS')}
+            />
+
+            <NumberField
+              label="Volume Retry Limit"
+              name="VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"
+              value={form.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
+              onChange={onNumber}
+              error={numberError('VOLUME_AVAILABLE_WAIT_RETRY_LIMIT')}
+            />
+
+            <NumberField
+              label="vCenter Login Retry Limit"
+              name="VCENTER_LOGIN_RETRY_LIMIT"
+              value={form.VCENTER_LOGIN_RETRY_LIMIT}
+              onChange={onNumber}
+              error={numberError('VCENTER_LOGIN_RETRY_LIMIT')}
+            />
+
+            <NumberField
+              label="vCenter Concurrency Limit"
+              name="VCENTER_SCAN_CONCURRENCY_LIMIT"
+              value={form.VCENTER_SCAN_CONCURRENCY_LIMIT}
+              onChange={onNumber}
+              error={numberError('VCENTER_SCAN_CONCURRENCY_LIMIT')}
+            />
+          </Box>
+        </Box>
+
+        {/* Advanced & Flags */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Advanced & Flags
+          </Typography>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+              gap: 2,
+              alignItems: 'center'
+            }}
+          >
+            <NumberField
+              label="OpenStack Creds Requeue After (minutes)"
+              name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
+              value={form.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
+              onChange={onNumber}
+              error={numberError('OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES')}
+            />
+
+            <NumberField
+              label="VMware Creds Requeue After (minutes)"
+              name="VMWARE_CREDS_REQUEUE_AFTER_MINUTES"
+              value={form.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
+              onChange={onNumber}
+              error={numberError('VMWARE_CREDS_REQUEUE_AFTER_MINUTES')}
+            />
+
+            <FormControl fullWidth size="small" error={!!errors.DEFAULT_MIGRATION_METHOD}>
+              <Box display="flex" flexDirection="column" gap={0.5}>
+                <Typography variant="body2" fontWeight={500}>
+                  Default Migration Method{' '}
+                </Typography>
                 <Select
-                  label="Default Migration Method"
                   name="DEFAULT_MIGRATION_METHOD"
                   value={form.DEFAULT_MIGRATION_METHOD}
                   onChange={onSelect}
-                  size="small"
                 >
                   <MenuItem value="hot">hot</MenuItem>
                   <MenuItem value="cold">cold</MenuItem>
@@ -439,123 +587,44 @@ export default function GlobalSettingsPage() {
                 {errors.DEFAULT_MIGRATION_METHOD && (
                   <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
                 )}
-              </FormControl>
+              </Box>
+            </FormControl>
 
-              <NumberField
-                label="VM Active Wait Interval (sec)"
-                name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
-                value={form.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
-                onChange={onNumber}
-                error={numberError('VM_ACTIVE_WAIT_INTERVAL_SECONDS')}
-              />
-
-              <NumberField
-                label="VM Active Wait Retry Limit"
-                name="VM_ACTIVE_WAIT_RETRY_LIMIT"
-                value={form.VM_ACTIVE_WAIT_RETRY_LIMIT}
-                onChange={onNumber}
-                error={numberError('VM_ACTIVE_WAIT_RETRY_LIMIT')}
-              />
-
-              <NumberField
-                label="vCenter Scan Concurrency Limit"
-                name="VCENTER_SCAN_CONCURRENCY_LIMIT"
-                value={form.VCENTER_SCAN_CONCURRENCY_LIMIT}
-                onChange={onNumber}
-                error={numberError('VCENTER_SCAN_CONCURRENCY_LIMIT')}
-              />
-
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Cleanup Volumes After Convert Failure
-                </Typography>
+            {/* Flags - place them across the row to match design */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', gridColumn: '1 / -1' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Switch
                   name="CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"
                   checked={form.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE}
                   onChange={onBool}
                 />
+                <Typography variant="body2">Cleanup Volumes After Convert Failure</Typography>
               </Box>
 
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Populate VMware Machine Flavors
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Switch
                   name="POPULATE_VMWARE_MACHINE_FLAVORS"
                   checked={form.POPULATE_VMWARE_MACHINE_FLAVORS}
                   onChange={onBool}
                 />
+                <Typography variant="body2">Populate VMware Machine Flavors</Typography>
               </Box>
 
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Validate RDM Owner VMs
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Switch
                   name="VALIDATE_RDM_OWNER_VMS"
                   checked={form.VALIDATE_RDM_OWNER_VMS}
                   onChange={onBool}
                 />
+                <Typography variant="body2">Validate RDM Owner VMs</Typography>
               </Box>
-
-              <NumberField
-                label="Volume Available Wait Interval (sec)"
-                name="VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"
-                value={form.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
-                onChange={onNumber}
-                error={numberError('VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS')}
-              />
-
-              <NumberField
-                label="Volume Available Wait Retry Limit"
-                name="VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"
-                value={form.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
-                onChange={onNumber}
-                error={numberError('VOLUME_AVAILABLE_WAIT_RETRY_LIMIT')}
-              />
-
-              <NumberField
-                label="vCenter Login Retry Limit"
-                name="VCENTER_LOGIN_RETRY_LIMIT"
-                value={form.VCENTER_LOGIN_RETRY_LIMIT}
-                onChange={onNumber}
-                error={numberError('VCENTER_LOGIN_RETRY_LIMIT')}
-              />
-
-              <NumberField
-                label="OpenStack Creds Requeue After (minutes)"
-                name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
-                value={form.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
-                onChange={onNumber}
-                error={numberError('OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES')}
-              />
-
-              <NumberField
-                label="VMware Creds Requeue After (minutes)"
-                name="VMWARE_CREDS_REQUEUE_AFTER_MINUTES"
-                value={form.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
-                onChange={onNumber}
-                error={numberError('VMWARE_CREDS_REQUEUE_AFTER_MINUTES')}
-              />
-
-              <TextField
-                fullWidth
-                size="small"
-                label="Deployment Name"
-                name="DEPLOYMENT_NAME"
-                value={form.DEPLOYMENT_NAME}
-                onChange={onText}
-                error={!!errors.DEPLOYMENT_NAME}
-                helperText={errors.DEPLOYMENT_NAME}
-              />
             </Box>
           </Box>
         </Box>
 
-        {/* spacer pushes footer to bottom via marginTop: auto */}
         <Box sx={{ flexGrow: 1 }} />
 
-        <Footer sx={{ marginTop: 'auto' }}>
+        <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
           <Button
             variant="outlined"
             color="inherit"
