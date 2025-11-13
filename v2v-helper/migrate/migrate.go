@@ -1162,11 +1162,11 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	healthChecks := make(map[string]bool)
 	healthChecks["Ping"] = false
 	healthChecks["HTTP Get"] = false
-	for i := 0; i < len(vminfo.IPs); i++ {
-		if ips[i] != vminfo.IPs[i] {
-			migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
-		}
-	}
+	// for i := 0; i < len(vminfo.IPs); i++ {
+	// if ips[i] != vminfo.IPs[i] {
+	// migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
+	// }
+	// }
 	for i := 0; i < 10; i++ {
 		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
 		// 1. Ping
@@ -1378,23 +1378,19 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ip := []string{}
 			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
 			if !ok {
 				ippm = []string{}
 			}
-			ip = vminfo.IPs
-			if len(ip) == 0 && vminfo.NetworkInterfaces != nil {
+			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
-						ip = append(ip, nic.IPAddress)
 						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}
 			if migobj.AssignedIP != "" {
-				ip = []string{migobj.AssignedIP}
-				ippm = append(ippm, migobj.AssignedIP)
+				ippm = []string{migobj.AssignedIP}
 			}
 			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)

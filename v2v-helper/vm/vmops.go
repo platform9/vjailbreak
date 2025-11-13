@@ -47,12 +47,12 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU               int32
-	Memory            int32
-	State             types.VirtualMachinePowerState
-	Mac               []string
-	IPperMac          map[string][]string
-	IPs               []string
+	CPU      int32
+	Memory   int32
+	State    types.VirtualMachinePowerState
+	Mac      []string
+	IPperMac map[string][]string
+	// IPs               []string
 	UUID              string
 	Host              string
 	VMDisks           []VMDisk
@@ -192,16 +192,6 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 							}
 							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], networkInterface.IPAddress)
 						}
-
-						// for _, ip := range networkInterface.IPAddress {
-						// 	if !strings.Contains(ip, ":") {
-						// 		ips = append(ips, ip)
-						// 		if _, ok := ipPerMac[networkInterface.MAC]; !ok {
-						// 			ipPerMac[networkInterface.MAC] = []string{}
-						// 		}
-						// 		ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], ip)
-						// 	}
-						// }
 					}
 				}
 			}
@@ -254,7 +244,6 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		State:             o.Runtime.PowerState,
 		Mac:               mac,
 		IPperMac:          ipPerMac,
-		IPs:               ips,
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,
