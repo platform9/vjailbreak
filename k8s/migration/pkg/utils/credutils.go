@@ -1852,3 +1852,84 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 		ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
 	}
 }
+
+func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Discovering backend pools from OpenStack Cinder")
+
+	// Get OpenStack credentials to extract region
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenStack credentials from secret")
+	}
+
+	// Get OpenStack client
+	providerClient, err := ValidateAndGetProviderClient(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenStack provider client")
+	}
+
+	// Get Cinder client
+	cinderClient, err := openstack.NewBlockStorageV3(providerClient, gophercloud.EndpointOpts{
+		Region: openstackCredential.RegionName,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create Cinder client")
+	}
+
+	// Get pool backend info
+	poolPages, err := schedulerstats.List(cinderClient, schedulerstats.ListOpts{Detail: true}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list backend pools")
+	}
+
+	backendPools, err := schedulerstats.ExtractStoragePools(poolPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract backend pools")
+	}
+
+	// Map backend name -> vendor/type info for quick lookup
+	backendMap := make(map[string]map[string]string)
+	for _, pool := range backendPools {
+		backendName := pool.Capabilities.VolumeBackendName
+
+		// Skip if backend name is empty (indicates empty/invalid capabilities)
+		if backendName == "" {
+			continue
+		}
+
+		vendor := pool.Capabilities.VendorName
+		driver := pool.Capabilities.DriverVersion
+		volumeType := parsePoolName(pool.Name)
+
+		backendMap[backendName] = map[string]string{
+			"vendor":     vendor,
+			"driver":     driver,
+			"pool":       pool.Name,
+			"volumeType": volumeType,
+		}
+	}
+
+	return backendMap, nil
+}
+
+// parsePoolName extracts backendName and poolName from a full Cinder pool name.
+// Example: "host@pure-iscsi-1#vt-pure-iscsi" → ("pure-iscsi-1", "vt-pure-iscsi")
+func parsePoolName(fullPoolName string) (volumeType string) {
+	// Example input: "host@backend#pool"
+	parts := strings.Split(fullPoolName, "@")
+	if len(parts) < 2 {
+		return ""
+	}
+
+	rest := parts[1]
+	segments := strings.SplitN(rest, "#", 2)
+
+	if len(segments) > 1 {
+		volumeType = segments[1]
+	} else {
+		volumeType = "default"
+	}
+
+	return volumeType
+}

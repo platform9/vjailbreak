@@ -127,11 +127,32 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// Check if secretRef is provided - if not, this is an auto-discovered array awaiting credentials
+	if arraycreds.Spec.SecretRef.Name == "" {
+		ctxlog.Info("ArrayCreds is awaiting credentials (no secretRef)", "arraycreds", arraycreds.Name)
+
+		// Update status to indicate waiting for credentials
+		if scope.ArrayCreds.Status.Phase != constants.ArrayCredsPhaseDiscovered {
+			scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseDiscovered
+			scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusAwaitingCredentials
+			scope.ArrayCreds.Status.ArrayValidationMessage = "Array discovered from OpenStack. Awaiting storage array credentials."
+
+			if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+				ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Don't requeue - wait for user to add secretRef
+		return ctrl.Result{}, nil
+	}
+
 	// Get credentials from secret
 	arrayCredential, err := utils.GetArrayCredentialsFromSecret(ctx, r.Client, arraycreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get storage array credentials from secret", "secretName", arraycreds.Spec.SecretRef.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = "Failed"
+		scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseFailed
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Failed to get credentials from secret: %v", err)
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
@@ -143,7 +164,8 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	// Validate credentials using storage SDK
 	if err := r.validateArrayCredentials(ctx, arraycreds.Spec.VendorType, arrayCredential); err != nil {
 		ctxlog.Error(err, "Error validating ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = "Failed"
+		scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseFailed
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Validation failed: %v", err)
 		ctxlog.Info("Updating status to failed", "arraycreds", scope.ArrayCreds.Name, "message", err.Error())
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
@@ -167,7 +189,8 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		scope.ArrayCreds.Status.DataStores = datastores
 	}
 
-	scope.ArrayCreds.Status.ArrayValidationStatus = string(corev1.PodSucceeded)
+	scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseValidated
+	scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusSucceeded
 	scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
 	ctxlog.Info("Updating status to success", "arraycreds", scope.ArrayCreds.Name)
 	if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
