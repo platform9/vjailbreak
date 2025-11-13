@@ -462,7 +462,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
@@ -527,6 +527,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 			if err != nil && !fallbackToDHCP {
 				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
 			}
+			gatewayIP[subnetId.ID] = subnetId.GatewayIP
 			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
 			fixedIPs = append(fixedIPs, ports.IP{
 				SubnetID:  subnetId.ID,
