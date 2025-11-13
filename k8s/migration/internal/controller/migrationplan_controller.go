@@ -400,6 +400,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	// Fetch OpenStackCreds CR
+    openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+    if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
+        false, openstackcreds); !ok {
+        return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
+    }
+
 	// Validate VM OS types before proceeding with migration
 	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds)
 	if err != nil {
@@ -422,12 +429,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	// Fetch VMwareCreds CR
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 	return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
-	}
-	// Fetch OpenStackCreds CR
-	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
-		false, openstackcreds); !ok {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
 	// Starting the Migrations
