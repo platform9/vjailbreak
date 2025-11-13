@@ -287,15 +287,24 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 	datastoresPresentInarray := []string{}
 
 	for _, vmwareCred := range vmwareCreds.Items {
-		_, finder, err := utils.GetFinderForVMwareCreds(ctx, r.Client, &vmwareCred, "")
+		// Get VMware credentials from secret to extract datacenter
+		vmwareCredsInfo, err := utils.GetVMwareCredentialsFromSecret(ctx, r.Client, vmwareCred.Spec.SecretRef.Name)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get finder for vmware credentials")
+			ctxlog.Error(err, "Failed to get VMware credentials from secret", "secretName", vmwareCred.Spec.SecretRef.Name)
+			continue // Skip this VMware credential and try the next one
+		}
+
+		_, finder, err := utils.GetFinderForVMwareCreds(ctx, r.Client, &vmwareCred, vmwareCredsInfo.Datacenter)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get finder for vmware credentials", "datacenter", vmwareCredsInfo.Datacenter)
+			continue // Skip this VMware credential and try the next one
 		}
 
 		// 1. Get all datastores
 		datastores, err := finder.DatastoreList(ctx, "*")
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to list datastores")
+			ctxlog.Error(err, "Failed to list datastores", "datacenter", vmwareCredsInfo.Datacenter)
+			continue // Skip this VMware credential and try the next one
 		}
 
 		// 2. Get datastore info
