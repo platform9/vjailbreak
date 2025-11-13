@@ -26,6 +26,15 @@ spec:
     - jsonPath: .spec.vendorType
       name: Vendor
       type: string
+    - jsonPath: .spec.openstackMapping.volumeType
+      name: VolumeType
+      type: string
+    - jsonPath: .spec.openstackMapping.cinderBackendName
+      name: Backend
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     - jsonPath: .status.arrayValidationStatus
       name: Status
       type: string
@@ -58,6 +67,10 @@ spec:
           spec:
             description: ArrayCredsSpec defines the desired state of ArrayCreds
             properties:
+              autoDiscovered:
+                description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
+                  from OpenStack
+                type: boolean
               openstackMapping:
                 description: OpenStackMapping is the openstack mapping for this array
                 properties:
@@ -66,9 +79,13 @@ spec:
                       CinderBackendName is the Cinder backend name for this mapping
                       This is the backend configured in cinder.conf (e.g., "pure-01")
                     type: string
+                  cinderBackendPool:
+                    description: CinderBackendPool is the pool name within the backend
+                      (optional)
+                    type: string
                   volumeType:
-                    description: Volume type is the Cinder volume type associated
-                      with this mapping
+                    description: VolumeType is the Cinder volume type associated with
+                      this mapping
                     type: string
                 required:
                 - cinderBackendName
@@ -133,8 +150,9 @@ spec:
                   the storage array validation
                 type: string
               arrayValidationStatus:
-                description: ArrayValidationStatus is the status of the storage array
-                  validation
+                description: |-
+                  ArrayValidationStatus is the status of the storage array validation
+                  Possible values: Pending, Succeeded, Failed, AwaitingCredentials
                 type: string
               dataStores:
                 description: DataStores is the list of datastores associated with
@@ -142,6 +160,11 @@ spec:
                 items:
                   type: string
                 type: array
+              phase:
+                description: |-
+                  Phase indicates the current phase of the ArrayCreds
+                  Possible values: Discovered, Configured, Validated, Failed
+                type: string
             type: object
         type: object
     served: true
@@ -614,6 +637,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
@@ -1810,6 +1835,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean

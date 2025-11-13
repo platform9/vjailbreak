@@ -82,6 +82,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
