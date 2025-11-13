@@ -292,6 +292,7 @@ func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *
 			"existingName", existingArrayCredsList.Items[0].Name,
 			"volumeType", backendInfo["volumeType"],
 			"backend", backendName)
+		return
 	}
 
 	ctxlog.Info("Creating ArrayCreds", "name", arrayCredsName, "volumeType", backendInfo["volumeType"], "backend", backendName)
