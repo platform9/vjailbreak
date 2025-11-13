@@ -47,6 +47,8 @@ type MigrationPlanStrategy struct {
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
 	// +kubebuilder:validation:Enum=pure
 	VendorType string `json:"vendorType,omitempty"`
+	// +kubebuilder:validation:Type=string
+	ArrayCredsRef string `json:"arrayCredsRef,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process

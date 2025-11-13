@@ -32,6 +32,9 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 
+	// Import storage providers to register them
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
