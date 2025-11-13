@@ -305,3 +305,94 @@ func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
 
 	return diskInfo, nil
 }
+
+// ListStorageDevices returns all storage devices/LUNs visible to the ESXi host
+func (c *Client) ListStorageDevices() ([]StorageDeviceInfo, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Use esxcli to list storage devices
+	output, err := c.ExecuteCommand("esxcli storage core device list")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list storage devices: %w", err)
+	}
+
+	devices := []StorageDeviceInfo{}
+	lines := strings.Split(output, "\n")
+
+	var currentDevice *StorageDeviceInfo
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			// Empty line marks end of device entry
+			if currentDevice != nil && currentDevice.DeviceID != "" {
+				devices = append(devices, *currentDevice)
+				currentDevice = nil
+			}
+			continue
+		}
+
+		// New device starts with a device ID line
+		if !strings.Contains(line, ":") && strings.HasPrefix(line, "naa.") || strings.HasPrefix(line, "t10.") || strings.HasPrefix(line, "mpx.") {
+			// Save previous device if exists
+			if currentDevice != nil && currentDevice.DeviceID != "" {
+				devices = append(devices, *currentDevice)
+			}
+			currentDevice = &StorageDeviceInfo{
+				DeviceID: line,
+			}
+			continue
+		}
+
+		// Parse device properties
+		if currentDevice != nil && strings.Contains(line, ":") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+
+			switch key {
+			case "Display Name":
+				currentDevice.DisplayName = value
+			case "Size":
+				// Parse size like "107374 MB" or "1000 GB"
+				sizeFields := strings.Fields(value)
+				if len(sizeFields) >= 2 {
+					if size, err := strconv.ParseInt(sizeFields[0], 10, 64); err == nil {
+						unit := sizeFields[1]
+						switch unit {
+						case "MB":
+							currentDevice.Size = size * 1024 * 1024
+						case "GB":
+							currentDevice.Size = size * 1024 * 1024 * 1024
+						case "TB":
+							currentDevice.Size = size * 1024 * 1024 * 1024 * 1024
+						}
+					}
+				}
+			case "Device Type":
+				currentDevice.DeviceType = value
+			case "Vendor":
+				currentDevice.Vendor = value
+			case "Model":
+				currentDevice.Model = value
+			case "Is Local":
+				currentDevice.IsLocal = (value == "true")
+			case "Is SSD":
+				currentDevice.IsSSD = (value == "true")
+			case "Devfs Path":
+				currentDevice.DevfsPath = value
+			}
+		}
+	}
+
+	// Add last device if exists
+	if currentDevice != nil && currentDevice.DeviceID != "" {
+		devices = append(devices, *currentDevice)
+	}
+
+	return devices, nil
+}
