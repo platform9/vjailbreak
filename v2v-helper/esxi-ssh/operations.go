@@ -4,15 +4,13 @@ package esxissh
 
 import (
 	"context"
-	"io"
 )
 
 //go:generate mockgen -source=operations.go -destination=operations_mock.go -package=esxissh
 
 // ESXiOperations defines the interface for ESXi operations via SSH
 type ESXiOperations interface {
-	// Connection management
-	Connect() error
+	Connect(ctx context.Context, hostname, username string, privateKey []byte) error
 	Disconnect() error
 	IsConnected() bool
 	TestConnection() error
@@ -28,8 +26,6 @@ type ESXiOperations interface {
 
 	// Disk operations
 	GetDiskInfo(diskPath string) (*DiskInfo, error)
-	StreamDisk(ctx context.Context, diskPath string, writer io.Writer, options *TransferOptions) error
-	CloneDisk(ctx context.Context, sourcePath, destPath string, options *TransferOptions) error
 
 	// Utility operations
 	ExecuteCommand(command string) (string, error)

@@ -3,65 +3,76 @@
 package esxissh
 
 import (
-	"bufio"
-	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // ListDatastores returns all datastores on the ESXi host
+// Note: Using vim-cmd instead of esxcli as it's more reliable (esxcli can hang on some hosts)
+// This is primarily for testing/debugging - production code gets VMDK paths from vSphere API
 func (c *Client) ListDatastores() ([]DatastoreInfo, error) {
-	if !c.connected {
+	if c.sshClient == nil {
 		return nil, fmt.Errorf("not connected to ESXi host")
 	}
 
-	// Use esxcli to list datastores
-	output, err := c.ExecuteCommand("esxcli storage filesystem list")
+	// Use vim-cmd which is faster and more reliable than esxcli storage filesystem list
+	output, err := c.ExecuteCommand("vim-cmd hostsvc/datastore/listsummary")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list datastores: %w", err)
 	}
 
+	// Parse vim-cmd output format:
+	// (vim.Datastore.Summary) {
+	//    name = "datastore1",
+	//    url = "/vmfs/volumes/...",
+	//    capacity = 1099511627776,
+	//    freeSpace = 549755813888,
+	//    type = "VMFS",
+	// }
 	datastores := []DatastoreInfo{}
 	lines := strings.Split(output, "\n")
 
-	// Skip header lines
-	for i, line := range lines {
-		if i < 2 || strings.TrimSpace(line) == "" {
+	var currentDS *DatastoreInfo
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
 
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			continue
-		}
-
-		// Parse datastore info
-		// Format: Mount Point  Volume Name  UUID  Mounted  Type  Size  Free
-		datastore := DatastoreInfo{
-			Path: fields[0],
-			Name: fields[1],
-			UUID: fields[2],
-			Type: fields[4],
-		}
-
-		// Parse size and free space if available
-		if len(fields) >= 6 {
-			if size, err := parseSize(fields[5]); err == nil {
-				datastore.Capacity = size
+		if strings.HasPrefix(line, "(vim.Datastore.Summary)") {
+			// New datastore entry - save previous one if exists
+			if currentDS != nil {
+				datastores = append(datastores, *currentDS)
+			}
+			currentDS = &DatastoreInfo{}
+		} else if currentDS != nil {
+			// Parse datastore properties
+			if strings.HasPrefix(line, "name = ") {
+				currentDS.Name = strings.Trim(strings.TrimPrefix(line, "name = "), "\",")
+			} else if strings.HasPrefix(line, "url = ") {
+				currentDS.Path = strings.Trim(strings.TrimPrefix(line, "url = "), "\",")
+			} else if strings.HasPrefix(line, "capacity = ") {
+				capacityStr := strings.Trim(strings.TrimPrefix(line, "capacity = "), ",")
+				if capacity, err := strconv.ParseInt(capacityStr, 10, 64); err == nil {
+					currentDS.Capacity = capacity
+				}
+			} else if strings.HasPrefix(line, "freeSpace = ") {
+				freeStr := strings.Trim(strings.TrimPrefix(line, "freeSpace = "), ",")
+				if free, err := strconv.ParseInt(freeStr, 10, 64); err == nil {
+					currentDS.FreeSpace = free
+				}
+			} else if strings.HasPrefix(line, "type = ") {
+				currentDS.Type = strings.Trim(strings.TrimPrefix(line, "type = "), "\",")
 			}
 		}
-		if len(fields) >= 7 {
-			if free, err := parseSize(fields[6]); err == nil {
-				datastore.FreeSpace = free
-			}
-		}
+	}
 
-		datastores = append(datastores, datastore)
+	// Add last datastore if exists
+	if currentDS != nil {
+		datastores = append(datastores, *currentDS)
 	}
 
 	return datastores, nil
@@ -85,7 +96,7 @@ func (c *Client) GetDatastoreInfo(datastoreName string) (*DatastoreInfo, error) 
 
 // ListVMs returns all VMs on the ESXi host
 func (c *Client) ListVMs() ([]VMInfo, error) {
-	if !c.connected {
+	if c.sshClient == nil {
 		return nil, fmt.Errorf("not connected to ESXi host")
 	}
 
@@ -104,23 +115,43 @@ func (c *Client) ListVMs() ([]VMInfo, error) {
 			continue
 		}
 
+		// Parse line more carefully - fields are: Vmid  Name  File  Guest OS  Version
+		// The File field is like: [datastore] vm-folder/vm-name.vmx
+		// We need to extract from the full line, not just split by whitespace
+
+		// Extract VM ID (first field)
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
 			continue
 		}
 
-		// Format: Vmid  Name  File  Guest OS  Version  Annotation
-		vm := VMInfo{
-			ID:      fields[0],
-			Name:    fields[1],
-			VMXPath: fields[2],
+		vmID := fields[0]
+
+		// Find the VMX path - it's everything between the VM name and the Guest OS
+		// Look for the pattern [datastore] path/to/file.vmx
+		vmxPattern := regexp.MustCompile(`\[([^\]]+)\]\s+([^\s]+\.vmx)`)
+		matches := vmxPattern.FindStringSubmatch(line)
+
+		if len(matches) < 3 {
+			// Couldn't parse VMX path, skip this VM
+			continue
 		}
 
-		// Extract datastore and path from VMX path
-		// Format: [datastore1] vm-name/vm-name.vmx
-		if matches := regexp.MustCompile(`\[([^\]]+)\]\s+(.+)`).FindStringSubmatch(vm.VMXPath); len(matches) == 3 {
-			vm.Datastore = matches[1]
-			vm.Path = filepath.Dir(matches[2])
+		datastore := matches[1]
+		vmxFile := matches[2]
+		vmxPath := fmt.Sprintf("[%s] %s", datastore, vmxFile)
+
+		// Extract VM name - it's between the ID and the VMX path
+		nameStart := strings.Index(line, vmID) + len(vmID)
+		nameEnd := strings.Index(line, "["+datastore+"]")
+		vmName := strings.TrimSpace(line[nameStart:nameEnd])
+
+		vm := VMInfo{
+			ID:        vmID,
+			Name:      vmName,
+			VMXPath:   vmxPath,
+			Datastore: datastore,
+			Path:      filepath.Dir(vmxFile),
 		}
 
 		vms = append(vms, vm)
@@ -153,7 +184,7 @@ func (c *Client) GetVMInfo(vmName string) (*VMInfo, error) {
 
 // GetVMDisks returns all disks for a VM given its VMX path
 func (c *Client) GetVMDisks(vmxPath string) ([]DiskInfo, error) {
-	if !c.connected {
+	if c.sshClient == nil {
 		return nil, fmt.Errorf("not connected to ESXi host")
 	}
 
@@ -191,9 +222,9 @@ func (c *Client) GetVMDisks(vmxPath string) ([]DiskInfo, error) {
 			continue
 		}
 
-		// Extract filename (last field)
-		filename := fields[len(fields)-1]
-		diskPath := filepath.Join(vmPath, filename)
+		// Extract filename (last field) - this is the full path from ls output
+		diskPath := fields[len(fields)-1]
+		filename := filepath.Base(diskPath)
 
 		// Get detailed disk info
 		diskInfo, err := c.GetDiskInfo(diskPath)
@@ -214,7 +245,7 @@ func (c *Client) GetVMDisks(vmxPath string) ([]DiskInfo, error) {
 
 // GetDiskInfo returns detailed information about a specific VMDK
 func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
-	if !c.connected {
+	if c.sshClient == nil {
 		return nil, fmt.Errorf("not connected to ESXi host")
 	}
 
@@ -265,237 +296,4 @@ func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
 	}
 
 	return diskInfo, nil
-}
-
-// StreamDisk streams a VMDK disk to a writer using vmkfstools
-func (c *Client) StreamDisk(ctx context.Context, diskPath string, writer io.Writer, options *TransferOptions) error {
-	if !c.connected {
-		return fmt.Errorf("not connected to ESXi host")
-	}
-
-	if options == nil {
-		options = DefaultTransferOptions()
-	}
-
-	// Get disk info for progress tracking
-	diskInfo, err := c.GetDiskInfo(diskPath)
-	if err != nil {
-		return fmt.Errorf("failed to get disk info: %w", err)
-	}
-
-	// Use vmkfstools to clone to stdout, then stream
-	// vmkfstools -i source -d thin /dev/stdout | compress | ssh transfer
-	command := fmt.Sprintf("vmkfstools -i %s -d thin /dev/stdout", diskPath)
-
-	if options.UseCompression {
-		command = fmt.Sprintf("%s | gzip", command)
-	}
-
-	session, err := c.sshClient.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH session: %w", err)
-	}
-	defer session.Close()
-
-	// Get stdout pipe
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdout pipe: %w", err)
-	}
-
-	// Start command
-	if err := session.Start(command); err != nil {
-		return fmt.Errorf("failed to start disk streaming: %w", err)
-	}
-
-	// Track progress
-	progress := &TransferProgress{
-		DiskPath:   diskPath,
-		TotalBytes: diskInfo.SizeBytes,
-		StartTime:  time.Now(),
-	}
-
-	// Copy data with progress tracking
-	buf := make([]byte, options.BufferSize)
-	totalRead := int64(0)
-
-readLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			n, err := stdout.Read(buf)
-			if n > 0 {
-				if _, werr := writer.Write(buf[:n]); werr != nil {
-					return fmt.Errorf("failed to write data: %w", werr)
-				}
-
-				totalRead += int64(n)
-				progress.TransferredBytes = totalRead
-				progress.LastUpdateTime = time.Now()
-				progress.Percentage = float64(totalRead) / float64(diskInfo.SizeBytes) * 100.0
-
-				elapsed := time.Since(progress.StartTime).Seconds()
-				if elapsed > 0 {
-					progress.BytesPerSecond = float64(totalRead) / elapsed
-					remaining := diskInfo.SizeBytes - totalRead
-					progress.EstimatedTimeLeft = time.Duration(float64(remaining)/progress.BytesPerSecond) * time.Second
-				}
-
-				// Send progress update
-				if options.ProgressChan != nil && totalRead%int64(options.ChunkSize) == 0 {
-					options.ProgressChan <- *progress
-				}
-			}
-
-			if err == io.EOF {
-				// Send final progress
-				if options.ProgressChan != nil {
-					options.ProgressChan <- *progress
-				}
-				break readLoop
-			}
-
-			if err != nil {
-				return fmt.Errorf("failed to read disk data: %w", err)
-			}
-
-			// Check if we've read all expected data
-			if totalRead >= diskInfo.SizeBytes {
-				break readLoop
-			}
-		}
-	}
-
-	// Wait for command to complete
-	if err := session.Wait(); err != nil {
-		return fmt.Errorf("disk streaming command failed: %w", err)
-	}
-
-	return nil
-}
-
-// CloneDisk clones a VMDK to another location using vmkfstools
-func (c *Client) CloneDisk(ctx context.Context, sourcePath, destPath string, options *TransferOptions) error {
-	if !c.connected {
-		return fmt.Errorf("not connected to ESXi host")
-	}
-
-	if options == nil {
-		options = DefaultTransferOptions()
-	}
-
-	// Get source disk info
-	diskInfo, err := c.GetDiskInfo(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to get source disk info: %w", err)
-	}
-
-	// Build vmkfstools command
-	command := fmt.Sprintf("vmkfstools -i %s -d thin %s", sourcePath, destPath)
-
-	// Create progress tracker
-	progress := &TransferProgress{
-		DiskPath:   sourcePath,
-		TotalBytes: diskInfo.SizeBytes,
-		StartTime:  time.Now(),
-	}
-
-	// Execute command with progress monitoring
-	outputChan := make(chan string, 100)
-	errChan := make(chan error, 1)
-
-	go func() {
-		errChan <- c.ExecuteCommandWithProgress(command, outputChan)
-	}()
-
-	// Monitor progress
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-errChan:
-			if err != nil {
-				return fmt.Errorf("clone command failed: %w", err)
-			}
-			// Command completed successfully
-			if options.ProgressChan != nil {
-				progress.TransferredBytes = diskInfo.SizeBytes
-				progress.Percentage = 100.0
-				progress.LastUpdateTime = time.Now()
-				options.ProgressChan <- *progress
-			}
-			return nil
-		case output := <-outputChan:
-			// Parse vmkfstools progress output
-			// Format: "Destination disk format: VMFS thin-provisioned\nCloning disk 'source'...\nClone: 45% done."
-			if strings.Contains(output, "% done") {
-				if matches := regexp.MustCompile(`(\d+)%`).FindStringSubmatch(output); len(matches) > 1 {
-					if percentage, err := strconv.ParseFloat(matches[1], 64); err == nil {
-						progress.Percentage = percentage
-						progress.TransferredBytes = int64(percentage / 100.0 * float64(diskInfo.SizeBytes))
-						progress.LastUpdateTime = time.Now()
-
-						elapsed := time.Since(progress.StartTime).Seconds()
-						if elapsed > 0 {
-							progress.BytesPerSecond = float64(progress.TransferredBytes) / elapsed
-							remaining := diskInfo.SizeBytes - progress.TransferredBytes
-							if progress.BytesPerSecond > 0 {
-								progress.EstimatedTimeLeft = time.Duration(float64(remaining)/progress.BytesPerSecond) * time.Second
-							}
-						}
-
-						if options.ProgressChan != nil {
-							options.ProgressChan <- *progress
-						}
-					}
-				}
-			}
-		case <-ticker.C:
-			// Periodic check - could query dest file size
-			continue
-		}
-	}
-}
-
-// parseSize parses a size string like "1.5GB" to bytes
-func parseSize(sizeStr string) (int64, error) {
-	sizeStr = strings.TrimSpace(sizeStr)
-
-	// Extract number and unit
-	var value float64
-	var unit string
-
-	scanner := bufio.NewScanner(strings.NewReader(sizeStr))
-	scanner.Split(bufio.ScanWords)
-
-	if scanner.Scan() {
-		var err error
-		value, err = strconv.ParseFloat(scanner.Text(), 64)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse size value: %w", err)
-		}
-	}
-	if scanner.Scan() {
-		unit = strings.ToUpper(scanner.Text())
-	}
-
-	// Convert to bytes
-	multiplier := int64(1)
-	switch unit {
-	case "KB", "K":
-		multiplier = 1024
-	case "MB", "M":
-		multiplier = 1024 * 1024
-	case "GB", "G":
-		multiplier = 1024 * 1024 * 1024
-	case "TB", "T":
-		multiplier = 1024 * 1024 * 1024 * 1024
-	}
-
-	return int64(value * float64(multiplier)), nil
 }
