@@ -51,6 +51,7 @@ type VMInfo struct {
 	Memory            int32
 	State             types.VirtualMachinePowerState
 	Mac               []string
+	IPperMac          map[string][]string
 	IPs               []string
 	UUID              string
 	Host              string
@@ -154,6 +155,8 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	}
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
+	ipPerMac := make(map[string][]string)
+
 	// Get the vmware machine from k8s
 	vmk8sName, err := k8sutils.GetVMwareMachineName()
 	if err != nil {
@@ -172,13 +175,25 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 				// Every mac should have a corresponding IP, Ignore link layer ip
 				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
 					ips = append(ips, guestNetwork.IP)
+					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
+						ipPerMac[guestNetwork.MAC] = []string{}
+					}
+					ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], guestNetwork.IP)
 				}
 			}
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
-						ips = append(ips, networkInterface.IPAddress)
+					if networkInterface.MAC == macAddresss {
+						for _, ip := range networkInterface.IPAddress {
+							if !strings.Contains(ip, ":") {
+								ips = append(ips, ip)
+								if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+									ipPerMac[networkInterface.MAC] = []string{}
+								}
+								ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], ip)
+							}
+						}
 					}
 				}
 			}
@@ -224,12 +239,13 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		}
 		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
 	}
-	log.Printf("DEBUG IPS %v", ips)
+	log.Printf("DEBUG IPS %v", ipPerMac)
 	vminfo := VMInfo{
 		CPU:               o.Config.Hardware.NumCPU,
 		Memory:            o.Config.Hardware.MemoryMB,
 		State:             o.Runtime.PowerState,
 		Mac:               mac,
+		IPperMac:          ipPerMac,
 		IPs:               ips,
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
