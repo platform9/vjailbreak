@@ -73,6 +73,30 @@ func main() {
 		freeGB := float64(ds.FreeSpace) / (1024 * 1024 * 1024)
 		fmt.Printf("  - %s: %.2f GB total, %.2f GB free (Type: %s)\n",
 			ds.Name, sizeGB, freeGB, ds.Type)
+		fmt.Printf("    Path: %s\n", ds.Path)
+	}
+
+	fmt.Println("\nListing storage devices/LUNs...")
+	devices, err := client.ListStorageDevices()
+	if err != nil {
+		fmt.Printf("Failed to list storage devices: %v\n", err)
+	} else {
+		fmt.Printf("Found %d storage device(s):\n", len(devices))
+		for i, dev := range devices {
+			sizeGB := float64(dev.Size) / (1024 * 1024 * 1024)
+			fmt.Printf("\n  Device %d:\n", i+1)
+			fmt.Printf("    Device ID: %s\n", dev.DeviceID)
+			fmt.Printf("    Display Name: %s\n", dev.DisplayName)
+			fmt.Printf("    Size: %.2f GB\n", sizeGB)
+			fmt.Printf("    Type: %s\n", dev.DeviceType)
+			fmt.Printf("    Vendor: %s\n", dev.Vendor)
+			fmt.Printf("    Model: %s\n", dev.Model)
+			fmt.Printf("    Is Local: %t\n", dev.IsLocal)
+			fmt.Printf("    Is SSD: %t\n", dev.IsSSD)
+			if dev.DevfsPath != "" {
+				fmt.Printf("    Device Path: %s\n", dev.DevfsPath)
+			}
+		}
 	}
 
 	fmt.Println("\nListing VMs...")
@@ -116,6 +140,42 @@ func main() {
 		}
 	} else {
 		fmt.Println("No VMs found on this ESXi host")
+	}
+
+	// Test vmkfstools clone functionality
+	fmt.Println("\n=== Testing vmkfstools clone functionality ===")
+
+	// Get source and target from environment variables
+	sourceVMDK := os.Getenv("ESXI_SOURCE_VMDK")
+	targetLUN := os.Getenv("ESXI_TARGET_LUN")
+
+	if sourceVMDK != "" && targetLUN != "" {
+		fmt.Printf("\nTesting vmkfstools clone:\n")
+		fmt.Printf("  Source: %s\n", sourceVMDK)
+		fmt.Printf("  Target: %s\n", targetLUN)
+
+		task, err := client.StartVmkfstoolsClone(sourceVMDK, targetLUN)
+		if err != nil {
+			fmt.Printf("Failed to start vmkfstools clone: %v\n", err)
+		} else {
+			fmt.Println("\nSuccessfully started vmkfstools clone task:")
+			fmt.Printf("  Task ID: %s\n", task.TaskId)
+			fmt.Printf("  PID: %d\n", task.Pid)
+			fmt.Printf("  Exit Code: %s\n", task.ExitCode)
+			fmt.Printf("  Last Line: %s\n", task.LastLine)
+			if task.Stderr != "" {
+				fmt.Printf("  StdErr: %s\n", task.Stderr)
+			}
+		}
+	} else {
+		fmt.Println("\nSkipping vmkfstools clone test (environment variables not set)")
+		fmt.Println("\nTo test vmkfstools clone, set both source and target:")
+		fmt.Println("  export ESXI_SOURCE_VMDK=/vmfs/volumes/datastore1/vm-name/disk.vmdk")
+		fmt.Println("  export ESXI_TARGET_LUN=/vmfs/volumes/datastore2/target-disk.vmdk")
+		fmt.Println("\nUse the paths shown above from:")
+		fmt.Println("  - VM Disks (for source VMDK)")
+		fmt.Println("  - Datastores (to construct target path)")
+		fmt.Println("  - Storage Devices/LUNs (for raw device access)")
 	}
 
 	fmt.Println("\nAll tests completed!")

@@ -4,12 +4,50 @@ package esxissh
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"net"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"k8s.io/klog/v2"
 )
+
+// SSHOperation represents the type of SSH operation
+type SSHOperation string
+
+const (
+	SSHOperationClone   SSHOperation = "clone"
+	SSHOperationStatus  SSHOperation = "status"
+	SSHOperationCleanup SSHOperation = "cleanup"
+)
+
+// VmkfstoolsTask represents the result of a vmkfstools operation
+type VmkfstoolsTask struct {
+	TaskId   string `json:"taskId"`
+	Pid      int    `json:"pid"`
+	ExitCode string `json:"exitCode"`
+	LastLine string `json:"lastLine"`
+	Stderr   string `json:"stdErr"`
+}
+
+// XMLResponse represents the XML response structure
+type XMLResponse struct {
+	XMLName   xml.Name  `xml:"o"`
+	Structure Structure `xml:"structure"`
+}
+
+// Structure represents the structure element in the XML response
+type Structure struct {
+	TypeName string  `xml:"typeName,attr"`
+	Fields   []Field `xml:"field"`
+}
+
+// Field represents a field in the XML response
+type Field struct {
+	Name   string `xml:"name,attr"`
+	String string `xml:"string"`
+}
 
 type Client struct {
 	hostname       string
@@ -158,4 +196,56 @@ func (c *Client) TestConnection() error {
 	}
 
 	return nil
+}
+
+// StartVmkfstoolsClone starts a vmkfstools clone operation from source VMDK to target LUN
+func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*VmkfstoolsTask, error) {
+	klog.Infof("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN)
+
+	// Build the command with operation and arguments
+	command := fmt.Sprintf("%s %s %s", SSHOperationClone, sourceVMDK, targetLUN)
+	output, err := c.ExecuteCommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start clone: %w", err)
+	}
+
+	klog.Infof("Received output from script: %s", output)
+
+	// Parse the XML response from the script
+	task, err := parseTaskResponse(output)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse clone response: %w", err)
+	}
+
+	klog.Infof("Started vmkfstools clone task %s with PID %d", task.TaskId, task.Pid)
+	return task, nil
+}
+
+// parseTaskResponse parses the XML response from vmkfstools operations
+func parseTaskResponse(output string) (*VmkfstoolsTask, error) {
+	var xmlResp XMLResponse
+	if err := xml.Unmarshal([]byte(output), &xmlResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal XML: %w", err)
+	}
+
+	task := &VmkfstoolsTask{}
+	for _, field := range xmlResp.Structure.Fields {
+		switch field.Name {
+		case "taskId":
+			task.TaskId = field.String
+		case "pid":
+			var pid int
+			if _, err := fmt.Sscanf(field.String, "%d", &pid); err == nil {
+				task.Pid = pid
+			}
+		case "exitCode":
+			task.ExitCode = field.String
+		case "lastLine":
+			task.LastLine = field.String
+		case "stdErr":
+			task.Stderr = field.String
+		}
+	}
+
+	return task, nil
 }
