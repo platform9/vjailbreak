@@ -48,6 +48,10 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
+		// WARNING: InsecureIgnoreHostKey bypasses host key verification.
+		// This is acceptable for ESXi hosts which typically use self-signed certificates,
+		// but in a production environment with higher security requirements, consider
+		// implementing proper host key verification using ssh.FixedHostKey().
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
@@ -59,7 +63,10 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 	}
 
 	if deadline, ok := ctx.Deadline(); ok {
-		_ = netConn.SetDeadline(deadline)
+		if err := netConn.SetDeadline(deadline); err != nil {
+			_ = netConn.Close()
+			return fmt.Errorf("failed to set connection deadline: %w", err)
+		}
 	}
 
 	cc, chans, reqs, err := ssh.NewClientConn(netConn, addr, config)
@@ -125,7 +132,7 @@ func (c *Client) ExecuteCommandWithContext(ctx context.Context, command string) 
 		// Try to kill the session
 		_ = session.Signal(ssh.SIGKILL)
 		_ = session.Close()
-		return "", fmt.Errorf("command timeout after %v: %w", c.commandTimeout, ctx.Err())
+		return "", fmt.Errorf("command cancelled or timed out: %w", ctx.Err())
 	case res := <-resultChan:
 		if res.err != nil {
 			return string(res.output), fmt.Errorf("command failed: %w", res.err)
