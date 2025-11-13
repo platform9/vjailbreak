@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -52,7 +51,6 @@ type ArrayCredsReconciler struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	MaxConcurrentReconciles int
-	Logger                  logr.Logger
 }
 
 // DatastoreInfo holds datastore information including backing device NAA
@@ -159,7 +157,7 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	ctxlog.Info("Successfully authenticated to storage array", "vendor", arraycreds.Spec.VendorType, "hostname", arrayCredential.Hostname)
 
 	// Discover datastores backed by this array
-	datastores, err := r.discoverDatastores(ctx, arraycreds.Spec.VendorType, arrayCredential)
+	datastores, err := r.discoverDatastores(ctx, arraycreds.Spec.VendorType, arrayCredential, scope)
 	if err != nil {
 		ctxlog.Error(err, "Failed to discover datastores", "arraycreds", scope.ArrayCreds.Name)
 		// Don't fail validation, just log warning
@@ -244,8 +242,8 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 }
 
 // discoverDatastores discovers vCenter datastores backed by volumes from this storage array
-func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo) ([]string, error) {
-	ctxlog := r.Logger
+func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo, scope *scope.ArrayCredsScope) ([]string, error) {
+	ctxlog := scope.Logger
 	ctxlog.Info("Discovering datastores", "vendorType", vendorType)
 	// Step 1: Get all volume NAAs from the storage array
 	// Get the storage provider
@@ -277,6 +275,7 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 	if len(naaIdentifiers) == 0 {
 		return []string{}, nil
 	}
+	ctxlog.Info("Found volume NAAs", "naaIdentifiers", naaIdentifiers)
 
 	// Step 2: Get vmware credentials to query datastores
 	vmwareCreds, err := r.getVMwareCredentials(ctx)
