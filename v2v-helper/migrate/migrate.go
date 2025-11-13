@@ -1397,7 +1397,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				ippm = append(ippm, migobj.AssignedIP)
 			}
 			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
