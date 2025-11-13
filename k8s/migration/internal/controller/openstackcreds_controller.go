@@ -126,6 +126,16 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
+
+		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = err.Error()
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+			return ctrl.Result{}, err
+		}
+		ctxlog.Info("Successfully updated status to failed")
+		return ctrl.Result{}, nil
 		// TODO: Uncomment before committing
 
 		// // Update the status of the OpenstackCreds object
