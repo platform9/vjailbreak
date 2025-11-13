@@ -1387,8 +1387,8 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			if len(ip) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
-						ip = append(ip, nic.IPAddress...)
-						ippm = append(ippm, nic.IPAddress...)
+						ip = append(ip, nic.IPAddress)
+						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}

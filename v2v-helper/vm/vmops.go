@@ -185,15 +185,23 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
 					if networkInterface.MAC == macAddresss {
-						for _, ip := range networkInterface.IPAddress {
-							if !strings.Contains(ip, ":") {
-								ips = append(ips, ip)
-								if _, ok := ipPerMac[networkInterface.MAC]; !ok {
-									ipPerMac[networkInterface.MAC] = []string{}
-								}
-								ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], ip)
+						if !strings.Contains(networkInterface.IPAddress, ":") {
+							ips = append(ips, networkInterface.IPAddress)
+							if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+								ipPerMac[networkInterface.MAC] = []string{}
 							}
+							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], networkInterface.IPAddress)
 						}
+
+						// for _, ip := range networkInterface.IPAddress {
+						// 	if !strings.Contains(ip, ":") {
+						// 		ips = append(ips, ip)
+						// 		if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+						// 			ipPerMac[networkInterface.MAC] = []string{}
+						// 		}
+						// 		ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], ip)
+						// 	}
+						// }
 					}
 				}
 			}
