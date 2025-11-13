@@ -130,7 +130,8 @@ func (c *Client) ListVMs() ([]VMInfo, error) {
 
 		// Find the VMX path - it's everything between the VM name and the Guest OS
 		// Look for the pattern [datastore] path/to/file.vmx
-		vmxPattern := regexp.MustCompile(`\[([^\]]+)\]\s+([^\s]+\.vmx)`)
+		// Updated regex to handle paths with spaces
+		vmxPattern := regexp.MustCompile(`\[([^\]]+)\]\s+(.+\.vmx)`)
 		matches := vmxPattern.FindStringSubmatch(line)
 
 		if len(matches) < 3 {
