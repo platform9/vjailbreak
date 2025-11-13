@@ -118,7 +118,7 @@ const getColumns = (
 
       return (
         <Box>
-          <Tooltip title="Sync / Revalidate Credentials">
+          <Tooltip title="Revalidate Credentials">
             <span>
               <IconButton
                 onClick={(e) => {

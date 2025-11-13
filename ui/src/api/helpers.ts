@@ -211,7 +211,7 @@ export interface RevalidateCredentialsResponse {
 
 export const revalidateCredentials = (data: RevalidateCredentialsRequest) => {
   return axios.post<RevalidateCredentialsResponse>({
-    endpoint: "/vpw/v1/revalidate_credentials",
+    endpoint: "/dev-api/sdk/vpw/v1/revalidate_credentials",
     data,
   })
 }

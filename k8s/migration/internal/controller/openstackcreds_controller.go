@@ -112,6 +112,33 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling OpenstackCreds")
 	openstackcreds := scope.OpenstackCreds
+
+	annotations := scope.OpenstackCreds.GetAnnotations()
+	_, revalidateRequested := annotations[RevalidateAnnotationKey]
+
+	defer func() {
+		if revalidateRequested {
+			ctxlog.Info("Re-validation complete, cleaning up annotation")
+
+			credsToUpdate := &vjailbreakv1alpha1.OpenstackCreds{}
+			if err := r.Get(ctx, client.ObjectKeyFromObject(scope.OpenstackCreds), credsToUpdate); err != nil {
+				ctxlog.Error(err, "Failed to get latest OpenstackCreds to remove annotation")
+				return
+			}
+
+			latestAnnotations := credsToUpdate.GetAnnotations()
+			if _, ok := latestAnnotations[RevalidateAnnotationKey]; ok {
+				delete(latestAnnotations, RevalidateAnnotationKey)
+				credsToUpdate.SetAnnotations(latestAnnotations)
+				if err := r.Update(ctx, credsToUpdate); err != nil {
+					ctxlog.Error(err, "Failed to remove re-validation annotation")
+				} else {
+					ctxlog.Info("Successfully removed re-validation annotation")
+				}
+			}
+		}
+	}()
+
 	if !controllerutil.ContainsFinalizer(openstackcreds, constants.OpenstackCredsFinalizer) {
 		controllerutil.AddFinalizer(openstackcreds, constants.OpenstackCredsFinalizer)
 		if err := r.Update(ctx, openstackcreds); err != nil {
@@ -120,8 +147,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
-	annotations := scope.OpenstackCreds.GetAnnotations()
-	_, revalidateRequested := annotations[RevalidateAnnotationKey]
 
 	if revalidateRequested {
 		ctxlog.Info("Re-validation requested, setting status to Validating")
@@ -133,7 +158,9 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
+	var validationError error
 	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
+		validationError = err
 		// Update the status of the OpenstackCreds object
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
@@ -165,7 +192,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
-		ctxlog.Info("Successfully updated status to success")
+		ctxlog.Info("Successfully updated status to success")		
 		err = handleValidatedCreds(ctx, r, scope)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -174,17 +201,15 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("vjailbreak-settings configmap not found, using default requeue")
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
-	if revalidateRequested {
-		ctxlog.Info("Re-validation complete, removing annotation")
-		delete(annotations, RevalidateAnnotationKey)
-		scope.OpenstackCreds.SetAnnotations(annotations)
-		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Failed to remove re-validation annotation")
-			return ctrl.Result{Requeue: true}, err
-		}
+	if validationError != nil {
+		return ctrl.Result{}, nil
 	}
 
 	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors

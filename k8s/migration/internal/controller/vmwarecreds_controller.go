@@ -97,6 +97,29 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	annotations := scope.VMwareCreds.GetAnnotations()
 	_, revalidateRequested := annotations[RevalidateAnnotationKey]
 
+	defer func() {
+		if revalidateRequested {
+			ctxlog.Info("Re-validation complete, cleaning up annotation")
+
+			credsToUpdate := &vjailbreakv1alpha1.VMwareCreds{}
+			if err := r.Get(ctx, client.ObjectKeyFromObject(scope.VMwareCreds), credsToUpdate); err != nil {
+				ctxlog.Error(err, "Failed to get latest VMwareCreds to remove annotation")
+				return
+			}
+
+			latestAnnotations := credsToUpdate.GetAnnotations()
+			if _, ok := latestAnnotations[RevalidateAnnotationKey]; ok {
+				delete(latestAnnotations, RevalidateAnnotationKey)
+				credsToUpdate.SetAnnotations(latestAnnotations)
+				if err := r.Update(ctx, credsToUpdate); err != nil {
+					ctxlog.Error(err, "Failed to remove re-validation annotation")
+				} else {
+					ctxlog.Info("Successfully removed re-validation annotation")
+				}
+			}
+		}
+	}()
+
 	if revalidateRequested {
 		ctxlog.Info("Re-validation requested, setting status to Validating")
 		scope.VMwareCreds.Status.VMwareValidationStatus = "Validating"
@@ -151,7 +174,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 		controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-		err = utils.CreateVMwareClustersAndHosts(ctx, scope)
+				err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 		}
@@ -173,21 +196,19 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 	}
 
-	if revalidateRequested {
-		ctxlog.Info("Re-validation complete, removing annotation")
-		delete(annotations, RevalidateAnnotationKey)
-		scope.VMwareCreds.SetAnnotations(annotations)
-		if err := r.Update(ctx, scope.VMwareCreds); err != nil {
-			ctxlog.Error(err, "Failed to remove re-validation annotation")
-			return ctrl.Result{Requeue: true}, err
-		}
-	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("vjailbreak-settings configmap not found, using default requeue")
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
-	return ctrl.Result{RequeueAfter: time.Duration(vjailbreakSettings.VMwareCredsRequeueAfterMinutes) * time.Minute}, nil
+	if err == nil {
+		return ctrl.Result{RequeueAfter: time.Duration(vjailbreakSettings.VMwareCredsRequeueAfterMinutes) * time.Minute}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 // nolint:unparam
