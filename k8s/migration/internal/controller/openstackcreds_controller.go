@@ -40,8 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const RevalidateAnnotationKey = "vjailbreak.k8s.pf9.io/revalidate-timestamp"
-
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
 type OpenstackCredsReconciler struct {
 	client.Client
