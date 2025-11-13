@@ -3,108 +3,100 @@
 package esxissh
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
-// Client represents an SSH client connected to an ESXi host
 type Client struct {
-	credentials *ESXiCredentials
-	sshClient   *ssh.Client
-	connected   bool
+	hostname       string
+	username       string
+	sshClient      *ssh.Client
+	commandTimeout time.Duration
 }
 
-// NewClient creates a new ESXi SSH client
-func NewClient(credentials *ESXiCredentials) *Client {
+func NewClient() *Client {
 	return &Client{
-		credentials: credentials,
-		connected:   false,
+		commandTimeout: 30 * time.Second,
 	}
 }
 
-// Connect establishes an SSH connection to the ESXi host
-func (c *Client) Connect() error {
-	if c.connected {
-		return nil // Already connected
+func NewClientWithTimeout(timeout time.Duration) *Client {
+	return &Client{
+		commandTimeout: timeout,
 	}
+}
 
-	var authMethods []ssh.AuthMethod
+func (c *Client) SetCommandTimeout(timeout time.Duration) {
+	c.commandTimeout = timeout
+}
 
-	// Try key-based authentication first if SSH key path is provided
-	if c.credentials.SSHKeyPath != "" {
-		key, err := ioutil.ReadFile(c.credentials.SSHKeyPath)
-		if err != nil {
-			return fmt.Errorf("failed to read SSH key: %w", err)
-		}
+func (c *Client) Connect(ctx context.Context, hostname, username string, privateKey []byte) error {
+	c.hostname = hostname
+	c.username = username
 
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			return fmt.Errorf("failed to parse SSH key: %w", err)
-		}
-
-		authMethods = append(authMethods, ssh.PublicKeys(signer))
-	}
-
-	// Add password authentication
-	if c.credentials.Password != "" {
-		authMethods = append(authMethods, ssh.Password(c.credentials.Password))
-	}
-
-	if len(authMethods) == 0 {
-		return fmt.Errorf("no authentication method provided (need password or SSH key)")
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	config := &ssh.ClientConfig{
-		User:            c.credentials.Username,
-		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // ESXi often has self-signed certs
-		Timeout:         30 * time.Second,
+		User: username,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	// Default port is 22 if not specified
-	port := c.credentials.Port
-	if port == 0 {
-		port = 22
-	}
-
-	addr := fmt.Sprintf("%s:%d", c.credentials.Host, port)
-
-	client, err := ssh.Dial("tcp", addr, config)
+	addr := net.JoinHostPort(hostname, "22")
+	dialer := &net.Dialer{}
+	netConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to connect to ESXi host %s: %w", addr, err)
+		return fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
 
-	c.sshClient = client
-	c.connected = true
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = netConn.SetDeadline(deadline)
+	}
 
+	cc, chans, reqs, err := ssh.NewClientConn(netConn, addr, config)
+	if err != nil {
+		_ = netConn.Close()
+		return fmt.Errorf("failed to establish SSH client connection: %w", err)
+	}
+	c.sshClient = ssh.NewClient(cc, chans, reqs)
 	return nil
 }
 
-// Disconnect closes the SSH connection
 func (c *Client) Disconnect() error {
-	if !c.connected || c.sshClient == nil {
+	if c.sshClient == nil {
 		return nil
 	}
 
 	err := c.sshClient.Close()
-	c.connected = false
 	c.sshClient = nil
 
 	return err
 }
 
-// IsConnected returns whether the client is currently connected
 func (c *Client) IsConnected() bool {
-	return c.connected && c.sshClient != nil
+	return c.sshClient != nil
 }
 
 // ExecuteCommand runs a command on the ESXi host and returns stdout
+// Uses the client's configured command timeout
 func (c *Client) ExecuteCommand(command string) (string, error) {
-	if !c.connected {
+	ctx, cancel := context.WithTimeout(context.Background(), c.commandTimeout)
+	defer cancel()
+	return c.ExecuteCommandWithContext(ctx, command)
+}
+
+// ExecuteCommandWithContext runs a command with a custom context (for timeout control)
+func (c *Client) ExecuteCommandWithContext(ctx context.Context, command string) (string, error) {
+	if c.sshClient == nil {
 		return "", fmt.Errorf("not connected to ESXi host")
 	}
 
@@ -114,106 +106,36 @@ func (c *Client) ExecuteCommand(command string) (string, error) {
 	}
 	defer session.Close()
 
-	output, err := session.CombinedOutput(command)
-	if err != nil {
-		return string(output), fmt.Errorf("command failed: %w (output: %s)", err, string(output))
+	// Channel to receive command result
+	type result struct {
+		output []byte
+		err    error
 	}
+	resultChan := make(chan result, 1)
 
-	return string(output), nil
-}
-
-// ExecuteCommandWithProgress runs a command and streams output line by line
-func (c *Client) ExecuteCommandWithProgress(command string, outputChan chan<- string) error {
-	if !c.connected {
-		return fmt.Errorf("not connected to ESXi host")
-	}
-
-	session, err := c.sshClient.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH session: %w", err)
-	}
-	defer session.Close()
-
-	// Set up pipes for stdout and stderr
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdout pipe: %w", err)
-	}
-
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stderr pipe: %w", err)
-	}
-
-	// Start the command
-	if err := session.Start(command); err != nil {
-		return fmt.Errorf("failed to start command: %w", err)
-	}
-
-	// Read output in goroutines with proper cleanup
-	done := make(chan error, 1)
-	outputDone := make(chan struct{})
-
+	// Run command in goroutine
 	go func() {
-		defer func() { outputDone <- struct{}{} }()
-		buf := make([]byte, 1024)
-		for {
-			n, err := stdout.Read(buf)
-			if n > 0 && outputChan != nil {
-				outputChan <- string(buf[:n])
-			}
-			if err != nil {
-				break
-			}
+		output, err := session.CombinedOutput(command)
+		resultChan <- result{output: output, err: err}
+	}()
+
+	// Wait for either command completion or context cancellation/timeout
+	select {
+	case <-ctx.Done():
+		// Try to kill the session
+		_ = session.Signal(ssh.SIGKILL)
+		_ = session.Close()
+		return "", fmt.Errorf("command timeout after %v: %w", c.commandTimeout, ctx.Err())
+	case res := <-resultChan:
+		if res.err != nil {
+			return string(res.output), fmt.Errorf("command failed: %w", res.err)
 		}
-	}()
-
-	go func() {
-		defer func() { outputDone <- struct{}{} }()
-		buf := make([]byte, 1024)
-		for {
-			n, err := stderr.Read(buf)
-			if n > 0 && outputChan != nil {
-				outputChan <- string(buf[:n])
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	// Wait for command to finish
-	go func() {
-		done <- session.Wait()
-	}()
-
-	cmdErr := <-done
-
-	// Wait for output goroutines to finish
-	<-outputDone
-	<-outputDone
-
-	return cmdErr
+		return string(res.output), nil
+	}
 }
 
-// OpenTunnel creates an SSH tunnel for data transfer
-func (c *Client) OpenTunnel(remoteHost string, remotePort int) (net.Conn, error) {
-	if !c.connected {
-		return nil, fmt.Errorf("not connected to ESXi host")
-	}
-
-	addr := fmt.Sprintf("%s:%d", remoteHost, remotePort)
-	conn, err := c.sshClient.Dial("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open tunnel to %s: %w", addr, err)
-	}
-
-	return conn, nil
-}
-
-// TestConnection verifies the SSH connection is working
 func (c *Client) TestConnection() error {
-	if !c.connected {
+	if c.sshClient == nil {
 		return fmt.Errorf("not connected")
 	}
 
