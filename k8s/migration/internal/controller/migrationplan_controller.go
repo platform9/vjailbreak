@@ -401,7 +401,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// Validate VM OS types before proceeding with migration
-	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds)
 	if err != nil {
 		r.ctxlog.Error(err, "VM validation failed")
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
@@ -1563,7 +1563,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
 	var (
 		validVMs   []*vjailbreakv1alpha1.VMwareMachine
 		skippedVMs []string
@@ -1584,6 +1585,29 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 				skippedVMs = append(skippedVMs, vm)
 				continue
 			}
+
+			osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get OpenStack clients for IP precheck: %w", err)
+			}
+			
+			r.ctxlog.Info("Performing IP address precheck for VM", "vmName", vm)
+			ipsToVerify := utils.GetIPsForPrecheck(vmMachine.Spec.VMInfo)
+
+			if len(ipsToVerify) == 0 {
+				r.ctxlog.Info("No IP address found for precheck on VM, skipping check", "vmName", vm)
+			}
+
+			for _, ip := range ipsToVerify {
+				inUse, reason, err := utils.IsIPInUse(osClients, ip)
+				if err != nil {
+					return nil, fmt.Errorf("failed to perform IP precheck for %s on %s: %w", vm, ip, err)
+				}
+				if inUse {
+					return nil, fmt.Errorf("precheck failed for VM %s: IP %s is already in use. %s", vm, ip, reason)
+				}
+			}
+			r.ctxlog.Info("IP address precheck passed for VM", "vmName", vm, "ips", ipsToVerify)
 
 			validVMs = append(validVMs, vmMachine)
 		}

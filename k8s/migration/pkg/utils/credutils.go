@@ -1799,3 +1799,41 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 		ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
 	}
 }
+
+// IsIPInUse checks if a specific IP address is already in use by a port in OpenStack.
+func IsIPInUse(openstackClients *OpenStackClients, ip string) (bool, string, error) {
+	portList, err := ports.List(openstackClients.NetworkingClient, ports.ListOpts{
+		FixedIPs: []ports.FixedIPOpts{{IPAddress: ip}},
+	}).AllPages()
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to list ports by fixed IP")
+	}
+
+	allPorts, err := ports.ExtractPorts(portList)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to extract ports from list")
+	}
+
+	if len(allPorts) > 0 {
+		reason := fmt.Sprintf("IP already in use by port %s on device %s", allPorts[0].ID, allPorts[0].DeviceID)
+		return true, reason, nil
+	}
+
+	return false, "Available", nil
+}
+
+// GetIPsForPrecheck extracts all potential IPs for pre-validation.
+func GetIPsForPrecheck(vmInfo vjailbreakv1alpha1.VMInfo) []string {
+	var ipsToVerify []string
+
+	if vmInfo.AssignedIP != "" {
+		ipsToVerify = append(ipsToVerify, vmInfo.AssignedIP)
+	} else {
+		for _, guestNet := range vmInfo.GuestNetworks {
+			if guestNet.IP != "" && !strings.Contains(guestNet.IP, ":") {
+				ipsToVerify = append(ipsToVerify, guestNet.IP)
+			}
+		}
+	}
+	return ipsToVerify
+}
