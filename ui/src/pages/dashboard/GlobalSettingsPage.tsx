@@ -271,35 +271,20 @@ export default function GlobalSettingsPage() {
     severity: 'error' | 'info' | 'success' | 'warning'
   }>({ open: false, message: '', severity: 'info' })
 
-  // Fetch on mount
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        setLoading(true)
-        const cm = await getSettingsConfigMap()
-        if (cancelled) return
-        const next = fromConfigMapData(cm?.data as any)
-        setForm(next)
-        setInitial(next)
-      } catch (err) {
-        // keep defaults if not found
-        setNotification({
-          open: true,
-          message:
-            'No existing Global Settings found. Defaults are prefilled; adjust and Save to create.',
-          severity: 'info'
-        })
-        setForm(DEFAULTS)
-        setInitial(DEFAULTS)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
+  const fetchSettings = async () => {
+    setLoading(true)
+    try {
+      const cm = await getSettingsConfigMap()
+      const next = fromConfigMapData(cm?.data as any)
+      setForm(next ?? DEFAULTS)
+      setInitial(next ?? DEFAULTS)
+    } finally {
+      setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }
+
+  useEffect(() => {
+    fetchSettings()
   }, [])
 
   const show = useCallback(
