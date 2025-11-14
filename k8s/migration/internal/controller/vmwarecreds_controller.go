@@ -77,8 +77,10 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	// Always close the scope when exiting this function such that we can persist any vmwarecreds changes.
 	defer func() {
-		if err := scope.Close(); err != nil && reterr == nil {
-			reterr = err
+		if vmwcreds.DeletionTimestamp.IsZero() {
+			if err := scope.Close(); err != nil && reterr == nil {
+				reterr = err
+			}
 		}
 	}()
 
