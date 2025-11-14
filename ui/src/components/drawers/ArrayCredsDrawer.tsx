@@ -214,13 +214,19 @@ export default function ArrayCredsDrawer({
         if (!validationResult.success) {
           setValidationStatus({ status: 'failed', message: validationResult.message })
           try {
-            await cleanupFailedCredentials(result.metadata.name)
+            if (isEditMode) {
+              // For edit mode, just clean up the secret and secretRef
+              await cleanupFailedCredentials(result.metadata.name)
+            } else {
+              // For create mode, delete the entire ArrayCreds resource
+              await cleanupFailedCreation(result.metadata.name)
+            }
           } catch (cleanupError) {
             console.error('Cleanup failed, but continuing:', cleanupError)
             // Update status to show cleanup also failed
             setValidationStatus({ 
               status: 'failed', 
-              message: `${validationResult.message}. Warning: Failed to clean up credentials - please delete the secret manually.` 
+              message: `${validationResult.message}. Warning: Failed to clean up - please delete manually.` 
             })
           }
           return // Stay in the form
@@ -279,6 +285,30 @@ export default function ArrayCredsDrawer({
     
     // Timeout - validation took too long
     return { success: false, message: 'Validation timed out after 60 seconds' }
+  }
+
+  const cleanupFailedCreation = async (name: string) => {
+    try {
+      const { deleteArrayCreds, deleteArrayCredsSecret } = await import('../../api/array-creds')
+      
+      console.log(`Starting cleanup for failed creation: ${name}`)
+      
+      // Delete the secret first
+      const secretName = `${name}-secret`
+      await deleteArrayCredsSecret(secretName)
+      console.log(`Secret deletion completed for: ${secretName}`)
+      
+      // Delete the entire ArrayCreds resource
+      await deleteArrayCreds(name)
+      console.log(`ArrayCreds deletion completed for: ${name}`)
+      
+      // Invalidate queries to refresh the table
+      queryClient.invalidateQueries({ queryKey: [ARRAY_CREDS_QUERY_KEY] })
+    } catch (error) {
+      console.error('Error cleaning up failed creation:', error)
+      // Re-throw to let the caller know cleanup failed
+      throw error
+    }
   }
 
   const cleanupFailedCredentials = async (name: string) => {
