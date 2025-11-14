@@ -31,6 +31,14 @@ const VENDOR_TYPES = [
   { value: 'hpalletra', label: 'HPE Alletra' },
 ]
 
+// Map display names to backend values
+const normalizeVendorType = (vendorType: string): string => {
+  const mapping: Record<string, string> = {
+    'Pure Storage': 'pure'
+  }
+  return mapping[vendorType] || vendorType.toLowerCase()
+}
+
 export default function ArrayCredsDrawer({
   open,
   onClose,
@@ -55,12 +63,17 @@ export default function ArrayCredsDrawer({
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showCredentials, setShowCredentials] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
+  const [validationStatus, setValidationStatus] = useState<{
+    status: 'validating' | 'success' | 'failed' | null
+    message?: string
+  }>({ status: null })
 
   useEffect(() => {
     if (arrayCreds) {
       setFormData({
         name: arrayCreds.metadata.name,
-        vendorType: arrayCreds.spec.vendorType,
+        vendorType: normalizeVendorType(arrayCreds.spec.vendorType),
         volumeType: arrayCreds.spec.openstackMapping?.volumeType || '',
         cinderBackendName: arrayCreds.spec.openstackMapping?.cinderBackendName || '',
         cinderBackendPool: arrayCreds.spec.openstackMapping?.cinderBackendPool || '',
@@ -69,7 +82,9 @@ export default function ArrayCredsDrawer({
         password: '',
         skipSSLVerification: false,
       })
-      setShowCredentials(!!arrayCreds.spec.secretRef?.name)
+      // Don't auto-check credentials checkbox when editing
+      setShowCredentials(false)
+      setValidationStatus({ status: null })
     } else {
       setFormData({
         name: '',
@@ -83,8 +98,10 @@ export default function ArrayCredsDrawer({
         skipSSLVerification: false,
       })
       setShowCredentials(false)
+      setValidationStatus({ status: null })
     }
     setErrors({})
+    setValidationStatus({ status: null })
   }, [arrayCreds, open])
 
   const handleChange = (field: keyof ArrayCredsFormData) => (
@@ -134,6 +151,8 @@ export default function ArrayCredsDrawer({
       return
     }
 
+    setValidationStatus({ status: null })
+
     try {
       let result: ArrayCreds
       if (isEditMode) {
@@ -147,21 +166,28 @@ export default function ArrayCredsDrawer({
 
       // If credentials were provided, wait for validation
       if (showCredentials && (formData.managementEndpoint || formData.username || formData.password)) {
+        setIsValidating(true)
+        setValidationStatus({ status: 'validating', message: 'Validating credentials...' })
+        
         const validationResult = await pollForValidation(result.metadata.name)
+        setIsValidating(false)
         
         // If validation failed, clean up and stay in form
         if (!validationResult.success) {
+          setValidationStatus({ status: 'failed', message: validationResult.message })
           await cleanupFailedCredentials(result.metadata.name)
-          reportError(
-            new Error(validationResult.message || 'Credential validation failed'),
-            { context: 'Array credential validation failed' }
-          )
           return // Stay in the form
         }
+        
+        setValidationStatus({ status: 'success', message: 'Credentials validated successfully!' })
+        // Wait a moment to show success message before closing
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
 
       onClose()
     } catch (error) {
+      setIsValidating(false)
+      setValidationStatus({ status: null })
       reportError(
         error as Error,
         {
@@ -235,7 +261,7 @@ export default function ArrayCredsDrawer({
     }
   }
 
-  const isLoading = createMutation.isPending || updateMutation.isPending
+  const isLoading = createMutation.isPending || updateMutation.isPending || isValidating
 
   const isAutoDiscovered = arrayCreds?.metadata.labels?.['vjailbreak.k8s.pf9.io/auto-discovered'] === 'true'
 
@@ -334,10 +360,30 @@ export default function ArrayCredsDrawer({
               Storage Array Credentials
             </Typography>
 
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Provide credentials to connect to the storage array management interface.
-              These are used for advanced operations like volume management.
-            </Alert>
+            {validationStatus.status === 'validating' && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                {validationStatus.message}
+              </Alert>
+            )}
+
+            {validationStatus.status === 'success' && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {validationStatus.message}
+              </Alert>
+            )}
+
+            {validationStatus.status === 'failed' && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {validationStatus.message}
+              </Alert>
+            )}
+
+            {!validationStatus.status && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Provide credentials to connect to the storage array management interface.
+                These are used for advanced operations like volume management.
+              </Alert>
+            )}
 
             <TextField
               label="Management Endpoint"

@@ -297,6 +297,11 @@ func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *
 
 	ctxlog.Info("Creating ArrayCreds", "name", arrayCredsName, "volumeType", backendInfo["volumeType"], "backend", backendName)
 
+	vendor := utils.GetArrayVendor(backendInfo["vendor"])
+	if vendor == "unsupported" {
+		ctxlog.Error(errors.New("unsupported array vendor"), "Failed to create ArrayCreds", "name", arrayCredsName)
+	}
+
 	// Create new ArrayCreds
 	arrayCreds := &vjailbreakv1alpha1.ArrayCreds{
 		ObjectMeta: metav1.ObjectMeta{
@@ -309,7 +314,7 @@ func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *
 			},
 		},
 		Spec: vjailbreakv1alpha1.ArrayCredsSpec{
-			VendorType:     backendInfo["vendor"],
+			VendorType:     vendor,
 			AutoDiscovered: true,
 			OpenStackMapping: vjailbreakv1alpha1.OpenstackMapping{
 				VolumeType:        backendInfo["volumeType"],

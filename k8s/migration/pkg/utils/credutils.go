@@ -1930,3 +1930,13 @@ func parsePoolName(fullPoolName string) (volumeType string, backendName string) 
 
 	return volumeType, segments[0]
 }
+
+func GetArrayVendor(vendor string) string {
+	// Convert vendor to lowercase
+	vendor = strings.ToLower(vendor)
+
+	if strings.Contains(vendor, "pure") {
+		return "pure"
+	}
+	return "unsupported"
+}
