@@ -28,6 +28,9 @@ export const getArrayCredsById = async (name: string): Promise<ArrayCreds> => {
 }
 
 export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayCreds> => {
+  // Check if credentials are provided
+  const hasCredentials = data.managementEndpoint || data.username || data.password
+  
   const arrayCreds: ArrayCreds = {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
     kind: 'ArrayCreds',
@@ -45,18 +48,18 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
         cinderBackendName: data.cinderBackendName,
         cinderBackendPool: data.cinderBackendPool || '',
       },
-      secretRef: {
-        name: `${data.name}-secret`,
-        namespace: NAMESPACE,
-      },
+      // Only set secretRef if credentials are provided
+      ...(hasCredentials && {
+        secretRef: {
+          name: `${data.name}-secret`,
+          namespace: NAMESPACE,
+        },
+      }),
     },
   }
 
-  // Create the ArrayCreds resource
-  const response = await axiosInstance.post(ARRAY_CREDS_API_PATH, arrayCreds)
-  
-  // Create the secret if credentials are provided
-  if (data.managementEndpoint || data.username || data.password) {
+  // Create the secret first if credentials are provided
+  if (hasCredentials) {
     await createArrayCredsSecret(data.name, {
       managementEndpoint: data.managementEndpoint || '',
       username: data.username || '',
@@ -64,6 +67,9 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
       skipSSLVerification: data.skipSSLVerification || false,
     })
   }
+
+  // Create the ArrayCreds resource after secret is created
+  const response = await axiosInstance.post(ARRAY_CREDS_API_PATH, arrayCreds)
 
   return response.data
 }

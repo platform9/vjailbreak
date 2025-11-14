@@ -143,8 +143,43 @@ export default function ArrayCredsDrawer({
       newErrors.cinderBackendName = 'Backend name is required'
     }
 
+    // If credentials checkbox is checked, validate credential fields
+    if (showCredentials) {
+      if (!formData.managementEndpoint?.trim()) {
+        newErrors.managementEndpoint = 'Management endpoint is required'
+      }
+      if (!formData.username?.trim()) {
+        newErrors.username = 'Username is required'
+      }
+      if (!formData.password?.trim()) {
+        newErrors.password = 'Password is required'
+      }
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  // Check if form is valid for enabling/disabling submit button
+  const isFormValid = (): boolean => {
+    // Basic required fields
+    const hasBasicFields = 
+      formData.name.trim() !== '' &&
+      /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(formData.name) &&
+      formData.vendorType !== '' &&
+      formData.volumeType.trim() !== '' &&
+      formData.cinderBackendName.trim() !== ''
+
+    // If credentials are being configured, check those fields too
+    if (showCredentials) {
+      const hasCredentialFields = 
+        formData.managementEndpoint?.trim() !== '' &&
+        formData.username?.trim() !== '' &&
+        formData.password?.trim() !== ''
+      return hasBasicFields && hasCredentialFields
+    }
+
+    return hasBasicFields
   }
 
   const handleSubmit = async () => {
@@ -462,6 +497,7 @@ export default function ArrayCredsDrawer({
         onSubmit={handleSubmit}
         submitButtonLabel={isEditMode ? 'Update' : 'Create'}
         submitting={isLoading}
+        disableSubmit={!isFormValid()}
       />
     </StyledDrawer>
   )
