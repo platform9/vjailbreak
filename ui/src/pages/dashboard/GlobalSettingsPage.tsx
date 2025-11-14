@@ -87,7 +87,10 @@ const DEFAULTS: SettingsForm = {
 /* ------------------------
    Helpers (parsing, IO)
    -----------------------*/
-const INTERVAL_REGEX = /^\s*\d+\s*(s|m|h|d)\s*$/i
+
+// Go duration regex (groups like 30s, 5m, 1h)
+const GO_DURATION_FULL_REGEX = /^([0-9]+(ns|us|µs|ms|s|m|h))+$/i
+const GO_DURATION_GROUP_RE = /([0-9]+)(ns|us|µs|ms|s|m|h)/gi
 
 const parseBool = (v: unknown, fallback: boolean) =>
   typeof v === 'string' ? v.toLowerCase() === 'true' : typeof v === 'boolean' ? v : fallback
@@ -168,6 +171,49 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
   DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME
 })
 
+/**
+ * Parse a Go duration string (like "5m", "30s", "1h30m") and return milliseconds.
+ * Returns NaN if parsing fails.
+ */
+const parseGoDurationMs = (dur: string): number => {
+  if (typeof dur !== 'string') return NaN
+  const s = dur.trim()
+  if (!GO_DURATION_FULL_REGEX.test(s)) return NaN
+
+  let totalMs = 0
+  let m: RegExpExecArray | null
+  GO_DURATION_GROUP_RE.lastIndex = 0
+  while ((m = GO_DURATION_GROUP_RE.exec(s)) !== null) {
+    const n = Number(m[1])
+    const unit = m[2].toLowerCase()
+    if (!Number.isFinite(n)) return NaN
+    switch (unit) {
+      case 'ns':
+        totalMs += n * 1e-6
+        break
+      case 'us':
+      case 'µs':
+        totalMs += n * 1e-3
+        break
+      case 'ms':
+        totalMs += n
+        break
+      case 's':
+        totalMs += n * 1000
+        break
+      case 'm':
+        totalMs += n * 60 * 1000
+        break
+      case 'h':
+        totalMs += n * 60 * 60 * 1000
+        break
+      default:
+        return NaN
+    }
+  }
+  return totalMs
+}
+
 type NumberFieldProps = {
   label: string
   name: keyof SettingsForm
@@ -194,7 +240,7 @@ const NumberField = ({
       fullWidth
       size="small"
       type="number"
-      inputProps={{ min }}
+      //inputProps={{ min }}
       name={String(name)}
       value={Number.isFinite(value) ? value : ''}
       onChange={onChange}
@@ -204,7 +250,6 @@ const NumberField = ({
   </Box>
 )
 
-// create a TextFeild which should similar like Number field which having label on top of field
 type TextFieldProps = {
   label: string
   name: keyof SettingsForm
@@ -296,32 +341,79 @@ export default function GlobalSettingsPage() {
   const validate = useCallback((state: SettingsForm) => {
     const e: Record<string, string> = {}
 
-    if (!INTERVAL_REGEX.test(state.PERIODIC_SYNC_INTERVAL)) {
-      e.PERIODIC_SYNC_INTERVAL = 'Use formats like 30s, 5m, 1h, 2d'
+    // CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: integer >=1 && <=20
+    const cb = state.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD
+    if (!Number.isInteger(cb) || cb < 1 || cb > 20) {
+      e.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD = 'Enter an integer between 1 and 20 (inclusive).'
     }
 
+    // PERIODIC_SYNC_INTERVAL: Go duration string and >= 5m
+    const intervalStr = (state.PERIODIC_SYNC_INTERVAL ?? '').trim()
+    if (!GO_DURATION_FULL_REGEX.test(intervalStr)) {
+      e.PERIODIC_SYNC_INTERVAL = 'Use duration format like 30s, 5m, 1h (units: s,m,h).'
+    } else {
+      const ms = parseGoDurationMs(intervalStr)
+      const min5Ms = 5 * 60 * 1000
+      if (!Number.isFinite(ms) || ms < min5Ms) {
+        e.PERIODIC_SYNC_INTERVAL = 'Interval must be at least 5m.'
+      }
+    }
+
+    // DEFAULT_MIGRATION_METHOD: enum hot|cold
     if (state.DEFAULT_MIGRATION_METHOD !== 'hot' && state.DEFAULT_MIGRATION_METHOD !== 'cold') {
-      e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'"
+      e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'."
     }
 
-    const positiveInts: Array<keyof SettingsForm> = [
-      'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD',
+    // Integer fields with >= 1 constraint
+    const requiredAtLeastOne: Array<keyof SettingsForm> = [
       'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
       'VM_ACTIVE_WAIT_RETRY_LIMIT',
       'VCENTER_SCAN_CONCURRENCY_LIMIT',
       'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
       'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
-      'VCENTER_LOGIN_RETRY_LIMIT',
       'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
       'VMWARE_CREDS_REQUEUE_AFTER_MINUTES'
     ]
 
-    positiveInts.forEach((k) => {
+    requiredAtLeastOne.forEach((k) => {
       const v = state[k] as unknown as number
-      if (!Number.isFinite(v) || v < 0) e[String(k)] = 'Enter a non-negative number'
+      if (!Number.isFinite(v) || !Number.isInteger(v) || v < 1) {
+        e[String(k)] = 'Enter an integer >= 1.'
+      }
     })
 
-    if (!state.DEPLOYMENT_NAME.trim()) e.DEPLOYMENT_NAME = 'Required'
+    // VCENTER_LOGIN_RETRY_LIMIT: integer >= 0
+    const loginRetry = state.VCENTER_LOGIN_RETRY_LIMIT
+    if (!Number.isFinite(loginRetry) || !Number.isInteger(loginRetry) || loginRetry < 0) {
+      e.VCENTER_LOGIN_RETRY_LIMIT = 'Enter an integer >= 0.'
+    }
+
+    // Boolean flags must be boolean (true/false)
+    const bools: Array<keyof SettingsForm> = [
+      'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+      'POPULATE_VMWARE_MACHINE_FLAVORS',
+      'VALIDATE_RDM_OWNER_VMS'
+    ]
+    bools.forEach((k) => {
+      const val = state[k]
+      if (typeof val !== 'boolean') {
+        e[String(k)] = 'Must be boolean: true or false.'
+      }
+    })
+
+    // DEPLOYMENT_NAME: non-empty, max 63 chars, match regex ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+    const dn = (state.DEPLOYMENT_NAME ?? '').trim()
+    //const DEPLOYMENT_NAME_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+    if (!dn) {
+      e.DEPLOYMENT_NAME = 'Required.'
+    } else if (dn.length > 63) {
+      e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
+    }
+
+    // else if (!DEPLOYMENT_NAME_RE.test(dn)) {
+    //   e.DEPLOYMENT_NAME =
+    //     'Must match /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/ (lowercase letters, numbers and hyphens).'
+    // }
 
     setErrors(e)
     return Object.keys(e).length === 0
