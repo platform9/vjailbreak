@@ -43,5 +43,5 @@ export interface ArrayCredsFormData {
   managementEndpoint?: string
   username?: string
   password?: string
-  apiToken?: string
+  skipSSLVerification?: boolean
 }

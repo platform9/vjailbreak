@@ -56,12 +56,12 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
   const response = await axiosInstance.post(ARRAY_CREDS_API_PATH, arrayCreds)
   
   // Create the secret if credentials are provided
-  if (data.managementEndpoint || data.username || data.password || data.apiToken) {
+  if (data.managementEndpoint || data.username || data.password) {
     await createArrayCredsSecret(data.name, {
       managementEndpoint: data.managementEndpoint || '',
       username: data.username || '',
       password: data.password || '',
-      apiToken: data.apiToken || '',
+      skipSSLVerification: data.skipSSLVerification || false,
     })
   }
 
@@ -95,12 +95,12 @@ export const updateArrayCreds = async (
   const response = await axiosInstance.put(`${ARRAY_CREDS_API_PATH}/${name}`, existing)
 
   // Update secret if credentials are provided
-  if (data.managementEndpoint || data.username || data.password || data.apiToken) {
+  if (data.managementEndpoint || data.username || data.password || data.skipSSLVerification !== undefined) {
     await updateArrayCredsSecret(name, {
       managementEndpoint: data.managementEndpoint || '',
       username: data.username || '',
       password: data.password || '',
-      apiToken: data.apiToken || '',
+      skipSSLVerification: data.skipSSLVerification || false,
     })
   }
 
@@ -116,7 +116,7 @@ interface SecretData {
   managementEndpoint: string
   username: string
   password: string
-  apiToken: string
+  skipSSLVerification: boolean
 }
 
 const createArrayCredsSecret = async (arrayCredsName: string, data: SecretData): Promise<void> => {
@@ -132,7 +132,7 @@ const createArrayCredsSecret = async (arrayCredsName: string, data: SecretData):
       managementEndpoint: data.managementEndpoint,
       username: data.username,
       password: data.password,
-      apiToken: data.apiToken,
+      skipSSLVerification: data.skipSSLVerification.toString(),
     },
   }
 
@@ -159,7 +159,7 @@ const updateArrayCredsSecret = async (arrayCredsName: string, data: SecretData):
         managementEndpoint: data.managementEndpoint,
         username: data.username,
         password: data.password,
-        apiToken: data.apiToken,
+        skipSSLVerification: data.skipSSLVerification.toString(),
       },
     }
     
@@ -179,7 +179,7 @@ export const getArrayCredsSecret = async (secretName: string): Promise<SecretDat
       managementEndpoint: data.managementEndpoint ? atob(data.managementEndpoint) : '',
       username: data.username ? atob(data.username) : '',
       password: data.password ? atob(data.password) : '',
-      apiToken: data.apiToken ? atob(data.apiToken) : '',
+      skipSSLVerification: data.skipSSLVerification ? atob(data.skipSSLVerification) === 'true' : false,
     }
   } catch (error) {
     return null

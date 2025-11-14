@@ -51,7 +51,7 @@ export default function ArrayCredsDrawer({
     managementEndpoint: '',
     username: '',
     password: '',
-    apiToken: '',
+    skipSSLVerification: false,
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -68,7 +68,7 @@ export default function ArrayCredsDrawer({
         managementEndpoint: '',
         username: '',
         password: '',
-        apiToken: '',
+        skipSSLVerification: false,
       })
       setShowCredentials(!!arrayCreds.spec.secretRef?.name)
     } else {
@@ -81,7 +81,7 @@ export default function ArrayCredsDrawer({
         managementEndpoint: '',
         username: '',
         password: '',
-        apiToken: '',
+        skipSSLVerification: false,
       })
       setShowCredentials(false)
     }
@@ -185,7 +185,6 @@ export default function ArrayCredsDrawer({
           onChange={handleChange('name')}
           error={!!errors.name}
           helperText={errors.name || 'Unique identifier for this array'}
-          disabled={isEditMode}
           required
           fullWidth
           sx={{ mb: 2 }}
@@ -237,15 +236,6 @@ export default function ArrayCredsDrawer({
           sx={{ mb: 2 }}
         />
 
-        <TextField
-          label="Backend Pool (Optional)"
-          value={formData.cinderBackendPool}
-          onChange={handleChange('cinderBackendPool')}
-          helperText="Cinder backend pool name (if applicable)"
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
         <Divider sx={{ my: 3 }} />
 
         <Box sx={{ mb: 2 }}>
@@ -268,7 +258,7 @@ export default function ArrayCredsDrawer({
 
             <Alert severity="info" sx={{ mb: 2 }}>
               Provide credentials to connect to the storage array management interface.
-              These are used for advanced operations like snapshot management.
+              These are used for advanced operations like volume management.
             </Alert>
 
             <TextField
@@ -299,12 +289,14 @@ export default function ArrayCredsDrawer({
               sx={{ mb: 2 }}
             />
 
-            <TextField
-              label="API Token (Optional)"
-              value={formData.apiToken}
-              onChange={handleChange('apiToken')}
-              helperText="API token for token-based authentication"
-              fullWidth
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={formData.skipSSLVerification}
+                  onChange={(e) => setFormData(prev => ({ ...prev, skipSSLVerification: e.target.checked }))}
+                />
+              }
+              label="Skip SSL Certificate Verification"
               sx={{ mb: 2 }}
             />
           </>
