@@ -478,13 +478,13 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		}
 	}
 
-	// _, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
-	// if err != nil {
-	// 	if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
-	// 		return nil, err
-	// 	}
-	// 	return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
-	// }
+	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
+	if err != nil {
+		if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
+	}
 
 	return providerClient, nil
 }
@@ -1891,16 +1891,10 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	// Map backend name -> vendor/type info for quick lookup
 	backendMap := make(map[string]map[string]string)
 	for _, pool := range backendPools {
-		backendName := pool.Capabilities.VolumeBackendName
-
-		// Skip if backend name is empty (indicates empty/invalid capabilities)
-		if backendName == "" {
-			continue
-		}
 
 		vendor := pool.Capabilities.VendorName
 		driver := pool.Capabilities.DriverVersion
-		volumeType := parsePoolName(pool.Name)
+		volumeType, backendName := parsePoolName(pool.Name)
 
 		backendMap[backendName] = map[string]string{
 			"vendor":     vendor,
@@ -1915,11 +1909,11 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 
 // parsePoolName extracts backendName and poolName from a full Cinder pool name.
 // Example: "host@pure-iscsi-1#vt-pure-iscsi" → ("pure-iscsi-1", "vt-pure-iscsi")
-func parsePoolName(fullPoolName string) (volumeType string) {
+func parsePoolName(fullPoolName string) (volumeType string, backendName string) {
 	// Example input: "host@backend#pool"
 	parts := strings.Split(fullPoolName, "@")
 	if len(parts) < 2 {
-		return ""
+		return "", ""
 	}
 
 	rest := parts[1]
@@ -1931,5 +1925,5 @@ func parsePoolName(fullPoolName string) (volumeType string) {
 		volumeType = "default"
 	}
 
-	return volumeType
+	return volumeType, segments[0]
 }
