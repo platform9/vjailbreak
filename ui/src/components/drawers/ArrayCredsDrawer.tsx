@@ -136,14 +136,21 @@ export default function ArrayCredsDrawer({
     }
 
     try {
+      let result: ArrayCreds
       if (isEditMode) {
-        await updateMutation.mutateAsync({
+        result = await updateMutation.mutateAsync({
           name: formData.name,
           data: formData,
         })
       } else {
-        await createMutation.mutateAsync(formData)
+        result = await createMutation.mutateAsync(formData)
       }
+
+      // If credentials were provided, wait for validation
+      if (showCredentials && (formData.managementEndpoint || formData.username || formData.password)) {
+        await pollForValidation(result.metadata.name)
+      }
+
       onClose()
     } catch (error) {
       reportError(
@@ -155,6 +162,30 @@ export default function ArrayCredsDrawer({
         }
       )
     }
+  }
+
+  const pollForValidation = async (name: string, maxAttempts = 30, intervalMs = 2000) => {
+    const { getArrayCredsById } = await import('../../api/array-creds')
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, intervalMs))
+      
+      try {
+        const updated = await getArrayCredsById(name)
+        const status = updated.status?.arrayValidationStatus
+        
+        // Check if validation is complete (either success or failure)
+        if (status && status !== 'AwaitingCredentials' && status !== 'Validating') {
+          return
+        }
+      } catch (error) {
+        // Continue polling even if there's an error
+        console.error('Error polling for validation:', error)
+      }
+    }
+    
+    // Timeout - validation took too long, but still close
+    console.warn('Validation polling timed out')
   }
 
   const isLoading = createMutation.isPending || updateMutation.isPending

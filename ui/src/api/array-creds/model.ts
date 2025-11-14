@@ -29,8 +29,9 @@ export interface OpenStackMapping {
 }
 
 export interface ArrayCredsStatus {
-  validationStatus?: string
-  validationMessage?: string
+  arrayValidationStatus?: string
+  arrayValidationMessage?: string
+  dataStores?: string[]
 }
 
 export interface ArrayCredsFormData {

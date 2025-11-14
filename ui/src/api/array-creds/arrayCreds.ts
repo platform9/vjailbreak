@@ -139,10 +139,10 @@ const createArrayCredsSecret = async (arrayCredsName: string, data: SecretData):
     },
     type: 'Opaque',
     stringData: {
-      managementEndpoint: data.managementEndpoint,
-      username: data.username,
-      password: data.password,
-      skipSSLVerification: data.skipSSLVerification.toString(),
+      ARRAY_HOSTNAME: data.managementEndpoint,
+      ARRAY_USERNAME: data.username,
+      ARRAY_PASSWORD: data.password,
+      ARRAY_INSECURE: data.skipSSLVerification.toString(),
     },
   }
 
@@ -166,10 +166,10 @@ const updateArrayCredsSecret = async (arrayCredsName: string, data: SecretData):
       },
       type: 'Opaque',
       stringData: {
-        managementEndpoint: data.managementEndpoint,
-        username: data.username,
-        password: data.password,
-        skipSSLVerification: data.skipSSLVerification.toString(),
+        ARRAY_HOSTNAME: data.managementEndpoint,
+        ARRAY_USERNAME: data.username,
+        ARRAY_PASSWORD: data.password,
+        ARRAY_INSECURE: data.skipSSLVerification.toString(),
       },
     }
     
@@ -186,10 +186,10 @@ export const getArrayCredsSecret = async (secretName: string): Promise<SecretDat
     const data = response.data.data || {}
     
     return {
-      managementEndpoint: data.managementEndpoint ? atob(data.managementEndpoint) : '',
-      username: data.username ? atob(data.username) : '',
-      password: data.password ? atob(data.password) : '',
-      skipSSLVerification: data.skipSSLVerification ? atob(data.skipSSLVerification) === 'true' : false,
+      managementEndpoint: data.ARRAY_HOSTNAME ? atob(data.ARRAY_HOSTNAME) : '',
+      username: data.ARRAY_USERNAME ? atob(data.ARRAY_USERNAME) : '',
+      password: data.ARRAY_PASSWORD ? atob(data.ARRAY_PASSWORD) : '',
+      skipSSLVerification: data.ARRAY_INSECURE ? atob(data.ARRAY_INSECURE) === 'true' : false,
     }
   } catch (error) {
     return null

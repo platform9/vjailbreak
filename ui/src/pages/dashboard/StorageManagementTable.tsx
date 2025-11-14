@@ -244,7 +244,7 @@ export default function StorageManagementTable() {
       volumeType: cred.spec.openstackMapping?.volumeType || 'N/A',
       backendName: cred.spec.openstackMapping?.cinderBackendName || 'N/A',
       autoDiscovered: isAutoDiscovered,
-      status: cred.status?.validationStatus || 'Unknown',
+      status: cred.status?.arrayValidationStatus || 'Unknown',
       hasCredentials: !!cred.spec.secretRef?.name,
       credObject: cred,
       onEdit: handleEdit,
