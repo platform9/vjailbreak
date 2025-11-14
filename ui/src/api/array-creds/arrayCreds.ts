@@ -2,7 +2,18 @@ import axios from 'axios'
 import { ArrayCreds, ArrayCredsFormData } from './model'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 
-const axiosInstance = axios.create()
+const getHeaders = () => {
+  const authToken = import.meta.env.VITE_API_TOKEN
+  return {
+    'Content-Type': 'application/json;charset=UTF-8',
+    ...(authToken && { Authorization: `Bearer ${authToken}` }),
+  }
+}
+
+const axiosInstance = axios.create({
+  headers: getHeaders(),
+})
+
 const NAMESPACE = VJAILBREAK_DEFAULT_NAMESPACE
 const ARRAY_CREDS_API_PATH = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NAMESPACE}/arraycreds`
 
