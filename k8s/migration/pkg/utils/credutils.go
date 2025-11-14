@@ -1825,15 +1825,55 @@ func IsIPInUse(openstackClients *OpenStackClients, ip string) (bool, string, err
 // GetIPsForPrecheck extracts all potential IPs for pre-validation.
 func GetIPsForPrecheck(vmInfo vjailbreakv1alpha1.VMInfo) []string {
 	var ipsToVerify []string
+	ipSet := make(map[string]struct{})
 
 	if vmInfo.AssignedIP != "" {
-		ipsToVerify = append(ipsToVerify, vmInfo.AssignedIP)
-	} else {
-		for _, guestNet := range vmInfo.GuestNetworks {
-			if guestNet.IP != "" && !strings.Contains(guestNet.IP, ":") {
-				ipsToVerify = append(ipsToVerify, guestNet.IP)
+		if _, ok := ipSet[vmInfo.AssignedIP]; !ok {
+			ipsToVerify = append(ipsToVerify, vmInfo.AssignedIP)
+			ipSet[vmInfo.AssignedIP] = struct{}{}
+		}
+	}
+
+	for _, nic := range vmInfo.NetworkInterfaces {
+		if nic.IPAddress != "" && !strings.Contains(nic.IPAddress, ":") {
+			if _, ok := ipSet[nic.IPAddress]; !ok {
+				ipsToVerify = append(ipsToVerify, nic.IPAddress)
+				ipSet[nic.IPAddress] = struct{}{}
 			}
 		}
 	}
+
+	if len(ipsToVerify) == 0 {
+		for _, guestNet := range vmInfo.GuestNetworks {
+			if guestNet.IP != "" && !strings.Contains(guestNet.IP, ":") {
+				if _, ok := ipSet[guestNet.IP]; !ok {
+					ipsToVerify = append(ipsToVerify, guestNet.IP)
+					ipSet[guestNet.IP] = struct{}{}
+				}
+			}
+		}
+	}
+
 	return ipsToVerify
+}
+
+// FindPortByMAC searches OpenStack for an existing port with a given MAC address.
+func FindPortByMAC(openstackClients *OpenStackClients, macAddress string) (*ports.Port, error) {
+	portList, err := ports.List(openstackClients.NetworkingClient, ports.ListOpts{
+		MACAddress: macAddress,
+	}).AllPages()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list ports by MAC address")
+	}
+
+	allPorts, err := ports.ExtractPorts(portList)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract ports from list")
+	}
+
+	if len(allPorts) > 0 {
+		return &allPorts[0], nil
+	}
+
+	return nil, nil
 }
