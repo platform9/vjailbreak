@@ -1,26 +1,41 @@
-import { deleteMigrationPlan, getMigrationPlansList } from './migration-plans/migrationPlans'
+import {
+  deleteMigrationPlan,
+  getMigrationPlansList,
+} from "./migration-plans/migrationPlans"
 import {
   deleteMigrationTemplate,
-  getMigrationTemplatesList
-} from './migration-templates/migrationTemplates'
-import { deleteNetworkMapping, getNetworkMappingList } from './network-mapping/networkMappings'
+  getMigrationTemplatesList,
+} from "./migration-templates/migrationTemplates"
+import {
+  deleteNetworkMapping,
+  getNetworkMappingList,
+} from "./network-mapping/networkMappings"
 import {
   deleteOpenstackCredentials,
   getOpenstackCredentialsList,
-  postOpenstackCredentials
-} from './openstack-creds/openstackCreds'
-import { deleteStorageMapping, getStorageMappingsList } from './storage-mappings/storageMappings'
-import { deleteVmwareCredentials, getVmwareCredentialsList } from './vmware-creds/vmwareCreds'
+  postOpenstackCredentials,
+} from "./openstack-creds/openstackCreds"
+import {
+  deleteStorageMapping,
+  getStorageMappingsList,
+} from "./storage-mappings/storageMappings"
+import {
+  deleteVmwareCredentials,
+  getVmwareCredentialsList,
+} from "./vmware-creds/vmwareCreds"
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
-  deleteSecret
-} from './secrets/secrets'
-import { createVMwareCredsWithSecret } from './vmware-creds/vmwareCreds'
-import { VJAILBREAK_DEFAULT_NAMESPACE } from './constants'
-import { AMPLITUDE_EVENTS, EventProperties } from 'src/types/amplitude'
-import { enrichEventProperties, getTrackingBehavior } from 'src/config/amplitude'
-import { trackEvent } from 'src/services/amplitudeService'
+  deleteSecret,
+} from "./secrets/secrets"
+import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
+import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
+import { AMPLITUDE_EVENTS, EventProperties } from "src/types/amplitude"
+import {
+  enrichEventProperties,
+  getTrackingBehavior,
+} from "src/config/amplitude"
+import { trackEvent } from "src/services/amplitudeService"
 
 export interface TrackingContext {
   component?: string
@@ -36,7 +51,7 @@ export const cleanupAllResources = async () => {
       await deleteVmwareCredentials(vmwareCred.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up vmware creds', e)
+    console.error("Error cleaning up vmware creds", e)
   }
 
   // Clean up openstack creds
@@ -46,7 +61,7 @@ export const cleanupAllResources = async () => {
       await deleteOpenstackCredentials(openstackCred.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up openstack creds', e)
+    console.error("Error cleaning up openstack creds", e)
   }
 
   // Clean up network mappings
@@ -56,7 +71,7 @@ export const cleanupAllResources = async () => {
       await deleteNetworkMapping(networkMapping.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up network mappings', e)
+    console.error("Error cleaning up network mappings", e)
   }
 
   // Clean up storage mappings
@@ -66,7 +81,7 @@ export const cleanupAllResources = async () => {
       await deleteStorageMapping(storageMapping.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up storage mappings', e)
+    console.error("Error cleaning up storage mappings", e)
   }
 
   // Clean up migration templates
@@ -76,7 +91,7 @@ export const cleanupAllResources = async () => {
       await deleteMigrationTemplate(migrationTemplate.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up migration templates', e)
+    console.error("Error cleaning up migration templates", e)
   }
 
   // Clean up migration plans. This will also clean up migrations
@@ -86,7 +101,7 @@ export const cleanupAllResources = async () => {
       await deleteMigrationPlan(migrationPlan.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up migration plans', e)
+    console.error("Error cleaning up migration plans", e)
   }
 }
 
@@ -105,7 +120,7 @@ export const createOpenstackCredsWithSecretFlow = async (
   },
   isPcd: boolean = false,
   projectName: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
 ) => {
   const secretName = `${credName}-openstack-secret`
 
@@ -114,21 +129,21 @@ export const createOpenstackCredsWithSecretFlow = async (
 
   // Then create the OpenStack credentials with the label
   const credBody = {
-    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
-    kind: 'OpenstackCreds',
+    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
+    kind: "OpenstackCreds",
     metadata: {
       name: credName,
       namespace,
       labels: {
-        'vjailbreak.k8s.pf9.io/is-pcd': isPcd ? 'true' : 'false'
-      }
+        "vjailbreak.k8s.pf9.io/is-pcd": isPcd ? "true" : "false",
+      },
     },
     spec: {
       secretRef: {
-        name: secretName
+        name: secretName,
       },
-      projectName: projectName
-    }
+      projectName: projectName,
+    },
   }
 
   return postOpenstackCredentials(credBody, namespace)
@@ -205,7 +220,7 @@ export const trackApiCall = async <T>(
     const successProperties = enrichEventProperties(baseProperties, {
       component: context.component || behavior.defaultComponent,
       userId: context.userId,
-      userEmail: context.userEmail
+      userEmail: context.userEmail,
     })
 
     trackEvent(AMPLITUDE_EVENTS[successEvent], successProperties)
@@ -217,7 +232,7 @@ export const trackApiCall = async <T>(
       component: context.component || behavior.defaultComponent,
       userId: context.userId,
       userEmail: context.userEmail,
-      errorMessage
+      errorMessage,
     })
 
     trackEvent(AMPLITUDE_EVENTS[failureEvent], failureProperties)
