@@ -121,6 +121,15 @@ export const deleteArrayCreds = async (name: string): Promise<void> => {
   await axiosInstance.delete(`${ARRAY_CREDS_API_PATH}/${name}`)
 }
 
+export const deleteArrayCredsSecret = async (secretName: string): Promise<void> => {
+  try {
+    await axiosInstance.delete(`/api/v1/namespaces/${NAMESPACE}/secrets/${secretName}`)
+  } catch (error) {
+    console.error('Error deleting secret:', error)
+    // Don't throw - secret might not exist
+  }
+}
+
 // Secret management
 interface SecretData {
   managementEndpoint: string

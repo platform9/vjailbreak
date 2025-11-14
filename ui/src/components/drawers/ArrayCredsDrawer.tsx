@@ -26,10 +26,9 @@ interface ArrayCredsDrawerProps {
 }
 
 const VENDOR_TYPES = [
-  { value: 'Pure Storage', label: 'Pure Storage' },
-  { value: 'NetApp ONTAP', label: 'NetApp ONTAP' },
-  { value: 'HPE Alletra', label: 'HPE Alletra' },
-  { value: 'Open Source', label: 'Open Source' },
+  { value: 'pure', label: 'Pure Storage' },
+  { value: 'ontap', label: 'NetApp ONTAP' },
+  { value: 'hpalletra', label: 'HPE Alletra' },
 ]
 
 export default function ArrayCredsDrawer({
@@ -44,7 +43,7 @@ export default function ArrayCredsDrawer({
 
   const [formData, setFormData] = useState<ArrayCredsFormData>({
     name: '',
-    vendorType: 'Pure Storage',
+    vendorType: 'pure',
     volumeType: '',
     cinderBackendName: '',
     cinderBackendPool: '',
@@ -74,7 +73,7 @@ export default function ArrayCredsDrawer({
     } else {
       setFormData({
         name: '',
-        vendorType: 'Pure Storage',
+        vendorType: 'pure',
         volumeType: '',
         cinderBackendName: '',
         cinderBackendPool: '',
@@ -148,7 +147,17 @@ export default function ArrayCredsDrawer({
 
       // If credentials were provided, wait for validation
       if (showCredentials && (formData.managementEndpoint || formData.username || formData.password)) {
-        await pollForValidation(result.metadata.name)
+        const validationResult = await pollForValidation(result.metadata.name)
+        
+        // If validation failed, clean up and stay in form
+        if (!validationResult.success) {
+          await cleanupFailedCredentials(result.metadata.name)
+          reportError(
+            new Error(validationResult.message || 'Credential validation failed'),
+            { context: 'Array credential validation failed' }
+          )
+          return // Stay in the form
+        }
       }
 
       onClose()
@@ -164,7 +173,7 @@ export default function ArrayCredsDrawer({
     }
   }
 
-  const pollForValidation = async (name: string, maxAttempts = 30, intervalMs = 2000) => {
+  const pollForValidation = async (name: string, maxAttempts = 30, intervalMs = 2000): Promise<{ success: boolean; message?: string }> => {
     const { getArrayCredsById } = await import('../../api/array-creds')
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -174,18 +183,56 @@ export default function ArrayCredsDrawer({
         const updated = await getArrayCredsById(name)
         const status = updated.status?.arrayValidationStatus
         
-        // Check if validation is complete (either success or failure)
+        // Check if validation succeeded
+        if (status === 'Succeeded') {
+          return { success: true }
+        }
+        
+        // Check if validation failed
         if (status && status !== 'AwaitingCredentials' && status !== 'Validating') {
-          return
+          return { 
+            success: false, 
+            message: updated.status?.arrayValidationMessage || `Validation failed with status: ${status}` 
+          }
         }
       } catch (error) {
-        // Continue polling even if there's an error
         console.error('Error polling for validation:', error)
       }
     }
     
-    // Timeout - validation took too long, but still close
-    console.warn('Validation polling timed out')
+    // Timeout - validation took too long
+    return { success: false, message: 'Validation timed out after 60 seconds' }
+  }
+
+  const cleanupFailedCredentials = async (name: string) => {
+    try {
+      const { deleteArrayCredsSecret } = await import('../../api/array-creds')
+      const axiosInstance = (await import('axios')).default
+      
+      // Delete the secret
+      const secretName = `${name}-secret`
+      await deleteArrayCredsSecret(secretName)
+      
+      // Remove secretRef from ArrayCreds by patching it
+      const NAMESPACE = 'migration-system'
+      const ARRAY_CREDS_API_PATH = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NAMESPACE}/arraycreds`
+      
+      await axiosInstance.patch(
+        `${ARRAY_CREDS_API_PATH}/${name}`,
+        {
+          spec: {
+            secretRef: null
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/merge-patch+json'
+          }
+        }
+      )
+    } catch (error) {
+      console.error('Error cleaning up failed credentials:', error)
+    }
   }
 
   const isLoading = createMutation.isPending || updateMutation.isPending
