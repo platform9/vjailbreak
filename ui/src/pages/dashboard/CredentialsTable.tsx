@@ -206,6 +206,7 @@ const CustomToolbar = ({
 export default function CredentialsTable() {
   const { reportError } = useErrorHandler({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
+  const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
 
   // Fetch credentials with options to always get fresh data
   const {
@@ -215,7 +216,7 @@ export default function CredentialsTable() {
   } = useVmwareCredentialsQuery(undefined, {
     staleTime: 0,
     refetchOnMount: true,
-    refetchInterval: 5000
+    refetchInterval: revalidatingId ? 5000 : false
   })
 
   const {
@@ -225,7 +226,7 @@ export default function CredentialsTable() {
   } = useOpenstackCredentialsQuery(undefined, {
     staleTime: 0,
     refetchOnMount: true,
-    refetchInterval: 5000
+    refetchInterval: revalidatingId ? 5000 : false
   })
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -236,14 +237,15 @@ export default function CredentialsTable() {
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
 
-  const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
   const revalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { mutate: revalidate } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
-      queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
+        queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
+      }, 500)
     },
     onError: (error: any, variables) => {
       reportError(error, {
