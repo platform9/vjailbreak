@@ -31,6 +31,24 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
   // Check if credentials are provided
   const hasCredentials = data.managementEndpoint || data.username || data.password
   
+  // Build the spec object
+  const spec: any = {
+    vendorType: data.vendorType,
+    openstackMapping: {
+      volumeType: data.volumeType,
+      cinderBackendName: data.cinderBackendName,
+      cinderBackendPool: data.cinderBackendPool || '',
+    },
+  }
+  
+  // Only add secretRef if credentials are provided
+  if (hasCredentials) {
+    spec.secretRef = {
+      name: `${data.name}-secret`,
+      namespace: NAMESPACE,
+    }
+  }
+  
   const arrayCreds: ArrayCreds = {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
     kind: 'ArrayCreds',
@@ -41,21 +59,7 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
         'vjailbreak.k8s.pf9.io/manually-created': 'true',
       },
     },
-    spec: {
-      vendorType: data.vendorType,
-      openstackMapping: {
-        volumeType: data.volumeType,
-        cinderBackendName: data.cinderBackendName,
-        cinderBackendPool: data.cinderBackendPool || '',
-      },
-      // Only set secretRef if credentials are provided
-      ...(hasCredentials && {
-        secretRef: {
-          name: `${data.name}-secret`,
-          namespace: NAMESPACE,
-        },
-      }),
-    },
+    spec,
   }
 
   // Create the secret first if credentials are provided
