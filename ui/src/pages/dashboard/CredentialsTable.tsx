@@ -23,7 +23,6 @@ import {
 import VMwareCredentialsDrawer from 'src/components/drawers/VMwareCredentialsDrawer'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import OpenstackCredentialsDrawer from 'src/components/drawers/OpenstackCredentialsDrawer'
-import toast from 'react-hot-toast'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 
 interface CredentialItem {
@@ -242,14 +241,11 @@ export default function CredentialsTable() {
 
   const { mutate: revalidate } = useMutation({
     mutationFn: revalidateCredentials,
-    onSuccess: (_data, variables) => {
-      toast.success(`Re-validation started for ${variables.name}. Status will update shortly.`)
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
     },
     onError: (error: any, variables) => {
-      const errorMsg = error.response?.data?.message || error.message || 'Unknown error occurred'
-      toast.error(`Failed to start re-validation for ${variables.name}: ${errorMsg}`)
       reportError(error, {
         context: 'credentials-revalidation',
         metadata: {
@@ -295,12 +291,6 @@ export default function CredentialsTable() {
           if (revalidationTimeoutRef.current) {
             clearTimeout(revalidationTimeoutRef.current)
             revalidationTimeoutRef.current = null
-          }
-
-          if (status === 'succeeded') {
-            toast.success(`Successfully revalidated ${revalidatingItem.name}.`)
-          } else if (status === 'failed') {
-            toast.error(`Revalidation failed for ${revalidatingItem.name}.`)
           }
           setRevalidatingId(null)
         }
@@ -363,7 +353,10 @@ export default function CredentialsTable() {
   const handleRevalidateClick = (row: CredentialItem) => {
     const { credObject } = row
     if (!credObject) {
-      toast.error('Cannot revalidate: Missing credential object data.')
+      reportError(new Error('Cannot revalidate: Missing credential object data.'), {
+        context: 'credentials-revalidation',
+        metadata: { credentialName: row.name }
+      })
       return
     }
 
@@ -374,7 +367,10 @@ export default function CredentialsTable() {
     setRevalidatingId(row.id)
 
     revalidationTimeoutRef.current = setTimeout(() => {
-      toast.error(`Revalidation for ${row.name} timed out. Please check logs.`)
+      reportError(new Error(`Revalidation for ${row.name} timed out. Please check logs.`), {
+        context: 'credentials-revalidation-timeout',
+        metadata: { credentialName: row.name }
+      })
       setRevalidatingId(null)
       revalidationTimeoutRef.current = null
     }, 120000)
