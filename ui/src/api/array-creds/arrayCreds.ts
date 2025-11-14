@@ -124,8 +124,12 @@ export const deleteArrayCreds = async (name: string): Promise<void> => {
 export const deleteArrayCredsSecret = async (secretName: string): Promise<void> => {
   try {
     await axiosInstance.delete(`/api/v1/namespaces/${NAMESPACE}/secrets/${secretName}`)
-  } catch (error) {
-    console.error('Error deleting secret:', error)
+    console.log(`Successfully deleted secret: ${secretName}`)
+  } catch (error: any) {
+    // Only log if it's not a 404 (secret doesn't exist)
+    if (error?.response?.status !== 404) {
+      console.error('Error deleting secret:', error)
+    }
     // Don't throw - secret might not exist
   }
 }

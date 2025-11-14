@@ -35,6 +35,7 @@ interface ArrayCredsRow {
   autoDiscovered: boolean
   status: string
   hasCredentials: boolean
+  credentialsStatus: 'configured' | 'pending' | 'failed'
   credObject: ArrayCreds
   onEdit: (cred: ArrayCreds) => void
   onDelete: (id: string) => void
@@ -102,18 +103,25 @@ const columns: GridColDef[] = [
     ),
   },
   {
-    field: "hasCredentials",
+    field: "credentialsStatus",
     headerName: "Credentials",
     flex: 0.8,
     minWidth: 120,
-    renderCell: (params) => (
-      <Chip
-        label={params.value ? 'Configured' : 'Pending'}
-        color={params.value ? 'success' : 'warning'}
-        variant={params.value ? 'filled' : 'outlined'}
-        size="small"
-      />
-    ),
+    renderCell: (params) => {
+      const status = params.value as 'configured' | 'pending' | 'failed'
+      const label = status === 'configured' ? 'Configured' : status === 'failed' ? 'Failed' : 'Pending'
+      const color = status === 'configured' ? 'success' : status === 'failed' ? 'error' : 'warning'
+      const variant = status === 'configured' ? 'filled' : 'outlined'
+      
+      return (
+        <Chip
+          label={label}
+          color={color}
+          variant={variant}
+          size="small"
+        />
+      )
+    },
   },
   {
     field: 'actions',
@@ -237,6 +245,22 @@ export default function StorageManagementTable() {
 
   const rows: ArrayCredsRow[] = (arrayCreds || []).map((cred) => {
     const isAutoDiscovered = cred.metadata.labels?.['vjailbreak.k8s.pf9.io/auto-discovered'] === 'true'
+    const hasSecretRef = !!cred.spec.secretRef?.name
+    const validationStatus = cred.status?.arrayValidationStatus
+    
+    // Determine credentials status
+    let credentialsStatus: 'configured' | 'pending' | 'failed' = 'pending'
+    if (hasSecretRef) {
+      if (validationStatus === 'Succeeded') {
+        credentialsStatus = 'configured'
+      } else if (validationStatus === 'Failed') {
+        credentialsStatus = 'failed'
+      } else {
+        // Has secret but validation is pending/in-progress
+        credentialsStatus = 'pending'
+      }
+    }
+    
     return {
       id: cred.metadata.name,
       name: cred.metadata.name,
@@ -244,8 +268,9 @@ export default function StorageManagementTable() {
       volumeType: cred.spec.openstackMapping?.volumeType || 'N/A',
       backendName: cred.spec.openstackMapping?.cinderBackendName || 'N/A',
       autoDiscovered: isAutoDiscovered,
-      status: cred.status?.arrayValidationStatus || 'Unknown',
-      hasCredentials: !!cred.spec.secretRef?.name,
+      status: validationStatus || 'Unknown',
+      hasCredentials: hasSecretRef,
+      credentialsStatus,
       credObject: cred,
       onEdit: handleEdit,
       onDelete: handleDelete,

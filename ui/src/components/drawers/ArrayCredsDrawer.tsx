@@ -82,9 +82,7 @@ export default function ArrayCredsDrawer({
         password: '',
         skipSSLVerification: false,
       })
-      // Don't auto-check credentials checkbox when editing
-      setShowCredentials(false)
-      setValidationStatus({ status: null })
+      setShowCredentials(!!arrayCreds.spec.secretRef?.name)
     } else {
       setFormData({
         name: '',
@@ -175,7 +173,16 @@ export default function ArrayCredsDrawer({
         // If validation failed, clean up and stay in form
         if (!validationResult.success) {
           setValidationStatus({ status: 'failed', message: validationResult.message })
-          await cleanupFailedCredentials(result.metadata.name)
+          try {
+            await cleanupFailedCredentials(result.metadata.name)
+          } catch (cleanupError) {
+            console.error('Cleanup failed, but continuing:', cleanupError)
+            // Update status to show cleanup also failed
+            setValidationStatus({ 
+              status: 'failed', 
+              message: `${validationResult.message}. Warning: Failed to clean up credentials - please delete the secret manually.` 
+            })
+          }
           return // Stay in the form
         }
         
@@ -232,32 +239,45 @@ export default function ArrayCredsDrawer({
 
   const cleanupFailedCredentials = async (name: string) => {
     try {
-      const { deleteArrayCredsSecret } = await import('../../api/array-creds')
-      const axiosInstance = (await import('axios')).default
+      const { deleteArrayCredsSecret, getArrayCredsById } = await import('../../api/array-creds')
+      const axios = (await import('axios')).default
+      
+      console.log(`Starting cleanup for failed credentials: ${name}`)
       
       // Delete the secret
       const secretName = `${name}-secret`
       await deleteArrayCredsSecret(secretName)
+      console.log(`Secret deletion completed for: ${secretName}`)
       
-      // Remove secretRef from ArrayCreds by patching it
+      // Get the current ArrayCreds to update it properly
+      const existing = await getArrayCredsById(name)
+      console.log(`Current secretRef:`, existing.spec.secretRef)
+      
+      // Remove secretRef by setting name to empty string
+      if (!existing.spec.secretRef) {
+        existing.spec.secretRef = {}
+      }
+      existing.spec.secretRef.name = ''
+      existing.spec.secretRef.namespace = ''
+      
+      // Update the ArrayCreds resource
       const NAMESPACE = 'migration-system'
       const ARRAY_CREDS_API_PATH = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NAMESPACE}/arraycreds`
       
-      await axiosInstance.patch(
-        `${ARRAY_CREDS_API_PATH}/${name}`,
-        {
-          spec: {
-            secretRef: null
-          }
+      const authToken = import.meta.env.VITE_API_TOKEN
+      const axiosInstance = axios.create({
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          ...(authToken && { Authorization: `Bearer ${authToken}` }),
         },
-        {
-          headers: {
-            'Content-Type': 'application/merge-patch+json'
-          }
-        }
-      )
+      })
+      
+      await axiosInstance.put(`${ARRAY_CREDS_API_PATH}/${name}`, existing)
+      console.log(`Successfully cleared secretRef for: ${name}`)
     } catch (error) {
       console.error('Error cleaning up failed credentials:', error)
+      // Re-throw to let the caller know cleanup failed
+      throw error
     }
   }
 
