@@ -174,7 +174,13 @@ export const deleteVMwareCredsWithSecretFlow = async (
   try {
     const secretName = `${credName}-vmware-secret`
     await deleteVmwareCredentials(credName, namespace)
-    await deleteSecret(secretName, namespace)
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (secretError: any) {
+      if (secretError?.response?.status !== 404) {
+        console.warn(`Successfully deleted credential ${credName}, but failed to delete associated secret ${secretName}.`, secretError)
+      }
+    }
     return { success: true }
   } catch (error) {
     console.error(`Error deleting VMware credential ${credName}:`, error)
@@ -190,7 +196,14 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   try {
     const secretName = `${credName}-openstack-secret`
     await deleteOpenstackCredentials(credName, namespace)
-    await deleteSecret(secretName, namespace)
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (secretError: any) {
+      if (secretError?.response?.status !== 404) {
+        console.warn(`Successfully deleted credential ${credName}, but failed to delete associated secret ${secretName}.`, secretError)
+      }
+    }
+    
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
