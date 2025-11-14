@@ -24,6 +24,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - get
@@ -45,14 +54,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - pods/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:
