@@ -5,6 +5,7 @@ export interface ArrayCreds {
     name: string
     namespace: string
     labels?: Record<string, string>
+    annotations?: Record<string, string>
     creationTimestamp?: string
     uid?: string
   }

@@ -109,6 +109,12 @@ export const updateArrayCreds = async (
       password: data.password || '',
       skipSSLVerification: data.skipSSLVerification || false,
     })
+    
+    // Add annotation to trigger reconciliation when secret is updated
+    if (!existing.metadata.annotations) {
+      existing.metadata.annotations = {}
+    }
+    existing.metadata.annotations['vjailbreak.k8s.pf9.io/credentials-updated'] = new Date().toISOString()
   }
 
   // Update the ArrayCreds resource
