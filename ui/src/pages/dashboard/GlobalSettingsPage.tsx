@@ -223,15 +223,7 @@ type NumberFieldProps = {
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
-const NumberField = ({
-  label,
-  name,
-  value,
-  helper,
-  min = 0,
-  error,
-  onChange
-}: NumberFieldProps) => (
+const NumberField = ({ label, name, value, helper, error, onChange }: NumberFieldProps) => (
   <Box display="flex" flexDirection="column" gap={0.5}>
     <Typography variant="body2" fontWeight={500}>
       {label}
@@ -240,7 +232,6 @@ const NumberField = ({
       fullWidth
       size="small"
       type="number"
-      //inputProps={{ min }}
       name={String(name)}
       value={Number.isFinite(value) ? value : ''}
       onChange={onChange}
@@ -295,7 +286,7 @@ const IntervalField = ({ label, name, value, helper, error, onChange }: Interval
       value={value}
       onChange={onChange}
       error={!!error}
-      helperText={error || helper || 'e.g. 30s, 5m, 1h, 2d'}
+      helperText={error || helper || 'e.g. 30s, 5m, 1h30m'}
     />
   </Box>
 )
