@@ -91,11 +91,18 @@ export const updateArrayCreds = async (
     existing.spec.openstackMapping.cinderBackendPool = data.cinderBackendPool
   }
 
-  // Update the ArrayCreds resource
-  const response = await axiosInstance.put(`${ARRAY_CREDS_API_PATH}/${name}`, existing)
-
   // Update secret if credentials are provided
-  if (data.managementEndpoint || data.username || data.password || data.skipSSLVerification !== undefined) {
+  const shouldUpdateSecret = data.managementEndpoint || data.username || data.password || data.skipSSLVerification !== undefined
+  if (shouldUpdateSecret) {
+    // Ensure secretRef is set
+    if (!existing.spec.secretRef) {
+      existing.spec.secretRef = {}
+    }
+    if (!existing.spec.secretRef.name) {
+      existing.spec.secretRef.name = `${name}-secret`
+      existing.spec.secretRef.namespace = NAMESPACE
+    }
+
     await updateArrayCredsSecret(name, {
       managementEndpoint: data.managementEndpoint || '',
       username: data.username || '',
@@ -103,6 +110,9 @@ export const updateArrayCreds = async (
       skipSSLVerification: data.skipSSLVerification || false,
     })
   }
+
+  // Update the ArrayCreds resource
+  const response = await axiosInstance.put(`${ARRAY_CREDS_API_PATH}/${name}`, existing)
 
   return response.data
 }
