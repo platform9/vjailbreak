@@ -320,6 +320,7 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	b.WriteString("  ethernets:\n")
 	idx := 0
 	routesAdded := false
+	log.Printf("MAC GATEWAY : %v", gatewayIP)
 	for mac, entries := range macToIPs {
 		if len(entries) == 0 {
 			continue
@@ -359,6 +360,7 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		log.Println("WARNING: No gateway found")
 	}
 	netplanYAML := b.String()
+	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	var ans string
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
