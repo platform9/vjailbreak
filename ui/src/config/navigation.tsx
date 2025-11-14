@@ -5,6 +5,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Analytics'
+import StorageIcon from '@mui/icons-material/Storage'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -24,6 +25,12 @@ export const navigationItems: NavigationItem[] = [
     label: 'Credentials',
     path: '/dashboard/credentials',
     icon: <CredentialsIcon />
+  },
+  {
+    id: 'storage-management',
+    label: 'Storage Management',
+    path: '/dashboard/storage-management',
+    icon: <StorageIcon />
   },
   {
     id: 'agents',

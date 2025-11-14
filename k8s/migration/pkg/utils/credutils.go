@@ -1888,6 +1888,9 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		return nil, errors.Wrap(err, "failed to extract backend pools")
 	}
 
+	ctxlog.Info("Discovered backend pools", "count", len(backendPools))
+	ctxlog.Info("Backend pools", "pools", backendPools)
+
 	// Map backend name -> vendor/type info for quick lookup
 	backendMap := make(map[string]map[string]string)
 	for _, pool := range backendPools {
