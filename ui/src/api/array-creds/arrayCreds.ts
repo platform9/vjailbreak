@@ -76,6 +76,14 @@ export const updateArrayCreds = async (
   // Get existing resource
   const existing = await getArrayCredsById(name)
 
+  // Ensure openStackMapping exists
+  if (!existing.spec.openStackMapping) {
+    existing.spec.openStackMapping = {
+      volumeType: '',
+      cinderBackendName: '',
+    }
+  }
+
   // Update spec fields
   if (data.vendorType) existing.spec.vendorType = data.vendorType
   if (data.volumeType) existing.spec.openStackMapping.volumeType = data.volumeType

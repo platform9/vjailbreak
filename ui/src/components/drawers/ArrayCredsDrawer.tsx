@@ -61,15 +61,15 @@ export default function ArrayCredsDrawer({
       setFormData({
         name: arrayCreds.metadata.name,
         vendorType: arrayCreds.spec.vendorType,
-        volumeType: arrayCreds.spec.openStackMapping.volumeType,
-        cinderBackendName: arrayCreds.spec.openStackMapping.cinderBackendName,
-        cinderBackendPool: arrayCreds.spec.openStackMapping.cinderBackendPool || '',
+        volumeType: arrayCreds.spec.openStackMapping?.volumeType || '',
+        cinderBackendName: arrayCreds.spec.openStackMapping?.cinderBackendName || '',
+        cinderBackendPool: arrayCreds.spec.openStackMapping?.cinderBackendPool || '',
         managementEndpoint: '',
         username: '',
         password: '',
         apiToken: '',
       })
-      setShowCredentials(!!arrayCreds.spec.secretRef.name)
+      setShowCredentials(!!arrayCreds.spec.secretRef?.name)
     } else {
       setFormData({
         name: '',
