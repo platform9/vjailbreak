@@ -16,8 +16,10 @@ import { ArrayCreds, ArrayCredsFormData } from '../../api/array-creds'
 import {
   useCreateArrayCredsMutation,
   useUpdateArrayCredsMutation,
+  ARRAY_CREDS_QUERY_KEY,
 } from '../../hooks/api/useArrayCredsQuery'
 import { useErrorHandler } from '../../hooks/useErrorHandler'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface ArrayCredsDrawerProps {
   open: boolean
@@ -48,6 +50,7 @@ export default function ArrayCredsDrawer({
   const createMutation = useCreateArrayCredsMutation()
   const updateMutation = useUpdateArrayCredsMutation()
   const { reportError } = useErrorHandler()
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState<ArrayCredsFormData>({
     name: '',
@@ -154,8 +157,10 @@ export default function ArrayCredsDrawer({
     try {
       let result: ArrayCreds
       if (isEditMode) {
+        // Use the original name from arrayCreds, not the form data
+        const originalName = arrayCreds!.metadata.name
         result = await updateMutation.mutateAsync({
-          name: formData.name,
+          name: originalName,
           data: formData,
         })
       } else {
@@ -187,10 +192,14 @@ export default function ArrayCredsDrawer({
         }
         
         setValidationStatus({ status: 'success', message: 'Credentials validated successfully!' })
+        // Invalidate queries to refresh the table with new validation status
+        queryClient.invalidateQueries({ queryKey: [ARRAY_CREDS_QUERY_KEY] })
         // Wait a moment to show success message before closing
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
 
+      // Invalidate queries to refresh the table
+      queryClient.invalidateQueries({ queryKey: [ARRAY_CREDS_QUERY_KEY] })
       onClose()
     } catch (error) {
       setIsValidating(false)
@@ -308,8 +317,9 @@ export default function ArrayCredsDrawer({
           value={formData.name}
           onChange={handleChange('name')}
           error={!!errors.name}
-          helperText={errors.name || 'Unique identifier for this array'}
+          helperText={errors.name || (isEditMode ? 'Name cannot be changed after creation' : 'Unique identifier for this array')}
           required
+          disabled={isEditMode}
           fullWidth
           sx={{ mb: 2 }}
         />
