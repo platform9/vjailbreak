@@ -65,7 +65,6 @@ export default function ArrayCredsDrawer({
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [showCredentials, setShowCredentials] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [validationStatus, setValidationStatus] = useState<{
     status: 'validating' | 'success' | 'failed' | null
@@ -85,7 +84,7 @@ export default function ArrayCredsDrawer({
         password: '',
         skipSSLVerification: false,
       })
-      setShowCredentials(!!arrayCreds.spec.secretRef?.name)
+      // Credentials section is always visible
     } else {
       setFormData({
         name: '',
@@ -98,7 +97,6 @@ export default function ArrayCredsDrawer({
         password: '',
         skipSSLVerification: false,
       })
-      setShowCredentials(false)
       setValidationStatus({ status: null })
     }
     setErrors({})
@@ -143,17 +141,15 @@ export default function ArrayCredsDrawer({
       newErrors.cinderBackendName = 'Backend name is required'
     }
 
-    // If credentials checkbox is checked, validate credential fields
-    if (showCredentials) {
-      if (!formData.managementEndpoint?.trim()) {
-        newErrors.managementEndpoint = 'Management endpoint is required'
-      }
-      if (!formData.username?.trim()) {
-        newErrors.username = 'Username is required'
-      }
-      if (!formData.password?.trim()) {
-        newErrors.password = 'Password is required'
-      }
+    // Validate credential fields
+    if (!formData.managementEndpoint?.trim()) {
+      newErrors.managementEndpoint = 'Management endpoint is required'
+    }
+    if (!formData.username?.trim()) {
+      newErrors.username = 'Username is required'
+    }
+    if (!formData.password?.trim()) {
+      newErrors.password = 'Password is required'
     }
 
     setErrors(newErrors)
@@ -170,16 +166,13 @@ export default function ArrayCredsDrawer({
       formData.volumeType.trim() !== '' &&
       formData.cinderBackendName.trim() !== ''
 
-    // If credentials are being configured, check those fields too
-    if (showCredentials) {
-      const hasCredentialFields = 
-        formData.managementEndpoint?.trim() !== '' &&
-        formData.username?.trim() !== '' &&
-        formData.password?.trim() !== ''
-      return hasBasicFields && hasCredentialFields
-    }
-
-    return hasBasicFields
+    // Check credential fields too
+    const hasCredentialFields = 
+      formData.managementEndpoint?.trim() !== '' &&
+      formData.username?.trim() !== '' &&
+      formData.password?.trim() !== ''
+    
+    return hasBasicFields && hasCredentialFields
   }
 
   const handleSubmit = async () => {
@@ -202,8 +195,8 @@ export default function ArrayCredsDrawer({
         result = await createMutation.mutateAsync(formData)
       }
 
-      // If credentials were provided, wait for validation
-      if (showCredentials && (formData.managementEndpoint || formData.username || formData.password)) {
+      // Wait for validation (credentials are always required now)
+      if (formData.managementEndpoint || formData.username || formData.password) {
         setIsValidating(true)
         setValidationStatus({ status: 'validating', message: 'Validating credentials...' })
         
@@ -437,89 +430,79 @@ export default function ArrayCredsDrawer({
 
         <Divider sx={{ my: 3 }} />
 
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={showCredentials}
-                onChange={(e) => setShowCredentials(e.target.checked)}
-              />
-            }
-            label="Configure Storage Array Credentials"
-          />
-        </Box>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Storage Array Credentials
+        </Typography>
 
-        {showCredentials && (
-          <>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Storage Array Credentials
-            </Typography>
-
-            {validationStatus.status === 'validating' && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                {validationStatus.message}
-              </Alert>
-            )}
-
-            {validationStatus.status === 'success' && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {validationStatus.message}
-              </Alert>
-            )}
-
-            {validationStatus.status === 'failed' && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {validationStatus.message}
-              </Alert>
-            )}
-
-            {!validationStatus.status && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Provide credentials to connect to the storage array management interface.
-                These are used for advanced operations like volume management.
-              </Alert>
-            )}
-
-            <TextField
-              label="Management Endpoint"
-              value={formData.managementEndpoint}
-              onChange={handleChange('managementEndpoint')}
-              helperText="Storage array management IP or hostname"
-              fullWidth
-              sx={{ mb: 2 }}
-            />
-
-            <TextField
-              label="Username"
-              value={formData.username}
-              onChange={handleChange('username')}
-              helperText="Storage array username"
-              fullWidth
-              sx={{ mb: 2 }}
-            />
-
-            <TextField
-              label="Password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange('password')}
-              helperText="Storage array password"
-              fullWidth
-              sx={{ mb: 2 }}
-            />
-
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData.skipSSLVerification}
-                  onChange={(e) => setFormData(prev => ({ ...prev, skipSSLVerification: e.target.checked }))}
-                />
-              }
-              label="Skip SSL Certificate Verification"
-              sx={{ mb: 2 }}
-            />
-          </>
+        {validationStatus.status === 'validating' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {validationStatus.message}
+          </Alert>
         )}
+
+        {validationStatus.status === 'success' && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {validationStatus.message}
+          </Alert>
+        )}
+
+        {validationStatus.status === 'failed' && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {validationStatus.message}
+          </Alert>
+        )}
+
+        {!validationStatus.status && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Provide credentials to connect to the storage array management interface.
+            These are used for advanced operations like volume management.
+          </Alert>
+        )}
+
+        <TextField
+          label="Management Endpoint"
+          value={formData.managementEndpoint}
+          onChange={handleChange('managementEndpoint')}
+          error={!!errors.managementEndpoint}
+          helperText={errors.managementEndpoint || 'Storage array management IP or hostname'}
+          required
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+
+        <TextField
+          label="Username"
+          value={formData.username}
+          onChange={handleChange('username')}
+          error={!!errors.username}
+          helperText={errors.username || 'Storage array username'}
+          required
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+
+        <TextField
+          label="Password"
+          type="password"
+          value={formData.password}
+          onChange={handleChange('password')}
+          error={!!errors.password}
+          helperText={errors.password || 'Storage array password'}
+          required
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.skipSSLVerification}
+              onChange={(e) => setFormData(prev => ({ ...prev, skipSSLVerification: e.target.checked }))}
+            />
+          }
+          label="Skip SSL Certificate Verification"
+          sx={{ mb: 2 }}
+        />
       </Box>
 
       <Footer
