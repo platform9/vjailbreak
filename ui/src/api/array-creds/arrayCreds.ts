@@ -40,8 +40,7 @@ export const createArrayCreds = async (data: ArrayCredsFormData): Promise<ArrayC
     },
     spec: {
       vendorType: data.vendorType,
-      autoDiscovered: false,
-      openStackMapping: {
+      openstackMapping: {
         volumeType: data.volumeType,
         cinderBackendName: data.cinderBackendName,
         cinderBackendPool: data.cinderBackendPool || '',
@@ -76,9 +75,9 @@ export const updateArrayCreds = async (
   // Get existing resource
   const existing = await getArrayCredsById(name)
 
-  // Ensure openStackMapping exists
-  if (!existing.spec.openStackMapping) {
-    existing.spec.openStackMapping = {
+  // Ensure openstackMapping exists
+  if (!existing.spec.openstackMapping) {
+    existing.spec.openstackMapping = {
       volumeType: '',
       cinderBackendName: '',
     }
@@ -86,10 +85,10 @@ export const updateArrayCreds = async (
 
   // Update spec fields
   if (data.vendorType) existing.spec.vendorType = data.vendorType
-  if (data.volumeType) existing.spec.openStackMapping.volumeType = data.volumeType
-  if (data.cinderBackendName) existing.spec.openStackMapping.cinderBackendName = data.cinderBackendName
+  if (data.volumeType) existing.spec.openstackMapping.volumeType = data.volumeType
+  if (data.cinderBackendName) existing.spec.openstackMapping.cinderBackendName = data.cinderBackendName
   if (data.cinderBackendPool !== undefined) {
-    existing.spec.openStackMapping.cinderBackendPool = data.cinderBackendPool
+    existing.spec.openstackMapping.cinderBackendPool = data.cinderBackendPool
   }
 
   // Update the ArrayCreds resource

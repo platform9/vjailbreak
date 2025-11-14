@@ -26,9 +26,10 @@ interface ArrayCredsDrawerProps {
 }
 
 const VENDOR_TYPES = [
-  { value: 'pure', label: 'Pure Storage' },
-  { value: 'ontap', label: 'NetApp ONTAP' },
-  { value: 'hpalletra', label: 'HPE Alletra' },
+  { value: 'Pure Storage', label: 'Pure Storage' },
+  { value: 'NetApp ONTAP', label: 'NetApp ONTAP' },
+  { value: 'HPE Alletra', label: 'HPE Alletra' },
+  { value: 'Open Source', label: 'Open Source' },
 ]
 
 export default function ArrayCredsDrawer({
@@ -43,7 +44,7 @@ export default function ArrayCredsDrawer({
 
   const [formData, setFormData] = useState<ArrayCredsFormData>({
     name: '',
-    vendorType: 'pure',
+    vendorType: 'Pure Storage',
     volumeType: '',
     cinderBackendName: '',
     cinderBackendPool: '',
@@ -61,9 +62,9 @@ export default function ArrayCredsDrawer({
       setFormData({
         name: arrayCreds.metadata.name,
         vendorType: arrayCreds.spec.vendorType,
-        volumeType: arrayCreds.spec.openStackMapping?.volumeType || '',
-        cinderBackendName: arrayCreds.spec.openStackMapping?.cinderBackendName || '',
-        cinderBackendPool: arrayCreds.spec.openStackMapping?.cinderBackendPool || '',
+        volumeType: arrayCreds.spec.openstackMapping?.volumeType || '',
+        cinderBackendName: arrayCreds.spec.openstackMapping?.cinderBackendName || '',
+        cinderBackendPool: arrayCreds.spec.openstackMapping?.cinderBackendPool || '',
         managementEndpoint: '',
         username: '',
         password: '',
@@ -73,7 +74,7 @@ export default function ArrayCredsDrawer({
     } else {
       setFormData({
         name: '',
-        vendorType: 'pure',
+        vendorType: 'Pure Storage',
         volumeType: '',
         cinderBackendName: '',
         cinderBackendPool: '',
@@ -158,14 +159,16 @@ export default function ArrayCredsDrawer({
 
   const isLoading = createMutation.isPending || updateMutation.isPending
 
+  const isAutoDiscovered = arrayCreds?.metadata.labels?.['vjailbreak.k8s.pf9.io/auto-discovered'] === 'true'
+
   return (
-    <StyledDrawer open={open} onClose={onClose}>
+    <StyledDrawer open={open} onClose={onClose} anchor="right">
       <Header
         title={isEditMode ? 'Edit Array Credentials' : 'Add Array Credentials'}
       />
 
       <Box sx={{ p: 3, flexGrow: 1, overflow: 'auto' }}>
-        {arrayCreds?.spec.autoDiscovered && (
+        {isAutoDiscovered && (
           <Alert severity="info" sx={{ mb: 3 }}>
             This array was auto-discovered from OpenStack Cinder. You can update the
             credentials and vendor type as needed.

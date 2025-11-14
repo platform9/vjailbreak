@@ -235,19 +235,22 @@ export default function StorageManagementTable() {
     console.log('Delete selected:', selectedRows)
   }, [selectedRows])
 
-  const rows: ArrayCredsRow[] = (arrayCreds || []).map((cred) => ({
-    id: cred.metadata.name,
-    name: cred.metadata.name,
-    vendorType: cred.spec.vendorType || 'Unknown',
-    volumeType: cred.spec.openStackMapping?.volumeType || 'N/A',
-    backendName: cred.spec.openStackMapping?.cinderBackendName || 'N/A',
-    autoDiscovered: cred.spec.autoDiscovered || false,
-    status: cred.status?.validationStatus || 'Unknown',
-    hasCredentials: !!cred.spec.secretRef?.name,
-    credObject: cred,
-    onEdit: handleEdit,
-    onDelete: handleDelete,
-  }))
+  const rows: ArrayCredsRow[] = (arrayCreds || []).map((cred) => {
+    const isAutoDiscovered = cred.metadata.labels?.['vjailbreak.k8s.pf9.io/auto-discovered'] === 'true'
+    return {
+      id: cred.metadata.name,
+      name: cred.metadata.name,
+      vendorType: cred.spec.vendorType || 'Unknown',
+      volumeType: cred.spec.openstackMapping?.volumeType || 'N/A',
+      backendName: cred.spec.openstackMapping?.cinderBackendName || 'N/A',
+      autoDiscovered: isAutoDiscovered,
+      status: cred.status?.validationStatus || 'Unknown',
+      hasCredentials: !!cred.spec.secretRef?.name,
+      credObject: cred,
+      onEdit: handleEdit,
+      onDelete: handleDelete,
+    }
+  })
 
   if (error) {
     return (

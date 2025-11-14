@@ -14,11 +14,11 @@ export interface ArrayCreds {
 
 export interface ArrayCredsSpec {
   vendorType: string
-  autoDiscovered: boolean
-  openStackMapping?: OpenStackMapping
+  autoDiscovered?: boolean
+  openstackMapping?: OpenStackMapping
   secretRef?: {
-    name: string
-    namespace: string
+    name?: string
+    namespace?: string
   }
 }
 
