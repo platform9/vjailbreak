@@ -339,13 +339,14 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 			}
 			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
 		}
-		if !routesAdded {
-			if gateway, ok := gatewayIP[mac]; ok {
+		if gateway, ok := gatewayIP[mac]; ok {
+			if !routesAdded {
+				log.Printf("Writing default routes")
 				b.WriteString("      routes:\n")
 				b.WriteString("        - to: default\n")
 				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+				routesAdded = true
 			}
-			routesAdded = true
 		}
 		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
 			b.WriteString("      nameservers:\n")
