@@ -17,7 +17,7 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import StorageIcon from '@mui/icons-material/Storage'
-import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
+// import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar"
 import { useState, useCallback } from "react"
 import { useArrayCredsQuery, useDeleteArrayCredsMutation } from "src/hooks/api/useArrayCredsQuery"
 import { ArrayCreds } from "src/api/array-creds"
@@ -193,11 +193,9 @@ function CustomToolbar({ numSelected, onDeleteSelected, onAddNew }: CustomToolba
 }
 
 export default function StorageManagementTable() {
-  const { data: arrayCreds, isLoading, error } = useArrayCredsQuery({
-    refetchInterval: 5000,
-  })
+  const { data: arrayCreds, isLoading, error } = useArrayCredsQuery()
   const deleteMutation = useDeleteArrayCredsMutation()
-  const { handleError } = useErrorHandler()
+  const { reportError } = useErrorHandler()
 
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -227,10 +225,10 @@ export default function StorageManagementTable() {
         setDeleteDialogOpen(false)
         setItemToDelete(null)
       } catch (error) {
-        handleError(error, 'Failed to delete array credentials')
+        reportError(error as Error, { context: 'Failed to delete array credentials' })
       }
     }
-  }, [itemToDelete, deleteMutation, handleError])
+  }, [itemToDelete, deleteMutation, reportError])
 
   const handleDeleteSelected = useCallback(() => {
     // Implement bulk delete if needed
@@ -272,15 +270,14 @@ export default function StorageManagementTable() {
         onRowSelectionModelChange={setSelectedRows}
         rowSelectionModel={selectedRows}
         slots={{
-          toolbar: CustomToolbar,
+          toolbar: () => (
+            <CustomToolbar
+              numSelected={selectedRows.length}
+              onDeleteSelected={handleDeleteSelected}
+              onAddNew={handleAddNew}
+            />
+          ),
           loadingOverlay: CustomLoadingOverlay,
-        }}
-        slotProps={{
-          toolbar: {
-            numSelected: selectedRows.length,
-            onDeleteSelected: handleDeleteSelected,
-            onAddNew: handleAddNew,
-          },
         }}
         initialState={{
           pagination: {
@@ -309,16 +306,16 @@ export default function StorageManagementTable() {
 
       <ConfirmationDialog
         open={deleteDialogOpen}
-        title="Delete Array Credentials"
-        message={`Are you sure you want to delete "${itemToDelete}"? This action cannot be undone.`}
-        onConfirm={confirmDelete}
-        onCancel={() => {
+        onClose={() => {
           setDeleteDialogOpen(false)
           setItemToDelete(null)
         }}
-        confirmText="Delete"
-        cancelText="Cancel"
-        severity="error"
+        title="Delete Array Credentials"
+        message={`Are you sure you want to delete "${itemToDelete}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+        actionLabel="Delete"
+        cancelLabel="Cancel"
+        actionColor="error"
       />
     </Box>
   )

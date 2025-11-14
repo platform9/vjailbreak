@@ -8,7 +8,7 @@ import {
   Checkbox,
   Divider,
 } from '@mui/material'
-import StyledDrawer from '../forms/StyledDrawer'
+import { StyledDrawer } from '../forms/StyledDrawer'
 import TextField from '../forms/TextField'
 import Footer from '../forms/Footer'
 import Header from '../forms/Header'
@@ -39,7 +39,7 @@ export default function ArrayCredsDrawer({
   const isEditMode = !!arrayCreds
   const createMutation = useCreateArrayCredsMutation()
   const updateMutation = useUpdateArrayCredsMutation()
-  const { handleError } = useErrorHandler()
+  const { reportError } = useErrorHandler()
 
   const [formData, setFormData] = useState<ArrayCredsFormData>({
     name: '',
@@ -145,11 +145,13 @@ export default function ArrayCredsDrawer({
       }
       onClose()
     } catch (error) {
-      handleError(
-        error,
-        isEditMode
-          ? 'Failed to update array credentials'
-          : 'Failed to create array credentials'
+      reportError(
+        error as Error,
+        {
+          context: isEditMode
+            ? 'Failed to update array credentials'
+            : 'Failed to create array credentials'
+        }
       )
     }
   }
@@ -160,7 +162,6 @@ export default function ArrayCredsDrawer({
     <StyledDrawer open={open} onClose={onClose}>
       <Header
         title={isEditMode ? 'Edit Array Credentials' : 'Add Array Credentials'}
-        onClose={onClose}
       />
 
       <Box sx={{ p: 3, flexGrow: 1, overflow: 'auto' }}>
@@ -308,10 +309,10 @@ export default function ArrayCredsDrawer({
       </Box>
 
       <Footer
-        onCancel={onClose}
+        onClose={onClose}
         onSubmit={handleSubmit}
-        submitText={isEditMode ? 'Update' : 'Create'}
-        isLoading={isLoading}
+        submitButtonLabel={isEditMode ? 'Update' : 'Create'}
+        submitting={isLoading}
       />
     </StyledDrawer>
   )
