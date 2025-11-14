@@ -400,15 +400,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	// Fetch OpenStackCreds CR
-    openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-    if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
-        false, openstackcreds); !ok {
-        return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
-    }
-
 	// Validate VM OS types before proceeding with migration
-	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds)
+	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
 	if err != nil {
 		r.ctxlog.Error(err, "VM validation failed")
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
@@ -429,6 +422,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	// Fetch VMwareCreds CR
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 	return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
+	}
+	// Fetch OpenStackCreds CR
+	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
+		false, openstackcreds); !ok {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
 	// Starting the Migrations
@@ -1564,17 +1563,11 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
 	var (
 		validVMs   []*vjailbreakv1alpha1.VMwareMachine
 		skippedVMs []string
 	)
-
-	osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get OpenStack clients for prechecks: %w", err)
-	}
 
 	for _, vmGroup := range migrationplan.Spec.VirtualMachines {
 		for _, vm := range vmGroup {
@@ -1592,50 +1585,6 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 				continue
 			}
 
-			r.ctxlog.Info("Performing IP address precheck for VM", "vmName", vm)
-			ipsToVerify := utils.GetIPsForPrecheck(vmMachine.Spec.VMInfo)
-
-			if len(ipsToVerify) == 0 {
-				r.ctxlog.Info("No IP address found for precheck on VM, skipping IP check", "vmName", vm)
-			} else {
-				for _, ip := range ipsToVerify {
-					inUse, reason, err := utils.IsIPInUse(osClients, ip)
-					if err != nil {
-						return nil, fmt.Errorf("failed to perform IP precheck for %s on %s: %w", vm, ip, err)
-					}
-					if inUse {
-						return nil, fmt.Errorf("precheck failed for VM %s: IP %s is already in use. %s", vm, ip, reason)
-					}
-				}
-				r.ctxlog.Info("IP address precheck passed for VM", "vmName", vm, "ips", ipsToVerify)
-			}
-
-			r.ctxlog.Info("Performing Port/MAC address precheck for VM", "vmName", vm)
-			if len(vmMachine.Spec.VMInfo.NetworkInterfaces) == 0 {
-				r.ctxlog.Info("No NetworkInterfaces found for VM, skipping Port/MAC check", "vmName", vm)
-			} else {
-				for _, nic := range vmMachine.Spec.VMInfo.NetworkInterfaces {
-					if nic.MAC == "" {
-						continue
-					}
-
-					r.ctxlog.Info("Checking MAC address", "vmName", vm, "mac", nic.MAC)
-					existingPort, err := utils.FindPortByMAC(osClients, nic.MAC)
-					if err != nil {
-						return nil, fmt.Errorf("failed to perform port/MAC precheck for %s on %s: %w", vm, nic.MAC, err)
-					}
-
-					if existingPort != nil {
-						if existingPort.DeviceID != "" {
-							return nil, fmt.Errorf("precheck failed for VM %s: MAC %s is tied to port %s, which is already in use by device %s", vm, nic.MAC, existingPort.ID, existingPort.DeviceID)
-						}
-						r.ctxlog.Info("Found existing port, but it is available. Migration will reuse it.", "vmName", vm, "mac", nic.MAC, "portID", existingPort.ID)
-					} else {
-						r.ctxlog.Info("No existing port found for MAC. Migration will create a new one.", "vmName", vm, "mac", nic.MAC)
-					}
-				}
-			}
-			r.ctxlog.Info("Port/MAC precheck passed for VM", "vmName", vm)
 			validVMs = append(validVMs, vmMachine)
 		}
 	}
@@ -1649,10 +1598,7 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	}
 
 	if len(validVMs) == 0 {
-		if len(migrationplan.Spec.VirtualMachines) > 0 && len(skippedVMs) == len(migrationplan.Spec.VirtualMachines[0]) {
-			return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
-		}
-		return nil, fmt.Errorf("no valid VMs found to migrate")
+		return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 	}
 
 	return validVMs, nil

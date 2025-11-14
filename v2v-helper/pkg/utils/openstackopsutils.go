@@ -478,13 +478,16 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	for _, port := range portList {
 		if port.MACAddress == mac {
+			if port.DeviceID != "" {
+				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
+			}
 			if len(port.FixedIPs) > 0 {
 				foundPortIP := port.FixedIPs[0].IPAddress
 				if ip != "" && foundPortIP != ip {
 					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
 				}
 			}
-			PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
+			PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
 			return &port, nil
 		}
 	}
