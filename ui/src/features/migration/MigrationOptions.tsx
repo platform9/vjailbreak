@@ -127,19 +127,6 @@ export default function MigrationOptions({
         </AccordionSummary>
         <AccordionDetails>
           <FieldsContainer>
-            {/* Retry on failure */}
-            <FormControlLabel
-              label="Retry On Failure"
-              control={
-                <Checkbox
-                  checked={params?.retryOnFailure || false}
-                  onChange={(e) => {
-                    onChange("retryOnFailure")(e.target.checked)
-                  }}
-                />
-              }
-            />
-
             {/* Data Copy */}
             <Fields>
               <FormControlLabel

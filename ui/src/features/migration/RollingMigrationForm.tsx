@@ -59,7 +59,6 @@ interface FormValues extends Record<string, unknown> {
     cutoverStartTime?: string;
     cutoverEndTime?: string;
     postMigrationScript?: string;
-    retryOnFailure?: boolean;
     osFamily?: string;
 }
 

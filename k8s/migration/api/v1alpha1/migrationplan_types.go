@@ -83,8 +83,6 @@ type MigrationPlanSpecPerVM struct {
 	MigrationTemplate string `json:"migrationTemplate"`
 	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
-	// Retry the migration if it fails
-	Retry bool `json:"retry,omitempty"`
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
