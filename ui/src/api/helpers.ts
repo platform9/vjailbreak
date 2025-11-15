@@ -26,7 +26,6 @@ import {
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
-  deleteSecret,
 } from "./secrets/secrets"
 import { createVMwareCredsWithSecret } from "./vmware-creds/vmwareCreds"
 import { VJAILBREAK_DEFAULT_NAMESPACE } from "./constants"
@@ -172,15 +171,7 @@ export const deleteVMwareCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const secretName = `${credName}-vmware-secret`
     await deleteVmwareCredentials(credName, namespace)
-    try {
-      await deleteSecret(secretName, namespace)
-    } catch (secretError: any) {
-      if (secretError?.response?.status !== 404) {
-        console.warn(`Successfully deleted credential ${credName}, but failed to delete associated secret ${secretName}.`, secretError)
-      }
-    }
     return { success: true }
   } catch (error) {
     console.error(`Error deleting VMware credential ${credName}:`, error)
@@ -194,16 +185,7 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const secretName = `${credName}-openstack-secret`
     await deleteOpenstackCredentials(credName, namespace)
-    try {
-      await deleteSecret(secretName, namespace)
-    } catch (secretError: any) {
-      if (secretError?.response?.status !== 404) {
-        console.warn(`Successfully deleted credential ${credName}, but failed to delete associated secret ${secretName}.`, secretError)
-      }
-    }
-    
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)
