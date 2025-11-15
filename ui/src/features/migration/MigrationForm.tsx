@@ -114,7 +114,6 @@ export interface FormValues extends Record<string, unknown> {
   cutoverStartTime?: string
   cutoverEndTime?: string
   postMigrationScript?: string
-  retryOnFailure?: boolean
   osFamily?: string
   // Add postMigrationAction with optional properties
   postMigrationAction?: {
@@ -479,7 +478,6 @@ export default function MigrationFormDrawer({
         params.cutoverEndTime && {
         vmCutoverEnd: params.cutoverEndTime
       }),
-      retry: params.retryOnFailure,
       ...(postMigrationAction && { postMigrationAction }),
       ...(params.securityGroups && params.securityGroups.length > 0 && {
         securityGroups: params.securityGroups,
@@ -508,7 +506,6 @@ export default function MigrationFormDrawer({
         hasDataCopyStartTime: !!migrationFields.dataCopyStart,
         hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
         hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
-        retryEnabled: !!migrationFields.retry,
         postMigrationAction,
         namespace: data.metadata?.namespace,
       });
