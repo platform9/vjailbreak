@@ -69,6 +69,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -125,9 +129,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               securityGroups:
                 items:
                   type: string
