@@ -55,5 +55,6 @@ RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
 COPY --from=builder /workspace/manager /home/fedora/manager
 
 # Copy scripts directory for migration utilities
-COPY scripts/ /home/fedora/scripts/
+COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
+COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 
