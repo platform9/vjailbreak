@@ -266,10 +266,6 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	envUserName := migobj.UserName
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
-	err := vmops.TakeSnapshot(constants.MigrationSnapshotName)
-	if err != nil {
-		return errors.Wrap(err, "failed to take snapshot of source VM")
-	}
 	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get snapshot")
@@ -368,6 +364,10 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
 	}
 
+	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+	if err != nil {
+		return errors.Wrap(err, "failed to take snapshot of source VM")
+	}
 	return nil
 }
 
@@ -407,6 +407,7 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
+	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
 		syncInterval = migobj.getSyncDuration()
 		select {
@@ -539,12 +540,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
-				// Cleanup the snapshot taken for incremental copy
-				migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
-				err = vmops.CleanUpSnapshots(false)
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
-				}
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
@@ -552,11 +547,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				err = vmops.VMPowerOff()
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				// Take final snapshot
-				err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")
 				}
 			}
 			if err := migobj.WaitforCutover(); err != nil {
