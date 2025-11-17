@@ -379,7 +379,7 @@ func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
 func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
-	if err == nil {
+	if err != nil {
 		return fmt.Errorf("failed to create libnbd handle: %v", err)
 	}
 	err = handle.AddMetaContext("base:allocation")
