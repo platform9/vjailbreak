@@ -496,7 +496,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 					if err != nil {
 						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx)
 					}
-					gatewayIP[subnetId.ID] = subnetId.GatewayIP
+					gatewayIP[mac] = subnetId.GatewayIP
 				}
 				if !contain_all {
 					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, fixedIps, ip)
