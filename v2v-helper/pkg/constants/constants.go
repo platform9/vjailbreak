@@ -146,11 +146,11 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// VMwareCredsRequeueAfterMinutes is the time to requeue after.
 	VMwareCredsRequeueAfterMinutes = 60
 
-	// MaxRetries is the max number of retries for CBT sync
-	MaxRetries = 3
+	// PeriodicSyncMaxRetries is the max number of retries for CBT sync
+	PeriodicSyncMaxRetries = 3
 
-	// RetryCap is the max retry interval for CBT sync
-	RetryCap = "3h"
+	// PeriodicSyncRetryCap is the max retry interval for CBT sync
+	PeriodicSyncRetryCap = "3h"
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 )

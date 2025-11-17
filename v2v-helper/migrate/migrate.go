@@ -239,7 +239,7 @@ func (migobj *Migrate) WaitforCutover() error {
 	}
 	return nil
 }
-func (migobj *Migrate) GetRetryLimits() (int, time.Duration) {
+func (migobj *Migrate) GetRetryLimits() (uint64, time.Duration) {
 	const defaultMaxRetries = 3
 	const defaultInterval = 3 * time.Hour
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
@@ -248,13 +248,13 @@ func (migobj *Migrate) GetRetryLimits() (int, time.Duration) {
 			err, defaultMaxRetries))
 		return defaultMaxRetries, defaultInterval
 	}
-	retryCap, err := time.ParseDuration(vjailbreakSettings.RetryCap)
+	retryCap, err := time.ParseDuration(vjailbreakSettings.PeriodicSyncRetryCap)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse retry cap: %v, using default retry cap (%s)",
 			err, defaultInterval))
 		retryCap = defaultInterval
 	}
-	return vjailbreakSettings.MaxRetries, retryCap
+	return vjailbreakSettings.PeriodicSyncMaxRetries, retryCap
 }
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	maxRetries, capInterval := migobj.GetRetryLimits()
@@ -300,7 +300,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 			// 11. Copy Changed Blocks over
 			changedBlockCopySuccess := true
-			retries := 0
+			retries := uint64(0)
 			waitTime := 1 * time.Minute
 			migobj.logMessage("Copying changed blocks")
 			for {
@@ -324,6 +324,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 							migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
 							// In case if the whole migration is cancelled through context this routine should not be sleeping
 							select {
+							// Gracefully handling the termination in case of error
 							case <-ctx.Done():
 								err = vmops.CleanUpSnapshots(false)
 								changedBlockCopySuccess = false
