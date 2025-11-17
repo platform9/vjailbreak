@@ -1,3 +1,4 @@
+// 2. migrationplan_controller.go
 /*
 Copyright 2024.
 
@@ -1344,7 +1345,19 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 	migrationobj.Status.Conditions = cleanedConditions
 
 	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
-		if err = r.Status().Update(ctx, migrationobj); err != nil {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			currentMigration := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
+				return getErr
+			}
+            
+			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			currentMigration.Status.Conditions = cleanedConditions
+            
+			return r.Status().Update(ctx, currentMigration)
+		})
+
+		if err != nil {
 			return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 		}
 	}
