@@ -267,6 +267,14 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
+	err := vmops.CleanUpSnapshots(false)
+	if err != nil {
+		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+	}
+	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+	if err != nil {
+		return errors.Wrap(err, "failed to take snapshot of source VM")
+	}
 	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get snapshot")
@@ -358,14 +366,6 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 				migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 			}
 		}
-	}
-	err = vmops.CleanUpSnapshots(false)
-	if err != nil {
-		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-	}
-	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-	if err != nil {
-		return errors.Wrap(err, "failed to take snapshot of source VM")
 	}
 	return nil
 }
