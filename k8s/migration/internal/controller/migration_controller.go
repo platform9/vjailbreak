@@ -177,7 +177,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Status().Update(ctx, migration); err != nil {
 		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 		return ctrl.Result{}, err
-	} 
+	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {

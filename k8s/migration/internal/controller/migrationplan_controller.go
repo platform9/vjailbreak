@@ -1534,7 +1534,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 			}
 		}
 	}
-
 	return nil
 }
 
