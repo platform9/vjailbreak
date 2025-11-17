@@ -1,4 +1,3 @@
-// 2. migrationplan_controller.go
 /*
 Copyright 2024.
 
@@ -20,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/user"
 	"reflect"
 	"strconv"
 	"strings"
@@ -56,6 +57,9 @@ import (
 	"github.com/vmware/govmomi/session"
 	govmomitypes "github.com/vmware/govmomi/vim25/types"
 )
+
+// VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
+const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -1226,6 +1230,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
+		//nolint:gocritic // err is already declared above
+		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+			return err
+		}
 
 		err = r.CreateJob(ctx,
 			migrationplan,
@@ -1259,6 +1267,101 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+func (r *MigrationPlanReconciler) validateVDDKPresence(
+	ctx context.Context,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	logger logr.Logger,
+) error {
+	currentUser, err := user.Current()
+	whoami := "unknown"
+	if err == nil {
+		whoami = currentUser.Username
+	}
+
+	oldConditions := migrationobj.Status.Conditions
+
+	files, err := os.ReadDir(VDDKDirectory)
+	if err != nil {
+		logger.Error(err, "VDDK directory could not be read")
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+		setCondition := corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryMissing",
+			Message:            "VDDK directory is missing. Please create and upload the required files.",
+			LastTransitionTime: metav1.Now(),
+		}
+
+		newConditions := []corev1.PodCondition{}
+		for _, c := range migrationobj.Status.Conditions {
+			if c.Type != "VDDKCheck" {
+				newConditions = append(newConditions, c)
+			}
+		}
+		newConditions = append(newConditions, setCondition)
+		migrationobj.Status.Conditions = newConditions
+
+		if err = r.Status().Update(ctx, migrationobj); err != nil {
+			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
+		}
+
+		return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
+	}
+
+	if len(files) == 0 {
+		logger.Info("VDDK directory is empty, skipping Job creation. Will retry in 30s.",
+			"path", VDDKDirectory,
+			"whoami", whoami)
+
+		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
+			Type:               "VDDKCheck",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VDDKDirectoryEmpty",
+			Message:            "VDDK directory is empty. Please upload the required files.",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
+			if err = r.Status().Update(ctx, migrationobj); err != nil {
+				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
+			}
+		}
+
+		return errors.Wrap(err, "VDDK_MISSING: directory is empty")
+	}
+
+	// Clear previous VDDKCheck condition if directory is valid
+	cleanedConditions := []corev1.PodCondition{}
+	for _, c := range migrationobj.Status.Conditions {
+		if c.Type != "VDDKCheck" {
+			cleanedConditions = append(cleanedConditions, c)
+		}
+	}
+
+	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+	migrationobj.Status.Conditions = cleanedConditions
+
+	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			currentMigration := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
+				return getErr
+			}
+            
+			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			currentMigration.Status.Conditions = cleanedConditions
+            
+			return r.Status().Update(ctx, currentMigration)
+		})
+
+		if err != nil {
+			return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
+		}
+	}
+	return nil
+}
 
 // MergeLabels combines two label maps into a single map, with values from b overriding values from a if keys conflict.
 // This function is used to create a complete set of labels for Kubernetes resources created during migration.
@@ -1408,25 +1511,30 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		}
 	}
 
-	// Wait for 25 seconds after updating disk details and before checking RDM disk status
-	time.Sleep(25 * time.Second)
+	// Only sleep and check for status if we actually have RDM disks to process
+	if len(allRDMDisks) > 0 {
+		// Wait for 25 seconds after updating disk details and before checking RDM disk status
+		r.ctxlog.Info("Waiting 25s for RDMDisk controller to act...", "diskCount", len(allRDMDisks))
+		time.Sleep(25 * time.Second)
 
-	// Check if all RDM disks are migrated after the delay
-	for _, rdmDiskCR := range allRDMDisks {
-		reFetchedRDMDiskCR := &vjailbreakv1alpha1.RDMDisk{}
-		err := r.Get(ctx, types.NamespacedName{
-			Name:      strings.TrimSpace(rdmDiskCR.Name),
-			Namespace: migrationplan.Namespace,
-		}, reFetchedRDMDiskCR)
-		if err != nil {
-			return err
-		}
-		if reFetchedRDMDiskCR.Status.Phase != RDMPhaseManaged || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
-			// Log which disk is not ready
-			r.ctxlog.Info("RDM disk not yet managed, will retry", "diskName", reFetchedRDMDiskCR.Name, "phase", reFetchedRDMDiskCR.Status.Phase, "cinderVolumeID", reFetchedRDMDiskCR.Status.CinderVolumeID)
-			return verrors.ErrRDMDiskNotMigrated
+		// Check if all RDM disks are migrated after the delay
+		for _, rdmDiskCR := range allRDMDisks {
+			reFetchedRDMDiskCR := &vjailbreakv1alpha1.RDMDisk{}
+			err := r.Get(ctx, types.NamespacedName{
+				Name:      strings.TrimSpace(rdmDiskCR.Name),
+				Namespace: migrationplan.Namespace,
+			}, reFetchedRDMDiskCR)
+			if err != nil {
+				return err
+			}
+			if reFetchedRDMDiskCR.Status.Phase != RDMPhaseManaged || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
+				// Log which disk is not ready
+				r.ctxlog.Info("RDM disk not yet managed, will retry", "diskName", reFetchedRDMDiskCR.Name, "phase", reFetchedRDMDiskCR.Status.Phase, "cinderVolumeID", reFetchedRDMDiskCR.Status.CinderVolumeID)
+				return verrors.ErrRDMDiskNotMigrated
+			}
 		}
 	}
+
 	return nil
 }
 
