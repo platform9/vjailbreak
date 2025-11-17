@@ -492,6 +492,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 					if !slices.Contains(fixedIps, ipIdx) {
 						contain_all = false
 					}
+					subnetId, err := osclient.GetSubnet(network.Subnets, ipIdx)
+					if err != nil {
+						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx)
+					}
+					gatewayIP[subnetId.ID] = subnetId.GatewayIP
 				}
 				if !contain_all {
 					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, fixedIps, ip)
