@@ -127,6 +127,9 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] == "" {
 		vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] = strconv.Itoa(constants.PeriodicSyncMaxRetries)
 	}
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] = constants.PeriodicSyncRetryCap
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
@@ -140,9 +143,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] == "" {
 		vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"] = constants.DefaultMigrationMethod
 	}
-	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] == "" {
-		vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] = constants.PeriodicSyncRetryCap
-	}
+
 	if vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] == "" {
 		vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"] = strconv.Itoa(constants.VCenterScanConcurrencyLimit)
 	}
