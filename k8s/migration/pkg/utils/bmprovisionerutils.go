@@ -208,6 +208,36 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 	return "#cloud-config\n" + string(result), nil
 }
 
+// appendScriptToRunCmd appends the pf9-setup.sh script execution to the runcmd section
+func appendScriptToRunCmd(cloudInit string) (string, error) {
+	// Parse the cloud-init YAML
+	cloudInitMap := make(map[string]interface{})
+	if err := yaml.Unmarshal([]byte(cloudInit), &cloudInitMap); err != nil {
+		return "", fmt.Errorf("failed to parse cloudInit: %v", err)
+	}
+
+	// Get or create the runcmd section
+	var runcmd []interface{}
+	if existingRuncmd, ok := cloudInitMap["runcmd"]; ok {
+		if runcmdSlice, ok := existingRuncmd.([]interface{}); ok {
+			runcmd = runcmdSlice
+		}
+	}
+
+	// Append the script execution command
+	runcmd = append(runcmd, "/root/pf9-setup.sh")
+	cloudInitMap["runcmd"] = runcmd
+
+	// Marshal back to YAML
+	result, err := yaml.Marshal(cloudInitMap)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal cloud-init: %v", err)
+	}
+
+	// Ensure the #cloud-config directive is at the beginning
+	return "#cloud-config\n" + string(result), nil
+}
+
 // MergeCloudInitAndCreateSecret merges cloud-init configurations and creates a secret with the result
 func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope, local bool) error {
 	// Get BMConfig for the rolling migration plan
@@ -238,6 +268,12 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	mergedCloudInit, err := MergeCloudInit(userData, cloudInit)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge cloud init and user data")
+	}
+
+	// Append script execution to runcmd
+	mergedCloudInit, err = appendScriptToRunCmd(mergedCloudInit)
+	if err != nil {
+		return errors.Wrap(err, "failed to append script to runcmd")
 	}
 
 	finalCloudInitSecret := &corev1.Secret{
