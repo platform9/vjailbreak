@@ -230,6 +230,9 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
+
+	time.Sleep(24 * time.Hour)
+
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 
@@ -477,7 +480,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
-	cmd.Args = append(cmd.Args, "-i", command)
+	cmd.Args = append(cmd.Args, "-i", "--", command)
 	cmd.Args = append(cmd.Args, args...)
 	return cmd
 }
@@ -493,6 +496,42 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(string(out)), nil
 }
 
+// GetDeviceNumberFromPartition returns the device index for a given partition name
+func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
+	command := "part-to-dev"
+	device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
+		return -1, err
+	}
+
+	command = "part-to-partnum"
+	num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
+		return -1, err
+	}
+
+	command = "part-get-bootable"
+	bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
+		return -1, err
+	}
+
+	if strings.TrimSpace(bootable) == "true" {
+		command = "device-index"
+		index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
+			return -1, err
+		}
+		return strconv.Atoi(strings.TrimSpace(index))
+	}
+
+	return -1, errors.New("partition is not bootable")
+}
+
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
@@ -502,36 +541,11 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 
 	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
 	for _, partition := range partitions {
-		command := "part-to-dev"
-		device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
-			return -1, err
+		deviceNum, err := GetDeviceNumberFromPartition(disks, partition)
+		if err == nil {
+			return deviceNum, nil
 		}
-
-		command = "part-to-partnum"
-		num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
-			return -1, err
-		}
-
-		command = "part-get-bootable"
-		bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
-			return -1, err
-		}
-
-		if strings.TrimSpace(bootable) == "true" {
-			command = "device-index"
-			index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
-			if err != nil {
-				fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-				return -1, err
-			}
-			return strconv.Atoi(strings.TrimSpace(index))
-		}
+		// Continue to next partition if this one is not bootable or has an error
 	}
 	return -1, errors.New("bootable volume not found")
 }
@@ -660,21 +674,21 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 // during guest inspection phase for Linux migrations
 func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	
-	// Script should be available in the container at /home/fedora/scripts/
-	scriptPath := "/home/fedora/scripts/generate-mount-persistence.sh"
-	
+
+	// Script should be available in the container at /home/fedora/
+	scriptPath := "/home/fedora/generate-mount-persistence.sh"
+
 	// Check if script exists in the container
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
 	}
-	
+
 	log.Printf("Running generate-mount-persistence.sh with --force-uuid option")
-	
+
 	// Upload the script to the guest VM
 	var uploadErr error
 	var uploadOutput string
-	
+
 	if useSingleDisk {
 		command := fmt.Sprintf("upload %s /tmp/generate-mount-persistence.sh", scriptPath)
 		uploadOutput, uploadErr = RunCommandInGuest(diskPath, command, true)
@@ -682,33 +696,105 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 		command := "upload"
 		uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
 	}
-	
+
 	if uploadErr != nil {
 		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
 	}
-	
+
 	log.Printf("Successfully uploaded generate-mount-persistence.sh to guest")
-	
-	// Make the script executable and run it with --force-uuid
+
+	// Make the script executable
+	var chmodErr error
+	var chmodOutput string
+
+	if useSingleDisk {
+		command := "chmod 0755 /tmp/generate-mount-persistence.sh"
+		chmodOutput, chmodErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "chmod"
+		chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
+	}
+
+	if chmodErr != nil {
+		return fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
+	}
+
+	log.Printf("Made generate-mount-persistence.sh executable")
+
+	// Run the script with --force-uuid
 	var runErr error
 	var runOutput string
-	
+
 	if useSingleDisk {
 		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
 		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "sh"
-		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh", "--force-uuid")
+		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
 	}
-	
+
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
 		// Don't return error, just log warning as this is not critical
 		return nil
 	}
-	
+
 	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
-	
+
 	return nil
+}
+
+func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Script should be available in the container at /home/fedora/
+	scriptPath := "/home/fedora/get-bootable-partition.sh"
+
+	// Check if script exists in the container
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
+	}
+
+	// Upload the script to the guest VM
+	var uploadErr error
+	var uploadOutput string
+
+	command := "upload"
+	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/get-bootable-partition.sh")
+
+	if uploadErr != nil {
+		return "", fmt.Errorf("failed to upload get-bootable-partition.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
+	}
+
+	log.Printf("Successfully uploaded get-bootable-partition.sh to guest")
+
+	// Make the script executable
+	var chmodErr error
+	var chmodOutput string
+
+	command = "chmod"
+	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/get-bootable-partition.sh")
+
+	if chmodErr != nil {
+		return "", fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
+	}
+
+	log.Printf("Made get-bootable-partition.sh executable")
+
+	// Run the script
+	var runErr error
+	var runOutput string
+
+	command = "sh"
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/get-bootable-partition.sh")
+
+	if runErr != nil {
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(runOutput))
+	}
+
+	log.Printf("Successfully executed get-bootable-partition.sh")
+	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+
+	return strings.TrimSpace(runOutput), nil
 }
