@@ -194,5 +194,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
 		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
+		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
+		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
 	}, nil
 }
