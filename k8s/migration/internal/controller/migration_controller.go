@@ -451,21 +451,15 @@ func (r *MigrationReconciler) validateVDDKPresence(
         }
 
         newConditions := []corev1.PodCondition{}
-        found := false
         for _, c := range migrationobj.Status.Conditions {
-            if c.Type == "VDDKCheck" {
-                if c.Status == corev1.ConditionFalse && c.Reason == "VDDKDirectoryMissing" {
-                    found = true
-                }
-            } else {
+            if c.Type != "VDDKCheck" {
                 newConditions = append(newConditions, c)
             }
         }
-        
         newConditions = append(newConditions, setCondition)
         migrationobj.Status.Conditions = newConditions
 
-        if !found {
+        if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
             if err = r.Status().Update(ctx, migrationobj); err != nil {
                 return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
             }
@@ -482,29 +476,21 @@ func (r *MigrationReconciler) validateVDDKPresence(
         migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
         
         newConditions := []corev1.PodCondition{}
-        found := false
         for _, c := range migrationobj.Status.Conditions {
-            if c.Type == "VDDKCheck" {
-                if c.Status == corev1.ConditionFalse && c.Reason == "VDDKDirectoryEmpty" {
-                    found = true
-                }
-            } else {
+            if c.Type != "VDDKCheck" {
                 newConditions = append(newConditions, c)
             }
         }
-
-        setCondition := corev1.PodCondition{
+        newConditions = append(newConditions, corev1.PodCondition{
             Type:               "VDDKCheck",
             Status:             corev1.ConditionFalse,
             Reason:             "VDDKDirectoryEmpty",
             Message:            "VDDK directory is empty. Please upload the required files.",
             LastTransitionTime: metav1.Now(),
-        }
-        newConditions = append(newConditions, setCondition)
+        })
         migrationobj.Status.Conditions = newConditions
 
-
-        if !found {
+        if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
             if err = r.Status().Update(ctx, migrationobj); err != nil {
                 return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
             }
@@ -514,18 +500,16 @@ func (r *MigrationReconciler) validateVDDKPresence(
     }
 
     cleanedConditions := []corev1.PodCondition{}
-    foundVDDKCondition := false
     for _, c := range migrationobj.Status.Conditions {
         if c.Type != "VDDKCheck" {
             cleanedConditions = append(cleanedConditions, c)
-        } else {
-            foundVDDKCondition = true
         }
     }
 
-    if foundVDDKCondition {
-        migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
-        migrationobj.Status.Conditions = cleanedConditions
+    migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+    migrationobj.Status.Conditions = cleanedConditions
+
+    if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
         if err = r.Status().Update(ctx, migrationobj); err != nil {
             return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
         }
