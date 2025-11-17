@@ -407,7 +407,7 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
-	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
+	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
 		syncInterval = migobj.getSyncDuration()
 		select {
