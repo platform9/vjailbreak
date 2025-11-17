@@ -407,7 +407,6 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
-	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
 		syncInterval = migobj.getSyncDuration()
 		select {
@@ -541,6 +540,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			if adminInitiatedCutover {
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				// Cleanup the snapshot taken for incremental copy
+				migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 				err = vmops.CleanUpSnapshots(false)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
