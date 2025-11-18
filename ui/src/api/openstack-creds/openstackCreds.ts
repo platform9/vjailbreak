@@ -73,6 +73,7 @@ export const deleteOpenstackCredentials = async (
 export const createOpenstackCredsWithSecret = async (
   name: string,
   secretName: string,
+  projectName: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds`
@@ -88,6 +89,7 @@ export const createOpenstackCredsWithSecret = async (
       secretRef: {
         name: secretName,
       },
+      projectName: projectName,
     },
   }
 

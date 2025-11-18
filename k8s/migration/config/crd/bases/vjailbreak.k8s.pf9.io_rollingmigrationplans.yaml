@@ -63,6 +63,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
@@ -221,9 +225,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan

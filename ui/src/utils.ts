@@ -109,3 +109,24 @@ export const calculateTimeElapsed = (creationTimestamp: string, status?: any): s
     return 'N/A';
   }
 };
+
+
+/**
+ * Formats a byte value into a human-readable string with appropriate units.
+ * Automatically selects the most appropriate unit (B, KB, MB, GB, TB) based on size.
+ * @param bytes - The size in bytes to format
+ * @returns Human-readable size string with one decimal place (e.g., "1.5 GB", "256.0 MB", "0 B")
+ */
+
+export const formatDiskSize = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  );
+
+  const size = bytes / Math.pow(1024, i);
+  return `${parseFloat(size.toFixed(1))} ${units[i]}`;
+};

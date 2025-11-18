@@ -78,6 +78,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationplans,verbs=get;list;watch;create;update;patch;delete
@@ -473,22 +474,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			switch migrationobjs.Items[i].Status.Phase {
 			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if migrationplan.Spec.Retry {
-					r.ctxlog.Info(fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					// Delete the migration so that it can be recreated
-					err := r.Delete(ctx, &migrationobjs.Items[i])
-					if err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "failed to delete migration")
-					}
-					migrationplan.Status.MigrationStatus = "Retrying"
-					migrationplan.Status.MigrationMessage = fmt.Sprintf("Retrying migration for VM '%s'", migrationobjs.Items[i].Spec.VMName)
-					migrationplan.Spec.Retry = false
-					err = r.Update(ctx, migrationplan)
-					if err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-					}
-					return ctrl.Result{}, nil
-				}
 				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
 					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 				if err != nil {
@@ -927,7 +912,6 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
 		}
 	}
-
 	// Create MigrationConfigMap
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
@@ -955,6 +939,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
 				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
+				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {

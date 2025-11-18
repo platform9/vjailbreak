@@ -95,9 +95,11 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Always close the scope when exiting this function such that we can persist any OpenstackCreds changes.
 	defer func() {
-		if err := scope.Close(); err != nil && reterr == nil {
-			ctxlog.Error(err, "Failed to close OpenstackCredsScope")
-			reterr = err
+		if openstackcreds.DeletionTimestamp.IsZero() {
+			if err := scope.Close(); err != nil && reterr == nil {
+				ctxlog.Error(err, "Failed to close OpenstackCredsScope")
+				reterr = err
+			}
 		}
 	}()
 
@@ -161,12 +163,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// }
 		// ctxlog.Info("Successfully updated status to failed")
 	} else {
-		openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
-		if err != nil {
-			ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
-			return ctrl.Result{}, errors.Wrap(err, "failed to get Openstack credentials from secret")
-		}
-		ctxlog.Info("Successfully authenticated to OpenStack", "authURL", openstackCredential.AuthURL)
 		// Update the status of the OpenstackCreds object
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
@@ -403,6 +399,18 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to get flavors")
 	}
 	scope.OpenstackCreds.Spec.Flavors = flavors
+
+	openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
+		return errors.Wrap(err, "failed to get Openstack credentials from secret")
+	}
+
+if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
+	ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+	scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+}
+
 	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		return errors.Wrap(err, "failed to update spec of OpenstackCreds")
