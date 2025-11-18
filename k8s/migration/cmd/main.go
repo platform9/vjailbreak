@@ -274,13 +274,6 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
 		return err
 	}
-	if err := (&controller.MigrationTemplateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
-		return err
-	}
 	if err := (&controller.VjailbreakNodeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
