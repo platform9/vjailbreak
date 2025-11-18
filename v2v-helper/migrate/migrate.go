@@ -361,7 +361,18 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	// Cleanup the snapshot taken for incremental copy
 	return nil
 }
-
+func (migobj *Migrate) getSyncEnabled() bool {
+	var enabled bool
+	enabled = false
+	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
+	if err != nil {
+		return enabled
+	}
+	if migrationParams.PeriodicSyncEnabled {
+		enabled = true
+	}
+	return enabled
+}
 func (migobj *Migrate) getSyncDuration() time.Duration {
 	const defaultInterval = "1h"
 
@@ -401,7 +412,10 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 	vmops := migobj.VMops
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
-		syncInterval = migobj.getSyncDuration()
+		syncEnabled := migobj.getSyncEnabled()
+		if syncEnabled {
+			syncInterval = migobj.getSyncDuration()
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -411,37 +425,41 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 				return nil
 			}
 		default:
-			// Perform sync
-			migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
-			start := time.Now()
-			err := vmops.CleanUpSnapshots(false)
-			if err != nil {
-				return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-			}
+			if syncEnabled {
+				// Perform sync
+				migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
+				start := time.Now()
+				err := vmops.CleanUpSnapshots(false)
+				if err != nil {
+					return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+				}
 
-			err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-			if err != nil {
-				return errors.Wrap(err, "failed to take snapshot of source VM")
-			}
-			if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-				return err
-			}
-			elapsed := time.Since(start)
-			// If sync took longer than interval → run next sync immediately
-			if elapsed >= syncInterval {
-				migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
+				err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+				if err != nil {
+					return errors.Wrap(err, "failed to take snapshot of source VM")
+				}
+				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+					return err
+				}
+				elapsed := time.Since(start)
+				// If sync took longer than interval → run next sync immediately
+				if elapsed >= syncInterval {
+					migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
+					continue
+				}
+				// Otherwise wait remaining time
+				waitTime := syncInterval - elapsed
+				migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-migobj.PodLabelWatcher:
+					return nil // admin triggered cutover during wait
+				case <-time.After(waitTime):
+					// wait completed → loop and sync again
+				}
+			} else {
 				continue
-			}
-			// Otherwise wait remaining time
-			waitTime := syncInterval - elapsed
-			migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-migobj.PodLabelWatcher:
-				return nil // admin triggered cutover during wait
-			case <-time.After(waitTime):
-				// wait completed → loop and sync again
 			}
 		}
 	}

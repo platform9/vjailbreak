@@ -928,6 +928,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
+				"PERIODIC_SYNC_ENABLED":      strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
