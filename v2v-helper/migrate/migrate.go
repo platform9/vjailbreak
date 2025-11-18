@@ -301,7 +301,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			changedBlockCopySuccess := true
 			retries := uint64(0)
 			waitTime := 1 * time.Minute
-			migobj.logMessage("Copying changed blocks")
+			migobj.logMessage("Periodic Sync: Copying changed blocks")
 			for {
 				startTime := time.Now()
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d attempt %d at %s", idx, retries, startTime))
@@ -365,7 +365,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 func (migobj *Migrate) getSyncDuration() time.Duration {
 	const defaultInterval = "1h"
 
-	migobj.logMessage("Setting up sync interval")
+	migobj.logMessage("Periodic Sync: Setting up sync interval")
 
 	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
 	if err != nil {
