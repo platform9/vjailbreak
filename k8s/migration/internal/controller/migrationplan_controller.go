@@ -1329,7 +1329,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
-				return getErr
+                return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
             
 			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
