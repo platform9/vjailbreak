@@ -271,6 +271,7 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //
 //nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
+	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	events, err := r.GetEventsSorted(ctx, scope)
 	if err != nil {
 		return err
@@ -299,6 +300,7 @@ loop:
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
+			ctxlog.Info("Waiting for admin cutover", "MigrationName", scope.Migration.Name)
 			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
 			if pod.Labels["startCutover"] != "yes" {
 				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver

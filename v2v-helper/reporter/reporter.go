@@ -201,6 +201,7 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackCha
 					utils.PrintLog(err.Error())
 				}
 				if !strings.Contains(msg, "Progress:") {
+					utils.PrintLog(fmt.Sprintf("Event: %s", msg))
 					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						utils.PrintLog(err.Error())
 					}
