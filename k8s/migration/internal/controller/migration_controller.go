@@ -86,6 +86,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	oldStatus := migration.Status.DeepCopy()
+
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
 		Client:    r.Client,
@@ -174,10 +176,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-	if err := r.Status().Update(ctx, migration); err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
-		return ctrl.Result{}, err
-	}
+	
+	if !reflect.DeepEqual(&migration.Status, oldStatus) {
+        if err := r.Status().Update(ctx, migration); err != nil {
+            ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
+            return ctrl.Result{}, err
+        }
+    }
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
