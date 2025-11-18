@@ -499,7 +499,7 @@ PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, t
 					gatewayIP[mac] = subnetId.GatewayIP
 				}
 				if !contain_all {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, fixedIps, ip)
+return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ip)
 				}
 			} else if len(port.FixedIPs) == 0 && len(ip) == 0 {
 				PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
