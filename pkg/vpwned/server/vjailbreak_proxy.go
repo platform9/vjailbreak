@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	gophercloud "github.com/gophercloud/gophercloud"
 	openstack "github.com/gophercloud/gophercloud/openstack"
@@ -15,13 +14,17 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	trueString = "true"
-	RevalidateAnnotationKey = "vjailbreak.k8s.pf9.io/revalidate-timestamp"
 )
 
 type vjailbreakProxy struct {
@@ -37,42 +40,6 @@ type OpenstackCredsinfo struct {
 	TenantName string `json:"tenant_name"`
 	RegionName string `json:"region_name"`
 	Insecure   bool   `json:"insecure"`
-}
-
-func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
-	var obj client.Object
-	kind := in.GetKind()
-
-	switch kind {
-	case "VmwareCreds":
-		obj = &vjailbreakv1alpha1.VMwareCreds{}
-	case "OpenstackCreds":
-		obj = &vjailbreakv1alpha1.OpenstackCreds{}
-	default:
-		return nil, fmt.Errorf("unknown resource kind: %s", kind)
-	}
-
-	err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: in.GetName(), Namespace: in.GetNamespace()}, obj)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get resource %s/%s: %w", in.GetNamespace(), in.GetName(), err)
-	}
-
-	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
-
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations[RevalidateAnnotationKey] = time.Now().Format(time.RFC3339)
-	obj.SetAnnotations(annotations)
-
-	if err := p.K8sClient.Patch(ctx, obj, patch); err != nil {
-		return nil, fmt.Errorf("failed to patch resource with annotation: %w", err)
-	}
-
-	return &api.RevalidateCredentialsResponse{
-		Message: fmt.Sprintf("Re-validation triggered for %s %s/%s", kind, in.GetNamespace(), in.GetName()),
-	}, nil
 }
 
 func (p *vjailbreakProxy) ValidateOpenstackIp(ctx context.Context, in *api.ValidateOpenstackIpRequest) (*api.ValidateOpenstackIpResponse, error) {
@@ -92,7 +59,7 @@ func (p *vjailbreakProxy) ValidateOpenstackIp(ctx context.Context, in *api.Valid
 		}
 	}
 
-	openstackClients, err := GetOpenStackClients(ctx, p.K8sClient, openstackAccessInfo)
+	openstackClients, err := GetOpenStackClients(ctx, openstackAccessInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +142,16 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 }
 
 // GetOpenStackClients is a function to create openstack clients
-func GetOpenStackClients(ctx context.Context, k8sclient client.Client, openstackAccessInfo *api.OpenstackAccessInfo) (*OpenStackClients, error) {
+func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.OpenstackAccessInfo) (*OpenStackClients, error) {
 
 	if openstackAccessInfo == nil {
 		return nil, fmt.Errorf("openstackAccessInfo cannot be nil")
 	}
 
+	k8sclient, err := CreateInClusterClient()
+	if err != nil {
+		return nil, err
+	}
 
 	openstackCreds, err := GetOpenstackCredentialsFromSecret(ctx, k8sclient, openstackAccessInfo.SecretName, openstackAccessInfo.SecretNamespace)
 	if err != nil {
@@ -248,4 +219,101 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 	}
 
 	return providerClient, nil
+}
+
+// Create in cluster k8s client
+func CreateInClusterClient() (client.Client, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	clientset, err := client.New(config, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return clientset, nil
+}
+
+func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
+    kind := in.GetKind()
+
+    switch kind {
+    case "VmwareCreds":
+        vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: in.GetName(), Namespace: in.GetNamespace()}, vmwcreds); err != nil {
+            return nil, fmt.Errorf("failed to get resource %s/%s: %w", in.GetNamespace(), in.GetName(), err)
+        }
+
+        // Update status to validating
+        vmwcreds.Status.VMwareValidationStatus = "Validating"
+        vmwcreds.Status.VMwareValidationMessage = "Re-validation triggered by API"
+        if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+            return nil, fmt.Errorf("failed to update status to Validating: %w", err)
+        }
+
+        // Perform Validation logic
+        c, err := utils.ValidateVMwareCreds(ctx, p.K8sClient, vmwcreds)
+        if err != nil {
+            vmwcreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
+            vmwcreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds: %s", err)
+            _ = p.K8sClient.Status().Update(ctx, vmwcreds) // Best effort update on failure
+            return nil, fmt.Errorf("validation failed: %w", err)
+        }
+
+        // Cleanup client immediately as we just wanted to validate
+        if c != nil {
+            c.CloseIdleConnections()
+            _ = utils.LogoutVMwareClient(ctx, p.K8sClient, vmwcreds, c)
+        }
+
+        // If successful, update status
+        vmwcreds.Status.VMwareValidationStatus = "Succeeded"
+        vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+        if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+            return nil, fmt.Errorf("failed to update status to Succeeded: %w", err)
+        }
+
+    case "OpenstackCreds":
+        oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
+        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: in.GetName(), Namespace: in.GetNamespace()}, oscreds); err != nil {
+            return nil, fmt.Errorf("failed to get resource %s/%s: %w", in.GetNamespace(), in.GetName(), err)
+        }
+
+        // Update status to validating
+        oscreds.Status.OpenStackValidationStatus = "Validating"
+        oscreds.Status.OpenStackValidationMessage = "Re-validation triggered by API"
+        if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+            return nil, fmt.Errorf("failed to update status to Validating: %w", err)
+        }
+
+        // Perform Validation logic
+        if _, err := utils.ValidateAndGetProviderClient(ctx, p.K8sClient, oscreds); err != nil {
+            oscreds.Status.OpenStackValidationStatus = "Failed"
+            oscreds.Status.OpenStackValidationMessage = err.Error()
+            _ = p.K8sClient.Status().Update(ctx, oscreds) // Best effort update on failure
+            return nil, fmt.Errorf("validation failed: %w", err)
+        }
+
+        // If successful, update status
+        oscreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+        oscreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+        if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+            return nil, fmt.Errorf("failed to update status to Succeeded: %w", err)
+        }
+
+        // Note: The Controller will see this update and automatically trigger reconciliation
+        // to populate Flavors, PCD Clusters, and other dependant resources via `handleValidatedCreds`.
+
+    default:
+        return nil, fmt.Errorf("unknown resource kind: %s", kind)
+    }
+
+    return &api.RevalidateCredentialsResponse{
+        Message: fmt.Sprintf("Re-validation successful for %s %s/%s", kind, in.GetNamespace(), in.GetName()),
+    }, nil
 }
