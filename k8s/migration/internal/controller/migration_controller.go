@@ -392,7 +392,11 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
-
+	// logging filtered events through loop
+	for i := range filteredEvents.Items {
+		// print messages of each event
+		ctxlog.Info("+++++Event: ", "message", filteredEvents.Items[i].Message)
+	}
 	return filteredEvents, nil
 }
 
