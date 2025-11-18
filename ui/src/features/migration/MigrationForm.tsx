@@ -613,7 +613,7 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
       }
       // TODO - Need to figure out a better way to add validation for periodic sync interval
       if (key === 'periodicSyncEnabled' && selectedMigrationOptions.periodicSyncEnabled) {
-        return params?.periodicSyncInterval !== '' && !fieldErrors['periodicSyncInterval']
+        return params?.periodicSyncInterval !== '' && fieldErrors['periodicSyncInterval'] === ''
       }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
         return params?.[key as keyof typeof params] !== undefined && !fieldErrors[key]

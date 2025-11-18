@@ -9,7 +9,7 @@ type IntervalFieldProps = {
   error?: string
   disabled?: boolean
   required?: boolean
-  getErrorsUpdater?: (fieldName: string) => (errorMsg: string | undefined) => void
+  getErrorsUpdater?: any
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 
@@ -40,6 +40,9 @@ const IntervalField = ({
     return undefined
   }, [])
 
+  const validationError = validate(value)
+  const hasError = !!error || !!validationError?.trim()
+
   return (
     <Box display="flex" flexDirection="column" gap={0.5}>
       {/* <Typography variant="body2" fontWeight={500}>
@@ -54,9 +57,9 @@ const IntervalField = ({
         onChange={onChange}
         disabled={disabled}
         required={required}
-        error={!!error || !!validate(value)?.trim()}
-        onBlur={() => getErrorsUpdater?.(name)(validate(value))}
-        helperText={error || helper || validate(value) || 'e.g. 30s, 5m, 1h30m'}
+        error={hasError}
+        onBlur={() => getErrorsUpdater?.(name)(validationError || '')}
+        helperText={error || helper || validationError || 'e.g. 30s, 5m, 1h30m'}
       />
     </Box>
   )

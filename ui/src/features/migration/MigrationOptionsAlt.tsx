@@ -270,6 +270,7 @@ export default function MigrationOptionsAlt({
                         onChange('periodicSyncInterval')(e.target.value || '')
                       }}
                       error={errors.periodicSyncInterval}
+                      getErrorsUpdater={getErrorsUpdater}
                       disabled={!selectedMigrationOptions.periodicSyncEnabled}
                     />
                   </>
