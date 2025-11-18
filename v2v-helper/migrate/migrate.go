@@ -258,8 +258,8 @@ func (migobj *Migrate) GetRetryLimits() (uint64, time.Duration) {
 }
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	maxRetries, capInterval := migobj.GetRetryLimits()
-	migobj.logMessage("Starting CBT sync process")
-	defer migobj.logMessage("CBT sync process completed")
+	migobj.logMessage("Starting Periodic sync process")
+	defer migobj.logMessage("Periodic sync process completed")
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
 	envURL := migobj.URL
@@ -280,9 +280,9 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		}
 
 		if len(changedAreas.ChangedArea) == 0 {
-			migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Disk %d: No changed blocks found. Skipping copy", idx))
 		} else {
-			migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Disk %d: Blocks have Changed.", idx))
 
 			utils.PrintLog("Restarting NBD server")
 			err = nbdops[idx].StopNBDServer()
@@ -304,7 +304,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			migobj.logMessage("Copying changed blocks")
 			for {
 				startTime := time.Now()
-				migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d attempt %d at %s", idx, retries, startTime))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d attempt %d at %s", idx, retries, startTime))
 
 				err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 				if err != nil {
@@ -320,7 +320,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 							return errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
 						} else {
 							retries++
-							migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
+							migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
 							// In case if the whole migration is cancelled through context this routine should not be sleeping
 							select {
 							// Gracefully handling the termination in case of error
@@ -343,7 +343,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 				duration := time.Since(startTime)
 
-				migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d completed in %s", idx, duration))
 
 				break
 			}
@@ -353,8 +353,8 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 				return errors.Wrap(err, "failed to update disk info")
 			}
 			if !changedBlockCopySuccess {
-				migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-				migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to copy changed blocks: %s", err))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 			}
 		}
 	}
@@ -412,7 +412,7 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			}
 		default:
 			// Perform sync
-			migobj.logMessage(fmt.Sprintf("Starting periodic sync (interval: %s)", syncInterval))
+			migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
 			start := time.Now()
 			err := vmops.CleanUpSnapshots(false)
 			if err != nil {

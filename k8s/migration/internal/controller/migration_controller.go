@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -286,14 +285,9 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending}
-	logfile, err := os.OpenFile("migration.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer logfile.Close()
+
 loop:
 	for i := range events.Items {
-		fmt.Fprintln(logfile, events.Items[i].Message)
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
@@ -393,6 +387,7 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 			filteredEvents.Items = append(filteredEvents.Items, allevents.Items[i])
 		}
 	}
+
 	// Sort filteredEvents by creation timestamp
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)

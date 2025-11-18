@@ -200,7 +200,7 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackCha
 				if err := r.UpdateProgress(msg); err != nil {
 					utils.PrintLog(err.Error())
 				}
-				if !strings.Contains(msg, "Progress:") {
+				if !strings.Contains(msg, "Progress:") && !strings.Contains(msg, "Periodic") {
 					utils.PrintLog(fmt.Sprintf("Event: %s", msg))
 					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						utils.PrintLog(fmt.Sprintf("Event: FAILED %s", msg))
