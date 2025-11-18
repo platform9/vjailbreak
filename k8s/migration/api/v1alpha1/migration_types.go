@@ -76,6 +76,14 @@ type MigrationSpec struct {
 	// after a successful migration to prevent network conflicts. Defaults to false.
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+
+	// ArrayOffload specifies whether to use array offload for data copy
+	// +optional
+	ArrayOffload bool `json:"arrayOffload,omitempty"`
+
+	// VendorType specifies the vendor type of the storage system
+	// +optional enum=pure
+	VendorType string `json:"vendorType,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration

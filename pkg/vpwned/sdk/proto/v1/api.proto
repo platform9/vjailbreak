@@ -522,3 +522,136 @@ message CleanupStepResponse {
     bool success = 2;
     string message = 3;
 }
+
+// Storage Array APIs
+message StorageAccessInfo {
+    string hostname = 1;
+    string username = 2;
+    string password = 3;
+    bool skip_ssl_verification = 4;
+    string vendor_type = 5;
+}
+
+message VolumeInfo {
+    string name = 1;
+    int64 size = 2;
+    string id = 3;
+    string serial_number = 4;
+    string naa = 5;
+}
+
+message MappingContextEntry {
+    string key = 1;
+    repeated string values = 2;
+}
+
+service StorageArray {
+    rpc ValidateCredentials(ValidateStorageCredsRequest) returns (ValidateStorageCredsResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/validate"
+            body: "*"
+        };
+    }
+    
+    rpc CreateOrUpdateInitiatorGroup(CreateInitiatorGroupRequest) returns (CreateInitiatorGroupResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/initiator_group"
+            body: "*"
+        };
+    }
+    
+    rpc MapVolumeToGroup(MapVolumeRequest) returns (MapVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/map_volume"
+            body: "*"
+        };
+    }
+    
+    rpc UnmapVolumeFromGroup(UnmapVolumeRequest) returns (UnmapVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/unmap_volume"
+            body: "*"
+        };
+    }
+    
+    rpc GetMappedGroups(GetMappedGroupsRequest) returns (GetMappedGroupsResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/mapped_groups"
+            body: "*"
+        };
+    }
+    
+    rpc ResolveCinderVolume(ResolveCinderVolumeRequest) returns (ResolveCinderVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/resolve_volume"
+            body: "*"
+        };
+    }
+}
+
+message ValidateStorageCredsRequest {
+    StorageAccessInfo access_info = 1;
+}
+
+message ValidateStorageCredsResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message CreateInitiatorGroupRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    repeated string hba_identifiers = 3;
+}
+
+message CreateInitiatorGroupResponse {
+    bool success = 1;
+    string message = 2;
+    repeated MappingContextEntry mapping_context = 3;
+}
+
+message MapVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    VolumeInfo volume = 3;
+    repeated MappingContextEntry mapping_context = 4;
+}
+
+message MapVolumeResponse {
+    bool success = 1;
+    string message = 2;
+    VolumeInfo volume = 3;
+}
+
+message UnmapVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    VolumeInfo volume = 3;
+    repeated MappingContextEntry mapping_context = 4;
+}
+
+message UnmapVolumeResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message GetMappedGroupsRequest {
+    StorageAccessInfo access_info = 1;
+    VolumeInfo volume = 2;
+    repeated MappingContextEntry mapping_context = 3;
+}
+
+message GetMappedGroupsResponse {
+    repeated string groups = 1;
+}
+
+message ResolveCinderVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string volume_name = 2;
+}
+
+message ResolveCinderVolumeResponse {
+    bool success = 1;
+    string message = 2;
+    VolumeInfo volume = 3;
+}
