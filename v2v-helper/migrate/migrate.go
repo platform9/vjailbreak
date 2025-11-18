@@ -359,15 +359,6 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		}
 	}
 	// Cleanup the snapshot taken for incremental copy
-	err = vmops.CleanUpSnapshots(false)
-	if err != nil {
-		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-	}
-
-	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-	if err != nil {
-		return errors.Wrap(err, "failed to take snapshot of source VM")
-	}
 	return nil
 }
 
@@ -407,6 +398,7 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
+	vmops := migobj.VMops
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
 		syncInterval = migobj.getSyncDuration()
@@ -422,6 +414,15 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			// Perform sync
 			migobj.logMessage(fmt.Sprintf("Starting periodic sync (interval: %s)", syncInterval))
 			start := time.Now()
+			err := vmops.CleanUpSnapshots(false)
+			if err != nil {
+				return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+			}
+
+			err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+			if err != nil {
+				return errors.Wrap(err, "failed to take snapshot of source VM")
+			}
 			if err := migobj.SyncCBT(ctx, vminfo); err != nil {
 				return err
 			}
