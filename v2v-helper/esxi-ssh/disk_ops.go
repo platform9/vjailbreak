@@ -334,7 +334,7 @@ func (c *Client) ListStorageDevices() ([]StorageDeviceInfo, error) {
 		}
 
 		// New device starts with a device ID line
-		if !strings.Contains(line, ":") && strings.HasPrefix(line, "naa.") || strings.HasPrefix(line, "t10.") || strings.HasPrefix(line, "mpx.") {
+		if !strings.Contains(line, ":") && (strings.HasPrefix(line, "naa.") || strings.HasPrefix(line, "t10.") || strings.HasPrefix(line, "mpx.")) {
 			// Save previous device if exists
 			if currentDevice != nil && currentDevice.DeviceID != "" {
 				devices = append(devices, *currentDevice)
@@ -358,20 +358,10 @@ func (c *Client) ListStorageDevices() ([]StorageDeviceInfo, error) {
 			case "Display Name":
 				currentDevice.DisplayName = value
 			case "Size":
-				// Parse size like "107374 MB" or "1000 GB"
-				sizeFields := strings.Fields(value)
-				if len(sizeFields) >= 2 {
-					if size, err := strconv.ParseInt(sizeFields[0], 10, 64); err == nil {
-						unit := sizeFields[1]
-						switch unit {
-						case "MB":
-							currentDevice.Size = size * 1024 * 1024
-						case "GB":
-							currentDevice.Size = size * 1024 * 1024 * 1024
-						case "TB":
-							currentDevice.Size = size * 1024 * 1024 * 1024 * 1024
-						}
-					}
+				// Parse size - ESXi returns just a number in MB (e.g., "2048")
+				if size, err := strconv.ParseInt(value, 10, 64); err == nil {
+					// Size is in MB
+					currentDevice.Size = size * 1024 * 1024
 				}
 			case "Device Type":
 				currentDevice.DeviceType = value

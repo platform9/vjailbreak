@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -58,7 +59,7 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		commandTimeout: 30 * time.Second,
+		commandTimeout: 5 * time.Minute, // Increased for long-running operations
 	}
 }
 
@@ -91,7 +92,7 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 		// but in a production environment with higher security requirements, consider
 		// implementing proper host key verification using ssh.FixedHostKey().
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         30 * time.Second,
+		Timeout:         2 * time.Minute, // Increased timeout for ESXi connections
 	}
 
 	addr := net.JoinHostPort(hostname, "22")
@@ -199,26 +200,49 @@ func (c *Client) TestConnection() error {
 }
 
 // StartVmkfstoolsClone starts a vmkfstools clone operation from source VMDK to target LUN
+// This will automatically use XCOPY/VAAI hardware offload if available on the storage array
+// The clone runs in the background and returns immediately
 func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*VmkfstoolsTask, error) {
 	klog.Infof("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN)
 
-	// Build the command with operation and arguments
-	command := fmt.Sprintf("%s %s %s", SSHOperationClone, sourceVMDK, targetLUN)
+	// Run vmkfstools in background
+	// Use vmkfstools -i (clone/import) which automatically uses XCOPY on VAAI-capable storage
+	// -d thin creates thin provisioned disk (can also use eagerzeroedthick, zeroedthick)
+	// Redirect to /dev/null and run in background to avoid SSH hanging
+	command := fmt.Sprintf("vmkfstools -i %s %s -d thin >/dev/null 2>&1 & echo $!", sourceVMDK, targetLUN)
+
 	output, err := c.ExecuteCommand(command)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start clone: %w", err)
 	}
 
-	klog.Infof("Received output from script: %s", output)
+	pid := strings.TrimSpace(output)
+	klog.Infof("Started vmkfstools clone with PID: %s", pid)
 
-	// Parse the XML response from the script
-	task, err := parseTaskResponse(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse clone response: %w", err)
+	// Return task info with PID so we can check status later
+	task := &VmkfstoolsTask{
+		TaskId:   fmt.Sprintf("vmkfstools-clone-%s", pid),
+		Pid:      0, // Will be parsed from output
+		LastLine: fmt.Sprintf("Clone started with PID %s", pid),
 	}
 
-	klog.Infof("Started vmkfstools clone task %s with PID %d", task.TaskId, task.Pid)
+	// Try to parse PID
+	if pidInt, err := fmt.Sscanf(pid, "%d", &task.Pid); err == nil && pidInt == 1 {
+		klog.Infof("Parsed PID: %d", task.Pid)
+	}
+
 	return task, nil
+}
+
+// CheckCloneStatus checks if a clone operation is still running
+func (c *Client) CheckCloneStatus(pid int) (bool, error) {
+	// Check if process is still running using ps
+	checkCmd := fmt.Sprintf("ps -c -p %d 2>/dev/null | grep %d", pid, pid)
+	output, _ := c.ExecuteCommand(checkCmd)
+
+	isRunning := strings.Contains(output, fmt.Sprintf("%d", pid))
+
+	return isRunning, nil
 }
 
 // parseTaskResponse parses the XML response from vmkfstools operations

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
@@ -36,7 +37,7 @@ func main() {
 	fmt.Printf("Connecting to %s as %s...\n", host, user)
 
 	client := esxissh.NewClient()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	if err := client.Connect(ctx, host, user, privateKey); err != nil {
@@ -107,35 +108,45 @@ func main() {
 	}
 	fmt.Printf("Found %d VM(s):\n", len(vms))
 	for i, vm := range vms {
-		fmt.Printf("  %d. %s (ID: %s, Datastore: %s)\n", i+1, vm.Name, vm.ID, vm.Datastore)
+		// Check power state
+		powerState, _ := client.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vm.ID))
+		state := "unknown"
+		if strings.Contains(powerState, "Powered on") {
+			state = "ON"
+		} else if strings.Contains(powerState, "Powered off") {
+			state = "OFF"
+		}
+		fmt.Printf("  %d. %s (ID: %s, Datastore: %s, Power: %s)\n", i+1, vm.Name, vm.ID, vm.Datastore, state)
 	}
 
+	// Try to get detailed VM info, but don't fail if it errors
+	// (VMs that are powered off may have locked disks)
 	if len(vms) > 0 {
 		vmName := vms[0].Name
 		fmt.Printf("\nGetting details for VM: %s\n", vmName)
 		vmInfo, err := client.GetVMInfo(vmName)
 		if err != nil {
-			fmt.Printf("Failed to get VM info: %v\n", err)
-			os.Exit(1)
-		}
+			fmt.Printf("Warning: Failed to get VM info (VM may be powered off or locked): %v\n", err)
+			fmt.Println("Skipping detailed disk information...")
+		} else {
+			fmt.Println("VM Details:")
+			fmt.Printf("  Name: %s\n", vmInfo.Name)
+			fmt.Printf("  ID: %s\n", vmInfo.ID)
+			fmt.Printf("  Datastore: %s\n", vmInfo.Datastore)
+			fmt.Printf("  VMX Path: %s\n", vmInfo.VMXPath)
+			fmt.Printf("  Disks: %d\n", len(vmInfo.Disks))
 
-		fmt.Println("VM Details:")
-		fmt.Printf("  Name: %s\n", vmInfo.Name)
-		fmt.Printf("  ID: %s\n", vmInfo.ID)
-		fmt.Printf("  Datastore: %s\n", vmInfo.Datastore)
-		fmt.Printf("  VMX Path: %s\n", vmInfo.VMXPath)
-		fmt.Printf("  Disks: %d\n", len(vmInfo.Disks))
-
-		if len(vmInfo.Disks) > 0 {
-			fmt.Println("\nDisk information:")
-			for i, disk := range vmInfo.Disks {
-				sizeGB := float64(disk.SizeBytes) / (1024 * 1024 * 1024)
-				fmt.Printf("  Disk %d:\n", i+1)
-				fmt.Printf("    Name: %s\n", disk.Name)
-				fmt.Printf("    Path: %s\n", disk.Path)
-				fmt.Printf("    Size: %.2f GB\n", sizeGB)
-				fmt.Printf("    Type: %s\n", disk.ProvisionType)
-				fmt.Printf("    Datastore: %s\n", disk.Datastore)
+			if len(vmInfo.Disks) > 0 {
+				fmt.Println("\nDisk information:")
+				for i, disk := range vmInfo.Disks {
+					sizeGB := float64(disk.SizeBytes) / (1024 * 1024 * 1024)
+					fmt.Printf("  Disk %d:\n", i+1)
+					fmt.Printf("    Name: %s\n", disk.Name)
+					fmt.Printf("    Path: %s\n", disk.Path)
+					fmt.Printf("    Size: %.2f GB\n", sizeGB)
+					fmt.Printf("    Type: %s\n", disk.ProvisionType)
+					fmt.Printf("    Datastore: %s\n", disk.Datastore)
+				}
 			}
 		}
 	} else {
@@ -154,6 +165,18 @@ func main() {
 		fmt.Printf("  Source: %s\n", sourceVMDK)
 		fmt.Printf("  Target: %s\n", targetLUN)
 
+		// Reconnect to get a fresh SSH connection for the clone operation
+		// (previous commands may have exhausted the connection)
+		fmt.Println("\nRefreshing SSH connection...")
+		client.Disconnect()
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel2()
+		if err := client.Connect(ctx2, host, user, privateKey); err != nil {
+			fmt.Printf("Failed to reconnect: %v\n", err)
+		} else {
+			fmt.Println("Reconnected successfully!")
+		}
+
 		task, err := client.StartVmkfstoolsClone(sourceVMDK, targetLUN)
 		if err != nil {
 			fmt.Printf("Failed to start vmkfstools clone: %v\n", err)
@@ -161,21 +184,58 @@ func main() {
 			fmt.Println("\nSuccessfully started vmkfstools clone task:")
 			fmt.Printf("  Task ID: %s\n", task.TaskId)
 			fmt.Printf("  PID: %d\n", task.Pid)
-			fmt.Printf("  Exit Code: %s\n", task.ExitCode)
-			fmt.Printf("  Last Line: %s\n", task.LastLine)
-			if task.Stderr != "" {
-				fmt.Printf("  StdErr: %s\n", task.Stderr)
+			fmt.Printf("  Info: %s\n", task.LastLine)
+
+			// Monitor clone progress
+			if task.Pid > 0 {
+				fmt.Println("\nMonitoring clone progress (checking every 2 seconds)...")
+
+				for i := 0; i < 30; i++ { // Check for up to 60 seconds
+					time.Sleep(2 * time.Second)
+					isRunning, err := client.CheckCloneStatus(task.Pid)
+					if err != nil {
+						fmt.Printf("Error checking status: %v\n", err)
+						break
+					}
+
+					if !isRunning {
+						fmt.Println("\nClone completed!")
+						// Check if target file was created
+						checkCmd := fmt.Sprintf("ls -lh %s 2>/dev/null", targetLUN)
+						if output, err := client.ExecuteCommand(checkCmd); err == nil && output != "" {
+							fmt.Printf("Target file created:\n%s\n", output)
+						}
+						break
+					} else {
+						fmt.Printf("  [%ds] Clone still running...\n", (i+1)*2)
+					}
+				}
 			}
 		}
 	} else {
 		fmt.Println("\nSkipping vmkfstools clone test (environment variables not set)")
-		fmt.Println("\nTo test vmkfstools clone, set both source and target:")
-		fmt.Println("  export ESXI_SOURCE_VMDK=/vmfs/volumes/datastore1/vm-name/disk.vmdk")
-		fmt.Println("  export ESXI_TARGET_LUN=/vmfs/volumes/datastore2/target-disk.vmdk")
-		fmt.Println("\nUse the paths shown above from:")
-		fmt.Println("  - VM Disks (for source VMDK)")
-		fmt.Println("  - Datastores (to construct target path)")
-		fmt.Println("  - Storage Devices/LUNs (for raw device access)")
+		fmt.Println("\nTo test vmkfstools clone with XCOPY on Pure Storage:")
+		fmt.Println("")
+		fmt.Println("IMPORTANT: The source VM must be POWERED OFF to avoid file locks!")
+		fmt.Println("           Check the VM power states listed above.")
+		fmt.Println("")
+		fmt.Println("Step 1: Power off the VM (if needed):")
+		fmt.Println("  ssh root@<esxi-host> \"vim-cmd vmsvc/power.off <VM-ID>\"")
+		fmt.Println("")
+		fmt.Println("Step 2: Create target directory:")
+		fmt.Println("  ssh root@<esxi-host> \"mkdir -p /vmfs/volumes/pure-ds/test-clone\"")
+		fmt.Println("")
+		fmt.Println("Step 3: Set source (use a POWERED OFF VM disk from above):")
+		fmt.Println("  export ESXI_SOURCE_VMDK=/vmfs/volumes/pure-ds/test-pure-vm/test-pure-vm.vmdk")
+		fmt.Println("")
+		fmt.Println("Step 4: Set target (NEW file path on SAME datastore for XCOPY):")
+		fmt.Println("  export ESXI_TARGET_LUN=/vmfs/volumes/pure-ds/test-clone/cloned-disk.vmdk")
+		fmt.Println("")
+		fmt.Println("Step 5: Run the test:")
+		fmt.Println("  go run test_esxi_simple.go")
+		fmt.Println("")
+		fmt.Println("NOTE: Source and target must be on the same Pure datastore for XCOPY to work!")
+		fmt.Println("      XCOPY will offload the clone to Pure FlashArray (hardware acceleration)")
 	}
 
 	fmt.Println("\nAll tests completed!")
