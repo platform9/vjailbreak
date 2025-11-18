@@ -92,9 +92,11 @@ func (r *OpenstackCredsReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Always close the scope when exiting this function such that we can persist any OpenstackCreds changes.
 	defer func() {
-		if err := scope.Close(); err != nil && reterr == nil {
-			ctxlog.Error(err, "Failed to close OpenstackCredsScope")
-			reterr = err
+		if openstackcreds.DeletionTimestamp.IsZero() {
+			if err := scope.Close(); err != nil && reterr == nil {
+				ctxlog.Error(err, "Failed to close OpenstackCredsScope")
+				reterr = err
+			}
 		}
 	}()
 

@@ -174,9 +174,7 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   try {
-    const secretName = `${credName}-openstack-secret`
     await deleteOpenstackCredentials(credName, namespace)
-    await deleteSecret(secretName, namespace)
     return { success: true }
   } catch (error) {
     console.error(`Error deleting OpenStack credential ${credName}:`, error)

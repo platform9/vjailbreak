@@ -216,9 +216,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
