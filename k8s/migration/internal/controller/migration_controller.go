@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -271,7 +272,6 @@ func (r *MigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //
 //nolint:gocyclo
 func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *scope.MigrationScope) error {
-	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	events, err := r.GetEventsSorted(ctx, scope)
 	if err != nil {
 		return err
@@ -286,11 +286,14 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending}
-
+	logfile, err := os.OpenFile("migration.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer logfile.Close()
 loop:
 	for i := range events.Items {
-
-		ctxlog.Info("********* EVENT : ", "MigrationName", scope.Migration.Name, "Message", events.Items[i].Message)
+		fmt.Fprintln(logfile, events.Items[i].Message)
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
@@ -302,7 +305,6 @@ loop:
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
-			ctxlog.Info("Waiting for admin cutover", "MigrationName", scope.Migration.Name)
 			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
 			if pod.Labels["startCutover"] != "yes" {
 				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
@@ -391,11 +393,6 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 			filteredEvents.Items = append(filteredEvents.Items, allevents.Items[i])
 		}
 	}
-	ctxlog.Info("Fetched events", "pod", migration.Spec.PodRef, "uid", string(pod.UID), "count", len(filteredEvents.Items), "migration", scope.Migration.Name)
-	for i, e := range filteredEvents.Items {
-		ctxlog.Info(fmt.Sprintf("Event %d: %s", i, e.Message))
-	}
-
 	// Sort filteredEvents by creation timestamp
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
