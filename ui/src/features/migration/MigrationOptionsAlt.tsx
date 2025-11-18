@@ -242,37 +242,38 @@ export default function MigrationOptionsAlt({
                   </Fields>
                 )}
 
-              {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && (
-                <>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={selectedMigrationOptions.periodicSyncEnabled}
-                        onChange={(e) => {
-                          onChange('periodicSyncInterval')('') // Reset interval when disabling
-                          updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
-                        }}
-                      />
-                    }
-                    label="Use Periodic Sync Interval"
-                  />
-                  <IntervalField
-                    label="Periodic Sync Interval"
-                    name="periodicSyncInterval"
-                    required={selectedMigrationOptions.periodicSyncEnabled}
-                    value={String(
-                      params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
-                        ? params.periodicSyncInterval
-                        : ''
-                    )}
-                    onChange={(e) => {
-                      onChange('periodicSyncInterval')(e.target.value || '')
-                    }}
-                    error={errors.periodicSyncInterval}
-                    disabled={!selectedMigrationOptions.periodicSyncEnabled}
-                  />
-                </>
-              )}
+              {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+                selectedMigrationOptions.cutoverOption && (
+                  <>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={selectedMigrationOptions.periodicSyncEnabled}
+                          onChange={(e) => {
+                            onChange('periodicSyncInterval')('') // Reset interval when disabling
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
+                          }}
+                        />
+                      }
+                      label="Use Periodic Sync Interval"
+                    />
+                    <IntervalField
+                      label="Periodic Sync Interval"
+                      name="periodicSyncInterval"
+                      required={selectedMigrationOptions.periodicSyncEnabled}
+                      value={String(
+                        params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
+                          ? params.periodicSyncInterval
+                          : ''
+                      )}
+                      onChange={(e) => {
+                        onChange('periodicSyncInterval')(e.target.value || '')
+                      }}
+                      error={errors.periodicSyncInterval}
+                      disabled={!selectedMigrationOptions.periodicSyncEnabled}
+                    />
+                  </>
+                )}
             </Fields>
 
             <Fields sx={{ gridGap: '0' }}>
