@@ -82,6 +82,8 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
+                  arrayCredsRef:
+                    type: string
                   arrayOffload:
                     default: false
                     type: boolean
@@ -101,6 +103,10 @@ spec:
                     enum:
                     - hot
                     - cold
+                    type: string
+                  vendorType:
+                    enum:
+                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time

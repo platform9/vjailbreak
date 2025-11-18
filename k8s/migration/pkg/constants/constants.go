@@ -120,6 +120,18 @@ const (
 	// ArrayCredsFinalizer is the finalizer for storage array credentials
 	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 
+	// ArrayCreds phases
+	ArrayCredsPhaseDiscovered = "Discovered"
+	ArrayCredsPhaseConfigured = "Configured"
+	ArrayCredsPhaseValidated  = "Validated"
+	ArrayCredsPhaseFailed     = "Failed"
+
+	// ArrayCreds validation statuses
+	ArrayCredsStatusPending             = "Pending"
+	ArrayCredsStatusSucceeded           = "Succeeded"
+	ArrayCredsStatusFailed              = "Failed"
+	ArrayCredsStatusAwaitingCredentials = "AwaitingCredentials"
+
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 

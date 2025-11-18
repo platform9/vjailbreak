@@ -79,6 +79,73 @@ func (p *PureStorageProvider) ValidateCredentials(ctx context.Context) error {
 	return nil
 }
 
+// CreateVolume creates a new volume on the storage array
+func (p *PureStorageProvider) CreateVolume(volumeName string, size int64) error {
+	_, err := p.client.Volumes.CreateVolume(volumeName, int(size))
+	if err != nil {
+		return fmt.Errorf("failed to create volume %s: %w", volumeName, err)
+	}
+	return nil
+}
+
+// DeleteVolume deletes a volume from the storage array
+func (p *PureStorageProvider) DeleteVolume(volumeName string) error {
+	_, err := p.client.Volumes.DeleteVolume(volumeName)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume %s: %w", volumeName, err)
+	}
+	return nil
+}
+
+// GetVolumeInfo retrieves information about a volume from the storage array
+func (p *PureStorageProvider) GetVolumeInfo(volumeName string) (storage.VolumeInfo, error) {
+	v, err := p.client.Volumes.GetVolume(volumeName, nil)
+	if err != nil {
+		return storage.VolumeInfo{}, fmt.Errorf("failed to get volume %s: %w", volumeName, err)
+	}
+	return storage.VolumeInfo{
+		Name:    v.Name,
+		Size:    v.Size,
+		Created: v.Created,
+		NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+	}, nil
+}
+
+// ListAllVolumes retrieves all volumes from the Pure Storage array with their NAA identifiers
+func (p *PureStorageProvider) ListAllVolumes() ([]storage.VolumeInfo, error) {
+	volumes, err := p.client.Volumes.ListVolumes(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	var volumeInfos []storage.VolumeInfo
+	for _, v := range volumes {
+		volumeInfos = append(volumeInfos, storage.VolumeInfo{
+			Name:    v.Name,
+			Size:    v.Size,
+			Created: v.Created,
+			NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+		})
+	}
+
+	return volumeInfos, nil
+}
+
+// GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
+func (p *PureStorageProvider) GetAllVolumeNAAs() ([]string, error) {
+	volumes, err := p.ListAllVolumes()
+	if err != nil {
+		return nil, err
+	}
+
+	var naaIdentifiers []string
+	for _, v := range volumes {
+		naaIdentifiers = append(naaIdentifiers, v.NAA)
+	}
+
+	return naaIdentifiers, nil
+}
+
 // CreateOrUpdateInitiatorGroup creates or updates an initiator group with the ESX adapters
 // mapping esxi's hba adapters initiator group to the volume host in pure.
 func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
