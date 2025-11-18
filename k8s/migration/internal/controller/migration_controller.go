@@ -159,7 +159,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Check if the pod is in a valid state only then continue
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
+		ctxlog.Info("Pod is not in a terminal state, requeuing", "migration", migration.Name, "podStatus", pod.Status.Phase)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
