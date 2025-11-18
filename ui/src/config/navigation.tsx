@@ -6,6 +6,7 @@ import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Analytics'
 import StorageIcon from '@mui/icons-material/Storage'
+import { ManageAccounts } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -45,6 +46,12 @@ export const navigationItems: NavigationItem[] = [
     icon: <ConfigIcon />
   },
   {
+    id: 'global-settings',
+    label: 'Global Settings',
+    path: '/dashboard/global-settings',
+    icon: <ManageAccounts />
+  },
+  {
     id: 'monitoring',
     label: 'Monitoring',
     path: '/grafana',
@@ -54,9 +61,9 @@ export const navigationItems: NavigationItem[] = [
 ]
 
 export const getNavigationItemById = (id: string): NavigationItem | undefined => {
-  return navigationItems.find(item => item.id === id)
+  return navigationItems.find((item) => item.id === id)
 }
 
 export const getNavigationItemByPath = (path: string): NavigationItem | undefined => {
-  return navigationItems.find(item => item.path === path)
+  return navigationItems.find((item) => item.path === path)
 }

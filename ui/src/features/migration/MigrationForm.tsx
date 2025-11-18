@@ -109,6 +109,7 @@ export interface FormValues extends Record<string, unknown> {
   arrayCredsMappings?: { source: string; target: string }[]
   // Cluster selection fields
   vmwareCluster?: string  // Format: "credName:datacenter:clusterName"
+  vmwareClusterDisplayName?: string
   pcdCluster?: string     // PCD cluster ID
   // Optional Params
   dataCopyMethod?: string
@@ -117,7 +118,6 @@ export interface FormValues extends Record<string, unknown> {
   cutoverStartTime?: string
   cutoverEndTime?: string
   postMigrationScript?: string
-  retryOnFailure?: boolean
   osFamily?: string
   // Add postMigrationAction with optional properties
   postMigrationAction?: {
@@ -541,7 +541,6 @@ export default function MigrationFormDrawer({
         params.cutoverEndTime && {
         vmCutoverEnd: params.cutoverEndTime
       }),
-      retry: params.retryOnFailure,
       ...(postMigrationAction && { postMigrationAction }),
       ...(params.securityGroups && params.securityGroups.length > 0 && {
         securityGroups: params.securityGroups,
@@ -570,7 +569,6 @@ export default function MigrationFormDrawer({
         hasDataCopyStartTime: !!migrationFields.dataCopyStart,
         hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
         hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
-        retryEnabled: !!migrationFields.retry,
         postMigrationAction,
         namespace: data.metadata?.namespace,
       });
@@ -922,6 +920,8 @@ export default function MigrationFormDrawer({
             vmwareCredName={params.vmwareCreds?.existingCredName}
             openstackCredName={params.openstackCreds?.existingCredName}
             openstackCredentials={openstackCredentials}
+            vmwareCluster={params.vmwareCluster}
+            vmwareClusterDisplayName={params.vmwareClusterDisplayName}
           />
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>

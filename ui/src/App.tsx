@@ -15,37 +15,36 @@ import ClusterConversionsPage from "./pages/dashboard/ClusterConversionsPage"
 import MaasConfigPage from "./pages/dashboard/MaasConfigPage"
 import Onboarding from "./pages/onboarding/Onboarding"
 
-const AppFrame = styled("div")(() => ({
-  position: "relative",
-  display: "grid",
-  gridTemplateRows: "auto 1fr",
-  height: "100vh",
-  overflow: "hidden"
+const AppFrame = styled('div')(() => ({
+  position: 'relative',
+  display: 'grid',
+  gridTemplateRows: 'auto 1fr',
+  height: '100vh',
+  overflow: 'hidden'
 }))
 
-const AppContent = styled("div")(({ theme }) => ({
-  overflow: "hidden",
-  display: "flex",
-  flexDirection: "column",
+const AppContent = styled('div')(({ theme }) => ({
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
   flex: 1,
-  [theme.breakpoints.up("lg")]: {
-    maxWidth: "1600px",
-    margin: "0 auto",
-    width: "100%",
-  },
+  [theme.breakpoints.up('lg')]: {
+    maxWidth: '1600px',
+    margin: '0 auto',
+    width: '100%'
+  }
 }))
 
 function App() {
   const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
-  const hideAppbar =
-    location.pathname === "/onboarding" || location.pathname === "/"
+  const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
 
   const handleOpenMigrationForm = (open, type = 'standard') => {
-    setOpenMigrationForm(open);
-    setMigrationType(type);
-  };
+    setOpenMigrationForm(open)
+    setMigrationType(type)
+  }
 
   return (
     <AppFrame>
@@ -53,16 +52,10 @@ function App() {
       <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
       <AppContent>
         {openMigrationForm && migrationType === 'standard' && (
-          <MigrationFormDrawer
-            open
-            onClose={() => setOpenMigrationForm(false)}
-          />
+          <MigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
         )}
         {openMigrationForm && migrationType === 'rolling' && (
-          <RollingMigrationFormDrawer
-            open
-            onClose={() => setOpenMigrationForm(false)}
-          />
+          <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
         )}
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
@@ -73,6 +66,7 @@ function App() {
             <Route path="storage-management" element={<StorageManagementPage />} />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
+            <Route path="global-settings" element={<GlobalSettingsPage />} />
           </Route>
           <Route path="/onboarding" element={<Onboarding />} />
         </Routes>
