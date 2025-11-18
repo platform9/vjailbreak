@@ -289,6 +289,8 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 loop:
 	for i := range events.Items {
+
+		ctxlog.Info("********* EVENT : ", "MigrationName", scope.Migration.Name, "Message", events.Items[i].Message)
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
