@@ -391,7 +391,7 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 			filteredEvents.Items = append(filteredEvents.Items, allevents.Items[i])
 		}
 	}
-	ctxlog.Info("Fetched events", "count", len(filteredEvents.Items), "migration", scope.Migration.Name)
+	ctxlog.Info("Fetched events", "pod", migration.Spec.PodRef, "uid", string(pod.UID), "count", len(filteredEvents.Items), "migration", scope.Migration.Name)
 	for i, e := range filteredEvents.Items {
 		ctxlog.Info(fmt.Sprintf("Event %d: %s", i, e.Message))
 	}

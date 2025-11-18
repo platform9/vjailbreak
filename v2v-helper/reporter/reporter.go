@@ -143,7 +143,7 @@ func (r *Reporter) CreateKubernetesEvent(ctx context.Context, eventType, reason,
 		},
 		Type: eventType,
 	}
-
+	utils.PrintLog(fmt.Sprintf("Creating event: %s", string(event.InvolvedObject.UID)))
 	_, err := r.Clientset.CoreV1().Events(r.PodNamespace).Create(ctx, event, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes event: %v", err)
