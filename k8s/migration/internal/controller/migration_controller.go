@@ -384,6 +384,10 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 		ctxlog.Error(err, fmt.Sprintf("Failed to get events for Pod '%s'", migration.Spec.PodRef))
 		return nil, err
 	}
+	ctxlog.Info("Fetched events", "count", len(allevents.Items), "migration", scope.Migration.Name)
+	for i, e := range allevents.Items {
+		ctxlog.Info(fmt.Sprintf("Event %d: %s", i, e.Message))
+	}
 
 	filteredEvents := &corev1.EventList{}
 	for i := 0; i < len(allevents.Items); i++ {
