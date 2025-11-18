@@ -506,40 +506,22 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 // handleRDMDiskMigrationError handles errors that occur during RDM disk migration
 func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, err error) (ctrl.Result, error) {
 	if err == verrors.ErrRDMDiskNotMigrated {
-		retries := migrationplan.Status.RetryCount
-		if retries <= 5 {
-			delay := 25 * time.Second
-			r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan.", "retryCount", retries, "requeueAfter", delay)
-
-			// Refetch the migration plan to get the latest version before updating
-			if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, migrationplan); err != nil {
-				r.ctxlog.Error(err, "Failed to refetch MigrationPlan before updating retry count")
-				return ctrl.Result{RequeueAfter: delay}, fmt.Errorf("failed to refetch MigrationPlan: %w", err)
-			}
-
-			migrationplan.Status.RetryCount++
-			if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, "RDM disk not migrated yet, requeuing MigrationPlan."); err != nil {
-				r.ctxlog.Error(err, "Failed to update MigrationPlan retry count")
-				return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan retry count: %w", err)
-			}
-			r.ctxlog.Info("RDM disk not migrated, requeuing MigrationPlan for retry. ", "Retry Count: ", retries, "Delay: ", delay)
-			return ctrl.Result{RequeueAfter: delay}, nil
-		}
-		// Maximum retries exceeded for RDM disk migration
-		r.ctxlog.Info("RDM disk not migrated after maximum retries, failing MigrationPlan.", "error", err.Error())
+		delay := 25 * time.Second
+		r.ctxlog.Info("RDM disk not migrated yet, requeuing MigrationPlan for polling.", "requeueAfter", delay)
 
 		// Refetch the migration plan to get the latest version before updating
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, migrationplan); err != nil {
-			r.ctxlog.Error(err, "Failed to refetch MigrationPlan before failing")
-			return ctrl.Result{}, fmt.Errorf("failed to refetch MigrationPlan: %w", err)
+			r.ctxlog.Error(err, "Failed to refetch MigrationPlan before updating status")
+			return ctrl.Result{RequeueAfter: delay}, nil
+		}
+		newMessage := "RDM disk not migrated yet, requeuing MigrationPlan."
+		if migrationplan.Status.MigrationMessage != newMessage || migrationplan.Status.MigrationStatus != corev1.PodPending {
+			if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, newMessage); err != nil {
+				r.ctxlog.Error(err, "Failed to update MigrationPlan status")
+			}
 		}
 
-		migrationplan.Status.MigrationStatus = corev1.PodFailed
-		migrationplan.Status.MigrationMessage = fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)
-		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("RDM disk not migrated after maximum retries. Reason : %s", err)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update MigrationPlan status: %w", err)
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	// Handle any other RDM disk migration errors
 	r.ctxlog.Info("RDM disk migration failed, failing MigrationPlan.", "error", err.Error())
@@ -1511,27 +1493,20 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		}
 	}
 
-	// Only sleep and check for status if we actually have RDM disks to process
-	if len(allRDMDisks) > 0 {
-		// Wait for 25 seconds after updating disk details and before checking RDM disk status
-		r.ctxlog.Info("Waiting 25s for RDMDisk controller to act...", "diskCount", len(allRDMDisks))
-		time.Sleep(25 * time.Second)
-
-		// Check if all RDM disks are migrated after the delay
-		for _, rdmDiskCR := range allRDMDisks {
-			reFetchedRDMDiskCR := &vjailbreakv1alpha1.RDMDisk{}
-			err := r.Get(ctx, types.NamespacedName{
-				Name:      strings.TrimSpace(rdmDiskCR.Name),
-				Namespace: migrationplan.Namespace,
-			}, reFetchedRDMDiskCR)
-			if err != nil {
-				return err
-			}
-			if reFetchedRDMDiskCR.Status.Phase != RDMPhaseManaged || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
-				// Log which disk is not ready
-				r.ctxlog.Info("RDM disk not yet managed, will retry", "diskName", reFetchedRDMDiskCR.Name, "phase", reFetchedRDMDiskCR.Status.Phase, "cinderVolumeID", reFetchedRDMDiskCR.Status.CinderVolumeID)
-				return verrors.ErrRDMDiskNotMigrated
-			}
+	// Check if all RDM disks are migrated after the delay
+	for _, rdmDiskCR := range allRDMDisks {
+		reFetchedRDMDiskCR := &vjailbreakv1alpha1.RDMDisk{}
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      strings.TrimSpace(rdmDiskCR.Name),
+			Namespace: migrationplan.Namespace,
+		}, reFetchedRDMDiskCR)
+		if err != nil {
+			return err
+		}
+		if reFetchedRDMDiskCR.Status.Phase != RDMPhaseManaged || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
+			// Log which disk is not ready
+			r.ctxlog.Info("RDM disk not yet managed, will retry", "diskName", reFetchedRDMDiskCR.Name, "phase", reFetchedRDMDiskCR.Status.Phase, "cinderVolumeID", reFetchedRDMDiskCR.Status.CinderVolumeID)
+			return verrors.ErrRDMDiskNotMigrated
 		}
 	}
 	return nil
