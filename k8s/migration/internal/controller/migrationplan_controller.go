@@ -394,6 +394,11 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	if migrationplan.Status.MigrationStatus == corev1.PodSucceeded {
+		r.ctxlog.Info("Migration already completed, skipping job reconciliation", "migrationplan", migrationplan.Name)
+		return ctrl.Result{}, nil
+	}
+
 	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
 	if err != nil {
 		r.ctxlog.Error(err, "Failed to get migration template and credentials")
@@ -401,8 +406,16 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// Validate VM OS types before proceeding with migration
-	validVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	validVMs, skippedVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
 	if err != nil {
+		if validVMs == nil && skippedVMs == nil {
+			// Both are nil, meaning no VMs were found at all
+			if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodSucceeded,
+				fmt.Sprintf("Marking migration plan as succeeded due to no VMs found: %v", err)); updateErr != nil {
+				r.ctxlog.Error(updateErr, "Failed to update migration plan status after validation error")
+			}
+			return ctrl.Result{}, nil
+		}
 		r.ctxlog.Error(err, "VM validation failed")
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
 			fmt.Sprintf("Migration plan validation failed: %v", err)); updateErr != nil {
@@ -411,17 +424,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
-	// Fetch MigrationTemplate CR
-	migrationtemplate = &vjailbreakv1alpha1.MigrationTemplate{}
-	if err = r.Get(ctx, types.NamespacedName{Name: migrationplan.Spec.MigrationTemplate, Namespace: migrationplan.Namespace},
-		migrationtemplate); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to get MigrationTemplate '%s'", migrationplan.Spec.MigrationTemplate)
-	}
 	// Fetch VMwareCreds CR
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-	return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
+		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
 	}
 	// Fetch OpenStackCreds CR
 	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -1538,25 +1544,28 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
 	var (
-		validVMs   []*vjailbreakv1alpha1.VMwareMachine
-		skippedVMs []string
+		validVMs, skippedVMs []*vjailbreakv1alpha1.VMwareMachine
 	)
+
+	if len(migrationplan.Spec.VirtualMachines) == 0 {
+		return nil, nil, fmt.Errorf("no VMs to migrate in migration plan")
+	}
 
 	for _, vmGroup := range migrationplan.Spec.VirtualMachines {
 		for _, vm := range vmGroup {
 			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
+				return nil, nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
 			}
 
 			_, skipped, err := r.validateVMOS(vmMachine)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if skipped {
-				skippedVMs = append(skippedVMs, vm)
+				skippedVMs = append(skippedVMs, vmMachine)
 				continue
 			}
 
@@ -1573,8 +1582,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	}
 
 	if len(validVMs) == 0 {
-		return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
+		return nil, skippedVMs, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 	}
 
-	return validVMs, nil
+	return validVMs, skippedVMs, nil
 }
