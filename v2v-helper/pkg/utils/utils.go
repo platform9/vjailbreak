@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -121,4 +123,28 @@ func atoi(s string) int {
 		return 0
 	}
 	return i
+}
+
+func GetRetryLimits() (uint64, time.Duration) {
+	const defaultMaxRetries = 3
+	const defaultInterval = 3 * time.Hour
+	client, err := GetInclusterClient()
+	if err != nil {
+		PrintLog(fmt.Sprintf("WARNING: Failed to get in-cluster client: %v, using default max retries (%d)",
+			err, defaultMaxRetries))
+		return defaultMaxRetries, defaultInterval
+	}
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), client)
+	if err != nil {
+		PrintLog(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default max retries (%d)",
+			err, defaultMaxRetries))
+		return defaultMaxRetries, defaultInterval
+	}
+	retryCap, err := time.ParseDuration(vjailbreakSettings.PeriodicSyncRetryCap)
+	if err != nil {
+		PrintLog(fmt.Sprintf("WARNING: Failed to parse retry cap: %v, using default retry cap (%s)",
+			err, defaultInterval))
+		retryCap = defaultInterval
+	}
+	return vjailbreakSettings.PeriodicSyncMaxRetries, retryCap
 }
