@@ -231,8 +231,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
 
-	time.Sleep(24 * time.Hour)
-
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 
