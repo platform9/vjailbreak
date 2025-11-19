@@ -45,6 +45,7 @@ type OpenstackOperations interface {
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
 	WaitUntilVMActive(vmID string) (bool, error)
+	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 }
 
 func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
