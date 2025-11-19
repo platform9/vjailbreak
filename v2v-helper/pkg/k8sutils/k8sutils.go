@@ -190,3 +190,19 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
 	}, nil
 }
+
+func GetArrayCredsMapping(ctx context.Context, k8sClient client.Client, arrayCredsMappingName string) (vjailbreakv1alpha1.ArrayCredsMapping, error) {
+	arrayCredsMapping := vjailbreakv1alpha1.ArrayCredsMapping{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsMappingName, Namespace: constants.NamespaceMigrationSystem}, &arrayCredsMapping); err != nil {
+		return vjailbreakv1alpha1.ArrayCredsMapping{}, errors.Wrap(err, "failed to get array creds mapping configmap")
+	}
+	return arrayCredsMapping, nil
+}
+
+func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName string) (vjailbreakv1alpha1.ArrayCreds, error) {
+	arrayCreds := vjailbreakv1alpha1.ArrayCreds{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsName, Namespace: constants.NamespaceMigrationSystem}, &arrayCreds); err != nil {
+		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds configmap")
+	}
+	return arrayCreds, nil
+}

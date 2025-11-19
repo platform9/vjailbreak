@@ -69,6 +69,10 @@ func main() {
 		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
 		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
 		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+		arrayHost         = strings.TrimSpace(os.Getenv("ARRAY_HOST"))
+		arrayUser         = strings.TrimSpace(os.Getenv("ARRAY_USER"))
+		arrayPassword     = strings.TrimSpace(os.Getenv("ARRAY_PASSWORD"))
+		arrayInsecure     = strings.EqualFold(strings.TrimSpace(os.Getenv("ARRAY_INSECURE")), constants.TrueString)
 	)
 
 	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -145,6 +149,13 @@ func main() {
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
+		StorageCopyMethod:      migrationparams.StorageCopyMethod,
+		ArrayHost:              arrayHost,
+		ArrayUser:              arrayUser,
+		ArrayPassword:          arrayPassword,
+		ArrayInsecure:          arrayInsecure,
+		VendorType:             migrationparams.VendorType,
+		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 	}
 
 	if err := migrationobj.MigrateVM(ctx); err != nil {
