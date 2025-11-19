@@ -19,11 +19,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
 	"time"
-	"reflect"
 
 	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -178,13 +178,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-	
+
 	if !reflect.DeepEqual(&migration.Status, oldStatus) {
-        if err := r.Status().Update(ctx, migration); err != nil {
-            ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
-            return ctrl.Result{}, err
-        }
-    }
+		if err := r.Status().Update(ctx, migration); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
+			return ctrl.Result{}, err
+		}
+	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
@@ -392,11 +392,6 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
-	// logging filtered events through loop
-	// for i := range filteredEvents.Items {
-	// print messages of each event
-	// ctxlog.Info("+++++Event: ", "message", filteredEvents.Items[i].Message)
-	// }
 	return filteredEvents, nil
 }
 
