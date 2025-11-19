@@ -19,56 +19,61 @@ import {
   Alert,
   TextField,
   CircularProgress,
-  GlobalStyles,
-} from "@mui/material";
-import { DataGrid, GridColDef, GridRow, GridRowSelectionModel, GridToolbarColumnsButton } from "@mui/x-data-grid";
-import { useQueryClient } from "@tanstack/react-query";
-import { VmData } from "src/api/migration-templates/model";
-import { OpenStackFlavor, OpenstackCreds } from "src/api/openstack-creds/model";
-import { patchVMwareMachine } from "src/api/vmware-machines/vmwareMachines";
-import CustomLoadingOverlay from "src/components/grid/CustomLoadingOverlay";
-import CustomSearchToolbar from "src/components/grid/CustomSearchToolbar";
-import Step from "../../components/forms/Step";
-import { useEffect, useState, useCallback } from "react";
-;
-import * as React from "react";
-import { getMigrationPlans } from "src/api/migration-plans/migrationPlans";
-import { useVMwareMachinesQuery } from "src/hooks/api/useVMwareMachinesQuery";
-import InfoIcon from "@mui/icons-material/Info";
-import WarningIcon from "@mui/icons-material/Warning";
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import WindowsIcon from "src/assets/windows_icon.svg";
-import LinuxIcon from "src/assets/linux_icon.svg";
-import { useErrorHandler } from "src/hooks/useErrorHandler";
-import { validateOpenstackIPs } from "src/api/openstack-creds/openstackCreds";
-import { useAmplitude } from "src/hooks/useAmplitude"
-import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
-import { RdmDiskConfigurationPanel } from "src/components/RdmDiskConfigurationPanel"
-import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from "src/hooks/api/useRdmDisksQuery"
-import { patchRdmDisk } from "src/api/rdm-disks/rdmDisks";
-import { RdmDisk } from "src/api/rdm-disks/model";
+  GlobalStyles
+} from '@mui/material'
+import {
+  DataGrid,
+  GridColDef,
+  GridRow,
+  GridRowSelectionModel,
+  GridToolbarColumnsButton
+} from '@mui/x-data-grid'
+import { useQueryClient } from '@tanstack/react-query'
+import { VmData } from 'src/api/migration-templates/model'
+import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
+import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
+import CustomLoadingOverlay from 'src/components/grid/CustomLoadingOverlay'
+import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
+import Step from '../../components/forms/Step'
+import { useEffect, useState, useCallback } from 'react'
+import * as React from 'react'
+import { getMigrationPlans } from 'src/api/migration-plans/migrationPlans'
+import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
+import InfoIcon from '@mui/icons-material/Info'
+import WarningIcon from '@mui/icons-material/Warning'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorIcon from '@mui/icons-material/Error'
+import WindowsIcon from 'src/assets/windows_icon.svg'
+import LinuxIcon from 'src/assets/linux_icon.svg'
+import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { validateOpenstackIPs } from 'src/api/openstack-creds/openstackCreds'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
+import { RdmDiskConfigurationPanel } from 'src/components/RdmDiskConfigurationPanel'
+import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from 'src/hooks/api/useRdmDisksQuery'
+import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
+import { RdmDisk } from 'src/api/rdm-disks/model'
 
-const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
-  display: "grid",
+const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
+  display: 'grid',
   gridGap: theme.spacing(1),
-  "& .disabled-row": {
+  '& .disabled-row': {
     opacity: 0.6,
-    cursor: "not-allowed",
+    cursor: 'not-allowed'
   },
-  "& .hidden-column": {
-    display: "none"
+  '& .hidden-column': {
+    display: 'none'
   },
-  "& .warning-row": {
-    color: "#856404",
-    fontWeight: "bold",
+  '& .warning-row': {
+    color: '#856404',
+    fontWeight: 'bold'
   }
-}));
+}))
 
-const FieldsContainer = styled("div")(({ theme }) => ({
-  display: "grid",
-  marginLeft: theme.spacing(6),
-}));
+const FieldsContainer = styled('div')(({ theme }) => ({
+  display: 'grid',
+  marginLeft: theme.spacing(6)
+}))
 
 // Style for Clarity icons
 const CdsIconWrapper = styled('div')({
@@ -76,26 +81,30 @@ const CdsIconWrapper = styled('div')({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center'
-});
-
+})
 
 const CustomToolbarWithActions = (props) => {
-  const { rowSelectionModel, onAssignFlavor, onAssignIP, hasRdmVMs, onAssignRdmConfiguration, poweredOffSelectionCount, ...toolbarProps } = props;
+  const {
+    rowSelectionModel,
+    onAssignFlavor,
+    onAssignIP,
+    hasRdmVMs,
+    onAssignRdmConfiguration,
+    poweredOffSelectionCount,
+    ...toolbarProps
+  } = props
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}>
+    <Box
+      sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '4px 8px' }}
+    >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <GridToolbarColumnsButton />
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {rowSelectionModel && rowSelectionModel.length > 0 && (
           <>
-            <Button
-              variant="text"
-              color="primary"
-              onClick={onAssignFlavor}
-              size="small"
-            >
+            <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
             </Button>
             {hasRdmVMs && (
@@ -109,12 +118,7 @@ const CustomToolbarWithActions = (props) => {
               </Button>
             )}
             {poweredOffSelectionCount > 0 && (
-              <Button
-                variant="text"
-                color="primary"
-                onClick={onAssignIP}
-                size="small"
-              >
+              <Button variant="text" color="primary" onClick={onAssignIP} size="small">
                 Assign IP ({poweredOffSelectionCount})
               </Button>
             )}
@@ -123,38 +127,39 @@ const CustomToolbarWithActions = (props) => {
         <CustomSearchToolbar {...toolbarProps} />
       </Box>
     </Box>
-  );
-};
+  )
+}
 
 interface VmDataWithFlavor extends VmData {
-  isMigrated?: boolean;
-  flavorName?: string; // Add a field to store the flavor name
-  flavorNotFound?: boolean; // Add a flag to indicate if a flavor wasn't found
-  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating';
-  ipValidationMessage?: string;
-  powerState?: string; // Add power state for IP editing logic
+  isMigrated?: boolean
+  flavorName?: string // Add a field to store the flavor name
+  flavorNotFound?: boolean // Add a flag to indicate if a flavor wasn't found
+  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
+  ipValidationMessage?: string
+  powerState?: string // Add power state for IP editing logic
 }
 
 // Column definition moved inside component to access state
 
-const paginationModel = { page: 0, pageSize: 5 };
+const paginationModel = { page: 0, pageSize: 5 }
 
-const MIGRATED_TOOLTIP_MESSAGE = "This VM is migrating or already has been migrated.";
-const FLAVOR_NOT_FOUND_MESSAGE = "Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.";
+const MIGRATED_TOOLTIP_MESSAGE = 'This VM is migrating or already has been migrated.'
+const FLAVOR_NOT_FOUND_MESSAGE =
+  'Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.'
 
 interface VmsSelectionStepProps {
-  onChange: (id: string) => (value: unknown) => void;
-  error: string;
-  open?: boolean;
-  vmwareCredsValidated: boolean;
-  openstackCredsValidated: boolean;
-  sessionId?: string;
-  openstackFlavors?: OpenStackFlavor[];
-  vmwareCredName?: string;
-  openstackCredName?: string;
-  openstackCredentials?: OpenstackCreds;
-  vmwareCluster?: string;
-  vmwareClusterDisplayName?: string;
+  onChange: (id: string) => (value: unknown) => void
+  error: string
+  open?: boolean
+  vmwareCredsValidated: boolean
+  openstackCredsValidated: boolean
+  sessionId?: string
+  openstackFlavors?: OpenStackFlavor[]
+  vmwareCredName?: string
+  openstackCredName?: string
+  openstackCredentials?: OpenstackCreds
+  vmwareCluster?: string
+  vmwareClusterDisplayName?: string
 }
 
 export default function VmsSelectionStep({
@@ -169,105 +174,117 @@ export default function VmsSelectionStep({
   openstackCredName,
   openstackCredentials,
   vmwareCluster,
-  vmwareClusterDisplayName,
+  vmwareClusterDisplayName
 }: VmsSelectionStepProps) {
-  const { reportError } = useErrorHandler({ component: "VmsSelectionStep" });
-  const { track } = useAmplitude({ component: "VmsSelectionStep" });
-  const queryClient = useQueryClient();
-  const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set());
-  const [loadingMigratedVms, setLoadingMigratedVms] = useState(false);
-  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
-  const [selectedFlavor, setSelectedFlavor] = useState<string>("");
-  const [rdmConfigDialogOpen, setRdmConfigDialogOpen] = useState(false);
-  const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set());
-  const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([]);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">("success");
+  const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
+  const { track } = useAmplitude({ component: 'VmsSelectionStep' })
+  const queryClient = useQueryClient()
+  const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
+  const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
+  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
+  const [selectedFlavor, setSelectedFlavor] = useState<string>('')
+  const [rdmConfigDialogOpen, setRdmConfigDialogOpen] = useState(false)
+  const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set())
+  const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
+  const [snackbarOpen, setSnackbarOpen] = useState(false)
+  const [snackbarMessage, setSnackbarMessage] = useState('')
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success')
 
   // Toast notification for IP assignments
-  const [toastOpen, setToastOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [toastSeverityIp, setToastSeverityIp] = useState<"success" | "error" | "warning" | "info">("success");
-  const [updating, setUpdating] = useState(false);
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastSeverityIp, setToastSeverityIp] = useState<'success' | 'error' | 'warning' | 'info'>(
+    'success'
+  )
+  const [updating, setUpdating] = useState(false)
 
   // Toast notification helper
-  const showToast = useCallback((message: string, severity: "success" | "error" | "warning" | "info" = "success") => {
-    setToastMessage(message);
-    setToastSeverityIp(severity);
-    setToastOpen(true);
-  }, []);
+  const showToast = useCallback(
+    (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+      setToastMessage(message)
+      setToastSeverityIp(severity)
+      setToastOpen(true)
+    },
+    []
+  )
 
   const handleCloseToast = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
-      return;
+      return
     }
-    setToastOpen(false);
-  }, []);
+    setToastOpen(false)
+  }, [])
 
   // OS assignment state
-  const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({});
+  const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
 
-  const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery();
+  const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery()
 
   // RDM validation logic
   const rdmValidation = useRdmConfigValidation({
-    selectedVMs: Array.from(selectedVMs).map(vmName =>
-      vmsWithFlavor.find(vm => vm.name === vmName)
-    ).filter(Boolean) as VmData[],
-    rdmDisks: rdmDisks,
-  });
+    selectedVMs: Array.from(selectedVMs)
+      .map((vmName) => vmsWithFlavor.find((vm) => vm.name === vmName))
+      .filter(Boolean) as VmData[],
+    rdmDisks: rdmDisks
+  })
 
   // RDM configuration state
-  const [rdmConfigurations, setRdmConfigurations] = useState<Array<{
-    uuid: string;
-    diskName: string;
-    cinderBackendPool: string;
-    volumeType: string;
-    source: Record<string, string>;
-  }>>([]);
+  const [rdmConfigurations, setRdmConfigurations] = useState<
+    Array<{
+      uuid: string
+      diskName: string
+      cinderBackendPool: string
+      volumeType: string
+      source: Record<string, string>
+    }>
+  >([])
 
   // IP editing and validation state - similar to RollingMigrationForm
 
   // Bulk IP editing state (kept for potential future use but not accessible via UI)
-  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
-  const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({});
-  const [bulkValidationStatus, setBulkValidationStatus] = useState<Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>>({});
-  const [bulkValidationMessages, setBulkValidationMessages] = useState<Record<string, Record<number, string>>>({});
-  const [assigningIPs, setAssigningIPs] = useState(false);
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
+  const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
+  const [bulkValidationStatus, setBulkValidationStatus] = useState<
+    Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
+  >({})
+  const [bulkValidationMessages, setBulkValidationMessages] = useState<
+    Record<string, Record<number, string>>
+  >({})
+  const [assigningIPs, setAssigningIPs] = useState(false)
 
   const clusterName = React.useMemo(() => {
-    if (!vmwareCluster) return undefined;
-    const parts = vmwareCluster.split(':');
+    if (!vmwareCluster) return undefined
+    const parts = vmwareCluster.split(':')
     // The value is "credName:datacenter:clusterName"
-    return parts.length === 3 ? parts[2] : undefined;
-  }, [vmwareCluster]);
+    return parts.length === 3 ? parts[2] : undefined
+  }, [vmwareCluster])
 
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
     {
-      field: "name",
-      headerName: "VM Name",
+      field: 'name',
+      headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tooltip title={params.row.vmState === "running" ? "Running" : "Stopped"}>
+            <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
               <CdsIconWrapper>
                 {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                 {/* @ts-ignore */}
-                <cds-icon shape="vm" size="md" badge={params.row.vmState === "running" ? "success" : "danger"}></cds-icon>
+                <cds-icon
+                  shape="vm"
+                  size="md"
+                  badge={params.row.vmState === 'running' ? 'success' : 'danger'}
+                >
+                  {/* @ts-ignore */}
+                </cds-icon>
               </CdsIconWrapper>
             </Tooltip>
             <Box>{params.value}</Box>
           </Box>
           {params.row.isMigrated && (
-            <Chip
-              variant="outlined"
-              label="Migrated"
-              color="info"
-              size="small"
-            />
+            <Chip variant="outlined" label="Migrated" color="info" size="small" />
           )}
           {params.row.flavorNotFound && (
             <Box display="flex" alignItems="center" gap={0.5}>
@@ -286,119 +303,126 @@ export default function VmsSelectionStep({
             </Tooltip>
           )}
         </Box>
-      ),
+      )
     },
     {
-      field: "ipAddress",
-      headerName: "IP Address(es)",
+      field: 'ipAddress',
+      headerName: 'IP Address(es)',
       flex: 1,
       hideable: true,
       renderCell: (params) => {
-        const vm = params.row as VmDataWithFlavor;
-        const vmId = vm.name;
-        const isSelected = selectedVMs.has(vmId);
-        const powerState = vm.powerState;
+        const vm = params.row as VmDataWithFlavor
+        const vmId = vm.name
+        const isSelected = selectedVMs.has(vmId)
+        const powerState = vm.powerState
 
         // For powered-off VMs - consistent display with tooltip to use toolbar
-        if (powerState === "powered-off") {
-          let ipDisplay = "";
-          let tooltipMessage = "";
+        if (powerState === 'powered-off') {
+          let ipDisplay = ''
+          let tooltipMessage = ''
 
           if (vm.networkInterfaces && vm.networkInterfaces.length > 1) {
             // Multiple network interfaces
-            ipDisplay = vm.networkInterfaces.map(nic => nic.ipAddress || "—").join(", ");
-            tooltipMessage = "Use 'Assign IP' button in toolbar to edit IP addresses for multiple network interfaces";
+            ipDisplay = vm.networkInterfaces.map((nic) => nic.ipAddress || '—').join(', ')
+            tooltipMessage =
+              "Use 'Assign IP' button in toolbar to edit IP addresses for multiple network interfaces"
           } else {
             // Single interface
-            ipDisplay = vm.ipAddress || "—";
-            tooltipMessage = "Use 'Assign IP' button in toolbar to assign IP address";
+            ipDisplay = vm.ipAddress || '—'
+            tooltipMessage = "Use 'Assign IP' button in toolbar to assign IP address"
           }
 
           const content = (
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              height: '100%'
-            }}>
-              <Typography variant="body2" sx={{
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                width: '100%',
+                height: '100%'
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
                 {ipDisplay}
               </Typography>
             </Box>
-          );
+          )
 
           return isSelected ? (
             <Tooltip title={tooltipMessage} arrow placement="top">
               {content}
             </Tooltip>
-          ) : content;
+          ) : (
+            content
+          )
         }
 
         // For single interface or when not using multi-interface modal
-        const currentIp = vm.ipAddress || "—";
+        const currentIp = vm.ipAddress || '—'
 
-        if (powerState === "powered-on") {
+        if (powerState === 'powered-on') {
           return (
             <Tooltip title="IP assignment is only available for powered-off VMs" arrow>
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                width: '100%',
-                height: '100%',
-              }}>
-                <Typography variant="body2">
-                  {currentIp}
-                </Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  width: '100%',
+                  height: '100%'
+                }}
+              >
+                <Typography variant="body2">{currentIp}</Typography>
               </Box>
             </Tooltip>
-          );
+          )
         }
 
         return (
-          <Box sx={{
-            display: 'flex',
-            alignItems: 'center',
-            width: '100%',
-            height: '100%'
-          }}>
-            <Typography variant="body2">
-              {currentIp}
-            </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            <Typography variant="body2">{currentIp}</Typography>
           </Box>
-        );
-      },
+        )
+      }
     },
     {
-      field: "osFamily",
-      headerName: "Operating System",
+      field: 'osFamily',
+      headerName: 'Operating System',
       flex: 1,
       hideable: true,
       renderCell: (params) => {
-        const vmId = params.row.id;
-        const isSelected = selectedVMs.has(vmId);
-        const powerState = params.row?.powerState;
-        const detectedOsFamily = params.row?.osFamily;
-        const assignedOsFamily = vmOSAssignments[vmId];
-        const currentOsFamily = assignedOsFamily || detectedOsFamily;
-
+        const vmId = params.row.id
+        const isSelected = selectedVMs.has(vmId)
+        const powerState = params.row?.powerState
+        const detectedOsFamily = params.row?.osFamily
+        const assignedOsFamily = vmOSAssignments[vmId]
+        const currentOsFamily = assignedOsFamily || detectedOsFamily
 
         // Show dropdown for ALL powered-off VMs (allows changing selection)
-        if (isSelected && powerState === "powered-off") {
+        if (isSelected && powerState === 'powered-off') {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
               <Select
                 size="small"
                 value={(() => {
-                  if (!currentOsFamily || currentOsFamily === "Unknown") return "";
-                  const osLower = currentOsFamily.toLowerCase();
-                  if (osLower.includes("windows")) return "windowsGuest";
-                  if (osLower.includes("linux")) return "linuxGuest";
-                  return "";
+                  if (!currentOsFamily || currentOsFamily === 'Unknown') return ''
+                  const osLower = currentOsFamily.toLowerCase()
+                  if (osLower.includes('windows')) return 'windowsGuest'
+                  if (osLower.includes('linux')) return 'linuxGuest'
+                  return ''
                 })()}
                 onChange={(e) => handleOSAssignment(vmId, e.target.value)}
                 displayEmpty
@@ -411,7 +435,9 @@ export default function VmsSelectionStep({
                 }}
               >
                 <MenuItem value="">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                  <Box
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
+                  >
                     <WarningIcon sx={{ fontSize: 16 }} />
                     <em>Select OS</em>
                   </Box>
@@ -430,77 +456,89 @@ export default function VmsSelectionStep({
                 </MenuItem>
               </Select>
             </Box>
-          );
+          )
         }
 
-        let displayValue = currentOsFamily || "Unknown";
-        let icon: React.ReactNode = null;
+        let displayValue = currentOsFamily || 'Unknown'
+        let icon: React.ReactNode = null
 
-        if (currentOsFamily && currentOsFamily.toLowerCase().includes("windows")) {
-          displayValue = "Windows";
-          icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />;
-        } else if (currentOsFamily && currentOsFamily.toLowerCase().includes("linux")) {
-          displayValue = "Linux";
-          icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20 }} />;
-        } else if (currentOsFamily && currentOsFamily !== "Unknown") {
-          displayValue = "Unknown";
+        if (currentOsFamily && currentOsFamily.toLowerCase().includes('windows')) {
+          displayValue = 'Windows'
+          icon = <img src={WindowsIcon} alt="Windows" style={{ width: 20, height: 20 }} />
+        } else if (currentOsFamily && currentOsFamily.toLowerCase().includes('linux')) {
+          displayValue = 'Linux'
+          icon = <img src={LinuxIcon} alt="Linux" style={{ width: 20, height: 20 }} />
+        } else if (currentOsFamily && currentOsFamily !== 'Unknown') {
+          displayValue = 'Unknown'
         }
 
         return (
-          <Tooltip title={powerState === "powered-off" ?
-            ((!currentOsFamily || currentOsFamily === "Unknown") ?
-              "OS assignment required for powered-off VMs" :
-              "Click to change OS selection") :
-            displayValue}>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              height: '100%',
-              gap: 1
-            }}>
+          <Tooltip
+            title={
+              powerState === 'powered-off'
+                ? !currentOsFamily || currentOsFamily === 'Unknown'
+                  ? 'OS assignment required for powered-off VMs'
+                  : 'Click to change OS selection'
+                : displayValue
+            }
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                height: '100%',
+                gap: 1
+              }}
+            >
               {icon}
-              {(!currentOsFamily || currentOsFamily === "Unknown") && (
+              {(!currentOsFamily || currentOsFamily === 'Unknown') && (
                 <WarningIcon sx={{ color: 'warning.main', fontSize: 16 }} />
               )}
-              <Typography variant="body2" sx={{
-                color: (!currentOsFamily || currentOsFamily === "Unknown") ? 'text.secondary' : 'text.primary'
-              }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color:
+                    !currentOsFamily || currentOsFamily === 'Unknown'
+                      ? 'text.secondary'
+                      : 'text.primary'
+                }}
+              >
                 {displayValue}
               </Typography>
             </Box>
           </Tooltip>
-        );
-      },
+        )
+      }
     },
     {
-      field: "networks",
-      headerName: "Network Interface(s)",
+      field: 'networks',
+      headerName: 'Network Interface(s)',
       flex: 1.2,
-      valueGetter: (value: string[]) => value?.join(", ") || "- ",
+      valueGetter: (value: string[]) => value?.join(', ') || '- '
     },
     {
-      field: "cpuCount",
-      headerName: "CPU",
+      field: 'cpuCount',
+      headerName: 'CPU',
       flex: 0.7,
-      valueGetter: (value) => value || "- ",
+      valueGetter: (value) => value || '- '
     },
     {
-      field: "memory",
-      headerName: "Memory (MB)",
+      field: 'memory',
+      headerName: 'Memory (MB)',
       flex: 0.9,
-      valueGetter: (value) => value || "- ",
+      valueGetter: (value) => value || '- '
     },
     {
-      field: "esxHost",
-      headerName: "ESX Host",
+      field: 'esxHost',
+      headerName: 'ESX Host',
       flex: 1,
-      valueGetter: (value) => value || "—",
+      valueGetter: (value) => value || '—'
     },
     {
-      field: "flavor",
-      headerName: "Flavor",
+      field: 'flavor',
+      headerName: 'Flavor',
       flex: 1,
-      valueGetter: (value) => value || "auto-assign",
+      valueGetter: (value) => value || 'auto-assign',
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <div style={{ fontWeight: 500 }}>Flavor</div>
@@ -508,14 +546,14 @@ export default function VmsSelectionStep({
             <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
           </Tooltip>
         </Box>
-      ),
+      )
     },
     {
-      field: "rdmDisks",
-      headerName: "RDM Disks",
+      field: 'rdmDisks',
+      headerName: 'RDM Disks',
       flex: 1.2,
       hideable: true,
-      valueGetter: (value: string[]) => value?.join(", ") || "—",
+      valueGetter: (value: string[]) => value?.join(', ') || '—',
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <div style={{ fontWeight: 500 }}>RDM Disks</div>
@@ -523,35 +561,36 @@ export default function VmsSelectionStep({
             <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
           </Tooltip>
         </Box>
-      ),
+      )
     },
     // Hidden column for sorting by vmState
     {
-      field: "vmState",
-      headerName: "Status",
+      field: 'vmState',
+      headerName: 'Status',
       flex: 1,
       sortable: true,
       sortComparator: (v1, v2) => {
-        if (v1 === "running" && v2 === "stopped") return -1;
-        if (v1 === "stopped" && v2 === "running") return 1;
-        return 0;
+        if (v1 === 'running' && v2 === 'stopped') return -1
+        if (v1 === 'stopped' && v2 === 'running') return 1
+        return 0
       }
     }
-  ];
+  ]
 
   // IP validation and utility functions
   const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    return ipRegex.test(ip);
-  };
+    const ipRegex =
+      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+    return ipRegex.test(ip)
+  }
 
   // Removed getOpenstackAccessInfo - no longer needed with new API
 
   useEffect(() => {
     if (!open) {
-      setSelectedVMs(new Set());
+      setSelectedVMs(new Set())
     }
-  }, [open]);
+  }, [open])
 
   const {
     data: vmList = [],
@@ -564,157 +603,178 @@ export default function VmsSelectionStep({
     sessionId,
     vmwareCredName,
     clusterName,
-    vmwareClusterDisplayName,
-  });
+    vmwareClusterDisplayName
+  })
 
   useEffect(() => {
     if (open && vmwareCluster !== undefined) {
-      refreshVMList();
+      refreshVMList()
     }
-  }, [vmwareCluster]);
+  }, [vmwareCluster])
 
   useEffect(() => {
     const fetchMigratedVms = async () => {
-      if (!open) return;
+      if (!open) return
 
-      setLoadingMigratedVms(true);
+      setLoadingMigratedVms(true)
       try {
-        const plans = await getMigrationPlans();
-        const migratedVmSet = new Set<string>();
+        const plans = await getMigrationPlans()
+        const migratedVmSet = new Set<string>()
 
-        plans.forEach(plan => {
-          plan.spec.virtualMachines.forEach(vmList => {
-            vmList.forEach(vm => migratedVmSet.add(vm));
-          });
-        });
+        plans.forEach((plan) => {
+          plan.spec.virtualMachines.forEach((vmList) => {
+            vmList.forEach((vm) => migratedVmSet.add(vm))
+          })
+        })
 
-        setMigratedVms(migratedVmSet);
+        setMigratedVms(migratedVmSet)
       } catch (error) {
-        console.error("Error fetching migrated VMs:", error);
+        console.error('Error fetching migrated VMs:', error)
       } finally {
-        setLoadingMigratedVms(false);
+        setLoadingMigratedVms(false)
       }
-    };
+    }
 
-    fetchMigratedVms();
-  }, [open, vmList]);
+    fetchMigratedVms()
+  }, [open, vmList])
 
   useEffect(() => {
-    const initialVmsWithFlavor = vmList.map(vm => {
-      let flavor = "";
+    // Create a map of existing VM data (including assigned IPs) for quick lookup
+    const existingVmsMap = new Map(vmsWithFlavor.map((vm) => [vm.name, vm]))
+
+    const initialVmsWithFlavor = vmList.map((vm) => {
+      let flavor = ''
       if (vm.targetFlavorId) {
-        const foundFlavor = openstackFlavors.find(f => f.id === vm.targetFlavorId);
+        const foundFlavor = openstackFlavors.find((f) => f.id === vm.targetFlavorId)
         if (foundFlavor) {
-          flavor = foundFlavor.name;
+          flavor = foundFlavor.name
         } else {
-          flavor = vm.targetFlavorId;
+          flavor = vm.targetFlavorId
         }
       }
 
       // Check for NOT_FOUND label for OpenStack credentials
-      const flavorNotFound = openstackCredName ? vm.labels?.[openstackCredName] === "NOT_FOUND" : false;
+      const flavorNotFound = openstackCredName
+        ? vm.labels?.[openstackCredName] === 'NOT_FOUND'
+        : false
 
-      // Map power state from vmState 
-      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
+      // Map power state from vmState
+      const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
 
-      // Create comma-separated IP string from networkInterfaces
-      const allIPs = vm.networkInterfaces
+      // FIX: Use existing IP data from vmsWithFlavor if the VM exists,
+      // otherwise, use the fresh data from vmList.
+      const existingVm = existingVmsMap.get(vm.name)
+
+      let allIPs = vm.networkInterfaces
         ? vm.networkInterfaces
-          .map(nic => nic.ipAddress)
-          .filter(ip => ip && ip.trim() !== "")
-          .join(", ")
-        : vm.ipAddress || "";
+            .map((nic) => nic.ipAddress)
+            .filter((ip) => ip && ip.trim() !== '')
+            .join(', ')
+        : vm.ipAddress || ''
+
+      // If the VM exists in the current state, and vmList hasn't changed its core structure,
+      // prefer the locally assigned IP data from the existing object.
+      // We only want to use the local state IP if the source VM data (vmList) is the same object reference,
+      // but since we are re-mapping, we'll check if the existing VM has non-default IP data.
+      if (existingVm && vm.id === existingVm.id) {
+        const existingVmHasAssignedIP = existingVm.ipAddress && existingVm.ipAddress !== '—'
+        if (existingVmHasAssignedIP) {
+          allIPs = existingVm.ipAddress ?? vm.ipAddress ?? ''
+        }
+      }
 
       // Use assigned OS family if available, otherwise use the VM's detected OS family
-      const assignedOsFamily = vmOSAssignments[vm.name];
-      const finalOsFamily = assignedOsFamily || vm.osFamily;
+      const assignedOsFamily = vmOSAssignments[vm.name]
+      const finalOsFamily = assignedOsFamily || vm.osFamily
 
       return {
         ...vm,
-        ipAddress: allIPs || "—", // Update the main IP field to contain comma-separated IPs
+        ipAddress: allIPs || '—', // Update the main IP field to contain comma-separated IPs
         isMigrated: migratedVms.has(vm.name) || Boolean(vm.isMigrated),
         flavor,
         flavorNotFound,
         powerState,
         osFamily: finalOsFamily, // Use the assigned OS family or fallback to detected
         ipValidationStatus: 'pending' as const,
-        ipValidationMessage: '',
-      };
-    });
-    setVmsWithFlavor(initialVmsWithFlavor);
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments]);
-
+        ipValidationMessage: ''
+      }
+    })
+    setVmsWithFlavor(initialVmsWithFlavor)
+  }, [
+    vmList,
+    migratedVms,
+    openstackFlavors,
+    openstackCredName,
+    vmOSAssignments,
+    vmsWithFlavor.length
+  ])
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
-    if (vmsWithFlavor.length === 0) return;
+    if (vmsWithFlavor.length === 0) return
 
     // Clean up selection - remove VMs that no longer exist
-    const availableVmNames = new Set(vmsWithFlavor.map(vm => vm.name));
+    const availableVmNames = new Set(vmsWithFlavor.map((vm) => vm.name))
     const cleanedSelection = new Set(
-      Array.from(selectedVMs).filter(vmName => availableVmNames.has(vmName))
-    );
+      Array.from(selectedVMs).filter((vmName) => availableVmNames.has(vmName))
+    )
 
     if (cleanedSelection.size !== selectedVMs.size) {
-      setSelectedVMs(cleanedSelection);
+      setSelectedVMs(cleanedSelection)
       // Update parent with cleaned selection
-      const selectedVmData = vmsWithFlavor.filter(vm => cleanedSelection.has(vm.name));
-      onChange("vms")(selectedVmData);
+      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.name))
+      onChange('vms')(selectedVmData)
     }
-  }, [vmsWithFlavor, selectedVMs, onChange]);
+  }, [vmsWithFlavor, selectedVMs, onChange])
 
   useEffect(() => {
     if (vmsWithFlavor.length > 0 && selectedVMs.size > 0) {
-      const selectedVmData = vmsWithFlavor.filter(vm => selectedVMs.has(vm.name));
-      onChange("vms")(selectedVmData);
+      const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+      onChange('vms')(selectedVmData)
 
       // Also pass RDM configurations if available
       if (rdmConfigurations.length > 0) {
-        onChange("rdmConfigurations")(rdmConfigurations);
+        onChange('rdmConfigurations')(rdmConfigurations)
       }
     }
-  }, [vmsWithFlavor, selectedVMs, rdmConfigurations, onChange]);
+  }, [vmsWithFlavor, selectedVMs, rdmConfigurations, onChange])
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
     // Update selection based on the difference
-    const newSelection = new Set(selectedVMs);
+    const newSelection = new Set(selectedVMs)
 
     // Add newly selected items
-    selectedRowIds.forEach(id => {
+    selectedRowIds.forEach((id) => {
       if (!selectedVMs.has(id as string)) {
-        newSelection.add(id as string);
+        newSelection.add(id as string)
       }
-    });
+    })
 
     // Remove deselected items
-    selectedVMs.forEach(id => {
+    selectedVMs.forEach((id) => {
       if (!selectedRowIds.includes(id)) {
-        newSelection.delete(id);
+        newSelection.delete(id)
       }
-    });
+    })
 
-    setSelectedVMs(newSelection);
+    setSelectedVMs(newSelection)
 
     // Use persistent selection for onChange callback
-    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name));
-    onChange("vms")(selectedVmData);
+    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name))
+    onChange('vms')(selectedVmData)
 
     // Also pass RDM configurations if available
     if (rdmConfigurations.length > 0) {
-      onChange("rdmConfigurations")(rdmConfigurations);
+      onChange('rdmConfigurations')(rdmConfigurations)
     }
-  };
-
-
-
-
+  }
 
   // OS assignment handler
   const handleOSAssignment = async (vmId: string, osFamily: string) => {
     try {
       // Update local state first for immediate UI feedback
-      setVmOSAssignments(prev => ({ ...prev, [vmId]: osFamily }));
+      setVmOSAssignments((prev) => ({ ...prev, [vmId]: osFamily }))
 
-      const vm = vmsWithFlavor.find(v => v.name === vmId);
+      const vm = vmsWithFlavor.find((v) => v.name === vmId)
       if (vm?.vmWareMachineName) {
         await patchVMwareMachine(vm.vmWareMachineName, {
           spec: {
@@ -722,19 +782,17 @@ export default function VmsSelectionStep({
               osFamily: osFamily
             }
           }
-        });
+        })
       }
-
 
       // Track the analytics event
       track('os_family_assigned', {
         vm_name: vmId,
         os_family: osFamily,
         action: 'os-family-assignment'
-      });
+      })
 
-      showToast(`OS family successfully assigned for VM "${vmId}"`);
-
+      showToast(`OS family successfully assigned for VM "${vmId}"`)
     } catch (error) {
       reportError(error as Error, {
         context: 'os-family-assignment',
@@ -743,116 +801,124 @@ export default function VmsSelectionStep({
           osFamily: osFamily,
           action: 'os-family-assignment'
         }
-      });
+      })
       // Revert local state on error
-      setVmOSAssignments(prev => {
-        const newState = { ...prev };
-        delete newState[vmId];
-        return newState;
-      });
-      showToast(`Failed to assign OS family for VM "${vmId}": ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
+      setVmOSAssignments((prev) => {
+        const newState = { ...prev }
+        delete newState[vmId]
+        return newState
+      })
+      showToast(
+        `Failed to assign OS family for VM "${vmId}": ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        'error'
+      )
     }
-  };
+  }
 
   // Bulk IP editing functions (removed - not accessible via UI anymore)
 
   const handleCloseBulkEditDialog = () => {
-    setBulkEditDialogOpen(false);
-    setBulkEditIPs({});
-    setBulkValidationStatus({});
-    setBulkValidationMessages({});
-  };
+    setBulkEditDialogOpen(false)
+    setBulkEditIPs({})
+    setBulkValidationStatus({})
+    setBulkValidationMessages({})
+  }
 
   const handleBulkIpChange = (vmName: string, interfaceIndex: number, value: string) => {
-    setBulkEditIPs(prev => ({
+    setBulkEditIPs((prev) => ({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-    }));
+    }))
 
     if (!value.trim()) {
-      setBulkValidationStatus(prev => ({
+      setBulkValidationStatus((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-      }));
-      setBulkValidationMessages(prev => ({
+      }))
+      setBulkValidationMessages((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-      }));
+      }))
     } else if (!isValidIPAddress(value.trim())) {
-      setBulkValidationStatus(prev => ({
+      setBulkValidationStatus((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-      }));
-      setBulkValidationMessages(prev => ({
+      }))
+      setBulkValidationMessages((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'Invalid IP format' }
-      }));
+      }))
     } else {
-      setBulkValidationStatus(prev => ({
+      setBulkValidationStatus((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-      }));
-      setBulkValidationMessages(prev => ({
+      }))
+      setBulkValidationMessages((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-      }));
+      }))
     }
-  };
+  }
 
   const handleClearAllIPs = () => {
-    const clearedIPs: Record<string, Record<number, string>> = {};
-    const clearedStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
+    const clearedIPs: Record<string, Record<number, string>> = {}
+    const clearedStatus: Record<
+      string,
+      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
+    > = {}
 
-    Object.keys(bulkEditIPs).forEach(vmName => {
-      clearedIPs[vmName] = {};
-      clearedStatus[vmName] = {};
+    Object.keys(bulkEditIPs).forEach((vmName) => {
+      clearedIPs[vmName] = {}
+      clearedStatus[vmName] = {}
 
-      Object.keys(bulkEditIPs[vmName]).forEach(interfaceIndexStr => {
-        const interfaceIndex = parseInt(interfaceIndexStr);
-        clearedIPs[vmName][interfaceIndex] = "";
-        clearedStatus[vmName][interfaceIndex] = 'empty';
-      });
-    });
+      Object.keys(bulkEditIPs[vmName]).forEach((interfaceIndexStr) => {
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        clearedIPs[vmName][interfaceIndex] = ''
+        clearedStatus[vmName][interfaceIndex] = 'empty'
+      })
+    })
 
-    setBulkEditIPs(clearedIPs);
-    setBulkValidationStatus(clearedStatus);
-    setBulkValidationMessages({});
-  };
+    setBulkEditIPs(clearedIPs)
+    setBulkValidationStatus(clearedStatus)
+    setBulkValidationMessages({})
+  }
 
   const handleApplyBulkIPs = async () => {
     // Collect all IPs to apply with their VM and interface info
-    const ipsToApply: Array<{ vmName: string, interfaceIndex: number, ip: string }> = [];
+    const ipsToApply: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
 
     Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
       Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        if (ip.trim() !== "") {
+        if (ip.trim() !== '') {
           ipsToApply.push({
             vmName,
             interfaceIndex: parseInt(interfaceIndexStr),
             ip: ip.trim()
-          });
+          })
         }
-      });
-    });
+      })
+    })
 
-    if (ipsToApply.length === 0) return;
+    if (ipsToApply.length === 0) return
 
-    setAssigningIPs(true);
+    setAssigningIPs(true)
 
     try {
       // Batch validation before applying any changes
       if (openstackCredentials) {
-        const ipList = ipsToApply.map(item => item.ip);
+        const ipList = ipsToApply.map((item) => item.ip)
 
         // Set validating status for all IPs
-        setBulkValidationStatus(prev => {
-          const newStatus = { ...prev };
+        setBulkValidationStatus((prev) => {
+          const newStatus = { ...prev }
           ipsToApply.forEach(({ vmName, interfaceIndex }) => {
-            if (!newStatus[vmName]) newStatus[vmName] = {};
-            newStatus[vmName][interfaceIndex] = 'validating';
-          });
-          return newStatus;
-        });
+            if (!newStatus[vmName]) newStatus[vmName] = {}
+            newStatus[vmName][interfaceIndex] = 'validating'
+          })
+          return newStatus
+        })
 
         const validationResult = await validateOpenstackIPs({
           ip: ipList,
@@ -860,58 +926,58 @@ export default function VmsSelectionStep({
             secret_name: `${openstackCredentials.metadata.name}-openstack-secret`,
             secret_namespace: openstackCredentials.metadata.namespace
           }
-        });
+        })
 
         // Process validation results
-        const validIPs: Array<{ vmName: string, interfaceIndex: number, ip: string }> = [];
-        let hasInvalidIPs = false;
+        const validIPs: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
+        let hasInvalidIPs = false
 
         ipsToApply.forEach((item, index) => {
-          const isValid = validationResult.isValid[index];
-          const reason = validationResult.reason[index];
+          const isValid = validationResult.isValid[index]
+          const reason = validationResult.reason[index]
 
           if (isValid) {
-            validIPs.push(item);
-            setBulkValidationStatus(prev => ({
+            validIPs.push(item)
+            setBulkValidationStatus((prev) => ({
               ...prev,
               [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'valid' }
-            }));
-            setBulkValidationMessages(prev => ({
+            }))
+            setBulkValidationMessages((prev) => ({
               ...prev,
               [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'Valid' }
-            }));
+            }))
           } else {
-            hasInvalidIPs = true;
-            setBulkValidationStatus(prev => ({
+            hasInvalidIPs = true
+            setBulkValidationStatus((prev) => ({
               ...prev,
               [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'invalid' }
-            }));
-            setBulkValidationMessages(prev => ({
+            }))
+            setBulkValidationMessages((prev) => ({
               ...prev,
               [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: reason }
-            }));
+            }))
           }
-        });
+        })
 
         // Only proceed if ALL IPs are valid
         if (hasInvalidIPs) {
-          setAssigningIPs(false);
-          return;
+          setAssigningIPs(false)
+          return
         }
 
         // Apply the valid IPs to VMs
         const updatePromises = validIPs.map(async ({ vmName, interfaceIndex, ip }) => {
           try {
-            const vm = vmsWithFlavor.find(v => v.name === vmName);
-            if (!vm) throw new Error('VM not found');
+            const vm = vmsWithFlavor.find((v) => v.name === vmName)
+            if (!vm) throw new Error('VM not found')
 
             // Update network interfaces
             if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
-              const updatedInterfaces = [...vm.networkInterfaces];
+              const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
                 ipAddress: ip
-              };
+              }
 
               if (vm.vmWareMachineName) {
                 await patchVMwareMachine(vm.vmWareMachineName, {
@@ -920,7 +986,7 @@ export default function VmsSelectionStep({
                       networkInterfaces: updatedInterfaces
                     }
                   }
-                });
+                })
               }
             } else {
               // Fallback for single IP assignment
@@ -931,73 +997,75 @@ export default function VmsSelectionStep({
                       assignedIp: ip
                     }
                   }
-                });
+                })
               }
             }
 
-            return { success: true, vmName, interfaceIndex, ip };
+            return { success: true, vmName, interfaceIndex, ip }
           } catch (error) {
-            setBulkValidationStatus(prev => ({
+            setBulkValidationStatus((prev) => ({
               ...prev,
               [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-            }));
-            setBulkValidationMessages(prev => ({
+            }))
+            setBulkValidationMessages((prev) => ({
               ...prev,
-              [vmName]: { ...prev[vmName], [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP' }
-            }));
-            return { success: false, vmName, interfaceIndex, error };
+              [vmName]: {
+                ...prev[vmName],
+                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
+              }
+            }))
+            return { success: false, vmName, interfaceIndex, error }
           }
-        });
+        })
 
-        const results = await Promise.all(updatePromises);
+        const results = await Promise.all(updatePromises)
 
         // Check if any updates failed
-        const failedUpdates = results.filter(result => !result.success);
+        const failedUpdates = results.filter((result) => !result.success)
         if (failedUpdates.length > 0) {
-          setAssigningIPs(false);
-          return; // Don't close modal if any updates failed
+          setAssigningIPs(false)
+          return // Don't close modal if any updates failed
         }
 
         // Update local VM state
-        const updatedVMs = vmsWithFlavor.map(vm => {
-          const vmUpdates = validIPs.filter(item => item.vmName === vm.name);
-          if (vmUpdates.length === 0) return vm;
+        const updatedVMs = vmsWithFlavor.map((vm) => {
+          const vmUpdates = validIPs.filter((item) => item.vmName === vm.name)
+          if (vmUpdates.length === 0) return vm
 
-          const updatedVM = { ...vm };
+          const updatedVM = { ...vm }
 
           if (vm.networkInterfaces) {
-            const updatedInterfaces = [...vm.networkInterfaces];
+            const updatedInterfaces = [...vm.networkInterfaces]
             vmUpdates.forEach(({ interfaceIndex, ip }) => {
               if (updatedInterfaces[interfaceIndex]) {
                 updatedInterfaces[interfaceIndex] = {
                   ...updatedInterfaces[interfaceIndex],
                   ipAddress: ip
-                };
+                }
               }
-            });
-            updatedVM.networkInterfaces = updatedInterfaces;
+            })
+            updatedVM.networkInterfaces = updatedInterfaces
 
             // Recalculate comma-separated IP string
             const allIPs = updatedInterfaces
-              .map(nic => nic.ipAddress)
-              .filter(ip => ip && ip.trim() !== "")
-              .join(", ");
-            updatedVM.ipAddress = allIPs || "—";
+              .map((nic) => nic.ipAddress)
+              .filter((ip) => ip && ip.trim() !== '')
+              .join(', ')
+            updatedVM.ipAddress = allIPs || '—'
           } else {
             // Fallback for single IP
-            const firstUpdate = vmUpdates[0];
+            const firstUpdate = vmUpdates[0]
             if (firstUpdate) {
-              updatedVM.ipAddress = firstUpdate.ip;
+              updatedVM.ipAddress = firstUpdate.ip
             }
           }
 
-          return updatedVM;
-        });
-        setVmsWithFlavor(updatedVMs);
+          return updatedVM
+        })
+        setVmsWithFlavor(updatedVMs)
 
-        handleCloseBulkEditDialog();
+        handleCloseBulkEditDialog()
       }
-
     } catch (error) {
       reportError(error as Error, {
         context: 'bulk-ip-validation-assignment',
@@ -1005,161 +1073,175 @@ export default function VmsSelectionStep({
           bulkEditIPs: bulkEditIPs,
           action: 'bulk-ip-validation-assignment'
         }
-      });
+      })
     } finally {
-      setAssigningIPs(false);
+      setAssigningIPs(false)
     }
-  };
+  }
 
   const handleOpenFlavorDialog = () => {
-    if (selectedVMs.size === 0) return;
-    setFlavorDialogOpen(true);
-  };
+    if (selectedVMs.size === 0) return
+    setFlavorDialogOpen(true)
+  }
 
   const handleOpenRdmConfigurationDialog = () => {
-    if (selectedVMs.size === 0) return;
-    setRdmConfigDialogOpen(true);
-  };
+    if (selectedVMs.size === 0) return
+    setRdmConfigDialogOpen(true)
+  }
 
   const handleOpenBulkIPAssignment = () => {
-    if (selectedVMs.size === 0) return;
+    if (selectedVMs.size === 0) return
 
     // Initialize bulk edit IPs for selected VMs
-    const initialBulkEditIPs: Record<string, Record<number, string>> = {};
-    const initialValidationStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>> = {};
+    const initialBulkEditIPs: Record<string, Record<number, string>> = {}
+    const initialValidationStatus: Record<
+      string,
+      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
+    > = {}
 
-    Array.from(selectedVMs).forEach(vmName => {
-      const vm = vmsWithFlavor.find(v => v.name === vmName);
-      if (vm && vm.powerState === "powered-off") {
-        initialBulkEditIPs[vmName] = {};
-        initialValidationStatus[vmName] = {};
+    Array.from(selectedVMs).forEach((vmName) => {
+      const vm = vmsWithFlavor.find((v) => v.name === vmName)
+      if (vm && vm.powerState === 'powered-off') {
+        initialBulkEditIPs[vmName] = {}
+        initialValidationStatus[vmName] = {}
 
         if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
           // Multiple network interfaces
           vm.networkInterfaces.forEach((nic, index) => {
-            initialBulkEditIPs[vmName][index] = nic.ipAddress || "";
-            initialValidationStatus[vmName][index] = nic.ipAddress ? 'valid' : 'empty';
-          });
+            initialBulkEditIPs[vmName][index] = nic.ipAddress || ''
+            initialValidationStatus[vmName][index] = nic.ipAddress ? 'valid' : 'empty'
+          })
         } else {
           // Single interface (treat as interface 0)
-          initialBulkEditIPs[vmName][0] = vm.ipAddress && vm.ipAddress !== "—" ? vm.ipAddress : "";
-          initialValidationStatus[vmName][0] = (vm.ipAddress && vm.ipAddress !== "—") ? 'valid' : 'empty';
+          initialBulkEditIPs[vmName][0] = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+          initialValidationStatus[vmName][0] =
+            vm.ipAddress && vm.ipAddress !== '—' ? 'valid' : 'empty'
         }
       }
-    });
+    })
 
-    setBulkEditIPs(initialBulkEditIPs);
-    setBulkValidationStatus(initialValidationStatus);
-    setBulkValidationMessages({});
-    setBulkEditDialogOpen(true);
-  };
+    setBulkEditIPs(initialBulkEditIPs)
+    setBulkValidationStatus(initialValidationStatus)
+    setBulkValidationMessages({})
+    setBulkEditDialogOpen(true)
+  }
 
   const handleCloseRdmConfigurationDialog = () => {
-    setRdmConfigDialogOpen(false);
-  };
+    setRdmConfigDialogOpen(false)
+  }
 
   const handleCloseFlavorDialog = () => {
-    setFlavorDialogOpen(false);
-    setSelectedFlavor("");
-  };
+    setFlavorDialogOpen(false)
+    setSelectedFlavor('')
+  }
 
   const handleFlavorChange = (event) => {
-    setSelectedFlavor(event.target.value);
-  };
+    setSelectedFlavor(event.target.value)
+  }
 
   const handleApplyFlavor = async () => {
     if (!selectedFlavor) {
-      handleCloseFlavorDialog();
-      return;
+      handleCloseFlavorDialog()
+      return
     }
 
-    setUpdating(true);
+    setUpdating(true)
 
     try {
-      const isAutoAssign = selectedFlavor === "auto-assign";
-      const selectedFlavorObj = !isAutoAssign ? openstackFlavors.find(f => f.id === selectedFlavor) : null;
-      const flavorName = isAutoAssign ? "auto-assign" : (selectedFlavorObj ? selectedFlavorObj.name : selectedFlavor);
+      const isAutoAssign = selectedFlavor === 'auto-assign'
+      const selectedFlavorObj = !isAutoAssign
+        ? openstackFlavors.find((f) => f.id === selectedFlavor)
+        : null
+      const flavorName = isAutoAssign
+        ? 'auto-assign'
+        : selectedFlavorObj
+        ? selectedFlavorObj.name
+        : selectedFlavor
 
-      const updatedVms = vmsWithFlavor.map(vm => {
+      const updatedVms = vmsWithFlavor.map((vm) => {
         if (selectedVMs.has(vm.name)) {
           return {
             ...vm,
-            targetFlavorId: isAutoAssign ? "" : selectedFlavor,
+            targetFlavorId: isAutoAssign ? '' : selectedFlavor,
             flavorName,
             // If a flavor is assigned, the VM no longer has a flavor not found issue
             flavorNotFound: isAutoAssign ? vm.flavorNotFound : false
-          };
+          }
         }
-        return vm;
-      });
+        return vm
+      })
 
-      const selectedVmNames = Array.from(selectedVMs);
+      const selectedVmNames = Array.from(selectedVMs)
 
-      const updatePromises = selectedVmNames.map(vmName => {
-        const vmwareMachineName = vmList.find(vm => vm.name === vmName)?.vmWareMachineName
+      const updatePromises = selectedVmNames.map((vmName) => {
+        const vmwareMachineName = vmList.find((vm) => vm.name === vmName)?.vmWareMachineName
         const payload = {
           spec: {
-            targetFlavorId: isAutoAssign ? "" : selectedFlavor
+            targetFlavorId: isAutoAssign ? '' : selectedFlavor
           }
         }
         if (!vmwareMachineName) {
           return
         }
         return patchVMwareMachine(vmwareMachineName, payload)
-      });
+      })
 
-      await Promise.all(updatePromises);
+      await Promise.all(updatePromises)
 
-      setVmsWithFlavor(updatedVms);
-      onChange("vms")(updatedVms.filter((vm) => selectedVMs.has(vm.name)));
+      setVmsWithFlavor(updatedVms)
+      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
 
-      const actionText = isAutoAssign ? "cleared flavor assignment for" : "assigned flavor to";
-      setSnackbarMessage(`Successfully ${actionText} ${selectedVmNames.length} VM${selectedVmNames.length > 1 ? 's' : ''}`);
-      setSnackbarSeverity("success");
-      setSnackbarOpen(true);
+      const actionText = isAutoAssign ? 'cleared flavor assignment for' : 'assigned flavor to'
+      setSnackbarMessage(
+        `Successfully ${actionText} ${selectedVmNames.length} VM${
+          selectedVmNames.length > 1 ? 's' : ''
+        }`
+      )
+      setSnackbarSeverity('success')
+      setSnackbarOpen(true)
 
-      refreshVMList();
+      refreshVMList()
 
-      handleCloseFlavorDialog();
+      handleCloseFlavorDialog()
     } catch (error) {
       reportError(error as Error, {
         context: 'vm-flavors-update',
         metadata: {
           selectedVMs: Array.from(selectedVMs),
           selectedFlavor: selectedFlavor,
-          isAutoAssign: selectedFlavor === "auto-assign",
+          isAutoAssign: selectedFlavor === 'auto-assign',
           action: 'vm-flavors-bulk-update'
         }
-      });
-      setSnackbarMessage("Failed to assign flavor to VMs");
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
+      })
+      setSnackbarMessage('Failed to assign flavor to VMs')
+      setSnackbarSeverity('error')
+      setSnackbarOpen(true)
     } finally {
-      setUpdating(false);
+      setUpdating(false)
     }
-  };
+  }
 
   // RDM disk configuration functions
   const handleApplyRdmConfigurations = async () => {
     if (!rdmConfigurations || rdmConfigurations.length === 0) {
-      showToast("No RDM configurations to apply", "warning");
-      return;
+      showToast('No RDM configurations to apply', 'warning')
+      return
     }
 
-    setUpdating(true);
+    setUpdating(true)
 
     try {
-      track("rdm_configuration_applied", {
+      track('rdm_configuration_applied', {
         rdmDisksCount: rdmConfigurations.length,
-        selectedVMsCount: selectedVMs.size,
-      });
+        selectedVMsCount: selectedVMs.size
+      })
 
       const updatePromises = rdmConfigurations.map(async (config) => {
         // Find the RDM disk by uuid
-        const rdmDisk = rdmDisks.find(disk => disk.spec.uuid === config.uuid);
+        const rdmDisk = rdmDisks.find((disk) => disk.spec.uuid === config.uuid)
         if (!rdmDisk) {
-          console.warn(`RDM disk not found for diskName: ${config.diskName}`);
-          return;
+          console.warn(`RDM disk not found for diskName: ${config.diskName}`)
+          return
         }
 
         const payload = {
@@ -1167,24 +1249,28 @@ export default function VmsSelectionStep({
             openstackVolumeRef: {
               cinderBackendPool: config.cinderBackendPool,
               volumeType: config.volumeType,
-              openstackCreds: openstackCredName,
+              openstackCreds: openstackCredName
             }
           }
-        } as Partial<RdmDisk>;
+        } as Partial<RdmDisk>
 
-        return patchRdmDisk(rdmDisk.metadata.name, payload);
-      });
+        return patchRdmDisk(rdmDisk.metadata.name, payload)
+      })
 
-      await Promise.all(updatePromises);
+      await Promise.all(updatePromises)
 
-      showToast(`Successfully configured ${rdmConfigurations.length} RDM disk${rdmConfigurations.length > 1 ? 's' : ''}`, "success");
+      showToast(
+        `Successfully configured ${rdmConfigurations.length} RDM disk${
+          rdmConfigurations.length > 1 ? 's' : ''
+        }`,
+        'success'
+      )
 
       // Close the dialog after successful configuration
-      handleCloseRdmConfigurationDialog();
+      handleCloseRdmConfigurationDialog()
 
       // Invalidate RDM disks query to refetch updated configuration and re-run validation
-      queryClient.invalidateQueries({ queryKey: [RDM_DISKS_BASE_KEY] });
-
+      queryClient.invalidateQueries({ queryKey: [RDM_DISKS_BASE_KEY] })
     } catch (error) {
       reportError(error as Error, {
         context: 'rdm-disk-configuration',
@@ -1192,26 +1278,26 @@ export default function VmsSelectionStep({
           rdmConfigurationsCount: rdmConfigurations.length,
           action: 'apply-rdm-configurations'
         }
-      });
-      showToast("Failed to configure RDM disks", "error");
+      })
+      showToast('Failed to configure RDM disks', 'error')
     } finally {
-      setUpdating(false);
+      setUpdating(false)
     }
-  };
+  }
 
   const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
-  };
+    setSnackbarOpen(false)
+  }
 
   const isRowSelectable = (params) => {
     // Allow selection for both running and stopped VMs for cold migration
     // Only disable if VM is already migrated
-    return !params.row.isMigrated;
-  };
+    return !params.row.isMigrated
+  }
 
   const getNoRowsLabel = () => {
-    return "No VMs discovered";
-  };
+    return 'No VMs discovered'
+  }
 
   return (
     <VmsSelectionStepContainer>
@@ -1224,25 +1310,26 @@ export default function VmsSelectionStep({
                 RDM (Raw Device Mapping) Migration Detected
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Try and migrate VMs with shared RDM disks together as a group. You can configure Cinder backend settings for these disks using the "Configure RDM" button.
+                Try and migrate VMs with shared RDM disks together as a group. You can configure
+                Cinder backend settings for these disks using the "Configure RDM" button.
               </Typography>
             </Box>
           </Alert>
         )}
         <FormControl error={!!error} required>
-          <Paper sx={{ width: "100%", height: 389 }}>
+          <Paper sx={{ width: '100%', height: 389 }}>
             <DataGrid
               rows={vmsWithFlavor}
               columns={columns}
               initialState={{
                 pagination: { paginationModel },
                 sorting: {
-                  sortModel: [{ field: 'vmState', sort: 'asc' }],
+                  sortModel: [{ field: 'vmState', sort: 'asc' }]
                 },
                 columns: {
                   columnVisibilityModel: {
-                    vmState: false,  // Hide the vmState column that we use only for sorting
-                    rdmDisks: false  // Hide the RDM disks column by default
+                    vmState: false, // Hide the vmState column that we use only for sorting
+                    rdmDisks: false // Hide the RDM disks column by default
                   }
                 }
               }}
@@ -1250,27 +1337,32 @@ export default function VmsSelectionStep({
               localeText={{ noRowsLabel: getNoRowsLabel() }}
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
-              rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
-                vmsWithFlavor.some(vm => vm.name === vmName)
+              rowSelectionModel={Array.from(selectedVMs).filter((vmName) =>
+                vmsWithFlavor.some((vm) => vm.name === vmName)
               )}
               getRowId={(row) => row.name}
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
               slots={{
                 toolbar: (props) => {
-                  const poweredOffSelectionCount = Array.from(selectedVMs).filter(vmName => {
-                    const vm = vmsWithFlavor.find(v => v.name === vmName);
-                    return vm && vm.powerState === "powered-off";
-                  }).length;
+                  const poweredOffSelectionCount = Array.from(selectedVMs).filter((vmName) => {
+                    const vm = vmsWithFlavor.find((v) => v.name === vmName)
+                    return vm && vm.powerState === 'powered-off'
+                  }).length
 
                   return (
                     <CustomToolbarWithActions
                       {...props}
                       onRefresh={() => refreshVMList()}
-                      disableRefresh={loadingVms || loadingMigratedVms || !vmwareCredsValidated || !openstackCredsValidated}
+                      disableRefresh={
+                        loadingVms ||
+                        loadingMigratedVms ||
+                        !vmwareCredsValidated ||
+                        !openstackCredsValidated
+                      }
                       placeholder="Search by Name, Network Interface, CPU, or Memory"
-                      rowSelectionModel={Array.from(selectedVMs).filter(vmName =>
-                        vmsWithFlavor.some(vm => vm.name === vmName)
+                      rowSelectionModel={Array.from(selectedVMs).filter((vmName) =>
+                        vmsWithFlavor.some((vm) => vm.name === vmName)
                       )}
                       onAssignFlavor={handleOpenFlavorDialog}
                       onAssignRdmConfiguration={handleOpenRdmConfigurationDialog}
@@ -1278,42 +1370,37 @@ export default function VmsSelectionStep({
                       onAssignIP={handleOpenBulkIPAssignment}
                       poweredOffSelectionCount={poweredOffSelectionCount}
                     />
-                  );
+                  )
                 },
-                loadingOverlay: () => (
-                  <CustomLoadingOverlay loadingMessage="Loading VMs ..." />
-                ),
+                loadingOverlay: () => <CustomLoadingOverlay loadingMessage="Loading VMs ..." />,
                 row: (props) => {
-                  const isMigrated = props.row.isMigrated;
-                  const hasFlavorNotFound = props.row.flavorNotFound;
+                  const isMigrated = props.row.isMigrated
+                  const hasFlavorNotFound = props.row.flavorNotFound
 
-                  let tooltipMessage = "";
+                  let tooltipMessage = ''
                   if (isMigrated) {
-                    tooltipMessage = MIGRATED_TOOLTIP_MESSAGE;
+                    tooltipMessage = MIGRATED_TOOLTIP_MESSAGE
                   } else if (hasFlavorNotFound) {
-                    tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE;
+                    tooltipMessage = FLAVOR_NOT_FOUND_MESSAGE
                   }
 
                   return (
-                    <Tooltip
-                      title={tooltipMessage}
-                      followCursor
-                    >
+                    <Tooltip title={tooltipMessage} followCursor>
                       <span style={{ display: 'contents' }}>
                         <GridRow {...props} />
                       </span>
                     </Tooltip>
-                  );
-                },
+                  )
+                }
               }}
               loading={loadingVms || loadingMigratedVms}
               checkboxSelection
               disableColumnMenu
               getRowClassName={(params) => {
                 if (params.row.isMigrated) {
-                  return "disabled-row";
+                  return 'disabled-row'
                 } else {
-                  return "";
+                  return ''
                 }
               }}
               keepNonExistentRowsSelected
@@ -1333,16 +1420,10 @@ export default function VmsSelectionStep({
             {rdmValidation.powerStateErrorMessage}
           </Alert>
         )}
-
       </FieldsContainer>
 
       {/* Flavor Assignment Dialog */}
-      <Dialog
-        open={flavorDialogOpen}
-        onClose={handleCloseFlavorDialog}
-        fullWidth
-        maxWidth="sm"
-      >
+      <Dialog open={flavorDialogOpen} onClose={handleCloseFlavorDialog} fullWidth maxWidth="sm">
         <DialogTitle>
           Assign Flavor to {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
@@ -1389,7 +1470,7 @@ export default function VmsSelectionStep({
             color="primary"
             disabled={!selectedFlavor || updating}
           >
-            {updating ? "Applying..." : "Apply to selected VMs"}
+            {updating ? 'Applying...' : 'Apply to selected VMs'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1408,22 +1489,21 @@ export default function VmsSelectionStep({
           {/* Debug info */}
           {process.env.NODE_ENV === 'development' && (
             <Box sx={{ mb: 2, p: 1, bgcolor: 'grey.100', fontSize: '0.8rem' }}>
-              Debug: hasRdmVMs={String(rdmValidation.hasRdmVMs)}, rdmDisks.length={rdmDisks.length}, loading={String(rdmDisksLoading)}
+              Debug: hasRdmVMs={String(rdmValidation.hasRdmVMs)}, rdmDisks.length={rdmDisks.length},
+              loading={String(rdmDisksLoading)}
             </Box>
           )}
           {rdmDisksLoading ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <CircularProgress size={24} sx={{ mr: 1 }} />
-              <Typography color="text.secondary">
-                Loading RDM disk information...
-              </Typography>
+              <Typography color="text.secondary">Loading RDM disk information...</Typography>
             </Box>
           ) : rdmValidation.hasRdmVMs && rdmDisks.length > 0 ? (
             <RdmDiskConfigurationPanel
-              rdmDisks={rdmDisks.filter(disk => {
+              rdmDisks={rdmDisks.filter((disk) => {
                 // Only show RDM disks that have at least one selected VM as owner
-                const selectedVMsArray = Array.from(selectedVMs);
-                return disk.spec.ownerVMs.some(ownerVM => selectedVMsArray.includes(ownerVM));
+                const selectedVMsArray = Array.from(selectedVMs)
+                return disk.spec.ownerVMs.some((ownerVM) => selectedVMsArray.includes(ownerVM))
               })}
               openstackCreds={openstackCredentials}
               selectedVMs={Array.from(selectedVMs)}
@@ -1433,9 +1513,8 @@ export default function VmsSelectionStep({
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography color="text.secondary">
                 {rdmValidation.hasRdmVMs
-                  ? "No RDM disk configurations found."
-                  : "No RDM disks detected for selected VMs."
-                }
+                  ? 'No RDM disk configurations found.'
+                  : 'No RDM disks detected for selected VMs.'}
               </Typography>
             </Box>
           )}
@@ -1449,8 +1528,12 @@ export default function VmsSelectionStep({
               onClick={handleApplyRdmConfigurations}
               variant="contained"
               color="primary"
-              disabled={updating || !rdmConfigurations || rdmConfigurations.length === 0 ||
-                rdmConfigurations.some(config => !config.cinderBackendPool || !config.volumeType)}
+              disabled={
+                updating ||
+                !rdmConfigurations ||
+                rdmConfigurations.length === 0 ||
+                rdmConfigurations.some((config) => !config.cinderBackendPool || !config.volumeType)
+              }
               startIcon={updating ? <CircularProgress size={16} /> : undefined}
             >
               {updating ? 'Applying Configuration...' : 'Apply RDM Configuration'}
@@ -1471,11 +1554,7 @@ export default function VmsSelectionStep({
       </Snackbar>
 
       {/* Bulk IP Editor Dialog */}
-      <Dialog
-        open={bulkEditDialogOpen}
-        onClose={handleCloseBulkEditDialog}
-        maxWidth="md"
-      >
+      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md">
         <DialogTitle>
           Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
@@ -1491,35 +1570,43 @@ export default function VmsSelectionStep({
             {/* IP Editor Fields */}
             <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
               {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
-                const vm = vmsWithFlavor.find(v => v.name === vmName);
-                if (!vm) return null;
+                const vm = vmsWithFlavor.find((v) => v.name === vmName)
+                if (!vm) return null
 
                 return (
-                  <Box key={vmName} sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                  <Box
+                    key={vmName}
+                    sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
+                  >
                     <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
                       {vm.name}
                     </Typography>
 
                     {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
-                      const interfaceIndex = parseInt(interfaceIndexStr);
-                      const networkInterface = vm.networkInterfaces?.[interfaceIndex];
-                      const status = bulkValidationStatus[vmName]?.[interfaceIndex];
-                      const message = bulkValidationMessages[vmName]?.[interfaceIndex];
+                      const interfaceIndex = parseInt(interfaceIndexStr)
+                      const networkInterface = vm.networkInterfaces?.[interfaceIndex]
+                      const status = bulkValidationStatus[vmName]?.[interfaceIndex]
+                      const message = bulkValidationMessages[vmName]?.[interfaceIndex]
 
                       return (
-                        <Box key={interfaceIndex} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box
+                          key={interfaceIndex}
+                          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
+                        >
                           <Box sx={{ width: 120, flexShrink: 0 }}>
                             <Typography variant="caption" color="text.secondary">
                               {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
                             </Typography>
                             <Typography variant="caption" display="block" color="text.secondary">
-                              Current: {networkInterface?.ipAddress || vm.ipAddress || "—"}
+                              Current: {networkInterface?.ipAddress || vm.ipAddress || '—'}
                             </Typography>
                           </Box>
                           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TextField
                               value={ip}
-                              onChange={(e) => handleBulkIpChange(vmName, interfaceIndex, e.target.value)}
+                              onChange={(e) =>
+                                handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                              }
                               placeholder="Enter IP address"
                               size="small"
                               sx={{ flex: 1 }}
@@ -1528,15 +1615,17 @@ export default function VmsSelectionStep({
                             />
                             <Box sx={{ width: 24, display: 'flex' }}>
                               {status === 'validating' && <CircularProgress size={20} />}
-                              {status === 'valid' && <CheckCircleIcon color="success" fontSize="small" />}
+                              {status === 'valid' && (
+                                <CheckCircleIcon color="success" fontSize="small" />
+                              )}
                               {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
                             </Box>
                           </Box>
                         </Box>
-                      );
+                      )
                     })}
                   </Box>
-                );
+                )
               })}
             </Box>
           </Box>
@@ -1547,37 +1636,40 @@ export default function VmsSelectionStep({
             onClick={handleApplyBulkIPs}
             variant="contained"
             color="primary"
-            disabled={Object.values(bulkEditIPs).every(interfaces => Object.values(interfaces).every(ip => !ip.trim())) || assigningIPs}
+            disabled={
+              Object.values(bulkEditIPs).every((interfaces) =>
+                Object.values(interfaces).every((ip) => !ip.trim())
+              ) || assigningIPs
+            }
           >
-            {assigningIPs ? "Applying..." : "Apply Changes"}
+            {assigningIPs ? 'Applying...' : 'Apply Changes'}
           </Button>
         </DialogActions>
       </Dialog>
-
 
       {/* Add GlobalStyles similar to RollingMigrationForm */}
       <GlobalStyles
         styles={{
           '.MuiDataGrid-columnsManagement, .MuiDataGrid-columnsManagementPopover': {
             '& .MuiFormControlLabel-label': {
-              fontSize: '0.875rem !important',
+              fontSize: '0.875rem !important'
             },
             '& .MuiCheckbox-root': {
-              padding: '4px !important',
+              padding: '4px !important'
             },
             '& .MuiListItem-root': {
               fontSize: '0.875rem !important',
               minHeight: '32px !important',
-              padding: '2px 8px !important',
+              padding: '2px 8px !important'
             },
             '& .MuiTypography-root': {
-              fontSize: '0.875rem !important',
+              fontSize: '0.875rem !important'
             },
             '& .MuiInputBase-input': {
-              fontSize: '0.875rem !important',
+              fontSize: '0.875rem !important'
             },
             '& .MuiTextField-root .MuiInputBase-input': {
-              fontSize: '0.875rem !important',
+              fontSize: '0.875rem !important'
             }
           }
         }}
@@ -1600,5 +1692,5 @@ export default function VmsSelectionStep({
         </Alert>
       </Snackbar>
     </VmsSelectionStepContainer>
-  );
+  )
 }
