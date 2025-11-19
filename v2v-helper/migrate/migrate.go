@@ -419,6 +419,9 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 }
 
 func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
+	if migobj.Reporter == nil {
+		return false
+	}
 	value, err := migobj.Reporter.GetCutoverLabel()
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
