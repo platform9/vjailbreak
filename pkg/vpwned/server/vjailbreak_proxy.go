@@ -14,7 +14,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
-	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -241,79 +240,40 @@ func CreateInClusterClient() (client.Client, error) {
 
 func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
     kind := in.GetKind()
+    name := in.GetName()
+    namespace := in.GetNamespace()
 
     switch kind {
+
     case "VmwareCreds":
         vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
-        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: in.GetName(), Namespace: in.GetNamespace()}, vmwcreds); err != nil {
-            return nil, fmt.Errorf("failed to get resource %s/%s: %w", in.GetNamespace(), in.GetName(), err)
+        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, vmwcreds); err != nil {
+            return nil, fmt.Errorf("failed to get VMwareCreds %s/%s: %w", namespace, name, err)
         }
 
-        // Update status to validating
-        vmwcreds.Status.VMwareValidationStatus = "Validating"
-        vmwcreds.Status.VMwareValidationMessage = "Re-validation triggered by API"
+        vmwcreds.Status.VMwareValidationStatus = ""
+        vmwcreds.Status.VMwareValidationMessage = ""
         if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
-            return nil, fmt.Errorf("failed to update status to Validating: %w", err)
-        }
-
-        // Perform Validation logic
-        c, err := utils.ValidateVMwareCreds(ctx, p.K8sClient, vmwcreds)
-        if err != nil {
-            vmwcreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
-            vmwcreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds: %s", err)
-            _ = p.K8sClient.Status().Update(ctx, vmwcreds) // Best effort update on failure
-            return nil, fmt.Errorf("validation failed: %w", err)
-        }
-
-        // Cleanup client immediately as we just wanted to validate
-        if c != nil {
-            c.CloseIdleConnections()
-            _ = utils.LogoutVMwareClient(ctx, p.K8sClient, vmwcreds, c)
-        }
-
-        // If successful, update status
-        vmwcreds.Status.VMwareValidationStatus = "Succeeded"
-        vmwcreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
-        if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
-            return nil, fmt.Errorf("failed to update status to Succeeded: %w", err)
+            return nil, fmt.Errorf("failed to reset VMwareCreds status: %w", err)
         }
 
     case "OpenstackCreds":
         oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
-        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: in.GetName(), Namespace: in.GetNamespace()}, oscreds); err != nil {
-            return nil, fmt.Errorf("failed to get resource %s/%s: %w", in.GetNamespace(), in.GetName(), err)
+        if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, oscreds); err != nil {
+            return nil, fmt.Errorf("failed to get OpenstackCreds %s/%s: %w", namespace, name, err)
         }
 
-        // Update status to validating
-        oscreds.Status.OpenStackValidationStatus = "Validating"
-        oscreds.Status.OpenStackValidationMessage = "Re-validation triggered by API"
+        oscreds.Status.OpenStackValidationStatus = ""
+        oscreds.Status.OpenStackValidationMessage = ""
         if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
-            return nil, fmt.Errorf("failed to update status to Validating: %w", err)
+            return nil, fmt.Errorf("failed to reset OpenstackCreds status: %w", err)
         }
-
-        // Perform Validation logic
-        if _, err := utils.ValidateAndGetProviderClient(ctx, p.K8sClient, oscreds); err != nil {
-            oscreds.Status.OpenStackValidationStatus = "Failed"
-            oscreds.Status.OpenStackValidationMessage = err.Error()
-            _ = p.K8sClient.Status().Update(ctx, oscreds) // Best effort update on failure
-            return nil, fmt.Errorf("validation failed: %w", err)
-        }
-
-        // If successful, update status
-        oscreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-        oscreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-        if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
-            return nil, fmt.Errorf("failed to update status to Succeeded: %w", err)
-        }
-
-        // Note: The Controller will see this update and automatically trigger reconciliation
-        // to populate Flavors, PCD Clusters, and other dependant resources via `handleValidatedCreds`.
 
     default:
-        return nil, fmt.Errorf("unknown resource kind: %s", kind)
+        return nil, fmt.Errorf("unknown credentials kind: %s", kind)
     }
 
     return &api.RevalidateCredentialsResponse{
-        Message: fmt.Sprintf("Re-validation successful for %s %s/%s", kind, in.GetNamespace(), in.GetName()),
+        Message: fmt.Sprintf("Re-validation triggered for %s %s/%s", kind, namespace, name),
     }, nil
 }
