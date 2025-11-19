@@ -7,7 +7,8 @@ require (
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250904115639-c2134e9ef3b9
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251010063340-57148ad11aff
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0
@@ -22,6 +23,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/devans10/pugo/flasharray v0.0.0-20241116160615-6bb8c469c9a0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
@@ -63,3 +65,5 @@ require (
 )
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../k8s/migration
+
+replace github.com/platform9/vjailbreak/pkg/vpwned => ../pkg/vpwned

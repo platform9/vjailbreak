@@ -94,6 +94,8 @@ type VMDisk struct {
 	SnapBackingDisk string
 	ChangeID        string
 	Boot            bool
+	Datastore       string
+	DatastoreID     string
 }
 
 type VMOps struct {
@@ -114,6 +116,10 @@ func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name stri
 
 func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
+}
+
+func (vmops *VMOps) GetVCenterClient() *vcenter.VCenterClient {
+	return vmops.vcclient
 }
 
 func (vmops *VMOps) RefreshVM() error {
@@ -192,10 +198,38 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 			if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
 				continue
 			}
+			
+			// Get datastore information from disk backing
+			var datastoreName string
+			var datastoreID string
+			
+			if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				if backing.Datastore != nil {
+					datastoreID = backing.Datastore.Value
+					// Get datastore name
+					ds := object.NewDatastore(vmops.vcclient.VCClient, *backing.Datastore)
+					var dsObj mo.Datastore
+					if err := ds.Properties(vmops.ctx, ds.Reference(), []string{"name"}, &dsObj); err == nil {
+						datastoreName = dsObj.Name
+					}
+				}
+			} else if backing, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
+				if backing.Datastore != nil {
+					datastoreID = backing.Datastore.Value
+					ds := object.NewDatastore(vmops.vcclient.VCClient, *backing.Datastore)
+					var dsObj mo.Datastore
+					if err := ds.Properties(vmops.ctx, ds.Reference(), []string{"name"}, &dsObj); err == nil {
+						datastoreName = dsObj.Name
+					}
+				}
+			}
+			
 			vmdisks = append(vmdisks, VMDisk{
-				Name: disk.DeviceInfo.GetDescription().Label,
-				Size: disk.CapacityInBytes,
-				Disk: disk,
+				Name:        disk.DeviceInfo.GetDescription().Label,
+				Size:        disk.CapacityInBytes,
+				Disk:        disk,
+				Datastore:   datastoreName,
+				DatastoreID: datastoreID,
 			})
 		}
 	}

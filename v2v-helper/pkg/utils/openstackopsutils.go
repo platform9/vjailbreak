@@ -737,3 +737,45 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 
 	return groupIDs, nil
 }
+
+// ManageExistingVolume manages an existing volume on the storage backend into Cinder
+func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s, authurl %s, tenant %s", name, host, volumeType, osclient.AuthURL, osclient.Tenant))
+	
+	// Build the manage request
+	// The Cinder manage API requires specific fields
+	createOpts := map[string]interface{}{
+		"volume": map[string]interface{}{
+			"host":        host,
+			"ref":         ref,
+			"name":        name,
+			"volume_type": volumeType,
+		},
+	}
+	
+	// Make the API call to manage the volume
+	var result gophercloud.Result
+	_, result.Err = osclient.BlockStorageClient.Post(
+		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
+		createOpts,
+		&result.Body,
+		&gophercloud.RequestOpts{
+			OkCodes: []int{202}, // Accepted
+		},
+	)
+	
+	if result.Err != nil {
+		return nil, fmt.Errorf("failed to manage existing volume: %w", result.Err)
+	}
+	
+	// Extract the volume from the response
+	var volume volumes.Volume
+	err := result.ExtractInto(&volume)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract managed volume: %w", err)
+	}
+	
+	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
+	
+	return &volume, nil
+}

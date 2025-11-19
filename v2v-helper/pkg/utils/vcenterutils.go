@@ -40,6 +40,9 @@ type MigrationParams struct {
 	RDMDisks                string
 	FallbackToDHCP          bool
 	PeriodicSyncInterval    string
+	StorageCopyMethod       string
+	VendorType              string
+	ArrayCredsMapping       string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -81,5 +84,8 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		RDMDisks:                string(configMap.Data["RDM_DISK_NAMES"]),
 		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
 		PeriodicSyncInterval:    string(configMap.Data["PERIODIC_SYNC_INTERVAL"]),
+		StorageCopyMethod:       string(configMap.Data["STORAGE_COPY_METHOD"]),
+		VendorType:              string(configMap.Data["VENDOR_TYPE"]),
+		ArrayCredsMapping:       string(configMap.Data["ARRAY_CREDS_MAPPING"]),
 	}, nil
 }

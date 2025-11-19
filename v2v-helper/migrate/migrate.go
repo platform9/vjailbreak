@@ -18,6 +18,8 @@ import (
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/pure"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -68,6 +70,16 @@ type Migrate struct {
 	TenantName              string
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
+	StorageCopyMethod       string
+	// Array credentials for vendor-based storage migration
+	ArrayHost         string
+	ArrayUser         string
+	ArrayPassword     string
+	ArrayInsecure     bool
+	VendorType        string
+	ArrayCredsMapping string
+	StorageProvider   storage.StorageProvider
+	ESXiSSHPrivateKey []byte
 }
 
 type MigrationTimes struct {
@@ -1233,6 +1245,24 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
+	if migobj.StorageCopyMethod == "vendor-based" {
+		// Initialize storage provider if using vendor-based migration
+		if err := migobj.InitializeStorageProvider(ctx); err != nil {
+			return errors.Wrap(err, "failed to initialize storage provider")
+		}
+		defer func() {
+			if migobj.StorageProvider != nil {
+				migobj.StorageProvider.Disconnect()
+			}
+		}()
+
+		// Perform vendor-based storage copy
+		if err := migobj.VendorBasedStorageCopy(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform vendor-based storage copy")
+		}
+
+	}
+
 	// Create and Add Volumes to Host
 	vminfo, err = migobj.CreateVolumes(vminfo)
 	if err != nil {
@@ -1391,4 +1421,57 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 		}
 	}
 	return networkids, portids, ipaddresses, nil
+}
+
+// InitializeStorageProvider initializes and validates the storage provider for vendor-based migration
+func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
+	if migobj.StorageCopyMethod != "vendor-based" {
+		migobj.logMessage("Storage copy method is not vendor-based, skipping storage provider initialization")
+		return nil
+	}
+
+	migobj.logMessage("Initializing storage provider for vendor-based migration")
+
+	// Validate required credentials
+	if migobj.ArrayHost == "" {
+		return fmt.Errorf("ARRAY_HOST is required for vendor-based storage migration")
+	}
+	if migobj.ArrayUser == "" {
+		return fmt.Errorf("ARRAY_USER is required for vendor-based storage migration")
+	}
+	if migobj.ArrayPassword == "" {
+		return fmt.Errorf("ARRAY_PASSWORD is required for vendor-based storage migration")
+	}
+
+	// Create storage access info
+	accessInfo := storage.StorageAccessInfo{
+		Hostname:            migobj.ArrayHost,
+		Username:            migobj.ArrayUser,
+		Password:            migobj.ArrayPassword,
+		SkipSSLVerification: migobj.ArrayInsecure,
+		VendorType:          migobj.VendorType,
+	}
+
+	// Create storage provider
+	provider, err := storage.NewStorageProvider(accessInfo.VendorType)
+	if err != nil {
+		return fmt.Errorf("failed to create storage provider: %w", err)
+	}
+
+	// Connect to storage array
+	migobj.logMessage(fmt.Sprintf("Connecting to storage array: %s", migobj.ArrayHost))
+	if err := provider.Connect(ctx, accessInfo); err != nil {
+		return fmt.Errorf("failed to connect to storage array: %w", err)
+	}
+
+	// Validate credentials
+	migobj.logMessage("Validating storage array credentials...")
+	if err := provider.ValidateCredentials(ctx); err != nil {
+		return fmt.Errorf("storage array credential validation failed: %w", err)
+	}
+
+	migobj.StorageProvider = provider
+	migobj.logMessage(fmt.Sprintf("Storage provider initialized successfully: %s", provider.WhoAmI()))
+
+	return nil
 }
