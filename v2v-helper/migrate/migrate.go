@@ -239,17 +239,15 @@ func (migobj *Migrate) WaitforCutover() error {
 	}
 	return nil
 }
-
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
-	migobj.logMessage("Starting CBT sync process")
-	defer migobj.logMessage("CBT sync process completed")
+	migobj.logMessage("Starting Periodic sync process")
+	defer migobj.logMessage("Periodic sync process completed")
 	vmops := migobj.VMops
 	nbdops := migobj.Nbdops
 	envURL := migobj.URL
 	envUserName := migobj.UserName
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
-
 	migration_snapshot, err := vmops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get snapshot")
@@ -264,9 +262,9 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		}
 
 		if len(changedAreas.ChangedArea) == 0 {
-			migobj.logMessage(fmt.Sprintf("Disk %d: No changed blocks found. Skipping copy", idx))
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Disk %d: No changed blocks found. Skipping copy", idx))
 		} else {
-			migobj.logMessage(fmt.Sprintf("Disk %d: Blocks have Changed.", idx))
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Disk %d: Blocks have Changed.", idx))
 
 			utils.PrintLog("Restarting NBD server")
 			err = nbdops[idx].StopNBDServer()
@@ -283,13 +281,8 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 			// 11. Copy Changed Blocks over
 			changedBlockCopySuccess := true
-			migobj.logMessage("Copying changed blocks")
-
-			// incremental block copy
-
 			startTime := time.Now()
-			migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
-
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
 			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 			if err != nil {
 				select {
@@ -306,33 +299,37 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 			duration := time.Since(startTime)
 
-			migobj.logMessage(fmt.Sprintf("Incremental block copy for disk %d completed in %s", idx, duration))
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d completed in %s", idx, duration))
 
 			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 			if err != nil {
 				return errors.Wrap(err, "failed to update disk info")
 			}
 			if !changedBlockCopySuccess {
-				migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-				migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to copy changed blocks: %s", err))
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 			}
 		}
 	}
-	err = vmops.CleanUpSnapshots(false)
-	if err != nil {
-		return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-	}
-	err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-	if err != nil {
-		return errors.Wrap(err, "failed to take snapshot of source VM")
-	}
+	// Cleanup the snapshot taken for incremental copy
 	return nil
 }
-
+func (migobj *Migrate) getSyncEnabled() bool {
+	var enabled bool
+	enabled = false
+	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
+	if err != nil {
+		return enabled
+	}
+	if migrationParams.PeriodicSyncEnabled {
+		enabled = true
+	}
+	return enabled
+}
 func (migobj *Migrate) getSyncDuration() time.Duration {
 	const defaultInterval = "1h"
 
-	migobj.logMessage("Setting up sync interval")
+	migobj.logMessage("Periodic Sync: Setting up sync interval")
 
 	migrationParams, err := utils.GetMigrationParams(context.Background(), migobj.K8sClient)
 	if err != nil {
@@ -365,9 +362,13 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
-	migobj.logMessage("Waiting for Admin Cutover conditions to be met")
+	vmops := migobj.VMops
+	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
 	for {
-		syncInterval = migobj.getSyncDuration()
+		syncEnabled := migobj.getSyncEnabled()
+		if syncEnabled {
+			syncInterval = migobj.getSyncDuration()
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -377,28 +378,41 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 				return nil
 			}
 		default:
-			// Perform sync
-			migobj.logMessage(fmt.Sprintf("Starting periodic sync (interval: %s)", syncInterval))
-			start := time.Now()
-			if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-				return err
-			}
-			elapsed := time.Since(start)
-			// If sync took longer than interval → run next sync immediately
-			if elapsed >= syncInterval {
-				migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
+			if syncEnabled {
+				// Perform sync
+				migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
+				start := time.Now()
+				err := vmops.CleanUpSnapshots(false)
+				if err != nil {
+					return errors.Wrap(err, "failed to cleanup snapshot of source VM")
+				}
+
+				err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
+				if err != nil {
+					return errors.Wrap(err, "failed to take snapshot of source VM")
+				}
+				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+					return err
+				}
+				elapsed := time.Since(start)
+				// If sync took longer than interval → run next sync immediately
+				if elapsed >= syncInterval {
+					migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
+					continue
+				}
+				// Otherwise wait remaining time
+				waitTime := syncInterval - elapsed
+				migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-migobj.PodLabelWatcher:
+					return nil // admin triggered cutover during wait
+				case <-time.After(waitTime):
+					// wait completed → loop and sync again
+				}
+			} else {
 				continue
-			}
-			// Otherwise wait remaining time
-			waitTime := syncInterval - elapsed
-			migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-migobj.PodLabelWatcher:
-				return nil // admin triggered cutover during wait
-			case <-time.After(waitTime):
-				// wait completed → loop and sync again
 			}
 		}
 	}
