@@ -437,13 +437,13 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			waitTime := 1 * time.Minute
 			var err error
 			for bidx := 0; bidx < len(blocks); {
-				if retries >= maxRetries {
-					errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
-					return
-				}
 				if err = copyRange(fd, handle, blocks[bidx]); err != nil {
 					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
 					retries++
+					if retries >= maxRetries {
+						errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+						return
+					}
 					select {
 					case <-ctx.Done():
 						return
