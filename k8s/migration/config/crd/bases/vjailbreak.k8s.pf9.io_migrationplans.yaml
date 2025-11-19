@@ -69,6 +69,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
                   periodicSyncInterval:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced

@@ -143,7 +143,6 @@ func (r *Reporter) CreateKubernetesEvent(ctx context.Context, eventType, reason,
 		},
 		Type: eventType,
 	}
-
 	_, err := r.Clientset.CoreV1().Events(r.PodNamespace).Create(ctx, event, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes event: %v", err)
@@ -200,7 +199,7 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackCha
 				if err := r.UpdateProgress(msg); err != nil {
 					utils.PrintLog(err.Error())
 				}
-				if !strings.Contains(msg, "Progress:") {
+				if !strings.Contains(msg, "Progress:") && !strings.Contains(msg, "Periodic") {
 					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						utils.PrintLog(err.Error())
 					}
