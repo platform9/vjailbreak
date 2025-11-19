@@ -240,7 +240,6 @@ func (migobj *Migrate) WaitforCutover() error {
 	return nil
 }
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
-	maxRetries, capInterval := utils.GetRetryLimits()
 	migobj.logMessage("Starting Periodic sync process")
 	defer migobj.logMessage("Periodic sync process completed")
 	vmops := migobj.VMops
@@ -282,54 +281,24 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 
 			// 11. Copy Changed Blocks over
 			changedBlockCopySuccess := true
-			retries := uint64(0)
-			waitTime := 1 * time.Minute
-			migobj.logMessage("Periodic Sync: Copying changed blocks")
-			for {
-				startTime := time.Now()
-				migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d attempt %d at %s", idx, retries, startTime))
-
-				err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-				if err != nil {
-					select {
-					case <-ctx.Done():
-						err = vmops.CleanUpSnapshots(false)
-						changedBlockCopySuccess = false
-						if err != nil {
-							return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-						}
-					default:
-						if retries >= maxRetries {
-							return errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
-						} else {
-							retries++
-							migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d attempt %d failed. Retrying in %s", idx, retries, waitTime))
-							// In case if the whole migration is cancelled through context this routine should not be sleeping
-							select {
-							// Gracefully handling the termination in case of error
-							case <-ctx.Done():
-								err = vmops.CleanUpSnapshots(false)
-								changedBlockCopySuccess = false
-								if err != nil {
-									return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-								}
-							case <-time.After(waitTime):
-								waitTime = waitTime * 2
-								if waitTime > capInterval {
-									waitTime = capInterval
-								}
-								continue
-							}
-						}
+			startTime := time.Now()
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					err = vmops.CleanUpSnapshots(false)
+					changedBlockCopySuccess = false
+					if err != nil {
+						return errors.Wrap(err, "failed to cleanup snapshot of source VM")
 					}
+				default:
+					return errors.Wrap(err, "failed to copy changed blocks")
 				}
-
-				duration := time.Since(startTime)
-
-				migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d completed in %s", idx, duration))
-
-				break
 			}
+
+			duration := time.Since(startTime)
+
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Incremental block copy for disk %d completed in %s", idx, duration))
 
 			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 			if err != nil {
