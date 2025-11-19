@@ -239,25 +239,8 @@ func (migobj *Migrate) WaitforCutover() error {
 	}
 	return nil
 }
-func (migobj *Migrate) GetRetryLimits() (uint64, time.Duration) {
-	const defaultMaxRetries = 3
-	const defaultInterval = 3 * time.Hour
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get vjailbreak settings: %v, using default max retries (%d)",
-			err, defaultMaxRetries))
-		return defaultMaxRetries, defaultInterval
-	}
-	retryCap, err := time.ParseDuration(vjailbreakSettings.PeriodicSyncRetryCap)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse retry cap: %v, using default retry cap (%s)",
-			err, defaultInterval))
-		retryCap = defaultInterval
-	}
-	return vjailbreakSettings.PeriodicSyncMaxRetries, retryCap
-}
 func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
-	maxRetries, capInterval := migobj.GetRetryLimits()
+	maxRetries, capInterval := utils.GetRetryLimits()
 	migobj.logMessage("Starting Periodic sync process")
 	defer migobj.logMessage("Periodic sync process completed")
 	vmops := migobj.VMops
