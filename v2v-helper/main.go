@@ -149,7 +149,7 @@ func main() {
 	}
 	PreMigrationPowerState, err := vmops.GetVmPowerState()
 	if err != nil {
-		handleError(fmt.Sprintf("Failed to get VM power state: %v", err))
+		utils.PrintLog(fmt.Sprintf("Failed to get VM power state: %v", err))
 		PreMigrationPowerState = types.VirtualMachinePowerStatePoweredOn
 	}
 	if err := migrationobj.MigrateVM(ctx); err != nil {
