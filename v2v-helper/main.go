@@ -151,11 +151,15 @@ func main() {
 		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
 
 		// Try to power on the VM if migration failed
-		powerOnErr := vmops.VMPowerOn()
-		if powerOnErr != nil {
-			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+		if migrationobj.MigrationType == "cold" {
+			msg += fmt.Sprintf("Detected Cold Migration. Not powering on VM")
 		} else {
-			msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			powerOnErr := vmops.VMPowerOn()
+			if powerOnErr != nil {
+				msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+			} else {
+				msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			}
 		}
 
 		handleError(msg)
