@@ -456,6 +456,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 					}
 				} else {
 					bidx++
+					retries = uint64(0)
 				}
 			}
 			// check if context is cancelled
