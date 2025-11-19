@@ -276,7 +276,9 @@ export default function VmsSelectionStep({
                   shape="vm"
                   size="md"
                   badge={params.row.vmState === 'running' ? 'success' : 'danger'}
-                ></cds-icon>
+                >
+                  {/* @ts-ignore */}
+                </cds-icon>
               </CdsIconWrapper>
             </Tooltip>
             <Box>{params.value}</Box>
