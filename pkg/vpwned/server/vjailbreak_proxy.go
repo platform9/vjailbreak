@@ -13,7 +13,6 @@ import (
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +24,7 @@ import (
 )
 
 const (
-	trueString = "true"
+	credsRevalidateAnnotation = "vjailbreak.k8s.pf9.io/revalidate-token"
 )
 
 type vjailbreakProxy struct {
@@ -258,7 +257,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		if vmwcreds.Annotations == nil {
 			vmwcreds.Annotations = map[string]string{}
 		}
-		vmwcreds.Annotations[constants.CredsRevalidateAnnotation] = token
+		vmwcreds.Annotations[credsRevalidateAnnotation] = token
 		if err := p.K8sClient.Update(ctx, vmwcreds); err != nil {
 			return nil, fmt.Errorf("failed to update VMwareCreds annotation: %w", err)
 		}
@@ -278,7 +277,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		if oscreds.Annotations == nil {
 			oscreds.Annotations = map[string]string{}
 		}
-		oscreds.Annotations[constants.CredsRevalidateAnnotation] = token
+		oscreds.Annotations[credsRevalidateAnnotation] = token
 		if err := p.K8sClient.Update(ctx, oscreds); err != nil {
 			return nil, fmt.Errorf("failed to update OpenstackCreds annotation: %w", err)
 		}
