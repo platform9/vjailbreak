@@ -266,7 +266,7 @@ export default function MigrationFormDrawer({
     if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
-    getFieldErrorsUpdater('opeanstackCreds')('')
+    getFieldErrorsUpdater('openstackCreds')('')
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
