@@ -283,6 +283,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			changedBlockCopySuccess := true
 			startTime := time.Now()
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
+			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 			if err != nil {
 				select {
 				case <-ctx.Done():
