@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/pkg/errors"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3"
 	"github.com/sirupsen/logrus"
