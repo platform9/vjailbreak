@@ -19,3 +19,5 @@ data:
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for vmware creds
   VALIDATE_RDM_OWNER_VMS: "true" # validate RDM owner VMs before migration
   DEPLOYMENT_NAME: vJailbreak
+  PERIODIC_SYNC_MAX_RETRIES: "3" # max number of retries for CBT sync
+  PERIODIC_SYNC_RETRY_CAP: "3h" # max retry interval for CBT sync

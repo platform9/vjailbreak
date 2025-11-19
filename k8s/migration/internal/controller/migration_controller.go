@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -85,6 +86,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
+
+	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
@@ -156,7 +159,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Check if the pod is in a valid state only then continue
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
+		ctxlog.Info("Pod is not in a terminal state, requeuing", "migration", migration.Name, "podStatus", pod.Status.Phase)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
@@ -174,9 +178,12 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-	if err := r.Status().Update(ctx, migration); err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
-		return ctrl.Result{}, err
+
+	if !reflect.DeepEqual(&migration.Status, oldStatus) {
+		if err := r.Status().Update(ctx, migration); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
+			return ctrl.Result{}, err
+		}
 	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
@@ -385,7 +392,6 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
-
 	return filteredEvents, nil
 }
 

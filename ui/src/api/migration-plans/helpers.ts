@@ -1,11 +1,11 @@
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4 } from 'uuid'
 
 export const createMigrationPlanJson = (params) => {
   const {
     name,
     migrationTemplateName,
     retry = false,
-    type = "hot",
+    type = 'hot',
     dataCopyStart,
     vmCutoverStart,
     vmCutoverEnd,
@@ -16,6 +16,8 @@ export const createMigrationPlanJson = (params) => {
     securityGroups,
     fallbackToDHCP = false,
     postMigrationScript,
+    periodicSyncInterval,
+    periodicSyncEnabled
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -27,26 +29,25 @@ export const createMigrationPlanJson = (params) => {
       adminInitiatedCutOver,
       vmCutoverStart,
       vmCutoverEnd,
-      disconnectSourceNetwork,
+      disconnectSourceNetwork
     },
     virtualMachines: [virtualMachines],
     fallbackToDHCP,
+    periodicSyncInterval,
+    periodicSyncEnabled
   }
 
-  // Add firstBootScript if postMigrationScript is provided
+  // Add firstBootScript  if postMigrationScript is provided
   if (postMigrationScript && postMigrationScript.trim()) {
     spec.firstBootScript = postMigrationScript
   }
 
-  if (
-    postMigrationAction &&
-    (postMigrationAction.renameVm || postMigrationAction.moveToFolder)
-  ) {
+  if (postMigrationAction && (postMigrationAction.renameVm || postMigrationAction.moveToFolder)) {
     spec.postMigrationAction = {
       renameVm: postMigrationAction.renameVm || false,
-      suffix: postMigrationAction.suffix || "",
+      suffix: postMigrationAction.suffix || '',
       moveToFolder: postMigrationAction.moveToFolder || false,
-      folderName: postMigrationAction.folderName || "vjailbreakedVMs",
+      folderName: postMigrationAction.folderName || 'vjailbreakedVMs'
     }
   }
 
@@ -55,11 +56,11 @@ export const createMigrationPlanJson = (params) => {
   }
 
   return {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "MigrationPlan",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'MigrationPlan',
     metadata: {
-      name: name || uuidv4(),
+      name: name || uuidv4()
     },
-    spec,
+    spec
   }
 }

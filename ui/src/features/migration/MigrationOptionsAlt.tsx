@@ -5,61 +5,57 @@ import {
   Select,
   styled,
   TextField,
-  Typography,
-} from "@mui/material"
-import customTypography from "../../theme/typography"
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
-import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
-import dayjs from "dayjs"
-import { useCallback, useEffect } from "react"
-import Step from "src/components/forms/Step"
-import {
-  FieldErrors,
-  FormValues,
-  SelectedMigrationOptionsType,
-} from "./MigrationForm"
+  Typography
+} from '@mui/material'
+import customTypography from '../../theme/typography'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import dayjs from 'dayjs'
+import { useCallback, useEffect } from 'react'
+import Step from 'src/components/forms/Step'
+import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
 
 // Accordian Imports
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import Accordion from "@mui/material/Accordion"
-import AccordionDetails from "@mui/material/AccordionDetails"
-import AccordionSummary from "@mui/material/AccordionSummary"
-import { OpenstackCreds } from "src/api/openstack-creds/model";
-import {
-  CUTOVER_TYPES,
-  DATA_COPY_OPTIONS,
-  VM_CUTOVER_OPTIONS,
-} from "./constants"
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import Accordion from '@mui/material/Accordion'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import AccordionSummary from '@mui/material/AccordionSummary'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
+import IntervalField from 'src/components/forms/IntervalField'
 
 // Styles
-const FieldsContainer = styled("div")(({ theme }) => ({
+const FieldsContainer = styled('div')(({ theme }) => ({
   marginLeft: theme.spacing(4),
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gridGap: "32px 16px", // Adds spacing between the columns
-  alignItems: "start",
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gridGap: '32px 16px', // Adds spacing between the columns
+  alignItems: 'start'
 }))
 
-const Fields = styled("div")(() => ({
-  display: "grid",
-  gridGap: "12px",
+const Fields = styled('div')(() => ({
+  display: 'grid',
+  gridGap: '12px'
 }))
 
 const CustomTextField = styled(TextField)(() => ({
-  "& .MuiOutlinedInput-root": {
-    ...customTypography.monospace,
-  },
+  '& .MuiOutlinedInput-root': {
+    ...customTypography.monospace
+  }
 }))
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
   params: FormValues & { useFlavorless?: boolean }
   onChange: (key: string) => (value: unknown) => void
-  openstackCredentials?: OpenstackCreds;
+  openstackCredentials?: OpenstackCreds
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-    key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+    key:
+      | keyof SelectedMigrationOptionsType
+      | 'postMigrationAction.suffix'
+      | 'postMigrationAction.folderName'
   ) => (value: unknown) => void
 
   errors: FieldErrors
@@ -83,12 +79,12 @@ export default function MigrationOptionsAlt({
   updateSelectedMigrationOptions,
   errors,
   getErrorsUpdater,
-  stepNumber,
+  stepNumber
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
-    onChange("dataCopyMethod")("cold")
-    onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
+    onChange('dataCopyMethod')('cold')
+    onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
   }, [])
 
   const getMinEndTime = useCallback(() => {
@@ -96,31 +92,28 @@ export default function MigrationOptionsAlt({
     if (selectedMigrationOptions.dataCopyStartTime) {
       // Which ever is greater
       minDate =
-        dayjs(params.cutoverStartTime).diff(
-          dayjs(params.dataCopyStartTime),
-          "seconds"
-        ) > 0
+        dayjs(params.cutoverStartTime).diff(dayjs(params.dataCopyStartTime), 'seconds') > 0
           ? params.cutoverStartTime
           : params.dataCopyStartTime
     }
 
     // Disabled selection of time in the past
-    const computedMin = dayjs(minDate).add(1, "minute")
+    const computedMin = dayjs(minDate).add(1, 'minute')
     const now = dayjs()
     return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
-  const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
+  const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Accordion
         sx={{
-          boxShadow: "none", // Removes box shadow
-          border: "none", // Removes border
-          "&:before": {
-            display: "none", // Removes the default divider line before the accordion
-          },
+          boxShadow: 'none', // Removes box shadow
+          border: 'none', // Removes border
+          '&:before': {
+            display: 'none' // Removes the default divider line before the accordion
+          }
         }}
         defaultExpanded
       >
@@ -129,11 +122,7 @@ export default function MigrationOptionsAlt({
           aria-controls="panel2-content"
           id="panel2-header"
         >
-          <Step
-            stepNumber={stepNumber}
-            label="Migration Options (Optional)"
-            sx={{ mb: "0" }}
-          />
+          <Step stepNumber={stepNumber} label="Migration Options (Optional)" sx={{ mb: '0' }} />
         </AccordionSummary>
         <AccordionDetails>
           <FieldsContainer>
@@ -146,9 +135,7 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={selectedMigrationOptions.dataCopyMethod}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("dataCopyMethod")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
                     }}
                   />
                 }
@@ -157,9 +144,9 @@ export default function MigrationOptionsAlt({
                 size="small"
                 disabled={!selectedMigrationOptions.dataCopyMethod}
                 labelId="source-item-label"
-                value={params?.dataCopyMethod || "cold"}
+                value={params?.dataCopyMethod || 'cold'}
                 onChange={(e) => {
-                  onChange("dataCopyMethod")(e.target.value)
+                  onChange('dataCopyMethod')(e.target.value)
                 }}
               >
                 {DATA_COPY_OPTIONS.map((item) => (
@@ -173,14 +160,12 @@ export default function MigrationOptionsAlt({
             {/* Data Copy Time Window */}
             <Fields>
               <FormControlLabel
-                label={"Data copy start time"}
+                label={'Data copy start time'}
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions?.dataCopyStartTime}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("dataCopyStartTime")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
                     }}
                   />
                 }
@@ -207,9 +192,9 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={selectedMigrationOptions.cutoverOption}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("cutoverOption")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
+                      updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+                      onChange('periodicSyncInterval')('') // Reset interval when disabling
                     }}
                   />
                 }
@@ -217,9 +202,9 @@ export default function MigrationOptionsAlt({
               <Select
                 size="small"
                 disabled={!selectedMigrationOptions?.cutoverOption}
-                value={params?.cutoverOption || "0"}
+                value={params?.cutoverOption || '0'}
                 onChange={(e) => {
-                  onChange("cutoverOption")(e.target.value)
+                  onChange('cutoverOption')(e.target.value)
                 }}
               >
                 {VM_CUTOVER_OPTIONS.map((item) => (
@@ -231,7 +216,7 @@ export default function MigrationOptionsAlt({
 
               {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
                 selectedMigrationOptions.cutoverOption && (
-                  <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
+                  <Fields sx={{ gridTemplateColumns: '1fr 1fr' }}>
                     <TimePicker
                       label="Cutover Start Time"
                       identifier="cutoverStartTime"
@@ -239,9 +224,7 @@ export default function MigrationOptionsAlt({
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
                       onChange={onChange}
-                      required={
-                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                      }
+                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                       disablePast
                     />
                     <TimePicker
@@ -251,15 +234,99 @@ export default function MigrationOptionsAlt({
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
                       onChange={onChange}
-                      required={
-                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                      }
+                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                       minDateTime={getMinEndTime()}
                       disablePast
                       helperText="Should be greater than data copy/cutover start time"
                     />
                   </Fields>
                 )}
+
+              {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+                selectedMigrationOptions.cutoverOption && (
+                  <>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={selectedMigrationOptions.periodicSyncEnabled}
+                          onChange={(e) => {
+                            onChange('periodicSyncInterval')('') // Reset interval when disabling
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
+                          }}
+                        />
+                      }
+                      label="Use Periodic Sync Interval"
+                    />
+                    <IntervalField
+                      label="Periodic Sync Interval"
+                      name="periodicSyncInterval"
+                      required={selectedMigrationOptions.periodicSyncEnabled}
+                      value={String(
+                        params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
+                          ? params.periodicSyncInterval
+                          : ''
+                      )}
+                      onChange={(e) => {
+                        onChange('periodicSyncInterval')(e.target.value || '')
+                      }}
+                      error={errors.periodicSyncInterval}
+                      getErrorsUpdater={getErrorsUpdater}
+                      disabled={!selectedMigrationOptions.periodicSyncEnabled}
+                    />
+                  </>
+                )}
+            </Fields>
+
+            <Fields sx={{ gridGap: '0' }}>
+              {/* Retry on failure */}
+              <FormControlLabel
+                label="Retry On Failure"
+                control={
+                  <Checkbox
+                    checked={!!params?.retryOnFailure}
+                    onChange={(e) => {
+                      onChange('retryOnFailure')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
+                Select this option to retry the migration incase of failure
+              </Typography>
+            </Fields>
+
+            <Fields sx={{ gridGap: '0' }}>
+              <FormControlLabel
+                label="Disconnect Source VM Network"
+                control={
+                  <Checkbox
+                    checked={params?.disconnectSourceNetwork || false}
+                    onChange={(e) => {
+                      onChange('disconnectSourceNetwork')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
+                Disconnect NICs on the source VM to prevent IP conflicts.
+              </Typography>
+            </Fields>
+
+            <Fields sx={{ gridGap: '0' }}>
+              <FormControlLabel
+                label="Fallback to DHCP"
+                control={
+                  <Checkbox
+                    checked={params?.fallbackToDHCP || false}
+                    onChange={(e) => {
+                      onChange('fallbackToDHCP')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
+                Migrated VM will use IP from DHCP if static IP cannot be preserved.
+              </Typography>
             </Fields>
 
             <Fields>
@@ -269,17 +336,21 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
                     onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
-                      });
-                      onChange("postMigrationAction")({
+                        suffix: isChecked
+                          ? true
+                          : selectedMigrationOptions.postMigrationAction?.suffix
+                      })
+                      onChange('postMigrationAction')({
                         ...params.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
-                      });
+                        suffix: isChecked
+                          ? params.postMigrationAction?.suffix || '_migrated_to_pcd'
+                          : undefined
+                      })
                     }}
                   />
                 }
@@ -288,12 +359,12 @@ export default function MigrationOptionsAlt({
                 size="small"
                 label="VM Rename Suffix"
                 disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
+                value={params.postMigrationAction?.suffix || '_migrated_to_pcd'}
                 onChange={(e) => {
-                  onChange("postMigrationAction")({
+                  onChange('postMigrationAction')({
                     ...params.postMigrationAction,
                     suffix: e.target.value
-                  });
+                  })
                 }}
                 placeholder="_migrated_to_pcd"
               />
@@ -309,17 +380,21 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
                     onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
-                      });
-                      onChange("postMigrationAction")({
+                        folderName: isChecked
+                          ? true
+                          : selectedMigrationOptions.postMigrationAction?.folderName
+                      })
+                      onChange('postMigrationAction')({
                         ...params.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
-                      });
+                        folderName: isChecked
+                          ? params.postMigrationAction?.folderName || 'vjailbreakedVMs'
+                          : undefined
+                      })
                     }}
                   />
                 }
@@ -328,12 +403,12 @@ export default function MigrationOptionsAlt({
                 size="small"
                 label="Folder Name"
                 disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
+                value={params.postMigrationAction?.folderName || 'vjailbreakedVMs'}
                 onChange={(e) => {
-                  onChange("postMigrationAction")({
+                  onChange('postMigrationAction')({
                     ...params.postMigrationAction,
                     folderName: e.target.value
-                  });
+                  })
                 }}
                 placeholder="vjailbreakedVMs"
               />
@@ -342,72 +417,70 @@ export default function MigrationOptionsAlt({
               </Typography>
             </Fields>
 
-            <Fields sx={{ gridGap: "0" }}>
+            <Fields sx={{ gridGap: '0' }}>
               <FormControlLabel
                 label="Disconnect Source VM Network"
                 control={
                   <Checkbox
                     checked={params?.disconnectSourceNetwork || false}
                     onChange={(e) => {
-                      onChange("disconnectSourceNetwork")(e.target.checked);
+                      onChange('disconnectSourceNetwork')(e.target.checked)
                     }}
                   />
                 }
               />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
                 Disconnect NICs on the source VM to prevent IP conflicts.
               </Typography>
             </Fields>
 
-            <Fields sx={{ gridGap: "0" }}>
+            <Fields sx={{ gridGap: '0' }}>
               <FormControlLabel
                 label="Fallback to DHCP"
                 control={
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
                     onChange={(e) => {
-                      onChange("fallbackToDHCP")(e.target.checked);
+                      onChange('fallbackToDHCP')(e.target.checked)
                     }}
                   />
                 }
               />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
                 Migrated VM will use IP from DHCP if static IP cannot be preserved.
               </Typography>
             </Fields>
 
             {isPCD && (
-              <Fields sx={{ gridGap: "0" }}>
+              <Fields sx={{ gridGap: '0' }}>
                 <FormControlLabel
                   label="Use Dynamic Hotplug-Enabled Flavors"
                   control={
                     <Checkbox
                       checked={params?.useFlavorless || false}
                       onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
-                        onChange("useFlavorless")(isChecked);
+                        const isChecked = e.target.checked
+                        updateSelectedMigrationOptions('useFlavorless')(isChecked)
+                        onChange('useFlavorless')(isChecked)
                       }}
                     />
                   }
                 />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+                <Typography variant="caption" sx={{ marginLeft: '32px' }}>
                   This will use the base flavor ID specified in PCD.
                 </Typography>
               </Fields>
             )}
 
             {/* Post Migration Script - moved to the end */}
-            <Fields sx={{ gridColumn: "1 / -1" }}>
+            <Fields sx={{ gridColumn: '1 / -1' }}>
               <FormControlLabel
                 label="Post Migration Script"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("postMigrationScript")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
                     }}
                   />
                 }
@@ -417,12 +490,10 @@ export default function MigrationOptionsAlt({
                 size="small"
                 multiline
                 rows={4}
-                value={params?.postMigrationScript || ""}
-                onChange={(e) =>
-                  onChange("postMigrationScript")(String(e.target.value))
-                }
+                value={params?.postMigrationScript || ''}
+                onChange={(e) => onChange('postMigrationScript')(String(e.target.value))}
                 disabled={!selectedMigrationOptions.postMigrationScript}
-                error={!!errors["postMigrationScript"]}
+                error={!!errors['postMigrationScript']}
                 required={selectedMigrationOptions.postMigrationScript}
                 placeholder="Enter your post-migration script here..."
               />
@@ -454,7 +525,7 @@ const TimePicker = ({
   onChange,
   errors,
   getErrorsUpdater,
-  helperText = "",
+  helperText = '',
   ...restProps
 }) => {
   const value = params?.[identifier] ? dayjs(params?.[identifier]) : null
@@ -471,20 +542,17 @@ const TimePicker = ({
     <DateTimePicker
       ampm={false}
       value={value}
-      onChange={(newValue: dayjs.Dayjs | null) =>
-        handleTimeChange(newValue, identifier)
-      }
+      onChange={(newValue: dayjs.Dayjs | null) => handleTimeChange(newValue, identifier)}
       onError={(error) => {
         getErrorsUpdater(identifier)(error)
       }}
       slotProps={{
         textField: {
-          size: "small",
+          size: 'small',
           required: restProps?.required,
           error: !!errors[identifier] && !restProps?.disabled, // Show error if validation fails
-          helperText:
-            !!errors[identifier] && !restProps?.disabled ? helperText : "",
-        },
+          helperText: !!errors[identifier] && !restProps?.disabled ? helperText : ''
+        }
       }}
       {...restProps}
     />
