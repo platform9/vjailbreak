@@ -17,6 +17,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 func main() {
@@ -146,12 +147,16 @@ func main() {
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
-
+	PreMigrationPowerState, err := vmops.GetVmPowerState()
+	if err != nil {
+		handleError(fmt.Sprintf("Failed to get VM power state: %v", err))
+		PreMigrationPowerState = types.VirtualMachinePowerStatePoweredOn
+	}
 	if err := migrationobj.MigrateVM(ctx); err != nil {
 		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
 
 		// Try to power on the VM if migration failed
-		if migrationobj.MigrationType == "cold" {
+		if migrationobj.MigrationType == "cold" && PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
 			msg += fmt.Sprintf("Detected Cold Migration. Not powering on VM")
 		} else {
 			powerOnErr := vmops.VMPowerOn()
