@@ -637,6 +637,9 @@ export default function VmsSelectionStep({
   }, [open, vmList])
 
   useEffect(() => {
+    // Create a map of existing VM data (including assigned IPs) for quick lookup
+    const existingVmsMap = new Map(vmsWithFlavor.map((vm) => [vm.name, vm]))
+
     const initialVmsWithFlavor = vmList.map((vm) => {
       let flavor = ''
       if (vm.targetFlavorId) {
@@ -656,13 +659,27 @@ export default function VmsSelectionStep({
       // Map power state from vmState
       const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
 
-      // Create comma-separated IP string from networkInterfaces
-      const allIPs = vm.networkInterfaces
+      // FIX: Use existing IP data from vmsWithFlavor if the VM exists,
+      // otherwise, use the fresh data from vmList.
+      const existingVm = existingVmsMap.get(vm.name)
+
+      let allIPs = vm.networkInterfaces
         ? vm.networkInterfaces
             .map((nic) => nic.ipAddress)
             .filter((ip) => ip && ip.trim() !== '')
             .join(', ')
         : vm.ipAddress || ''
+
+      // If the VM exists in the current state, and vmList hasn't changed its core structure,
+      // prefer the locally assigned IP data from the existing object.
+      // We only want to use the local state IP if the source VM data (vmList) is the same object reference,
+      // but since we are re-mapping, we'll check if the existing VM has non-default IP data.
+      if (existingVm && vm.id === existingVm.id) {
+        const existingVmHasAssignedIP = existingVm.ipAddress && existingVm.ipAddress !== '—'
+        if (existingVmHasAssignedIP) {
+          allIPs = existingVm.ipAddress ?? vm.ipAddress ?? ''
+        }
+      }
 
       // Use assigned OS family if available, otherwise use the VM's detected OS family
       const assignedOsFamily = vmOSAssignments[vm.name]
@@ -681,8 +698,14 @@ export default function VmsSelectionStep({
       }
     })
     setVmsWithFlavor(initialVmsWithFlavor)
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, vmOSAssignments])
-
+  }, [
+    vmList,
+    migratedVms,
+    openstackFlavors,
+    openstackCredName,
+    vmOSAssignments,
+    vmsWithFlavor.length
+  ])
   // Separate effect for cleaning up selections when VM list changes
   useEffect(() => {
     if (vmsWithFlavor.length === 0) return
