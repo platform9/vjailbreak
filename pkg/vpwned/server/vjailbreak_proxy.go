@@ -228,6 +228,7 @@ func CreateInClusterClient() (client.Client, error) {
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
 
 	clientset, err := client.New(config, client.Options{
 		Scheme: scheme,
