@@ -153,7 +153,7 @@ func main() {
 		PreMigrationPowerState = types.VirtualMachinePowerStatePoweredOn
 	}
 	if err := migrationobj.MigrateVM(ctx); err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
+		msg := fmt.Sprintf("Failed to migrate VM: %v. ", err)
 
 		// Try to power on the VM if migration failed
 		if migrationobj.MigrationType == "cold" && PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
