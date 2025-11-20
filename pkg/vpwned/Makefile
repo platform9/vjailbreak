@@ -75,7 +75,7 @@ vpwctl:
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${VPWNED_IMG} .
+	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${VPWNED_IMG} -f pkg/vpwned/Dockerfile ..
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

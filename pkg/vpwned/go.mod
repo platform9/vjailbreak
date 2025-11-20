@@ -46,6 +46,7 @@ require (
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -114,3 +115,5 @@ replace github.com/bougou/go-ipmi => github.com/bougou/go-ipmi v0.7.4
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+
+replace github.com/platform9/vjailbreak/pkg/validation => ../validation
