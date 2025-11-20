@@ -13,14 +13,12 @@ import {
   getMigrationTemplate,
   patchMigrationTemplate,
   postMigrationTemplate,
-  deleteMigrationTemplate
-} from 'src/api/migration-templates/migrationTemplates'
-import { MigrationTemplate, VmData } from 'src/api/migration-templates/model'
-import { getMigrations } from 'src/api/migrations/migrations'
-import { Migration } from 'src/api/migrations/model'
-import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
-import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
-import { OpenstackCreds } from 'src/api/openstack-creds/model'
+  deleteMigrationTemplate,
+} from "src/api/migration-templates/migrationTemplates"
+import { MigrationTemplate, VmData } from "src/api/migration-templates/model"
+import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
+import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
+import { OpenstackCreds } from "src/api/openstack-creds/model"
 import {
   getOpenstackCredentials,
   deleteOpenstackCredentials
@@ -164,15 +162,22 @@ interface MigrationFormDrawerProps {
   open: boolean
   onClose: () => void
   reloadMigrations?: () => void
+  onSuccess?: (message: string) => void
 }
 
-export default function MigrationFormDrawer({ open, onClose }: MigrationFormDrawerProps) {
+export default function MigrationFormDrawer({
+  open,
+  onClose,
+  onSuccess,
+}: MigrationFormDrawerProps) {
   const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
   const { pcdData } = useClusterData()
-  const { reportError } = useErrorHandler({ component: 'MigrationForm' })
-  const { track } = useAmplitude({ component: 'MigrationForm' })
-  const [error, setError] = useState<{ title: string; message: string } | null>(null)
+  const { reportError } = useErrorHandler({ component: "MigrationForm" })
+  const { track } = useAmplitude({ component: "MigrationForm" })
+  const [, setError] = useState<{ title: string; message: string } | null>(
+    null
+  )
   // Theses are the errors that will be displayed on the form
   const { params: fieldErrors, getParamsUpdater: getFieldErrorsUpdater } = useParams<FieldErrors>(
     {}
@@ -187,15 +192,15 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
   const [submitting, setSubmitting] = useState(false)
 
   // Migration Resources
-  const [vmwareCredentials, setVmwareCredentials] = useState<VMwareCreds | undefined>(undefined)
-  const [openstackCredentials, setOpenstackCredentials] = useState<OpenstackCreds | undefined>(
-    undefined
-  )
-  const [migrationTemplate, setMigrationTemplate] = useState<MigrationTemplate | undefined>(
-    undefined
-  )
-  const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | undefined>(undefined)
-  const [migrations, setMigrations] = useState<Migration[] | undefined>(undefined)
+  const [vmwareCredentials, setVmwareCredentials] = useState<
+    VMwareCreds | undefined
+  >(undefined)
+  const [openstackCredentials, setOpenstackCredentials] = useState<
+    OpenstackCreds | undefined
+  >(undefined)
+  const [migrationTemplate, setMigrationTemplate] = useState<
+    MigrationTemplate | undefined
+  >(undefined)
 
   // Generate a unique session ID for this form instance
   const [sessionId] = useState(() => `form-session-${Date.now()}`)
@@ -215,9 +220,6 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
     migrationTemplate?.metadata?.name &&
     (!migrationTemplate?.status?.openstack?.networks ||
       !migrationTemplate?.status?.openstack?.volumeTypes)
-
-  const shouldPollMigrationPlan =
-    !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
 
   // Update this effect to only handle existing credential selection
   useEffect(() => {
@@ -264,7 +266,7 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
     if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
-    getFieldErrorsUpdater('opeanstackCreds')('')
+    getFieldErrorsUpdater('openstackCreds')('')
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
@@ -568,8 +570,20 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
     )
 
     // Create MigrationPlan
-    const migrationPlanResource = await createMigrationPlan(updatedMigrationTemplate)
-    setMigrationPlan(migrationPlanResource)
+    await createMigrationPlan(
+      updatedMigrationTemplate
+    )
+
+    // Stop submitting state
+    setSubmitting(false)
+    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+
+    // Show success notification via callback
+    onSuccess?.("Migration submitted successfully")
+
+    // Close form and navigate
+    onClose()
+    navigate("/dashboard/migrations")
   }, [
     params.networkMappings,
     params.storageMappings,
@@ -577,33 +591,12 @@ export default function MigrationFormDrawer({ open, onClose }: MigrationFormDraw
     createNetworkMapping,
     createStorageMapping,
     updateMigrationTemplate,
-    createMigrationPlan
-  ])
-
-  useInterval(
-    async () => {
-      if (shouldPollMigrationPlan) {
-        try {
-          const response = await getMigrations(migrationPlan?.metadata?.name)
-          setMigrations(response)
-        } catch (error) {
-          console.error('Error getting MigrationPlan', { error })
-          setSubmitting(false)
-        }
-      }
-    },
-    THREE_SECONDS,
-    shouldPollMigrationPlan
-  )
-
-  useEffect(() => {
-    if (migrations && migrations.length > 0 && !error) {
-      setSubmitting(false)
-      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
-      onClose()
-      navigate('/dashboard/migrations')
-    }
-  }, [migrations, error, onClose, navigate, queryClient])
+    createMigrationPlan,
+    queryClient,
+    onClose,
+    onSuccess,
+    navigate
+  ]);
 
   const migrationOptionValidated = useMemo(() => {
     return Object.keys(selectedMigrationOptions).every((key) => {
