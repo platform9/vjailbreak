@@ -212,21 +212,21 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 		return vmwareCredsInfo, errors.Wrap(err, "failed to get secret")
 	}
 
-	requiredFields := []string{"host", "username", "password", "datacenter"}
-	for _, field := range requiredFields {
-		if _, ok := secret.Data[field]; !ok {
-			return vmwareCredsInfo, fmt.Errorf("missing required field '%s' in secret", field)
-		}
+	if secret.Data == nil {
+		return vmwareCredsInfo, fmt.Errorf("no data in secret '%s'", secretName)
 	}
 
-	vmwareCredsInfo.Host = string(secret.Data["host"])
-	vmwareCredsInfo.Username = string(secret.Data["username"])
-	vmwareCredsInfo.Password = string(secret.Data["password"])
-	vmwareCredsInfo.Datacenter = string(secret.Data["datacenter"])
+	vmwareCredsInfo.Host = string(secret.Data["VCENTER_HOST"])
+	vmwareCredsInfo.Username = string(secret.Data["VCENTER_USERNAME"])
+	vmwareCredsInfo.Password = string(secret.Data["VCENTER_PASSWORD"])
+	vmwareCredsInfo.Datacenter = string(secret.Data["VCENTER_DATACENTER"])
 
-	if insecureVal, ok := secret.Data["insecure"]; ok {
-		vmwareCredsInfo.Insecure = string(insecureVal) == "true"
+	if vmwareCredsInfo.Host == "" {
+		return vmwareCredsInfo, fmt.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
 	}
+
+	insecureStr := string(secret.Data["VCENTER_INSECURE"])
+	vmwareCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 
 	return vmwareCredsInfo, nil
 }

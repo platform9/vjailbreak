@@ -129,23 +129,30 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 		return openstackCredsInfo, errors.Wrap(err, "failed to get secret")
 	}
 
-	requiredFields := []string{"auth_url", "username", "password", "domain_name", "tenant_name", "region_name"}
-	for _, field := range requiredFields {
-		if _, ok := secret.Data[field]; !ok {
-			return openstackCredsInfo, fmt.Errorf("missing required field '%s' in secret", field)
+	fields := map[string]string{
+		"AuthURL":    string(secret.Data["OS_AUTH_URL"]),
+		"DomainName": string(secret.Data["OS_DOMAIN_NAME"]),
+		"Username":   string(secret.Data["OS_USERNAME"]),
+		"Password":   string(secret.Data["OS_PASSWORD"]),
+		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
+		"RegionName": string(secret.Data["OS_REGION_NAME"]),
+	}
+
+	for key, value := range fields {
+		if value == "" {
+			return openstackCredsInfo, fmt.Errorf("field %s is empty or missing in secret", key)
 		}
 	}
 
-	openstackCredsInfo.AuthURL = string(secret.Data["auth_url"])
-	openstackCredsInfo.Username = string(secret.Data["username"])
-	openstackCredsInfo.Password = string(secret.Data["password"])
-	openstackCredsInfo.DomainName = string(secret.Data["domain_name"])
-	openstackCredsInfo.TenantName = string(secret.Data["tenant_name"])
-	openstackCredsInfo.RegionName = string(secret.Data["region_name"])
+	openstackCredsInfo.AuthURL = fields["AuthURL"]
+	openstackCredsInfo.Username = fields["Username"]
+	openstackCredsInfo.Password = fields["Password"]
+	openstackCredsInfo.DomainName = fields["DomainName"]
+	openstackCredsInfo.TenantName = fields["TenantName"]
+	openstackCredsInfo.RegionName = fields["RegionName"]
 
-	if insecureVal, ok := secret.Data["insecure"]; ok {
-		openstackCredsInfo.Insecure = string(insecureVal) == "true"
-	}
+	insecureStr := string(secret.Data["OS_INSECURE"])
+	openstackCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 
 	return openstackCredsInfo, nil
 }

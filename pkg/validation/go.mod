@@ -6,7 +6,6 @@ require (
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/pkg/errors v0.9.1
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250904115639-c2134e9ef3b9
-	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/vmware/govmomi v0.51.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
@@ -55,6 +54,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a // indirect
+	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
