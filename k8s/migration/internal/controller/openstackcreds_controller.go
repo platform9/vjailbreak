@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -36,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -125,9 +125,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
-	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
+	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
+
+	if !result.Valid {
 		// Update the status of the OpenstackCreds object
-		errMsg := err.Error()
+		errMsg := result.Message
 		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
 			if r.Local {
 				// At this point creds are valid but controller is not able to fetch metadata
@@ -139,7 +141,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
-		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
@@ -158,7 +160,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		ctxlog.Info("Successfully updated status to success")
-		err = handleValidatedCreds(ctx, r, scope)
+		err := handleValidatedCreds(ctx, r, scope)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -227,25 +229,9 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Get max concurrent reconciles from vjailbreak settings configmap
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
-		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			revalidateAnnotationPredicate(),
-		)).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
-}
-
-func revalidateAnnotationPredicate() predicate.Predicate {
-	return predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.ObjectOld == nil || e.ObjectNew == nil {
-				return false
-			}
-			oldToken := e.ObjectOld.GetAnnotations()[constants.CredsRevalidateAnnotation]
-			newToken := e.ObjectNew.GetAnnotations()[constants.CredsRevalidateAnnotation]
-			return oldToken != newToken
-		},
-	}
 }
 
 func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {

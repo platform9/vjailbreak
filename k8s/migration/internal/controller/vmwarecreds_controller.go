@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
+	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -94,11 +95,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
-	c, err := utils.ValidateVMwareCreds(ctx, r.Client, scope.VMwareCreds)
-	if err != nil {
-		ctxlog.Info("VMware credentials validation failed", "name", scope.Name(), "error", err.Error())
+	result := vmwarevalidation.Validate(ctx, r.Client, scope.VMwareCreds)
+	if !result.Valid {
+		ctxlog.Info("VMware credentials validation failed", "name", scope.Name(), "error", result.Error)
 		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
-		scope.VMwareCreds.Status.VMwareValidationMessage = fmt.Sprintf("Error validating VMwareCreds '%s': %s", scope.Name(), err)
+		scope.VMwareCreds.Status.VMwareValidationMessage = result.Message
 		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
 			if apierrors.IsNotFound(updateErr) {
 				ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
@@ -117,22 +118,13 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
-	scope.VMwareCreds.Status.VMwareValidationMessage = "Successfully authenticated to VMware"
+	scope.VMwareCreds.Status.VMwareValidationMessage = result.Message
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		if apierrors.IsNotFound(err) {
 			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
-	}
-	// Cleanup VMware client connections when done
-	if c != nil {
-		defer c.CloseIdleConnections()
-		defer func() {
-			if err := utils.LogoutVMwareClient(ctx, r.Client, scope.VMwareCreds, c); err != nil {
-				ctxlog.Error(err, "Failed to logout VMware client")
-			}
-		}()
 	}
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
@@ -189,9 +181,6 @@ func (r *VMwareCredsReconciler) reconcileDelete(ctx context.Context, scope *scop
 func (r *VMwareCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VMwareCreds{}).
-		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			revalidateAnnotationPredicate(),
-		)).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }

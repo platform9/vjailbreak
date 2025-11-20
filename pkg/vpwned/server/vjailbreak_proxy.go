@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	gophercloud "github.com/gophercloud/gophercloud"
 	openstack "github.com/gophercloud/gophercloud/openstack"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
+	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
@@ -21,10 +22,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	credsRevalidateAnnotation = "vjailbreak.k8s.pf9.io/revalidate-token"
 )
 
 type vjailbreakProxy struct {
@@ -244,7 +241,6 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 	kind := in.GetKind()
 	name := in.GetName()
 	namespace := in.GetNamespace()
-	token := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	switch kind {
 
@@ -254,19 +250,23 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			return nil, fmt.Errorf("failed to get VMwareCreds %s/%s: %w", namespace, name, err)
 		}
 
-		if vmwcreds.Annotations == nil {
-			vmwcreds.Annotations = map[string]string{}
-		}
-		vmwcreds.Annotations[credsRevalidateAnnotation] = token
-		if err := p.K8sClient.Update(ctx, vmwcreds); err != nil {
-			return nil, fmt.Errorf("failed to update VMwareCreds annotation: %w", err)
+		result := vmwarevalidation.Validate(ctx, p.K8sClient, vmwcreds)
+
+		if result.Valid {
+			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
+			vmwcreds.Status.VMwareValidationMessage = result.Message
+		} else {
+			vmwcreds.Status.VMwareValidationStatus = "Failed"
+			vmwcreds.Status.VMwareValidationMessage = result.Message
 		}
 
-		vmwcreds.Status.VMwareValidationStatus = "Validating"
-		vmwcreds.Status.VMwareValidationMessage = "Revalidation requested"
 		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
 			return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
 		}
+
+		return &api.RevalidateCredentialsResponse{
+			Message: fmt.Sprintf("Validation completed for %s %s/%s: %s", kind, namespace, name, result.Message),
+		}, result.Error
 
 	case "OpenstackCreds":
 		oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -274,25 +274,25 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			return nil, fmt.Errorf("failed to get OpenstackCreds %s/%s: %w", namespace, name, err)
 		}
 
-		if oscreds.Annotations == nil {
-			oscreds.Annotations = map[string]string{}
-		}
-		oscreds.Annotations[credsRevalidateAnnotation] = token
-		if err := p.K8sClient.Update(ctx, oscreds); err != nil {
-			return nil, fmt.Errorf("failed to update OpenstackCreds annotation: %w", err)
+		result := openstackvalidation.Validate(ctx, p.K8sClient, oscreds)
+
+		if result.Valid {
+			oscreds.Status.OpenStackValidationStatus = "Succeeded"
+			oscreds.Status.OpenStackValidationMessage = result.Message
+		} else {
+			oscreds.Status.OpenStackValidationStatus = "Failed"
+			oscreds.Status.OpenStackValidationMessage = result.Message
 		}
 
-		oscreds.Status.OpenStackValidationStatus = "Validating"
-		oscreds.Status.OpenStackValidationMessage = "Revalidation requested"
 		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
 			return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
 		}
 
+		return &api.RevalidateCredentialsResponse{
+			Message: fmt.Sprintf("Validation completed for %s %s/%s: %s", kind, namespace, name, result.Message),
+		}, result.Error
+
 	default:
 		return nil, fmt.Errorf("unknown credentials kind: %s", kind)
 	}
-
-	return &api.RevalidateCredentialsResponse{
-		Message: fmt.Sprintf("Re-validation triggered for %s %s/%s", kind, namespace, name),
-	}, nil
 }

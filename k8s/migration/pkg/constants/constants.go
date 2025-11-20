@@ -141,8 +141,6 @@ const (
 	// CredsRequeueAfter is the time to requeue after
 	CredsRequeueAfter = 1 * time.Minute
 
-	// CredsRevalidateAnnotation is toggled to force immediate re-validation by controllers
-	CredsRevalidateAnnotation = "vjailbreak.k8s.pf9.io/revalidate-token" //nolint:gosec
 	// OpenstackCredsRequeueAfter is the time to requeue after.
 	OpenstackCredsRequeueAfterMinutes = 60
 
