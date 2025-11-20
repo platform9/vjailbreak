@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -241,58 +242,69 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 	kind := in.GetKind()
 	name := in.GetName()
 	namespace := in.GetNamespace()
+	log.Printf("Revalidating credentials: name=%s", name)
 
 	switch kind {
 
 	case "VmwareCreds":
 		vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
 		if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, vmwcreds); err != nil {
-			return nil, fmt.Errorf("failed to get VMwareCreds %s/%s: %w", namespace, name, err)
+			log.Printf("Failed to get VMwareCreds %s: %v", name, err)
+			return nil, fmt.Errorf("failed to get VMwareCreds %s: %w", name, err)
 		}
 
+		log.Printf("Starting VMware validation for %s", name)
 		result := vmwarevalidation.Validate(ctx, p.K8sClient, vmwcreds)
 
+		// Update status immediately
 		if result.Valid {
 			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
+			log.Printf("VMware validation succeeded for %s", name)
 		} else {
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
+			log.Printf("VMware validation failed for %s: %s", name, result.Message)
 		}
 
 		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+			log.Printf("Failed to update VMwareCreds status: %v", err)
 			return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
 		}
 
-		return &api.RevalidateCredentialsResponse{
-			Message: fmt.Sprintf("Validation completed for %s %s/%s: %s", kind, namespace, name, result.Message),
-		}, result.Error
+		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
+		return &api.RevalidateCredentialsResponse{Message: responseMsg}, nil
 
 	case "OpenstackCreds":
 		oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
 		if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, oscreds); err != nil {
-			return nil, fmt.Errorf("failed to get OpenstackCreds %s/%s: %w", namespace, name, err)
+			log.Printf("Failed to get OpenstackCreds %s: %v", name, err)
+			return nil, fmt.Errorf("failed to get OpenstackCreds %s: %w", name, err)
 		}
 
+		log.Printf("Starting OpenStack validation for %s", name)
 		result := openstackvalidation.Validate(ctx, p.K8sClient, oscreds)
 
 		if result.Valid {
 			oscreds.Status.OpenStackValidationStatus = "Succeeded"
 			oscreds.Status.OpenStackValidationMessage = result.Message
+			log.Printf("OpenStack validation succeeded for %s", name)
 		} else {
 			oscreds.Status.OpenStackValidationStatus = "Failed"
 			oscreds.Status.OpenStackValidationMessage = result.Message
+			log.Printf("OpenStack validation failed for %s: %s", name, result.Message)
 		}
 
 		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+			log.Printf("Failed to update OpenstackCreds status: %v", err)
 			return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
 		}
 
-		return &api.RevalidateCredentialsResponse{
-			Message: fmt.Sprintf("Validation completed for %s %s/%s: %s", kind, namespace, name, result.Message),
-		}, result.Error
+		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
+		return &api.RevalidateCredentialsResponse{Message: responseMsg}, nil
 
 	default:
+		log.Printf("Unknown credentials kind: %s", kind)
 		return nil, fmt.Errorf("unknown credentials kind: %s", kind)
 	}
 }
