@@ -675,13 +675,13 @@ export default function MigrationFormDrawer({
     );
 
     // Check for powered-ON VMs without OS assignment or with Unknown OS
-    const vmsWithoutOS = poweredOffVMs.filter(vm =>
+    const vmsWithoutOSAssigned = poweredOffVMs.filter(vm =>
       !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
     ).concat(poweredOnVMs.filter(vm =>
       !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === "" )
     );
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
+    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
       let errorMessage = "Cannot proceed with migration: ";
       const issues: string[] = [];
 
@@ -689,8 +689,8 @@ export default function MigrationFormDrawer({
         issues.push(`${vmsWithoutIPs.length} powered-off VM${vmsWithoutIPs.length === 1 ? '' : 's'} missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`);
       }
 
-      if (vmsWithoutOS.length > 0) {
-        issues.push(`We could not detect the operating system for ${vmsWithoutOS.length} powered-on VM${vmsWithoutOS.length === 1 ? '' : 's'}`);
+      if (vmsWithoutOSAssigned.length > 0) {
+        issues.push(`We could not detect the operating system for ${vmsWithoutOSAssigned.length} powered-on VM${vmsWithoutOSAssigned.length === 1 ? '' : 's'}`);
       }
 
       errorMessage += issues.join(" and ") + ". Please assign the required information before continuing.";
