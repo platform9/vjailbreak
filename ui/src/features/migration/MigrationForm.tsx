@@ -639,13 +639,15 @@ export default function MigrationFormDrawer({
     )
 
     // Check for powered-ON VMs without OS assignment or with Unknown OS
-    const vmsWithoutOS = poweredOnVMs.filter(
-      (vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === ''
-    )
+    const vmsWithoutOSAssigned = poweredOffVMs.filter(vm =>
+      !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
+    ).concat(poweredOnVMs.filter(vm =>
+      !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === "" )
+    );
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
-      let errorMessage = 'Cannot proceed with migration: '
-      const issues: string[] = []
+    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
+      let errorMessage = "Cannot proceed with migration: ";
+      const issues: string[] = [];
 
       if (vmsWithoutIPs.length > 0) {
         issues.push(
@@ -655,12 +657,8 @@ export default function MigrationFormDrawer({
         )
       }
 
-      if (vmsWithoutOS.length > 0) {
-        issues.push(
-          `We could not detect the operating system for ${vmsWithoutOS.length} powered-on VM${
-            vmsWithoutOS.length === 1 ? '' : 's'
-          }`
-        )
+      if (vmsWithoutOSAssigned.length > 0) {
+        issues.push(`We could not detect the operating system for ${vmsWithoutOSAssigned.length} powered-on VM${vmsWithoutOSAssigned.length === 1 ? '' : 's'}`);
       }
 
       errorMessage +=
@@ -698,7 +696,7 @@ export default function MigrationFormDrawer({
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
     // RDM validation - ensure RDM disks are properly configured
-    rdmValidation.hasValidationError
+    rdmValidation.hasValidationError 
 
   const sortedOpenstackNetworks = useMemo(
     () => (openstackCredentials?.status?.openstack?.networks || []).sort(stringsCompareFn),
