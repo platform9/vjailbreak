@@ -12,6 +12,20 @@ import (
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 )
 
+// formatBytes converts bytes to human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
 func main() {
 	fmt.Println("Starting ESXi SSH test...")
 
@@ -188,10 +202,21 @@ func main() {
 
 			// Monitor clone progress
 			if task.Pid > 0 {
-				fmt.Println("\nMonitoring clone progress (checking every 2 seconds)...")
+				fmt.Println("\nMonitoring clone progress (checking every 5 seconds)...")
+				fmt.Println("This may take several minutes depending on disk size and network conditions...")
 
-				for i := 0; i < 30; i++ { // Check for up to 60 seconds
-					time.Sleep(2 * time.Second)
+				startTime := time.Now()
+				checkInterval := 5 * time.Second
+				maxDuration := 30 * time.Minute // Allow up to 30 minutes for large disks or slow networks
+
+				var lastSize int64 = 0
+				checkCount := 0
+
+				for {
+					time.Sleep(checkInterval)
+					checkCount++
+					elapsed := time.Since(startTime)
+
 					isRunning, err := client.CheckCloneStatus(task.Pid)
 					if err != nil {
 						fmt.Printf("Error checking status: %v\n", err)
@@ -199,15 +224,67 @@ func main() {
 					}
 
 					if !isRunning {
-						fmt.Println("\nClone completed!")
-						// Check if target file was created
-						checkCmd := fmt.Sprintf("ls -lh %s 2>/dev/null", targetLUN)
-						if output, err := client.ExecuteCommand(checkCmd); err == nil && output != "" {
-							fmt.Printf("Target file created:\n%s\n", output)
+						fmt.Printf("\nClone process completed after %s!\n", elapsed.Round(time.Second))
+
+						// Wait a bit for descriptor file to be fully written
+						// vmkfstools may finish but still be writing metadata
+						fmt.Println("Waiting for descriptor file to be written...")
+						time.Sleep(3 * time.Second)
+
+						// Verify the clone actually succeeded by checking target files
+						fmt.Println("\nVerifying clone results...")
+
+						// Check descriptor file
+						descOutput, descErr := client.ExecuteCommand(fmt.Sprintf("ls -lh %s 2>/dev/null", targetLUN))
+						if descErr != nil || descOutput == "" {
+							fmt.Printf("ERROR: Descriptor file not found at %s\n", targetLUN)
+							fmt.Println("Clone may have failed!")
+							break
+						}
+
+						// Check flat file
+						flatFile := strings.Replace(targetLUN, ".vmdk", "-flat.vmdk", 1)
+						flatOutput, flatErr := client.ExecuteCommand(fmt.Sprintf("ls -lh %s 2>/dev/null", flatFile))
+						if flatErr != nil || flatOutput == "" {
+							fmt.Printf("ERROR: Flat file not found at %s\n", flatFile)
+							fmt.Println("Clone may have failed!")
+							break
+						}
+
+						// Check actual disk usage
+						targetDir := targetLUN[:strings.LastIndex(targetLUN, "/")]
+						duOutput, _ := client.ExecuteCommand(fmt.Sprintf("du -sh %s 2>/dev/null", targetDir))
+
+						fmt.Println("\nClone verification successful!")
+						fmt.Printf("Descriptor file:\n%s\n", descOutput)
+						fmt.Printf("Flat file:\n%s\n", flatOutput)
+						if duOutput != "" {
+							fmt.Printf("Actual disk usage: %s\n", strings.TrimSpace(duOutput))
 						}
 						break
-					} else {
-						fmt.Printf("  [%ds] Clone still running...\n", (i+1)*2)
+					}
+
+					// Still running - show progress
+					fmt.Printf("  [%s elapsed] Clone still running", elapsed.Round(time.Second))
+
+					// Try to show disk growth as progress indicator
+					if checkCount%3 == 0 { // Check size every 15 seconds
+						targetDir := targetLUN[:strings.LastIndex(targetLUN, "/")]
+						sizeOutput, err := client.ExecuteCommand(fmt.Sprintf("du -sb %s 2>/dev/null | awk '{print $1}'", targetDir))
+						if err == nil && sizeOutput != "" {
+							if currentSize, err := fmt.Sscanf(strings.TrimSpace(sizeOutput), "%d", &lastSize); err == nil && currentSize == 1 {
+								fmt.Printf(" - %s copied", formatBytes(lastSize))
+							}
+						}
+					}
+					fmt.Println("...")
+
+					// Check timeout
+					if elapsed > maxDuration {
+						fmt.Printf("\nWARNING: Clone exceeded maximum duration of %s\n", maxDuration)
+						fmt.Println("The process is still running but may be stuck.")
+						fmt.Println("Check ESXi logs for errors: grep vmkfstools /var/log/vmkernel.log")
+						break
 					}
 				}
 			}
