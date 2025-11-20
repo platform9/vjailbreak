@@ -3704,6 +3704,9 @@ spec:
         env:
         - name: MAX_CONCURRENT_RECONCILES
           value: "5"
+        envFrom:
+        - configMapRef:
+            name: pf9-env
         image: quay.io/platform9/vjailbreak-controller:v0.3.5
         imagePullPolicy: IfNotPresent
         lifecycle:
