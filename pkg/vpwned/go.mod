@@ -113,4 +113,6 @@ replace github.com/bougou/go-ipmi => github.com/bougou/go-ipmi v0.7.4
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
+replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+
 replace github.com/platform9/vjailbreak/pkg/validation => ../validation

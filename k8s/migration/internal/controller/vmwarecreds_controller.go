@@ -93,6 +93,8 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
+	var err error
+
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
 	result := vmwarevalidation.Validate(ctx, r.Client, scope.VMwareCreds)

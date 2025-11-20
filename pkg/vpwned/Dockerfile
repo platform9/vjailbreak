@@ -10,12 +10,12 @@ WORKDIR /app
 # Copy the source code
 COPY . .
 
-# Download dependencies
-RUN make dep
+# Download dependencies from vpwned subdirectory
+RUN make -C pkg/vpwned dep
 
-# Build the application
-RUN make config-swagger
-RUN make vpwctl
+# Build the application from vpwned subdirectory
+RUN make -C pkg/vpwned config-swagger
+RUN make -C pkg/vpwned vpwctl
 
 # Final stage
 FROM alpine:3.18
@@ -27,11 +27,11 @@ RUN apk --no-cache add ca-certificates tzdata skopeo
 WORKDIR /root/
 
 # Copy the pre-built binary file from the builder stage
-COPY --from=builder /app/bin/vpwctl .
+COPY --from=builder /app/pkg/vpwned/bin/vpwctl .
 
 # Copy any additional files you need
 # Uncomment and modify as needed
-COPY --from=builder /app/openapiv3 /opt/platform9/vpwned/openapiv3
+COPY --from=builder /app/pkg/vpwned/openapiv3 /opt/platform9/vpwned/openapiv3
 
 # Set the timezone (optional)
 ENV TZ=UTC
