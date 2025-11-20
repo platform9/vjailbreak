@@ -408,6 +408,9 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	semaphore := make(chan struct{}, 16)
 	incrementalcopyprogress := make(chan int64)
 
+	maxRetries, capInterval := utils.GetRetryLimits()
+	errorChan := make(chan error)
+	retryChannel := make(chan struct{})
 	// Goroutine for updating progress
 	go func() {
 		copiedsize := int64(0)
@@ -430,9 +433,30 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			blocks := getBlockStatus(handle, extent)
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			for _, block := range blocks {
-				if err := copyRange(fd, handle, block); err != nil {
-					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v", err))
+			retries := uint64(0)
+			waitTime := 1 * time.Minute
+			var err error
+			for bidx := 0; bidx < len(blocks); {
+				if err = copyRange(fd, handle, blocks[bidx]); err != nil {
+					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
+					retries++
+					if retries >= maxRetries {
+						errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(waitTime):
+						waitTime = waitTime * 2
+						if waitTime > capInterval {
+							waitTime = capInterval
+						}
+						continue
+					}
+				} else {
+					bidx++
+					retries = uint64(0)
 				}
 			}
 			// check if context is cancelled
@@ -447,9 +471,17 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			}
 		}(extent)
 	}
-	wg.Wait()
-	close(incrementalcopyprogress)
-	return nil
+	go func() {
+		wg.Wait()
+		close(retryChannel)
+	}()
+	select {
+	case <-retryChannel:
+		close(incrementalcopyprogress)
+		return nil
+	case err := <-errorChan:
+		return err
+	}
 }
 
 func generateSockUrl(tmp_dir string) string {

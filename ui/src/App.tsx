@@ -1,4 +1,4 @@
-import { styled } from '@mui/material'
+import { styled, Snackbar, Alert } from '@mui/material'
 import { useState } from 'react'
 import { Route, Routes, useLocation, Navigate } from 'react-router-dom'
 import './assets/reset.css'
@@ -39,11 +39,24 @@ function App() {
   const location = useLocation()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'error' | 'info' | 'success' | 'warning'
+  })
   const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
 
   const handleOpenMigrationForm = (open, type = 'standard') => {
     setOpenMigrationForm(open)
     setMigrationType(type)
+  }
+
+  const handleSuccess = (message: string) => {
+    setNotification({
+      open: true,
+      message,
+      severity: 'success'
+    })
   }
 
   return (
@@ -52,7 +65,11 @@ function App() {
       <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
       <AppContent>
         {openMigrationForm && migrationType === 'standard' && (
-          <MigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
+          <MigrationFormDrawer 
+            open 
+            onClose={() => setOpenMigrationForm(false)} 
+            onSuccess={handleSuccess}
+          />
         )}
         {openMigrationForm && migrationType === 'rolling' && (
           <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
@@ -70,6 +87,37 @@ function App() {
           <Route path="/onboarding" element={<Onboarding />} />
         </Routes>
       </AppContent>
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{
+          top: { xs: 80, sm: 90 },
+          right: { xs: 16, sm: 24 }
+        }}
+      >
+        <Alert
+          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          severity={notification.severity}
+          variant="filled"
+          sx={{ 
+            minWidth: '350px',
+            fontSize: '1rem',
+            fontWeight: 600,
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+            '& .MuiAlert-icon': {
+              fontSize: '28px'
+            },
+            '& .MuiAlert-message': {
+              fontSize: '1rem',
+              fontWeight: 600
+            }
+          }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </AppFrame>
   )
 }

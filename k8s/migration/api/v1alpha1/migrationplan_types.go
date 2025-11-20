@@ -56,6 +56,8 @@ type AdvancedOptions struct {
 	GranularPorts []string `json:"granularPorts,omitempty"`
 	// PeriodicSyncInterval is the interval at which the migration plan should be synced
 	PeriodicSyncInterval string `json:"periodicSyncInterval,omitempty"`
+	// PeriodicSyncEnabled is a boolean to enable periodic sync
+	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine
