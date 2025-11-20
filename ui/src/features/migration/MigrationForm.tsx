@@ -675,8 +675,10 @@ export default function MigrationFormDrawer({
     );
 
     // Check for powered-ON VMs without OS assignment or with Unknown OS
-    const vmsWithoutOS = poweredOnVMs.filter(vm =>
+    const vmsWithoutOS = poweredOffVMs.filter(vm =>
       !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
+    ).concat(poweredOnVMs.filter(vm =>
+      !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === "" )
     );
 
     if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
@@ -723,7 +725,7 @@ export default function MigrationFormDrawer({
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
     // RDM validation - ensure RDM disks are properly configured
-    rdmValidation.hasValidationError
+    rdmValidation.hasValidationError 
 
   const sortedOpenstackNetworks = useMemo(
     () =>
