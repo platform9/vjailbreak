@@ -17,6 +17,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 func main() {
@@ -146,16 +147,24 @@ func main() {
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
-
+	PreMigrationPowerState, err := vmops.GetVmPowerState()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get VM power state: %v", err))
+		PreMigrationPowerState = types.VirtualMachinePowerStatePoweredOn
+	}
 	if err := migrationobj.MigrateVM(ctx); err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
+		msg := fmt.Sprintf("Failed to migrate VM: %v. ", err)
 
 		// Try to power on the VM if migration failed
-		powerOnErr := vmops.VMPowerOn()
-		if powerOnErr != nil {
-			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+		if PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
+		msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
 		} else {
-			msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			powerOnErr := vmops.VMPowerOn()
+			if powerOnErr != nil {
+				msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+			} else {
+				msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			}
 		}
 
 		handleError(msg)
