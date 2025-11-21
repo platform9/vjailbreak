@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # generate-mount-persistence.sh
 #
 # Prints:
@@ -9,12 +9,11 @@
 # Supported distros: CentOS 6/7/8, Rocky Linux, Ubuntu, SUSE, RHEL.
 #
 # Usage:
-#   sudo bash generate-mount-persistence.sh > output.txt
+#   sudo sh generate-mount-persistence.sh > output.txt
 #   # Review output.txt for udev rules + suggested fstab entries.
 #   # Or run the command with --apply, --replace-fstab, or --force-uuid to apply the changes.
 
-#!/usr/bin/env bash
-set -euo pipefail
+set -eu
 
 SKIP_FS_TYPES="^(autofs|bpf|cgroup|cgroup2|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|fuse\.overlayfs|hugetlbfs|mqueue|nsfs|overlay|proc|pstore|ramfs|rpc_pipefs|securityfs|selinuxfs|smb3?|squashfs|sysfs|tmpfs|tracefs)$"
 SKIP_DEVICES_REGEX="^/dev/(ram|loop|fd|sr|zram|nbd|md|pmem)[0-9]"
@@ -56,22 +55,22 @@ case "${1:-}" in
   --help|-h) print_help ;;
 esac
 
-udev_rules=()
-fstab_lines=()
+UDEV_RULES_FILE=$(mktemp)
+FSTAB_LINES_FILE=$(mktemp)
+trap 'rm -f "$UDEV_RULES_FILE" "$FSTAB_LINES_FILE"' EXIT
 
 get_fstab_id() {
-  local DEV="$1"
-  local UUID LABEL PARTUUID
+  DEV="$1"
 
   UUID="$(blkid -s UUID -o value -- "$DEV" 2>/dev/null || true)"
   LABEL="$(blkid -s LABEL -o value -- "$DEV" 2>/dev/null || true)"
   PARTUUID="$(blkid -s PARTUUID -o value -- "$DEV" 2>/dev/null || true)"
 
-  if [[ -n "$UUID" ]]; then
+  if [ -n "$UUID" ]; then
     echo "UUID=$UUID"
-  elif [[ -n "$LABEL" ]]; then
+  elif [ -n "$LABEL" ]; then
     echo "LABEL=$LABEL"
-  elif [[ -n "$PARTUUID" ]]; then
+  elif [ -n "$PARTUUID" ]; then
     echo "PARTUUID=$PARTUUID"
   else
     echo "$DEV"
@@ -79,74 +78,85 @@ get_fstab_id() {
 }
 
 # --- 1. Handle mounted filesystems ---
-while IFS=$'\t' read -r SRC TGT FST; do
-  [[ "$SRC" == /dev/* ]] || continue
-  [[ "$FST" =~ $SKIP_FS_TYPES ]] && continue
-  [[ "$SRC" =~ $SKIP_DEVICES_REGEX ]] && continue
+awk '{ src=$1; tgt=$2; fstype=$3;
+       gsub(/\\040/, " ", tgt);
+       print src "\t" tgt "\t" fstype }' /proc/mounts | \
+while IFS="$(printf '\t')" read -r SRC TGT FST; do
+  case "$SRC" in
+    /dev/*) ;;
+    *) continue ;;
+  esac
+  
+  echo "$FST" | grep -Eq "$SKIP_FS_TYPES" && continue
+  echo "$SRC" | grep -Eq "$SKIP_DEVICES_REGEX" && continue
 
   FSTAB_ID=$(get_fstab_id "$SRC")
 
   SAFE_NAME="${TGT#/}"
-  [[ "$SAFE_NAME" == "" ]] && SAFE_NAME="root"
-  SAFE_NAME="${SAFE_NAME//\//_}"
-  SAFE_NAME="${SAFE_NAME// /_}"
+  [ -z "$SAFE_NAME" ] && SAFE_NAME="root"
+  SAFE_NAME=$(echo "$SAFE_NAME" | sed 's/\//_/g; s/ /_/g')
 
   UUID="$(blkid -s UUID -o value -- "$SRC" 2>/dev/null || true)"
   LABEL="$(blkid -s LABEL -o value -- "$SRC" 2>/dev/null || true)"
   PARTUUID="$(blkid -s PARTUUID -o value -- "$SRC" 2>/dev/null || true)"
 
-  if [[ -n "$UUID" ]]; then
+  if [ -n "$UUID" ]; then
     MATCH="ENV{ID_FS_UUID}==\"$UUID\""
-  elif [[ -n "$LABEL" ]]; then
+  elif [ -n "$LABEL" ]; then
     MATCH="ENV{ID_FS_LABEL}==\"$LABEL\""
   else
     MATCH="ENV{ID_PART_ENTRY_UUID}==\"$PARTUUID\""
   fi
 
-  udev_rules+=("ACTION==\"add\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"")
-  udev_rules+=("ACTION==\"change\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"")
+  echo "ACTION==\"add\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
+  echo "ACTION==\"change\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
 
-  #OPTIONS="$(awk -v src="$SRC" '$1==src {print $4}' /proc/mounts | head -n1)"
-  #OPTIONS="${OPTIONS:-defaults}"
   # Try to reuse options from existing /etc/fstab if present
-OPTIONS=$(awk -v tgt="$TGT" '$2==tgt {print $4}' /etc/fstab | head -n1)
+  OPTIONS=$(awk -v tgt="$TGT" '$2==tgt {print $4}' /etc/fstab | head -n1)
 
-if [[ -z "$OPTIONS" ]]; then
-  # Fallback: use /proc/mounts
-  OPTIONS=$(awk -v src="$SRC" '$1==src {print $4}' /proc/mounts | head -n1)
+  if [ -z "$OPTIONS" ]; then
+    # Fallback: use /proc/mounts
+    OPTIONS=$(awk -v src="$SRC" '$1==src {print $4}' /proc/mounts | head -n1)
 
-  # Detect if options are equivalent to defaults
-  # defaults generally == rw,suid,dev,exec,auto,nouser,async (varies per FS)
-  # We'll use a conservative match: rw,relatime + no special flags
-  if [[ "$OPTIONS" =~ ^rw(,relatime)?$ ]]; then
-    OPTIONS="defaults"
-  fi
-fi
-
-
-  if [[ "$FST" == xfs ]]; then
-    DUMP_PASS="0 0"
-  elif [[ "$FST" == ext* ]]; then
-    [[ "$TGT" == "/" ]] && DUMP_PASS="1 1" || DUMP_PASS="0 2"
-  else
-    [[ "$TGT" == "/" ]] && DUMP_PASS="1 1" || DUMP_PASS="0 2"
+    # Detect if options are equivalent to defaults
+    # defaults generally == rw,suid,dev,exec,auto,nouser,async (varies per FS)
+    # We'll use a conservative match: rw,relatime + no special flags
+    case "$OPTIONS" in
+      rw|rw,relatime) OPTIONS="defaults" ;;
+    esac
   fi
 
-  fstab_lines+=("$FSTAB_ID  $TGT  $FST  $OPTIONS  $DUMP_PASS")
-done < <(
-  awk '{ src=$1; tgt=$2; fstype=$3;
-         gsub(/\\040/, " ", tgt);
-         print src "\t" tgt "\t" fstype }' /proc/mounts
-)
+  case "$FST" in
+    xfs)
+      DUMP_PASS="0 0"
+      ;;
+    ext*)
+      if [ "$TGT" = "/" ]; then
+        DUMP_PASS="1 1"
+      else
+        DUMP_PASS="0 2"
+      fi
+      ;;
+    *)
+      if [ "$TGT" = "/" ]; then
+        DUMP_PASS="1 1"
+      else
+        DUMP_PASS="0 2"
+      fi
+      ;;
+  esac
+
+  echo "$FSTAB_ID  $TGT  $FST  $OPTIONS  $DUMP_PASS" >> "$FSTAB_LINES_FILE"
+done
 
 # --- 2. Handle swap devices ---
 while read -r swapline; do
-  read -r DEV TYPE _ <<<"$swapline"
-  [[ "$DEV" == Filename ]] && continue  # skip header
-  [[ "$DEV" =~ $SKIP_DEVICES_REGEX ]] && continue
+  DEV=$(echo "$swapline" | awk '{print $1}')
+  [ "$DEV" = "Filename" ] && continue  # skip header
+  echo "$DEV" | grep -Eq "$SKIP_DEVICES_REGEX" && continue
 
   FSTAB_ID=$(get_fstab_id "$DEV")
-  fstab_lines+=("$FSTAB_ID  none  swap  defaults  0 0")
+  echo "$FSTAB_ID  none  swap  defaults  0 0" >> "$FSTAB_LINES_FILE"
 done < /proc/swaps
 
 # --- Apply or print ---
@@ -154,7 +164,7 @@ if $APPLY; then
   echo "Applying changes..."
   RULE_FILE="/etc/udev/rules.d/99-by-mountpoint.rules"
   cp "$RULE_FILE" "$RULE_FILE.bak.$(date +%s)" 2>/dev/null || true
-  printf "%s\n" "${udev_rules[@]}" > "$RULE_FILE"
+  cat "$UDEV_RULES_FILE" > "$RULE_FILE"
   udevadm control --reload-rules && udevadm trigger
 
   cp /etc/fstab /etc/fstab.bak.$(date +%s)
@@ -165,38 +175,27 @@ if $APPLY; then
 
     while IFS= read -r line; do
       skip=false
-      for entry in "${fstab_lines[@]}"; do
+      while IFS= read -r entry; do
         mp=$(echo "$entry" | awk '{print $2}')
-        [[ "$line" =~ $mp[[:space:]] ]] && { skip=true; break; }
-      done
+        echo "$line" | grep -q "$mp[[:space:]]" && { skip=true; break; }
+      done < "$FSTAB_LINES_FILE"
       $skip || echo "$line" >> "$tmp_fstab"
     done < /etc/fstab
 
-    # When forcing UUIDs, convert existing device references too
-    if $FORCE_UUID; then
-      echo "Forcing UUID/LABEL/PARTUUID references for all devices..."
-      > "$tmp_fstab"
-      for entry in "${fstab_lines[@]}"; do
-        DEV=$(echo "$entry" | awk '{print $1}')
-        DEV_REAL=$(echo "$DEV" | sed 's/UUID=.*//;s/LABEL=.*//;s/PARTUUID=.*//')
-        NEW_ID=$(get_fstab_id "$DEV_REAL")
-        echo "$entry" | sed "s|^$DEV|$NEW_ID|" >> "$tmp_fstab"
-      done
-    else
-      printf "%s\n" "${fstab_lines[@]}" >> "$tmp_fstab"
-    fi
+    # Append new entries (already in UUID format from get_fstab_id)
+    cat "$FSTAB_LINES_FILE" >> "$tmp_fstab"
 
     mv "$tmp_fstab" /etc/fstab
   else
-    printf "%s\n" "${fstab_lines[@]}" >> /etc/fstab
+    cat "$FSTAB_LINES_FILE" >> /etc/fstab
   fi
 
   echo " -> Done. Backups created in /etc/udev/rules.d and /etc/fstab.bak.*"
 else
   echo "# === UDEV RULES (save to /etc/udev/rules.d/99-by-mountpoint.rules) ==="
-  printf "%s\n" "${udev_rules[@]}"
+  cat "$UDEV_RULES_FILE"
 
   echo ""
   echo "# === /etc/fstab entries (append to /etc/fstab) ==="
-  printf "%s\n" "${fstab_lines[@]}"
+  cat "$FSTAB_LINES_FILE"
 fi

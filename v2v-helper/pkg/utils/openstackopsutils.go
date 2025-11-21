@@ -486,6 +486,9 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 				if ip != "" && foundPortIP != ip {
 					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
 				}
+				if port.Status == "ACTIVE" {
+					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
+				}
 			}
 			PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
 			return &port, nil
@@ -508,18 +511,18 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	if ip != "" {
 		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
-		
+
 		subnet, err := osclient.GetSubnet(network.Subnets, ip)
 		fixedIP := []ports.IP{}
-		if err != nil  && !fallbackToDHCP {
+		if err != nil && !fallbackToDHCP {
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
-		
-		if subnet != nil{				
+
+		if subnet != nil {
 			fixedIP = append(fixedIP, ports.IP{
-			SubnetID:  subnet.ID,
-			IPAddress: ip,
-		    })
+				SubnetID:  subnet.ID,
+				IPAddress: ip,
+			})
 		}
 		createOpts.FixedIPs = fixedIP
 	}
