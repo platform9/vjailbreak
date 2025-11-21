@@ -149,10 +149,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	ctxlog := log.FromContext(ctx)
 
 	for attempt := 1; attempt <= retryLimit; attempt++ {
-		// Ensure we have a client for this attempt
-		if c == nil {
-			c = new(vim25.Client)
-		}
+		c = new(vim25.Client)
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful

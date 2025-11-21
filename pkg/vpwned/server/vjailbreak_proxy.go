@@ -253,6 +253,12 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			return nil, fmt.Errorf("failed to get VMwareCreds %s: %w", name, err)
 		}
 
+		vmwcreds.Status.VMwareValidationStatus = "Validating"
+		vmwcreds.Status.VMwareValidationMessage = "Validating credentials"
+		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+			log.Printf("Failed to update VMwareCreds status to Validating: %v", err)
+		}
+
 		log.Printf("Starting VMware validation for %s", name)
 		result := vmwarevalidation.Validate(ctx, p.K8sClient, vmwcreds)
 
@@ -268,11 +274,18 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			}
 
 			log.Printf("Starting resource discovery for %s", name)
-			if err := vmwarevalidation.PostValidate(ctx, p.K8sClient, vmwcreds); err != nil {
-				log.Printf("Resource discovery failed for %s: %v", name, err)
-				return nil, fmt.Errorf("resource discovery failed: %w", err)
-			}
-			log.Printf("Resource discovery completed successfully for %s", name)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("Resource discovery panicked for %s: %v", name, r)
+					}
+				}()
+				if err := vmwarevalidation.PostValidate(ctx, p.K8sClient, vmwcreds); err != nil {
+					log.Printf("Resource discovery failed for %s: %v", name, err)
+				} else {
+					log.Printf("Resource discovery completed successfully for %s", name)
+				}
+			}()
 		} else {
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
@@ -294,6 +307,12 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			return nil, fmt.Errorf("failed to get OpenstackCreds %s: %w", name, err)
 		}
 
+		oscreds.Status.OpenStackValidationStatus = "Validating"
+		oscreds.Status.OpenStackValidationMessage = "Validating credential"
+		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+			log.Printf("Failed to update OpenstackCreds status to Validating: %v", err)
+		}
+
 		log.Printf("Starting OpenStack validation for %s", name)
 		result := openstackvalidation.Validate(ctx, p.K8sClient, oscreds)
 
@@ -310,9 +329,9 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			log.Printf("Starting resource discovery for %s", name)
 			if err := openstackvalidation.PostValidate(ctx, p.K8sClient, oscreds, false); err != nil {
 				log.Printf("Resource discovery failed for %s: %v", name, err)
-				return nil, fmt.Errorf("resource discovery failed: %w", err)
+			} else {
+				log.Printf("Resource discovery completed successfully for %s", name)
 			}
-			log.Printf("Resource discovery completed successfully for %s", name)
 		} else {
 			oscreds.Status.OpenStackValidationStatus = "Failed"
 			oscreds.Status.OpenStackValidationMessage = result.Message
