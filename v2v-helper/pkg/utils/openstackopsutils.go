@@ -630,7 +630,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	// Wait for RDM disks to become available before creating VM
 	for _, disk := range vminfo.RDMDisks {
 		if disk.Status.CinderVolumeID == "" {
-			return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID", disk.Name)
+return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID: %w", disk.Name, err)
 		}
 		err := osclient.WaitForVolume(disk.Status.CinderVolumeID)
 		if err != nil {
