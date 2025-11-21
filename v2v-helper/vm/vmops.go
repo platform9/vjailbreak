@@ -111,7 +111,9 @@ func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name stri
 	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx, k8sClient: k8sClient}, nil
 
 }
-
+func (vmops *VMOps) GetVmPowerState() (types.VirtualMachinePowerState, error) {
+	return vmops.VMObj.PowerState(vmops.ctx)
+}
 func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
