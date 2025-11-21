@@ -32,9 +32,18 @@ export const createMigrationPlanJson = (params) => {
       disconnectSourceNetwork
     },
     virtualMachines: [virtualMachines],
-    fallbackToDHCP,
-    periodicSyncInterval,
-    periodicSyncEnabled
+    fallbackToDHCP
+  }
+
+  const advancedOptions: Record<string, unknown> = {}
+  if (periodicSyncInterval) {
+    advancedOptions.periodicSyncInterval = periodicSyncInterval
+  }
+  if (typeof periodicSyncEnabled === 'boolean') {
+    advancedOptions.periodicSyncEnabled = periodicSyncEnabled
+  }
+  if (Object.keys(advancedOptions).length > 0) {
+    spec.advancedOptions = advancedOptions
   }
 
   // Add firstBootScript  if postMigrationScript is provided
