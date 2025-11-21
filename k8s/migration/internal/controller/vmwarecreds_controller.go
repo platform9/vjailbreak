@@ -128,27 +128,10 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
-	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating RDM disk CR for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
-	}
-	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
+
+	ctxlog.Info("Performing resource discovery", "name", scope.Name())
+	if err := vmwarevalidation.PostValidate(ctx, r.Client, scope.VMwareCreds); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error in resource discovery for VMwareCreds '%s'", scope.Name()))
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)

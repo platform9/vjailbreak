@@ -134,7 +134,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			if r.Local {
 				// At this point creds are valid but controller is not able to fetch metadata
 				// that is why we are getting this above error
-				err := handleValidatedCreds(ctx, r, scope)
+				err := openstackvalidation.PostValidate(ctx, r.Client, scope.OpenstackCreds, r.Local)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -160,7 +160,8 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		ctxlog.Info("Successfully updated status to success")
-		err := handleValidatedCreds(ctx, r, scope)
+		ctxlog.Info("Performing resource discovery", "openstackcreds", scope.OpenstackCreds.Name)
+		err := openstackvalidation.PostValidate(ctx, r.Client, scope.OpenstackCreds, r.Local)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

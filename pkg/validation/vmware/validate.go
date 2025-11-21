@@ -19,6 +19,10 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -229,4 +233,63 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 	vmwareCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 
 	return vmwareCredsInfo, nil
+}
+
+// PostValidate performs resource discovery after successful VMware validation
+func PostValidate(ctx context.Context, k8sClient client.Client, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) error {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Starting VMware resource discovery", "name", vmwareCreds.Name)
+
+	// Create scope for utils functions
+	vmwareScope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
+		Client:      k8sClient,
+		VMwareCreds: vmwareCreds,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create VMwareCreds scope")
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(vmwareCreds, constants.VMwareCredsFinalizer) {
+		controllerutil.AddFinalizer(vmwareCreds, constants.VMwareCredsFinalizer)
+		if err := k8sClient.Update(ctx, vmwareCreds); err != nil {
+			return errors.Wrap(err, "failed to add finalizer")
+		}
+		ctxlog.Info("Added finalizer to VMwareCreds", "name", vmwareCreds.Name)
+	}
+
+	// Create clusters and hosts
+	ctxlog.Info("Creating VMware clusters and hosts", "name", vmwareCreds.Name)
+	if err := utils.CreateVMwareClustersAndHosts(ctx, vmwareScope); err != nil {
+		return errors.Wrap(err, "failed to create VMware clusters and hosts")
+	}
+
+	// Get all VMs
+	ctxlog.Info("Fetching all VMs from VMware", "name", vmwareCreds.Name, "datacenter", vmwareCreds.Spec.DataCenter)
+	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, vmwareScope, vmwareCreds.Spec.DataCenter)
+	if err != nil {
+		return errors.Wrap(err, "failed to get all VMs")
+	}
+	ctxlog.Info(fmt.Sprintf("Fetched %d VMs from VMware", len(vminfo)), "name", vmwareCreds.Name)
+
+	// Create or update RDM disks
+	ctxlog.Info("Creating/updating RDM disk CRs", "name", vmwareCreds.Name)
+	if err := utils.CreateOrUpdateRDMDisks(ctx, k8sClient, vmwareCreds, rdmDiskMap); err != nil {
+		return errors.Wrap(err, "failed to create/update RDM disks")
+	}
+
+	// Delete stale VMware machines
+	ctxlog.Info("Cleaning up stale VMware machines", "name", vmwareCreds.Name)
+	if err := utils.DeleteStaleVMwareMachines(ctx, k8sClient, vmwareCreds, vminfo); err != nil {
+		return errors.Wrap(err, "failed to delete stale VMware machines")
+	}
+
+	// Delete stale clusters and hosts
+	ctxlog.Info("Cleaning up stale clusters and hosts", "name", vmwareCreds.Name)
+	if err := utils.DeleteStaleVMwareClustersAndHosts(ctx, vmwareScope); err != nil {
+		return errors.Wrap(err, "failed to delete stale clusters and hosts")
+	}
+
+	ctxlog.Info("VMware resource discovery completed successfully", "name", vmwareCreds.Name)
+	return nil
 }

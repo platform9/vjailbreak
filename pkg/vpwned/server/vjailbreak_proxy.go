@@ -261,15 +261,27 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
 			log.Printf("VMware validation succeeded for %s", name)
+
+			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+				log.Printf("Failed to update VMwareCreds status: %v", err)
+				return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+			}
+
+			log.Printf("Starting resource discovery for %s", name)
+			if err := vmwarevalidation.PostValidate(ctx, p.K8sClient, vmwcreds); err != nil {
+				log.Printf("Resource discovery failed for %s: %v", name, err)
+				return nil, fmt.Errorf("resource discovery failed: %w", err)
+			}
+			log.Printf("Resource discovery completed successfully for %s", name)
 		} else {
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
 			log.Printf("VMware validation failed for %s: %s", name, result.Message)
-		}
 
-		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
-			log.Printf("Failed to update VMwareCreds status: %v", err)
-			return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+				log.Printf("Failed to update VMwareCreds status: %v", err)
+				return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+			}
 		}
 
 		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
@@ -289,15 +301,27 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			oscreds.Status.OpenStackValidationStatus = "Succeeded"
 			oscreds.Status.OpenStackValidationMessage = result.Message
 			log.Printf("OpenStack validation succeeded for %s", name)
+
+			if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+				log.Printf("Failed to update OpenstackCreds status: %v", err)
+				return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+			}
+
+			log.Printf("Starting resource discovery for %s", name)
+			if err := openstackvalidation.PostValidate(ctx, p.K8sClient, oscreds, false); err != nil {
+				log.Printf("Resource discovery failed for %s: %v", name, err)
+				return nil, fmt.Errorf("resource discovery failed: %w", err)
+			}
+			log.Printf("Resource discovery completed successfully for %s", name)
 		} else {
 			oscreds.Status.OpenStackValidationStatus = "Failed"
 			oscreds.Status.OpenStackValidationMessage = result.Message
 			log.Printf("OpenStack validation failed for %s: %s", name, result.Message)
-		}
 
-		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
-			log.Printf("Failed to update OpenstackCreds status: %v", err)
-			return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+			if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+				log.Printf("Failed to update OpenstackCreds status: %v", err)
+				return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+			}
 		}
 
 		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
