@@ -35,7 +35,7 @@ import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import CustomLoadingOverlay from 'src/components/grid/CustomLoadingOverlay'
 import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
 import Step from '../../components/forms/Step'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import * as React from 'react'
 import { getMigrationPlans } from 'src/api/migration-plans/migrationPlans'
 import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
@@ -162,7 +162,7 @@ interface VmsSelectionStepProps {
   vmwareClusterDisplayName?: string
 }
 
-export default function VmsSelectionStep({
+function VmsSelectionStep({
   onChange,
   error,
   open = false,
@@ -238,6 +238,55 @@ export default function VmsSelectionStep({
       source: Record<string, string>
     }>
   >([])
+  const lastSelectedVmsPayloadRef = useRef<string>('__initial__')
+  const lastRdmConfigPayloadRef = useRef<string>('__initial__')
+
+  const setFormVms = React.useMemo(() => onChange('vms'), [onChange])
+  const setFormRdmConfigurations = React.useMemo(() => onChange('rdmConfigurations'), [onChange])
+
+  const syncSelectedVmSelection = useCallback(
+    (selectedVmData: VmDataWithFlavor[]) => {
+      const payload = JSON.stringify(selectedVmData)
+      if (payload === lastSelectedVmsPayloadRef.current) {
+        return
+      }
+      lastSelectedVmsPayloadRef.current = payload
+      setFormVms(selectedVmData)
+    },
+    [setFormVms]
+  )
+
+  const syncRdmConfigurations = useCallback(
+    (
+      configs: Array<{
+        uuid: string
+        diskName: string
+        cinderBackendPool: string
+        volumeType: string
+        source: Record<string, string>
+      }>
+    ) => {
+      const payload = JSON.stringify(configs)
+      if (payload === lastRdmConfigPayloadRef.current) {
+        return
+      }
+      lastRdmConfigPayloadRef.current = payload
+      setFormRdmConfigurations(configs)
+    },
+    [setFormRdmConfigurations]
+  )
+
+  const areSetsEqual = useCallback((a: Set<string>, b: Set<string>) => {
+    if (a.size !== b.size) {
+      return false
+    }
+    for (const value of a) {
+      if (!b.has(value)) {
+        return false
+      }
+    }
+    return true
+  }, [])
 
   // IP editing and validation state - similar to RollingMigrationForm
 
@@ -718,53 +767,54 @@ export default function VmsSelectionStep({
       Array.from(selectedVMs).filter((vmName) => availableVmNames.has(vmName))
     )
 
-    if (cleanedSelection.size !== selectedVMs.size) {
+    if (!areSetsEqual(cleanedSelection, selectedVMs)) {
       setSelectedVMs(cleanedSelection)
-      // Update parent with cleaned selection
+
       const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.name))
-      onChange('vms')(selectedVmData)
+      syncSelectedVmSelection(selectedVmData)
+
+      if (rdmConfigurations.length > 0) {
+        syncRdmConfigurations(rdmConfigurations)
+      }
     }
-  }, [vmsWithFlavor, selectedVMs, onChange])
+  }, [
+    vmsWithFlavor,
+    selectedVMs,
+    rdmConfigurations,
+    areSetsEqual,
+    syncSelectedVmSelection,
+    syncRdmConfigurations
+  ])
 
   useEffect(() => {
-    if (vmsWithFlavor.length > 0 && selectedVMs.size > 0) {
-      const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
-      onChange('vms')(selectedVmData)
+    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+    syncSelectedVmSelection(selectedVmData)
 
-      // Also pass RDM configurations if available
-      if (rdmConfigurations.length > 0) {
-        onChange('rdmConfigurations')(rdmConfigurations)
-      }
+    if (selectedVmData.length > 0 && rdmConfigurations.length > 0) {
+      syncRdmConfigurations(rdmConfigurations)
     }
-  }, [vmsWithFlavor, selectedVMs, rdmConfigurations, onChange])
+  }, [
+    vmsWithFlavor,
+    selectedVMs,
+    rdmConfigurations,
+    syncSelectedVmSelection,
+    syncRdmConfigurations
+  ])
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
-    // Update selection based on the difference
-    const newSelection = new Set(selectedVMs)
+    const newSelection = new Set<string>(selectedRowIds as string[])
 
-    // Add newly selected items
-    selectedRowIds.forEach((id) => {
-      if (!selectedVMs.has(id as string)) {
-        newSelection.add(id as string)
-      }
-    })
-
-    // Remove deselected items
-    selectedVMs.forEach((id) => {
-      if (!selectedRowIds.includes(id)) {
-        newSelection.delete(id)
-      }
-    })
+    if (areSetsEqual(newSelection, selectedVMs)) {
+      return
+    }
 
     setSelectedVMs(newSelection)
 
-    // Use persistent selection for onChange callback
     const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name))
-    onChange('vms')(selectedVmData)
+    syncSelectedVmSelection(selectedVmData)
 
-    // Also pass RDM configurations if available
     if (rdmConfigurations.length > 0) {
-      onChange('rdmConfigurations')(rdmConfigurations)
+      syncRdmConfigurations(rdmConfigurations)
     }
   }
 
@@ -1694,3 +1744,50 @@ export default function VmsSelectionStep({
     </VmsSelectionStepContainer>
   )
 }
+
+const areOpenstackFlavorsEqual = (prev?: OpenStackFlavor[], next?: OpenStackFlavor[]): boolean => {
+  if (prev === next) {
+    return true
+  }
+
+  if (!prev || !next || prev.length !== next.length) {
+    return false
+  }
+
+  return prev.every((prevFlavor, index) => {
+    const nextFlavor = next[index]
+    return (
+      prevFlavor.id === nextFlavor.id &&
+      prevFlavor.name === nextFlavor.name &&
+      prevFlavor.disk === nextFlavor.disk &&
+      prevFlavor.ram === nextFlavor.ram &&
+      prevFlavor.vcpus === nextFlavor.vcpus
+    )
+  })
+}
+
+const arePropsEqual = (
+  prevProps: VmsSelectionStepProps,
+  nextProps: VmsSelectionStepProps
+): boolean => {
+  if (prevProps.onChange !== nextProps.onChange) {
+    return false
+  }
+
+  if (prevProps.open !== nextProps.open) return false
+  if (prevProps.error !== nextProps.error) return false
+  if (prevProps.vmwareCredsValidated !== nextProps.vmwareCredsValidated) return false
+  if (prevProps.openstackCredsValidated !== nextProps.openstackCredsValidated) return false
+  if (prevProps.sessionId !== nextProps.sessionId) return false
+  if (!areOpenstackFlavorsEqual(prevProps.openstackFlavors, nextProps.openstackFlavors))
+    return false
+  if (prevProps.vmwareCredName !== nextProps.vmwareCredName) return false
+  if (prevProps.openstackCredName !== nextProps.openstackCredName) return false
+  if (prevProps.openstackCredentials !== nextProps.openstackCredentials) return false
+  if (prevProps.vmwareCluster !== nextProps.vmwareCluster) return false
+  if (prevProps.vmwareClusterDisplayName !== nextProps.vmwareClusterDisplayName) return false
+
+  return true
+}
+
+export default React.memo(VmsSelectionStep, arePropsEqual)
