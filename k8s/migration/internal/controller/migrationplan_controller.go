@@ -942,6 +942,19 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["ASSIGNED_IP"] = ""
 		}
 
+		// Store NetworkInterfaces for per-NIC IP assignment
+		if len(vmMachine.Spec.VMInfo.NetworkInterfaces) > 0 {
+			nicMappings := []string{}
+			for _, nic := range vmMachine.Spec.VMInfo.NetworkInterfaces {
+				if nic.IPAddress != "" {
+					nicMappings = append(nicMappings, fmt.Sprintf("%s:%s", nic.MAC, nic.IPAddress))
+				}
+			}
+			configMap.Data["NETWORK_INTERFACE_IPS"] = strings.Join(nicMappings, ",")
+		} else {
+			configMap.Data["NETWORK_INTERFACE_IPS"] = ""
+		}
+
 		// Check if target flavor is set
 		if vmMachine.Spec.TargetFlavorID != "" {
 			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID

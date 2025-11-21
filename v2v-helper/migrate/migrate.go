@@ -62,6 +62,7 @@ type Migrate struct {
 	TargetFlavorId          string
 	TargetAvailabilityZone  string
 	AssignedIP              string
+	NetworkInterfaceIPs     string
 	SecurityGroups          []string
 	RDMDisks                []string
 	UseFlavorless           bool
@@ -1378,20 +1379,43 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
-			if !ok {
-				ippm = []string{}
+			// P0: User-assigned IPs from NetworkInterfaceIPs
+			ippm := []string{}
+			if migobj.NetworkInterfaceIPs != "" {
+				nicIPMappings := strings.Split(migobj.NetworkInterfaceIPs, ",")
+				for _, mapping := range nicIPMappings {
+					parts := strings.Split(strings.TrimSpace(mapping), ":")
+					if len(parts) == 2 {
+						mac := strings.TrimSpace(parts[0])
+						ip := strings.TrimSpace(parts[1])
+						if strings.EqualFold(mac, vminfo.Mac[idx]) && ip != "" {
+							ippm = append(ippm, ip)
+						}
+					}
+				}
 			}
+
+			// P1: Single AssignedIP
+			if len(ippm) == 0 && migobj.AssignedIP != "" {
+				ippm = []string{migobj.AssignedIP}
+			}
+
+			// P2: NetworkInterfaces from VMInfo
 			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] {
+					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
 						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}
-			if migobj.AssignedIP != "" {
-				ippm = []string{migobj.AssignedIP}
+
+			// P3: VMware Tools detected IPs
+			if len(ippm) == 0 {
+				if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok {
+					ippm = detectedIPs
+				}
 			}
+
 			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {

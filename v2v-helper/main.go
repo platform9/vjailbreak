@@ -140,6 +140,7 @@ func main() {
 		TargetFlavorId:         migrationparams.TARGET_FLAVOR_ID,
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
+		NetworkInterfaceIPs:    migrationparams.NetworkInterfaceIPs,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
 		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
