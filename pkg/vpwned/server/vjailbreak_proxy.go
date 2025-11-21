@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	openstack "github.com/gophercloud/gophercloud/openstack"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
+	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
@@ -22,12 +25,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	trueString = "true"
-)
-
 type vjailbreakProxy struct {
 	api.UnimplementedVailbreakProxyServer
+	K8sClient client.Client
 }
 
 type OpenstackCredsinfo struct {
@@ -227,6 +227,7 @@ func CreateInClusterClient() (client.Client, error) {
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
 
 	clientset, err := client.New(config, client.Options{
 		Scheme: scheme,
@@ -235,4 +236,75 @@ func CreateInClusterClient() (client.Client, error) {
 		return nil, err
 	}
 	return clientset, nil
+}
+
+func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
+	kind := in.GetKind()
+	name := in.GetName()
+	namespace := in.GetNamespace()
+	log.Printf("Revalidating credentials: name=%s", name)
+
+	switch kind {
+
+	case "VmwareCreds":
+		vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}
+		if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, vmwcreds); err != nil {
+			log.Printf("Failed to get VMwareCreds %s: %v", name, err)
+			return nil, fmt.Errorf("failed to get VMwareCreds %s: %w", name, err)
+		}
+
+		log.Printf("Starting VMware validation for %s", name)
+		result := vmwarevalidation.Validate(ctx, p.K8sClient, vmwcreds)
+
+		// Update status immediately
+		if result.Valid {
+			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
+			vmwcreds.Status.VMwareValidationMessage = result.Message
+			log.Printf("VMware validation succeeded for %s", name)
+		} else {
+			vmwcreds.Status.VMwareValidationStatus = "Failed"
+			vmwcreds.Status.VMwareValidationMessage = result.Message
+			log.Printf("VMware validation failed for %s: %s", name, result.Message)
+		}
+
+		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+			log.Printf("Failed to update VMwareCreds status: %v", err)
+			return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+		}
+
+		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
+		return &api.RevalidateCredentialsResponse{Message: responseMsg}, nil
+
+	case "OpenstackCreds":
+		oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
+		if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, oscreds); err != nil {
+			log.Printf("Failed to get OpenstackCreds %s: %v", name, err)
+			return nil, fmt.Errorf("failed to get OpenstackCreds %s: %w", name, err)
+		}
+
+		log.Printf("Starting OpenStack validation for %s", name)
+		result := openstackvalidation.Validate(ctx, p.K8sClient, oscreds)
+
+		if result.Valid {
+			oscreds.Status.OpenStackValidationStatus = "Succeeded"
+			oscreds.Status.OpenStackValidationMessage = result.Message
+			log.Printf("OpenStack validation succeeded for %s", name)
+		} else {
+			oscreds.Status.OpenStackValidationStatus = "Failed"
+			oscreds.Status.OpenStackValidationMessage = result.Message
+			log.Printf("OpenStack validation failed for %s: %s", name, result.Message)
+		}
+
+		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+			log.Printf("Failed to update OpenstackCreds status: %v", err)
+			return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+		}
+
+		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
+		return &api.RevalidateCredentialsResponse{Message: responseMsg}, nil
+
+	default:
+		log.Printf("Unknown credentials kind: %s", kind)
+		return nil, fmt.Errorf("unknown credentials kind: %s", kind)
+	}
 }
