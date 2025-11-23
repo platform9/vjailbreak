@@ -47,11 +47,7 @@ RUN dnf install -y \
 # Disable fstrim in libguestfs appliance
 RUN mkdir -p /usr/local/lib/guestfs/supermin.d && \
     mkdir -p /tmp/appliance-overlay/usr/bin && \
-    cat > /tmp/appliance-overlay/usr/bin/fstrim << 'FSTRIM_SCRIPT' && \
-#!/bin/bash
-echo "fstrim: disabled" >&2
-exit 0
-FSTRIM_SCRIPT
+    printf '#!/bin/bash\necho "fstrim: disabled" >&2\nexit 0\n' > /tmp/appliance-overlay/usr/bin/fstrim && \
     chmod +x /tmp/appliance-overlay/usr/bin/fstrim && \
     echo "usr/bin/fstrim" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-hostfiles && \
     echo "# vjailbreak fstrim override" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-base && \
