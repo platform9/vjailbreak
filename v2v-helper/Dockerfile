@@ -28,8 +28,6 @@ FROM fedora:42
 WORKDIR /tmp/rpms
 COPY nbdkit/*.rpm /tmp/rpms/
 
-COPY patches/disable-fstrim.patch /tmp/disable-fstrim.patch
-
 RUN dnf install -y \
     ./libnbd-1.22.2-1.fc42.x86_64.rpm \
     ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
@@ -42,14 +40,31 @@ RUN dnf install -y \
     ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
-    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
-    patch && \
+    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
-RUN cd / && \
-    cp /usr/lib/systemd/system/fstrim.service /usr/lib/systemd/system/fstrim.service.orig && \
-    patch /usr/lib/systemd/system/fstrim.service < /tmp/disable-fstrim.patch
+# Disable fstrim in libguestfs appliance
+RUN mkdir -p /usr/local/lib/guestfs/supermin.d && \
+    mkdir -p /tmp/appliance-overlay/usr/bin && \
+    cat > /tmp/appliance-overlay/usr/bin/fstrim << 'FSTRIM_SCRIPT' && \
+
+echo "fstrim: disabled" >&2
+exit 0
+FSTRIM_SCRIPT
+    chmod +x /tmp/appliance-overlay/usr/bin/fstrim && \
+    echo "usr/bin/fstrim" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-hostfiles && \
+    echo "# vjailbreak fstrim override" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-base && \
+    echo "supermin.if-newer-than /usr/bin/fstrim" >> /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-base && \
+    cd /tmp/appliance-overlay && tar czf /usr/local/lib/guestfs/supermin.d/zz-fstrim-override.tar.gz usr/bin/fstrim && \
+    rm -rf /tmp/appliance-overlay && \
+    echo "Supermin overlay created to disable fstrim in appliance"
+
+RUN libguestfs-test-tool > /tmp/libguestfs-test.log 2>&1 || \
+    ls -la /var/tmp/.guestfs-* 2>/dev/null || true
+
+ENV LIBGUESTFS_BACKEND=direct
+ENV LIBGUESTFS_CACHEDIR=/var/tmp
 
 #version lock 
 RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
