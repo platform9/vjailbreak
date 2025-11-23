@@ -48,7 +48,7 @@ RUN dnf install -y \
 RUN mkdir -p /usr/local/lib/guestfs/supermin.d && \
     mkdir -p /tmp/appliance-overlay/usr/bin && \
     cat > /tmp/appliance-overlay/usr/bin/fstrim << 'FSTRIM_SCRIPT' && \
-
+#!/bin/bash
 echo "fstrim: disabled" >&2
 exit 0
 FSTRIM_SCRIPT
