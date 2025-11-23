@@ -29,7 +29,7 @@ import {
   GridToolbarColumnsButton
 } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
-import { VmData } from 'src/api/migration-templates/model'
+import { VmData, VmNetworkInterface } from 'src/api/migration-templates/model'
 import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import CustomLoadingOverlay from 'src/components/grid/CustomLoadingOverlay'
@@ -965,56 +965,83 @@ export default function VmsSelectionStep({
           return
         }
 
+        // Group valid IPs by VM name for batch processing
+        const ipsByVm = validIPs.reduce((acc, item) => {
+          if (!acc[item.vmName]) {
+            acc[item.vmName] = []
+          }
+          acc[item.vmName].push(item)
+          return acc
+        }, {} as Record<string, Array<{ vmName: string; interfaceIndex: number; ip: string }>>)
+
         // Apply the valid IPs to VMs
-        const updatePromises = validIPs.map(async ({ vmName, interfaceIndex, ip }) => {
+        const updatePromises = Object.entries(ipsByVm).map(async ([vmName, ipAssignments]) => {
           try {
             const vm = vmsWithFlavor.find((v) => v.name === vmName)
             if (!vm) throw new Error('VM not found')
 
-            // Update network interfaces
-            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
-              const updatedInterfaces = [...vm.networkInterfaces]
-              updatedInterfaces[interfaceIndex] = {
-                ...updatedInterfaces[interfaceIndex],
-                ipAddress: ip
+            // Build the patch payload
+            const payload: {
+              spec: {
+                vms: {
+                  assignedIp?: string
+                  networkInterfaces?: VmNetworkInterface[]
+                }
               }
-
-              if (vm.vmWareMachineName) {
-                await patchVMwareMachine(vm.vmWareMachineName, {
-                  spec: {
-                    vms: {
-                      networkInterfaces: updatedInterfaces
-                    }
-                  }
-                })
-              }
-            } else {
-              // Fallback for single IP assignment
-              if (vm.vmWareMachineName) {
-                await patchVMwareMachine(vm.vmWareMachineName, {
-                  spec: {
-                    vms: {
-                      assignedIp: ip
-                    }
-                  }
-                })
+            } = {
+              spec: {
+                vms: {}
               }
             }
 
-            return { success: true, vmName, interfaceIndex, ip }
-          } catch (error) {
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [vmName]: {
-                ...prev[vmName],
-                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
+            // Update network interfaces
+            if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+              const updatedInterfaces = [...vm.networkInterfaces]
+              ipAssignments.forEach(({ interfaceIndex, ip }) => {
+                if (updatedInterfaces[interfaceIndex]) {
+                  updatedInterfaces[interfaceIndex] = {
+                    ...updatedInterfaces[interfaceIndex],
+                    ipAddress: ip
+                  }
+                }
+              })
+              payload.spec.vms.networkInterfaces = updatedInterfaces
+
+              const allAssignedIPs = updatedInterfaces
+                .map((nic) => nic.ipAddress)
+                .filter((ip) => ip && ip.trim() !== '')
+                .join(',')
+              if (allAssignedIPs) {
+                payload.spec.vms.assignedIp = allAssignedIPs
               }
-            }))
-            return { success: false, vmName, interfaceIndex, error }
+            } else {
+              // Fallback for single IP assignment
+              const firstIP = ipAssignments[0]?.ip
+              if (firstIP) {
+                payload.spec.vms.assignedIp = firstIP
+              }
+            }
+
+            if (vm.vmWareMachineName) {
+              await patchVMwareMachine(vm.vmWareMachineName, payload)
+            }
+
+            return { success: true, vmName, ipAssignments }
+          } catch (error) {
+            ipAssignments.forEach(({ interfaceIndex }) => {
+              setBulkValidationStatus((prev) => ({
+                ...prev,
+                [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+              }))
+              setBulkValidationMessages((prev) => ({
+                ...prev,
+                [vmName]: {
+                  ...prev[vmName],
+                  [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
+                }
+              }))
+            })
+            return { success: false, vmName, error }
           }
         })
 
