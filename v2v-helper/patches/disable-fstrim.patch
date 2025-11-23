@@ -1,8 +1,12 @@
---- a/scripts/convert-linux.sh
-+++ b/scripts/convert-linux.sh
-@@ -120,7 +120,7 @@
- # Discard unused blocks at end of conversion.
- if [ "$do_fstrim" = "true" ]; then
--    do_fstrim
-+    # do_fstrim
- fi
+--- /usr/lib/systemd/system/fstrim.service.orig    2023-01-01 00:00:00
++++ /usr/lib/systemd/system/fstrim.service 2025-01-01 00:00:00
+@@ -8,7 +8,10 @@
+ [Service]
+ Type=oneshot
+-ExecStart=/usr/bin/fstrim -av
++ExecStart=/bin/sh -c 'echo "fstrim disabled inside container"; exit 0'
++ExecStop=/bin/true
++ExecReload=/bin/true
+
+ [Install]
+ WantedBy=fstrim.timer

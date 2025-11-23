@@ -28,6 +28,8 @@ FROM fedora:42
 WORKDIR /tmp/rpms
 COPY nbdkit/*.rpm /tmp/rpms/
 
+COPY patches/disable-fstrim.patch /tmp/disable-fstrim.patch
+
 RUN dnf install -y \
     ./libnbd-1.22.2-1.fc42.x86_64.rpm \
     ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
@@ -44,16 +46,13 @@ RUN dnf install -y \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
-# Copy patch
-COPY patches/disable-fstrim.patch /tmp/disable-fstrim.patch
-
-# Apply patch to installed virt-v2v source files
-RUN cd /usr/share/virt-v2v && \
-    patch -p1 < /tmp/disable-fstrim.patch
+RUN cd / && \
+    cp /usr/lib/systemd/system/fstrim.service /usr/lib/systemd/system/fstrim.service.orig && \
+    patch /usr/lib/systemd/system/fstrim.service < /tmp/disable-fstrim.patch
 
 #version lock 
 RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
-    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
+    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \
     nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
     nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
     nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch
