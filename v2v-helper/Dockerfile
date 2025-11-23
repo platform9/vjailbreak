@@ -42,7 +42,8 @@ RUN dnf install -y \
     ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
-    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm && \
+    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
+    patch && \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
