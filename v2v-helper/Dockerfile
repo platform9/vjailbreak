@@ -44,20 +44,10 @@ RUN dnf install -y \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
-# Disable fstrim in libguestfs appliance
 RUN mkdir -p /usr/local/lib/guestfs/supermin.d && \
-    mkdir -p /tmp/appliance-overlay/usr/bin && \
-    printf '#!/bin/bash\necho "fstrim: disabled" >&2\nexit 0\n' > /tmp/appliance-overlay/usr/bin/fstrim && \
-    chmod +x /tmp/appliance-overlay/usr/bin/fstrim && \
-    echo "usr/bin/fstrim" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-hostfiles && \
-    echo "# vjailbreak fstrim override" > /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-base && \
-    echo "supermin.if-newer-than /usr/bin/fstrim" >> /usr/local/lib/guestfs/supermin.d/zz-fstrim-override-base && \
-    cd /tmp/appliance-overlay && tar czf /usr/local/lib/guestfs/supermin.d/zz-fstrim-override.tar.gz usr/bin/fstrim && \
-    rm -rf /tmp/appliance-overlay && \
-    echo "Supermin overlay created to disable fstrim in appliance"
+    echo "fstrim" > /usr/local/lib/guestfs/supermin.d/zz-disable-fstrim.skip
 
-RUN libguestfs-test-tool > /tmp/libguestfs-test.log 2>&1 || \
-    ls -la /var/tmp/.guestfs-* 2>/dev/null || true
+RUN libguestfs-test-tool > /tmp/libguestfs-test.log 2>&1 || true
 
 ENV LIBGUESTFS_BACKEND=direct
 ENV LIBGUESTFS_CACHEDIR=/var/tmp
