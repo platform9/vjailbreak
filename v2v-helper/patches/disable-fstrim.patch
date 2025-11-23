@@ -1,0 +1,8 @@
+--- a/v2v/convert/convert_linux.ml
++++ b/v2v/convert/convert_linux.ml
+@@ -148,7 +148,7 @@ let convert (g : Guestfs.guestfs) inspect source root =
+   (* Discard unused blocks at end of conversion.  *)
+   if Config.do_fstrim then (
+-    do_fstrim g inspect root
++    () (* fstrim disabled by patch *)
+   );

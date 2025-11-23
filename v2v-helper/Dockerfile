@@ -44,6 +44,13 @@ RUN dnf install -y \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
+# Copy patch
+COPY disable-fstrim.patch /tmp/disable-fstrim.patch
+
+# Apply patch to installed virt-v2v source files
+RUN cd /usr/share/virt-v2v && \
+    patch -p1 < /tmp/disable-fstrim.patch
+
 #version lock 
 RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
     libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
