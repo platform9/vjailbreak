@@ -45,7 +45,7 @@ RUN dnf install -y \
     rm -rf /var/cache/dnf /tmp/rpms/
 
 # Copy patch
-COPY disable-fstrim.patch /tmp/disable-fstrim.patch
+COPY patches/disable-fstrim.patch /tmp/disable-fstrim.patch
 
 # Apply patch to installed virt-v2v source files
 RUN cd /usr/share/virt-v2v && \
