@@ -187,9 +187,16 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Step 2: Set guestfs backend
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	
+	// Create fstrim wrapper to disable trimming during conversion
+	wrapperErr := createFstrimWrapper()
+	if wrapperErr != nil {
+		log.Printf("Warning: Failed to create fstrim wrapper: %v.", wrapperErr)
+	}
+	defer removeFstrimWrapper()
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-trim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -536,4 +543,37 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 
 	// Return original error if not a missing file issue
 	return "", err
+}
+
+const fstrimWrapperDir = "/home/fedora/fstrim-wrapper"
+const fstrimWrapperPath = fstrimWrapperDir + "/fstrim"
+
+// createFstrimWrapper creates a no-op fstrim wrapper script and adds it to PATH
+func createFstrimWrapper() error {
+	if err := os.MkdirAll(fstrimWrapperDir, 0755); err != nil {
+		return fmt.Errorf("failed to create wrapper directory: %w", err)
+	}
+
+	fstrimScript := `#!/bin/bash
+echo "fstrim: skipped (wrapper intercepted)" >&2
+exit 0
+`
+	if err := os.WriteFile(fstrimWrapperPath, []byte(fstrimScript), 0755); err != nil {
+		return fmt.Errorf("failed to create fstrim wrapper script: %w", err)
+	}
+
+	currentPath := os.Getenv("PATH")
+	newPath := fstrimWrapperDir + ":" + currentPath
+	os.Setenv("PATH", newPath)
+	
+	log.Printf("Created fstrim wrapper at %s and updated PATH", fstrimWrapperPath)
+	return nil
+}
+
+func removeFstrimWrapper() {
+	if err := os.RemoveAll(fstrimWrapperDir); err != nil {
+		log.Printf("Warning: Failed to remove fstrim wrapper: %v", err)
+	} else {
+		log.Printf("Removed fstrim wrapper directory")
+	}
 }
