@@ -62,7 +62,6 @@ type Migrate struct {
 	TargetFlavorId          string
 	TargetAvailabilityZone  string
 	AssignedIP              string
-	NetworkInterfaceIPs     string
 	SecurityGroups          []string
 	RDMDisks                []string
 	UseFlavorless           bool
@@ -835,7 +834,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				// Add Wildcard Netplan
 				utils.PrintLog("Adding wildcard netplan")
 				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP)
-				// err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 				if err != nil {
 					return errors.Wrap(err, "failed to add wildcard netplan")
 				}
@@ -1163,11 +1161,6 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	healthChecks := make(map[string]bool)
 	healthChecks["Ping"] = false
 	healthChecks["HTTP Get"] = false
-	// for i := 0; i < len(vminfo.IPs); i++ {
-	// if ips[i] != vminfo.IPs[i] {
-	// migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
-	// }
-	// }
 	for i := 0; i < 10; i++ {
 		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
 		// 1. Ping
@@ -1363,7 +1356,9 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 			networkids = append(networkids, retrPort.NetworkID)
 			portids = append(portids, retrPort.ID)
-			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
+			for _, fixedIP := range retrPort.FixedIPs {
+				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+			}
 		}
 	} else {
 
@@ -1379,43 +1374,20 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			// P0: User-assigned IPs from NetworkInterfaceIPs
-			ippm := []string{}
-			if migobj.NetworkInterfaceIPs != "" {
-				nicIPMappings := strings.Split(migobj.NetworkInterfaceIPs, ",")
-				for _, mapping := range nicIPMappings {
-					parts := strings.Split(strings.TrimSpace(mapping), ":")
-					if len(parts) == 2 {
-						mac := strings.TrimSpace(parts[0])
-						ip := strings.TrimSpace(parts[1])
-						if strings.EqualFold(mac, vminfo.Mac[idx]) && ip != "" {
-							ippm = append(ippm, ip)
-						}
-					}
-				}
+			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
+			if !ok {
+				ippm = []string{}
 			}
-
-			// P1: Single AssignedIP
-			if len(ippm) == 0 && migobj.AssignedIP != "" {
-				ippm = []string{migobj.AssignedIP}
-			}
-
-			// P2: NetworkInterfaces from VMInfo
 			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
+					if nic.MAC == vminfo.Mac[idx] {
 						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}
-
-			// P3: VMware Tools detected IPs
-			if len(ippm) == 0 {
-				if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok {
-					ippm = detectedIPs
-				}
+			if migobj.AssignedIP != "" {
+				ippm = []string{migobj.AssignedIP}
 			}
-
 			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {

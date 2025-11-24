@@ -541,7 +541,7 @@ return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has
 		}
 		createOpts.FixedIPs = fixedIPs
 	} else if len(ip) == 0 && !fallbackToDHCP {
-		PrintLog("Empty port detected")
+		PrintLog("Empty port on vcentre detected for mac " + mac)
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
@@ -645,6 +645,17 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			BootIndex:           -1,
 		}
 		createOpts.BlockDevice = append(createOpts.BlockDevice, blockDevice)
+	}
+
+	// Wait for RDM disks to become available before creating VM
+	for _, disk := range vminfo.RDMDisks {
+		if disk.Status.CinderVolumeID == "" {
+			return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID", disk.Name)
+		}
+		err := osclient.WaitForVolume(disk.Status.CinderVolumeID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to wait for RDM volume %s to become available: %s", disk.Name, err)
+		}
 	}
 
 	// Wait for disks to become available
