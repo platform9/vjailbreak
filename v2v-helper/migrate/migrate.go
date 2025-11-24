@@ -694,7 +694,7 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
-func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool, osPath string) (finalBootIndex int, finalOsPath string, osRelease string, err error) {
+func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, err error) {
 	finalBootIndex = bootVolumeIndex
 	finalOsPath = osPath
 
@@ -758,13 +758,17 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", err
 	}
 
-	// Run generate-mount-persistence.sh script with --force-uuid option
-	migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
-	if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
-		// Don't fail the migration, just log the warning
+	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
+	if autoFstabUpdate {
+		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
+			// Don't fail the migration, just log the warning
+		} else {
+			migobj.logMessage("Successfully ran generate-mount-persistence.sh script")
+		}
 	} else {
-		migobj.logMessage("Successfully ran generate-mount-persistence.sh script")
+		migobj.logMessage("Skipping generate-mount-persistence.sh script (AUTO_FSTAB_UPDATE is disabled)")
 	}
 
 	return finalBootIndex, finalOsPath, osRelease, nil
@@ -961,6 +965,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		return errors.Wrap(err, "failed to generate XML")
 	}
 
+	// Step 3.5: Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
 	// Step 4: Detect boot volume
 	bootVolumeIndex, osPath, useSingleDisk, err := migobj.detectBootVolume(vminfo, getBootCommand)
 	if err != nil {
@@ -973,7 +983,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	switch osType {
 	case constants.OSFamilyLinux:
-		bootVolumeIndex, osPath, osRelease, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, useSingleDisk, osPath)
+		bootVolumeIndex, osPath, osRelease, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, useSingleDisk, osPath, vjailbreakSettings.AutoFstabUpdate)
 		if err != nil {
 			return err
 		}
