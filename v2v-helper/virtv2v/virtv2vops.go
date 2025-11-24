@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -39,6 +40,34 @@ type VirtV2VOperations interface {
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
+}
+
+// AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
+func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
+	// Create the netplan file locally
+	localPath := "/home/fedora/50-vj.yaml"
+	if err := os.WriteFile(localPath, []byte(netplanYAML), 0644); err != nil {
+		return fmt.Errorf("failed to create netplan yaml: %s", err)
+	}
+	log.Println("Created local netplan YAML")
+	log.Println("Uploading netplan YAML to disk")
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var (
+		ans string
+		err error
+	)
+	if useSingleDisk {
+		command := `upload /home/fedora/50-vj.yaml /etc/netplan/50-vj.yaml`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/50-vj.yaml", "/etc/netplan/50-vj.yaml")
+	}
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
+		return err
+	}
+	return nil
 }
 
 func RetainAlphanumeric(input string) string {
@@ -203,7 +232,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// Step 5: Run virt-v2v-in-place
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
-	
+
 	// Use the debug logging with proper file cleanup
 	err := utils.RunCommandWithLogFile(cmd)
 	duration := time.Since(start)
@@ -256,17 +285,86 @@ func GetOsRelease(path string) (string, error) {
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC, gatewayIP map[string]string) error {
 	// Add wildcard to netplan
+	type ipEntry struct {
+		ip     string
+		prefix int32
+	}
+	macToIPs := make(map[string][]ipEntry)
+	macToDNS := make(map[string][]string)
+	if len(guestNetworks) > 0 {
+		for _, gn := range guestNetworks {
+			if strings.Contains(gn.IP, ":") { // skip IPv6 here
+				continue
+			}
+			macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
+			if len(gn.DNS) > 0 {
+				macToDNS[gn.MAC] = gn.DNS
+			}
+		}
+	} else if len(networkInterfaces) > 0 {
+		for _, ni := range networkInterfaces {
+			if strings.Contains(ni.IPAddress, ":") { // skip IPv6 here
+				continue
+			}
+			macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
+		}
+	}
+
+	// Construct YAML
+	var b strings.Builder
+	b.WriteString("network:\n")
+	b.WriteString("  version: 2\n")
+	b.WriteString("  renderer: networkd\n")
+	b.WriteString("  ethernets:\n")
+	idx := 0
+	routesAdded := false
+	log.Printf("MAC GATEWAY : %v", gatewayIP)
+	for mac, entries := range macToIPs {
+		if len(entries) == 0 {
+			continue
+		}
+		id := fmt.Sprintf("vj%d", idx)
+		b.WriteString(fmt.Sprintf("    %s:\n", id))
+		b.WriteString("      match:\n")
+		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
+		b.WriteString("      dhcp4: false\n")
+		b.WriteString("      addresses:\n")
+		for _, e := range entries {
+			// default prefix to 24 if zero
+			prefix := e.prefix
+			if prefix == 0 {
+				prefix = 24
+			}
+			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
+		}
+		if gateway, ok := gatewayIP[mac]; ok {
+			if !routesAdded {
+				log.Printf("Writing default routes")
+				b.WriteString("      routes:\n")
+				b.WriteString("        - to: default\n")
+				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+				routesAdded = true
+			}
+		}
+		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
+			b.WriteString("      nameservers:\n")
+			b.WriteString("        addresses:\n")
+			for _, d := range dns {
+				b.WriteString(fmt.Sprintf("          - %s\n", d))
+			}
+		}
+		idx++
+	}
+	if !routesAdded {
+		log.Println("WARNING: No gateway found")
+	}
+	netplanYAML := b.String()
+	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	var ans string
-	netplan := `[Match]
-Name=en*
-
-[Network]
-DHCP=yes`
-
 	// Create the netplan file
-	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
+	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create netplan file: %s", err)
 	}
@@ -275,11 +373,31 @@ DHCP=yes`
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	if useSingleDisk {
-		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+		remove_command := "mv /etc/netplan /etc/netplan-bkp"
+		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+		}
+		remove_command = "mkdir /etc/netplan"
+		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+		}
+		command := `upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml`
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
+		remove_command := "mv /etc/netplan /etc/netplan-bkp"
+		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+		}
+		remove_command = "mkdir /etc/netplan"
+		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+		}
 		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	}
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))

@@ -1689,7 +1689,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 					if !strings.Contains(guestNet.IP, ":") {
 						nicList[i].IPAddress = guestNet.IP
 					}
-					break
 				}
 			}
 		}
@@ -1710,6 +1709,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
 		return
 	}
+
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
 		Datastores:        datastores,

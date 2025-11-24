@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -124,9 +125,11 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
-	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
+	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
+
+	if !result.Valid {
 		// Update the status of the OpenstackCreds object
-		errMsg := err.Error()
+		errMsg := result.Message
 		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
 			if r.Local {
 				// At this point creds are valid but controller is not able to fetch metadata
@@ -138,7 +141,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			}
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
-		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
@@ -157,7 +160,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		ctxlog.Info("Successfully updated status to success")
-		err = handleValidatedCreds(ctx, r, scope)
+		err := handleValidatedCreds(ctx, r, scope)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
