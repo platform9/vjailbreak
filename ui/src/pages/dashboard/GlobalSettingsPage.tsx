@@ -88,10 +88,6 @@ const DEFAULTS: SettingsForm = {
    Helpers (parsing, IO)
    -----------------------*/
 
-// Go duration regex (groups like 30s, 5m, 1h)
-const GO_DURATION_FULL_REGEX = /^([0-9]+(ns|us|µs|ms|s|m|h))+$/i
-const GO_DURATION_GROUP_RE = /([0-9]+)(ns|us|µs|ms|s|m|h)/gi
-
 const parseBool = (v: unknown, fallback: boolean) =>
   typeof v === 'string' ? v.toLowerCase() === 'true' : typeof v === 'boolean' ? v : fallback
 
@@ -175,45 +171,31 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
  * Parse a Go duration string (like "5m", "30s", "1h30m") and return milliseconds.
  * Returns NaN if parsing fails.
  */
-const parseGoDurationMs = (dur: string): number => {
-  if (typeof dur !== 'string') return NaN
-  const s = dur.trim()
-  if (!GO_DURATION_FULL_REGEX.test(s)) return NaN
+const parseInterval = (val: string): string | undefined => {
+  const trimmedVal = val?.trim()
+  if (!trimmedVal) return 'Periodic Sync is required'
 
-  let totalMs = 0
-  let m: RegExpExecArray | null
-  GO_DURATION_GROUP_RE.lastIndex = 0
-  while ((m = GO_DURATION_GROUP_RE.exec(s)) !== null) {
-    const n = Number(m[1])
-    const unit = m[2].toLowerCase()
-    if (!Number.isFinite(n)) return NaN
-    switch (unit) {
-      case 'ns':
-        totalMs += n * 1e-6
-        break
-      case 'us':
-      case 'µs':
-        totalMs += n * 1e-3
-        break
-      case 'ms':
-        totalMs += n
-        break
-      case 's':
-        totalMs += n * 1000
-        break
-      case 'm':
-        totalMs += n * 60 * 1000
-        break
-      case 'h':
-        totalMs += n * 60 * 60 * 1000
-        break
-      default:
-        return NaN
-    }
+  // Allow composite formats like 1h30m, 5m30s, etc.
+  const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
+  const match = trimmedVal.match(regex)
+
+  if (!match || match[0] === '') {
+    return 'Use duration format like 30s, 5m, 1h, 1h30m, 5m30s (units: h,m,s).'
   }
-  return totalMs
-}
 
+  const hours = match[1] ? Number(match[1]) : 0
+  const minutes = match[2] ? Number(match[2]) : 0
+  const seconds = match[3] ? Number(match[3]) : 0
+
+  // Convert total duration to minutes
+  const totalMinutes = hours * 60 + minutes + seconds / 60
+
+  if (isNaN(totalMinutes) || totalMinutes < 5) {
+    return 'Interval must be at least 5 minutes'
+  }
+
+  return undefined
+}
 type NumberFieldProps = {
   label: string
   name: keyof SettingsForm
@@ -340,14 +322,9 @@ export default function GlobalSettingsPage() {
 
     // PERIODIC_SYNC_INTERVAL: Go duration string and >= 5m
     const intervalStr = (state.PERIODIC_SYNC_INTERVAL ?? '').trim()
-    if (!GO_DURATION_FULL_REGEX.test(intervalStr)) {
-      e.PERIODIC_SYNC_INTERVAL = 'Use duration format like 30s, 5m, 1h (units: s,m,h).'
-    } else {
-      const ms = parseGoDurationMs(intervalStr)
-      const min5Ms = 5 * 60 * 1000
-      if (!Number.isFinite(ms) || ms < min5Ms) {
-        e.PERIODIC_SYNC_INTERVAL = 'Interval must be at least 5m.'
-      }
+    const intervalError = parseInterval(intervalStr)
+    if (intervalError) {
+      e.PERIODIC_SYNC_INTERVAL = intervalError
     }
 
     // DEFAULT_MIGRATION_METHOD: enum hot|cold
@@ -537,7 +514,7 @@ export default function GlobalSettingsPage() {
             />
 
             <IntervalField
-              label="Periodic Sync Interval"
+              label="Periodic Sync"
               name="PERIODIC_SYNC_INTERVAL"
               value={form.PERIODIC_SYNC_INTERVAL}
               onChange={onText}
