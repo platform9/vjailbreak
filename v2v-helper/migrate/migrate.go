@@ -62,7 +62,6 @@ type Migrate struct {
 	TargetFlavorId          string
 	TargetAvailabilityZone  string
 	AssignedIP              string
-	NetworkInterfaceIPs     string
 	SecurityGroups          []string
 	RDMDisks                []string
 	UseFlavorless           bool
@@ -1375,54 +1374,21 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			var ippm []string
-
-			// Priority 3: Start with VMware Tools detected IPs (lowest priority)
-			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
-				ippm = detectedIPs
-				utils.PrintLog(fmt.Sprintf("Priority 3: Using VMware detected IPs for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
+			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
+			if !ok {
+				ippm = []string{}
 			}
-
-			// Priority 2: AssignedIP by interface index (overwrites P3 if present)
-			if migobj.AssignedIP != "" {
-				assignedIPs := strings.Split(migobj.AssignedIP, ",")
-				if idx < len(assignedIPs) {
-					ip := strings.TrimSpace(assignedIPs[idx])
-					if ip != "" {
-						ippm = []string{ip}
-						utils.PrintLog(fmt.Sprintf("Priority 2: Using IP from AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-					}
-				}
-			}
-
-			// Priority 1: NetworkInterfaces from VMInfo CRD (overwrites P2/P3 if present)
-			if vminfo.NetworkInterfaces != nil {
+			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
-						ippm = []string{nic.IPAddress}
-						utils.PrintLog(fmt.Sprintf("Priority 1: Using IP from NetworkInterfaces for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
-						break
+					if nic.MAC == vminfo.Mac[idx] {
+						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}
-
-			// Priority 0: NetworkInterfaceIPs (highest priority, overwrites all)
-			if migobj.NetworkInterfaceIPs != "" {
-				nicIPMappings := strings.Split(migobj.NetworkInterfaceIPs, ",")
-				for _, mapping := range nicIPMappings {
-					parts := strings.Split(mapping, ":")
-					if len(parts) == 2 && strings.TrimSpace(parts[0]) == vminfo.Mac[idx] {
-						ip := strings.TrimSpace(parts[1])
-						if ip != "" {
-							ippm = []string{ip}
-							utils.PrintLog(fmt.Sprintf("Priority 0: Using IP from NetworkInterfaceIPs for MAC %s: %s", vminfo.Mac[idx], ip))
-						}
-						break
-					}
-				}
+			if migobj.AssignedIP != "" {
+				ippm = []string{migobj.AssignedIP}
 			}
-
-			utils.PrintLog(fmt.Sprintf("Final IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
+			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")

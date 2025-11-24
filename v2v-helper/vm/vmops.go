@@ -237,7 +237,6 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		}
 		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
 	}
-	log.Printf("DEBUG IPS %v", ipPerMac)
 	vminfo := VMInfo{
 		CPU:               o.Config.Hardware.NumCPU,
 		Memory:            o.Config.Hardware.MemoryMB,

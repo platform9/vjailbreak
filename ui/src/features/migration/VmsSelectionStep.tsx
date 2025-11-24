@@ -19,7 +19,8 @@ import {
   Alert,
   TextField,
   CircularProgress,
-  GlobalStyles
+  GlobalStyles,
+  InputAdornment
 } from '@mui/material'
 import {
   DataGrid,
@@ -29,7 +30,7 @@ import {
   GridToolbarColumnsButton
 } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
-import { VmData, VmNetworkInterface } from 'src/api/migration-templates/model'
+import { VmData } from 'src/api/migration-templates/model'
 import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import CustomLoadingOverlay from 'src/components/grid/CustomLoadingOverlay'
@@ -53,6 +54,7 @@ import { RdmDiskConfigurationPanel } from 'src/components/RdmDiskConfigurationPa
 import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from 'src/hooks/api/useRdmDisksQuery'
 import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
+import axios from 'axios'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -935,6 +937,36 @@ function VmsSelectionStep({
     setBulkValidationMessages({})
   }
 
+  const renderValidationAdornment = (status?: 'empty' | 'valid' | 'invalid' | 'validating') => {
+    if (!status || status === 'empty') return null
+
+    if (status === 'validating') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <CircularProgress size={16} />
+        </InputAdornment>
+      )
+    }
+
+    if (status === 'valid') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <CheckCircleIcon color="success" fontSize="small" />
+        </InputAdornment>
+      )
+    }
+
+    if (status === 'invalid') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <ErrorIcon color="error" fontSize="small" />
+        </InputAdornment>
+      )
+    }
+
+    return null
+  }
+
   const handleApplyBulkIPs = async () => {
     // Collect all IPs to apply with their VM and interface info
     const ipsToApply: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
@@ -953,6 +985,25 @@ function VmsSelectionStep({
 
     if (ipsToApply.length === 0) return
 
+    const markBulkValidationFailure = (message: string) => {
+      setBulkValidationStatus((prev) => {
+        const newStatus = { ...prev }
+        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+          if (!newStatus[vmName]) newStatus[vmName] = {}
+          newStatus[vmName][interfaceIndex] = 'invalid'
+        })
+        return newStatus
+      })
+      setBulkValidationMessages((prev) => {
+        const newMessages = { ...prev }
+        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+          if (!newMessages[vmName]) newMessages[vmName] = {}
+          newMessages[vmName][interfaceIndex] = message
+        })
+        return newMessages
+      })
+    }
+
     setAssigningIPs(true)
 
     try {
@@ -970,13 +1021,40 @@ function VmsSelectionStep({
           return newStatus
         })
 
-        const validationResult = await validateOpenstackIPs({
-          ip: ipList,
-          accessInfo: {
-            secret_name: `${openstackCredentials.metadata.name}-openstack-secret`,
-            secret_namespace: openstackCredentials.metadata.namespace
+        let validationResult
+        try {
+          validationResult = await validateOpenstackIPs({
+            ip: ipList,
+            accessInfo: {
+              secret_name: `${openstackCredentials.metadata.name}-openstack-secret`,
+              secret_namespace: openstackCredentials.metadata.namespace
+            }
+          })
+        } catch (error) {
+          if (axios.isAxiosError(error) && error.response?.status === 500) {
+            const responseData = error.response?.data as { message?: string } | string | undefined
+            const apiMessage =
+              typeof responseData === 'string' ? responseData : responseData?.message
+            const validationErrorMessage =
+              apiMessage ||
+              'OpenStack IP validation service is unavailable (500). Please verify credentials or try again later.'
+
+            markBulkValidationFailure(validationErrorMessage)
+            showToast(validationErrorMessage, 'error')
+            reportError(error as Error, {
+              context: 'bulk-ip-validation-request',
+              metadata: {
+                bulkEditIPs: bulkEditIPs,
+                action: 'bulk-ip-validation-assignment',
+                status: error.response?.status
+              }
+            })
+            setAssigningIPs(false)
+            return
           }
-        })
+
+          throw error
+        }
 
         // Process validation results
         const validIPs: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
@@ -1015,83 +1093,56 @@ function VmsSelectionStep({
           return
         }
 
-        // Group valid IPs by VM name for batch processing
-        const ipsByVm = validIPs.reduce((acc, item) => {
-          if (!acc[item.vmName]) {
-            acc[item.vmName] = []
-          }
-          acc[item.vmName].push(item)
-          return acc
-        }, {} as Record<string, Array<{ vmName: string; interfaceIndex: number; ip: string }>>)
-
         // Apply the valid IPs to VMs
-        const updatePromises = Object.entries(ipsByVm).map(async ([vmName, ipAssignments]) => {
+        const updatePromises = validIPs.map(async ({ vmName, interfaceIndex, ip }) => {
           try {
             const vm = vmsWithFlavor.find((v) => v.name === vmName)
             if (!vm) throw new Error('VM not found')
 
-            // Build the patch payload
-            const payload: {
-              spec: {
-                vms: {
-                  assignedIp?: string
-                  networkInterfaces?: VmNetworkInterface[]
-                }
-              }
-            } = {
-              spec: {
-                vms: {}
-              }
-            }
-
             // Update network interfaces
-            if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
               const updatedInterfaces = [...vm.networkInterfaces]
-              ipAssignments.forEach(({ interfaceIndex, ip }) => {
-                if (updatedInterfaces[interfaceIndex]) {
-                  updatedInterfaces[interfaceIndex] = {
-                    ...updatedInterfaces[interfaceIndex],
-                    ipAddress: ip
-                  }
-                }
-              })
-              payload.spec.vms.networkInterfaces = updatedInterfaces
+              updatedInterfaces[interfaceIndex] = {
+                ...updatedInterfaces[interfaceIndex],
+                ipAddress: ip
+              }
 
-              const allAssignedIPs = updatedInterfaces
-                .map((nic) => nic.ipAddress)
-                .filter((ip) => ip && ip.trim() !== '')
-                .join(',')
-              if (allAssignedIPs) {
-                payload.spec.vms.assignedIp = allAssignedIPs
+              if (vm.vmWareMachineName) {
+                await patchVMwareMachine(vm.vmWareMachineName, {
+                  spec: {
+                    vms: {
+                      networkInterfaces: updatedInterfaces
+                    }
+                  }
+                })
               }
             } else {
               // Fallback for single IP assignment
-              const firstIP = ipAssignments[0]?.ip
-              if (firstIP) {
-                payload.spec.vms.assignedIp = firstIP
+              if (vm.vmWareMachineName) {
+                await patchVMwareMachine(vm.vmWareMachineName, {
+                  spec: {
+                    vms: {
+                      assignedIp: ip
+                    }
+                  }
+                })
               }
             }
 
-            if (vm.vmWareMachineName) {
-              await patchVMwareMachine(vm.vmWareMachineName, payload)
-            }
-
-            return { success: true, vmName, ipAssignments }
+            return { success: true, vmName, interfaceIndex, ip }
           } catch (error) {
-            ipAssignments.forEach(({ interfaceIndex }) => {
-              setBulkValidationStatus((prev) => ({
-                ...prev,
-                [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-              }))
-              setBulkValidationMessages((prev) => ({
-                ...prev,
-                [vmName]: {
-                  ...prev[vmName],
-                  [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
-                }
-              }))
-            })
-            return { success: false, vmName, error }
+            setBulkValidationStatus((prev) => ({
+              ...prev,
+              [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+            }))
+            setBulkValidationMessages((prev) => ({
+              ...prev,
+              [vmName]: {
+                ...prev[vmName],
+                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
+              }
+            }))
+            return { success: false, vmName, interfaceIndex, error }
           }
         })
 
@@ -1635,17 +1686,26 @@ function VmsSelectionStep({
         <DialogTitle>
           Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ my: 2 }}>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* Quick Actions */}
-            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+            <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
               <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
                 Clear All
               </Button>
             </Box>
 
             {/* IP Editor Fields */}
-            <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+            <Box
+              sx={{
+                maxHeight: 420,
+                overflowY: 'auto',
+                pr: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2
+              }}
+            >
               {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
                 const vm = vmsWithFlavor.find((v) => v.name === vmName)
                 if (!vm) return null
@@ -1653,9 +1713,17 @@ function VmsSelectionStep({
                 return (
                   <Box
                     key={vmName}
-                    sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
+                    sx={{
+                      p: 2,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2
+                    }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
                       {vm.name}
                     </Typography>
 
@@ -1668,36 +1736,35 @@ function VmsSelectionStep({
                       return (
                         <Box
                           key={interfaceIndex}
-                          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' },
+                            columnGap: { xs: 1.5, sm: 2 },
+                            rowGap: 1,
+                            alignItems: 'flex-start'
+                          }}
                         >
-                          <Box sx={{ width: 120, flexShrink: 0 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}
                             </Typography>
-                            <Typography variant="caption" display="block" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary">
                               Current: {networkInterface?.ipAddress || vm.ipAddress || '—'}
                             </Typography>
                           </Box>
-                          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TextField
-                              value={ip}
-                              onChange={(e) =>
-                                handleBulkIpChange(vmName, interfaceIndex, e.target.value)
-                              }
-                              placeholder="Enter IP address"
-                              size="small"
-                              sx={{ flex: 1 }}
-                              error={status === 'invalid'}
-                              helperText={message}
-                            />
-                            <Box sx={{ width: 24, display: 'flex' }}>
-                              {status === 'validating' && <CircularProgress size={20} />}
-                              {status === 'valid' && (
-                                <CheckCircleIcon color="success" fontSize="small" />
-                              )}
-                              {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
-                            </Box>
-                          </Box>
+                          <TextField
+                            value={ip}
+                            onChange={(e) =>
+                              handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                            }
+                            placeholder="Enter IP address"
+                            size="small"
+                            fullWidth
+                            error={status === 'invalid'}
+                            helperText={message || ' '}
+                            FormHelperTextProps={{ sx: { ml: 0 } }}
+                            InputProps={{ endAdornment: renderValidationAdornment(status) }}
+                          />
                         </Box>
                       )
                     })}
@@ -1707,7 +1774,7 @@ function VmsSelectionStep({
             </Box>
           </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
           <Button
             onClick={handleApplyBulkIPs}
