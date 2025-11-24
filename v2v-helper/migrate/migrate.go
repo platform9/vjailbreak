@@ -1503,38 +1503,54 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			var ippm []string
+		var ippm []string
 
-			// Start with VMware Tools detected IPs (lowest priority)
-			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
-				ippm = detectedIPs
-				utils.PrintLog(fmt.Sprintf("Using detected IPs by VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
+		// NetworkInterfaces from CRD spec (lowest priority, fallback)
+		if vminfo.NetworkInterfaces != nil {
+			for _, nic := range vminfo.NetworkInterfaces {
+				if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
+					ippm = []string{nic.IPAddress}
+					utils.PrintLog(fmt.Sprintf("NetworkInterfaces: Using IP for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
+					break
+				}
 			}
+		}
 
-			// Guest Network IPs from CRD
-			if vminfo.NetworkInterfaces != nil {
-				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
-						ippm = []string{nic.IPAddress}
-						utils.PrintLog(fmt.Sprintf("Using IP from Guest Network for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
-						break
+		// VMware Tools detected IPs
+		if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
+			ippm = detectedIPs
+			utils.PrintLog(fmt.Sprintf("VMware Tools: Using detected IPs for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
+		}
+
+		// Guest Network IPs
+		if vminfo.GuestNetworks != nil {
+			var guestIPs []string
+			for _, gn := range vminfo.GuestNetworks {
+				if strings.EqualFold(gn.MAC, vminfo.Mac[idx]) && gn.IP != "" {
+					if !strings.Contains(gn.IP, ":") {
+						guestIPs = append(guestIPs, gn.IP)
 					}
 				}
 			}
+			if len(guestIPs) > 0 {
+				ippm = guestIPs
+				utils.PrintLog(fmt.Sprintf("Guest Network: Using IPs for MAC %s: %v", vminfo.Mac[idx], guestIPs))
+			}
+		}
 
-			// AssignedIP from ConfigMap
-			if migobj.AssignedIP != "" {
-				assignedIPs := strings.Split(migobj.AssignedIP, ",")
-				if idx < len(assignedIPs) {
-					ip := strings.TrimSpace(assignedIPs[idx])
-					if ip != "" {
-						ippm = []string{ip}
-						utils.PrintLog(fmt.Sprintf("Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-					} else {
-						utils.PrintLog(fmt.Sprintf("AssignedIP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
-					}
+		// User-assigned IP from ConfigMap
+		if migobj.AssignedIP != "" {
+			assignedIPs := strings.Split(migobj.AssignedIP, ",")
+			if idx < len(assignedIPs) {
+				ip := strings.TrimSpace(assignedIPs[idx])
+				if ip != "" {
+					ippm = []string{ip}
+					utils.PrintLog(fmt.Sprintf("User-Assigned: Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+				} else {
+					utils.PrintLog(fmt.Sprintf("AssignedIP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 				}
 			}
+		}
 
 			utils.PrintLog(fmt.Sprintf("Final IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
