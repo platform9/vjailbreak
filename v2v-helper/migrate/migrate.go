@@ -708,11 +708,16 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		migobj.logMessage("Running get-bootable-partition.sh script")
 		var ans string
 		var cmdErr error
+
 		if ans, cmdErr = virtv2v.RunGetBootablePartitionScript(vminfo.VMDisks); cmdErr != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
 			// Don't fail the migration, just log the warning
 		} else {
-			migobj.logMessage("Successfully ran get-bootable-partition.sh script")
+			if ans == "" {
+				migobj.logMessage("Failed to run get-bootable-partition.sh script, empty output")
+			} else {
+				migobj.logMessage(fmt.Sprintf("Successfully ran get-bootable-partition.sh script with output: %s", ans))
+			}
 		}
 
 		if ans == "" {
