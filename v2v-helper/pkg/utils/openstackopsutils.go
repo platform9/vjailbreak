@@ -499,16 +499,24 @@ PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, t
 					gatewayIP[mac] = subnetId.GatewayIP
 				}
 				if !contain_all {
-return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ip)
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ip)
 				}
+				// Check if port is already active - cannot reuse active ports
+				if port.Status == "ACTIVE" {
+					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
+				}
+				PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
+				return &port, nil
 			} else if len(port.FixedIPs) == 0 && len(ip) == 0 {
+				// Check if port is already active - cannot reuse active ports
+				if port.Status == "ACTIVE" {
+					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
+				}
 				PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
 				return &port, nil
 			} else {
 				return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, port.FixedIPs, ip)
 			}
-			PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
-			return &port, nil
 		}
 	}
 
