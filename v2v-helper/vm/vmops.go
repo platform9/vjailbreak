@@ -47,11 +47,12 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU               int32
-	Memory            int32
-	State             types.VirtualMachinePowerState
-	Mac               []string
-	IPs               []string
+	CPU      int32
+	Memory   int32
+	State    types.VirtualMachinePowerState
+	Mac      []string
+	IPperMac map[string][]string
+	// IPs               []string
 	UUID              string
 	Host              string
 	VMDisks           []VMDisk
@@ -61,6 +62,7 @@ type VMInfo struct {
 	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
+	GatewayIP         map[string]string
 }
 
 type NIC struct {
@@ -111,7 +113,9 @@ func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name stri
 	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx, k8sClient: k8sClient}, nil
 
 }
-
+func (vmops *VMOps) GetVmPowerState() (types.VirtualMachinePowerState, error) {
+	return vmops.VMObj.PowerState(vmops.ctx)
+}
 func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
 }
@@ -151,6 +155,8 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	}
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
+	ipPerMac := make(map[string][]string)
+
 	// Get the vmware machine from k8s
 	vmk8sName, err := k8sutils.GetVMwareMachineName()
 	if err != nil {
@@ -169,13 +175,23 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 				// Every mac should have a corresponding IP, Ignore link layer ip
 				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
 					ips = append(ips, guestNetwork.IP)
+					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
+						ipPerMac[guestNetwork.MAC] = []string{}
+					}
+					ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], guestNetwork.IP)
 				}
 			}
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
-						ips = append(ips, networkInterface.IPAddress)
+					if networkInterface.MAC == macAddresss {
+						if !strings.Contains(networkInterface.IPAddress, ":") {
+							ips = append(ips, networkInterface.IPAddress)
+							if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+								ipPerMac[networkInterface.MAC] = []string{}
+							}
+							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], networkInterface.IPAddress)
+						}
 					}
 				}
 			}
@@ -226,7 +242,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		Memory:            o.Config.Hardware.MemoryMB,
 		State:             o.Runtime.PowerState,
 		Mac:               mac,
-		IPs:               ips,
+		IPperMac:          ipPerMac,
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,
@@ -236,6 +252,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		OSType:            ostype,
 		NetworkInterfaces: vmwareMachine.Spec.VMInfo.NetworkInterfaces,
 		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
+		GatewayIP:         make(map[string]string),
 	}
 	return vminfo, nil
 }
