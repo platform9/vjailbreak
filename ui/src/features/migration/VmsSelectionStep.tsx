@@ -1049,6 +1049,7 @@ function VmsSelectionStep({
                 status: error.response?.status
               }
             })
+            setAssigningIPs(false)
             return
           }
 
