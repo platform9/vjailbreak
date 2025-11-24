@@ -518,7 +518,7 @@ export default function GlobalSettingsPage() {
             />
 
             <IntervalField
-              label="Periodic Sync Interval"
+              label="Periodic Sync"
               name="PERIODIC_SYNC_INTERVAL"
               value={form.PERIODIC_SYNC_INTERVAL}
               onChange={onText}

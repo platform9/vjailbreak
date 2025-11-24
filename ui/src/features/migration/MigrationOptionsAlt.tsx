@@ -89,7 +89,7 @@ export default function MigrationOptionsAlt({
     onChange('dataCopyMethod')('cold')
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
     refetchConfigMap()
-  }, [])
+  }, [refetchConfigMap])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
@@ -264,7 +264,7 @@ export default function MigrationOptionsAlt({
                       label="Periodic Sync"
                     />
                     <IntervalField
-                      label="Periodic Sync Interval"
+                      label="Periodic Sync"
                       name="periodicSyncInterval"
                       required={selectedMigrationOptions.periodicSyncEnabled}
                       value={String(
