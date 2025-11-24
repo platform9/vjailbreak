@@ -177,7 +177,7 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
  */
 const parseInterval = (val: string): string | undefined => {
   const trimmedVal = val?.trim()
-  if (!trimmedVal) return 'required'
+  if (!trimmedVal) return 'Periodic Sync is required'
 
   // Allow composite formats like 1h30m, 5m30s, etc.
   const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
