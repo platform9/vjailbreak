@@ -28,15 +28,25 @@ const IntervalField = ({
     const trimmedVal = val?.trim()
     if (!trimmedVal) return undefined
 
-    const regex = /^([0-9]+)(s|m|h)$/
+    // Allow composite formats like 1h30m, 5m30s, etc.
+    const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
     const match = trimmedVal.match(regex)
-    if (!match) return 'Use duration format like 30s, 5m, 1h (units: s,m,h).'
 
-    const num = Number(match[1])
-    const unit = match[2].toLowerCase()
-    const minutes = unit === 's' ? num / 60 : unit === 'm' ? num : unit === 'h' ? num * 60 : NaN
+    if (!match || match[0] === '') {
+      return 'Use duration format like 30s, 5m, 1h, 1h30m, 5m30s (units: h,m,s).'
+    }
 
-    if (isNaN(minutes) || minutes < 5) return 'Interval must be at least 5 minutes'
+    const hours = match[1] ? Number(match[1]) : 0
+    const minutes = match[2] ? Number(match[2]) : 0
+    const seconds = match[3] ? Number(match[3]) : 0
+
+    // Convert total duration to minutes
+    const totalMinutes = hours * 60 + minutes + seconds / 60
+
+    if (isNaN(totalMinutes) || totalMinutes < 5) {
+      return 'Interval must be at least 5 minutes'
+    }
+
     return undefined
   }, [])
 

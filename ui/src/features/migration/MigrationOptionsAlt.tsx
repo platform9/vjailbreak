@@ -270,7 +270,7 @@ export default function MigrationOptionsAlt({
                       value={String(
                         params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
                           ? params.periodicSyncInterval
-                          : globalConfigMap?.data.PERIODIC_SYNC_INTERVAL || ''
+                          : ''
                       )}
                       onChange={(e) => {
                         onChange('periodicSyncInterval')(e.target.value || '')
