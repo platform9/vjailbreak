@@ -266,14 +266,13 @@ export default function MigrationOptionsAlt({
                     <IntervalField
                       label="Periodic Sync"
                       name="periodicSyncInterval"
-                      required={selectedMigrationOptions.periodicSyncEnabled}
                       value={String(
                         params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
                           ? params.periodicSyncInterval
                           : ''
                       )}
                       onChange={(e) => {
-                        onChange('periodicSyncInterval')(e.target.value || '')
+                        onChange('periodicSyncInterval')(e.target.value?.trim() || '')
                       }}
                       error={errors.periodicSyncInterval}
                       getErrorsUpdater={getErrorsUpdater}

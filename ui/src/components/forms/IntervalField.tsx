@@ -26,7 +26,7 @@ const IntervalField = ({
 }: IntervalFieldProps) => {
   const validate = useCallback((val: string): string | undefined => {
     const trimmedVal = val?.trim()
-    if (!trimmedVal) return `${label} is required.`
+    if (!trimmedVal) return undefined
 
     // Allow composite formats like 1h30m, 5m30s, etc.
     const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
