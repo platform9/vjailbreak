@@ -1581,14 +1581,22 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 
 	if len(validVMs) == 0 {
 		if len(skippedVMs) > 0 {
-			msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMs)
+			skippedVMNames := make([]string, len(skippedVMs))
+			for i, vm := range skippedVMs {
+				skippedVMNames[i] = vm.Spec.VMInfo.Name
+			}
+			msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
 			r.ctxlog.Info(msg)
 		}
 		return nil, skippedVMs, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 	}
 
 	if len(skippedVMs) > 0 {
-		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMs)
+		skippedVMNames := make([]string, len(skippedVMs))
+		for i, vm := range skippedVMs {
+			skippedVMNames[i] = vm.Spec.VMInfo.Name
+		}
+		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
 		r.ctxlog.Info(msg)
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg); updateErr != nil {
 			r.ctxlog.Error(updateErr, "Failed to update migration plan status for skipped VMs")
