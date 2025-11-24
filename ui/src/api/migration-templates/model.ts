@@ -76,7 +76,7 @@ export interface VmData {
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]
   osFamily?: string
-  // User-assigned IPs for cold migration (comma-separated: "IP1,IP2,IP3")
+  // User-assigned IPs for cold migration
   assignedIPs?: string
   // RDM-related properties
   rdmDisks?: string[]

@@ -583,7 +583,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Get assigned IPs for this VM from the migration plan (for cold migration)
+		// Get assigned IPs for this VM from the migration plan
 		assignedIP := ""
 		if migrationplan.Spec.AssignedIPsPerVM != nil {
 			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
@@ -603,6 +603,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			Spec: vjailbreakv1alpha1.MigrationSpec{
 				MigrationPlan:           migrationplan.Name,
 				VMName:                  vm,
+				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,

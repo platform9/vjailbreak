@@ -1376,32 +1376,31 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 
 			var ippm []string
 
-			// Priority 2: Start with VMware Tools detected IPs (lowest priority)
+			// Start with VMware Tools detected IPs (lowest priority)
 			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
 				ippm = detectedIPs
-				utils.PrintLog(fmt.Sprintf("Priority 2 (VMware Tools): Using detected IPs for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
+				utils.PrintLog(fmt.Sprintf("Using detected IPs by VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
 
-			// Priority 1: Guest Network IPs from CRD (overwrites P2 if present)
+			// Guest Network IPs from CRD
 			if vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
 						ippm = []string{nic.IPAddress}
-						utils.PrintLog(fmt.Sprintf("Priority 1 (Guest Network): Using IP for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
+						utils.PrintLog(fmt.Sprintf("Using IP from Guest Network for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
 						break
 					}
 				}
 			}
 
-			// Priority 0: AssignedIP from ConfigMap (highest priority, overwrites all)
-			// Format: "IP1,IP2,IP3" where each IP corresponds to interface by index
+			// AssignedIP from ConfigMap
 			if migobj.AssignedIP != "" {
 				assignedIPs := strings.Split(migobj.AssignedIP, ",")
 				if idx < len(assignedIPs) {
 					ip := strings.TrimSpace(assignedIPs[idx])
 					if ip != "" {
 						ippm = []string{ip}
-						utils.PrintLog(fmt.Sprintf("Priority 0 (User-Assigned): Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+						utils.PrintLog(fmt.Sprintf("Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
 					}
 				}
 			}

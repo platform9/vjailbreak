@@ -1093,8 +1093,7 @@ function VmsSelectionStep({
           return
         }
 
-        // Store IPs in local state (will be passed to MigrationPlan, not VMwareMachine CRD)
-        // Group IPs by VM name and collect as comma-separated string
+        // Group IPs by VM name
         const assignedIPsPerVM: Record<string, string[]> = {}
         
         validIPs.forEach(({ vmName, interfaceIndex, ip }) => {
@@ -1125,15 +1124,14 @@ function VmsSelectionStep({
             })
           }
           
-          // Filter out empty slots and join with comma-space for display
           const validIPs = assignedIPs.filter(ip => ip && ip.trim() !== '')
           const ipDisplay = validIPs.join(', ')
           
           return {
             ...vm,
-            assignedIPs: assignedIPs.join(','), // Store as comma-separated (no spaces) for backend
-            ipAddress: ipDisplay || vm.ipAddress, // Update display column (with spaces) or keep existing
-            networkInterfaces: updatedNetworkInterfaces // Update network interfaces
+            assignedIPs: assignedIPs.join(','),
+            ipAddress: ipDisplay || vm.ipAddress,
+            networkInterfaces: updatedNetworkInterfaces
           }
         })
         
