@@ -1093,104 +1093,48 @@ function VmsSelectionStep({
           return
         }
 
-        // Apply the valid IPs to VMs
-        const updatePromises = validIPs.map(async ({ vmName, interfaceIndex, ip }) => {
-          try {
-            const vm = vmsWithFlavor.find((v) => v.name === vmName)
-            if (!vm) throw new Error('VM not found')
-
-            // Update network interfaces
-            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
-              const updatedInterfaces = [...vm.networkInterfaces]
-              updatedInterfaces[interfaceIndex] = {
-                ...updatedInterfaces[interfaceIndex],
-                ipAddress: ip
-              }
-
-              if (vm.vmWareMachineName) {
-                await patchVMwareMachine(vm.vmWareMachineName, {
-                  spec: {
-                    vms: {
-                      networkInterfaces: updatedInterfaces
-                    }
-                  }
-                })
-              }
-            } else {
-              // Fallback for single IP assignment
-              if (vm.vmWareMachineName) {
-                await patchVMwareMachine(vm.vmWareMachineName, {
-                  spec: {
-                    vms: {
-                      assignedIp: ip
-                    }
-                  }
-                })
-              }
-            }
-
-            return { success: true, vmName, interfaceIndex, ip }
-          } catch (error) {
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [vmName]: {
-                ...prev[vmName],
-                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
-              }
-            }))
-            return { success: false, vmName, interfaceIndex, error }
+        // Store IPs in local state (will be passed to MigrationPlan, not VMwareMachine CRD)
+        // Group IPs by VM name and collect as comma-separated string
+        const assignedIPsPerVM: Record<string, string[]> = {}
+        
+        validIPs.forEach(({ vmName, interfaceIndex, ip }) => {
+          if (!assignedIPsPerVM[vmName]) {
+            assignedIPsPerVM[vmName] = []
           }
+          // Ensure the array has enough slots
+          while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
+            assignedIPsPerVM[vmName].push('')
+          }
+          assignedIPsPerVM[vmName][interfaceIndex] = ip
         })
 
-        const results = await Promise.all(updatePromises)
-
-        // Check if any updates failed
-        const failedUpdates = results.filter((result) => !result.success)
-        if (failedUpdates.length > 0) {
-          setAssigningIPs(false)
-          return // Don't close modal if any updates failed
-        }
-
-        // Update local VM state
-        const updatedVMs = vmsWithFlavor.map((vm) => {
-          const vmUpdates = validIPs.filter((item) => item.vmName === vm.name)
-          if (vmUpdates.length === 0) return vm
-
-          const updatedVM = { ...vm }
-
-          if (vm.networkInterfaces) {
-            const updatedInterfaces = [...vm.networkInterfaces]
-            vmUpdates.forEach(({ interfaceIndex, ip }) => {
-              if (updatedInterfaces[interfaceIndex]) {
-                updatedInterfaces[interfaceIndex] = {
-                  ...updatedInterfaces[interfaceIndex],
-                  ipAddress: ip
-                }
-              }
-            })
-            updatedVM.networkInterfaces = updatedInterfaces
-
-            // Recalculate comma-separated IP string
-            const allIPs = updatedInterfaces
-              .map((nic) => nic.ipAddress)
-              .filter((ip) => ip && ip.trim() !== '')
-              .join(', ')
-            updatedVM.ipAddress = allIPs || '—'
-          } else {
-            // Fallback for single IP
-            const firstUpdate = vmUpdates[0]
-            if (firstUpdate) {
-              updatedVM.ipAddress = firstUpdate.ip
-            }
+        // Update vmsWithFlavor to include assigned IPs for display purposes only
+        const updatedVms = vmsWithFlavor.map((vm) => {
+          const assignedIPs = assignedIPsPerVM[vm.name]
+          if (!assignedIPs) return vm
+          
+          return {
+            ...vm,
+            assignedIPs: assignedIPs.join(',') // Store as comma-separated string
           }
-
-          return updatedVM
         })
-        setVmsWithFlavor(updatedVMs)
+        
+        setVmsWithFlavor(updatedVms)
+
+        // Mark all as successfully applied
+        validIPs.forEach(({ vmName, interfaceIndex }) => {
+          setBulkValidationStatus((prev) => ({
+            ...prev,
+            [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
+          }))
+          setBulkValidationMessages((prev) => ({
+            ...prev,
+            [vmName]: { ...prev[vmName], [interfaceIndex]: 'IP assigned locally' }
+          }))
+        })
+
+        // Notify success
+        showToast(`Successfully assigned IPs to ${validIPs.length} interface(s)`, 'success')
 
         handleCloseBulkEditDialog()
       }

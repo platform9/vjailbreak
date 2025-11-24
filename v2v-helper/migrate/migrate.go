@@ -1374,21 +1374,39 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
-			if !ok {
-				ippm = []string{}
+			var ippm []string
+
+			// Priority 2: Start with VMware Tools detected IPs (lowest priority)
+			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
+				ippm = detectedIPs
+				utils.PrintLog(fmt.Sprintf("Priority 2 (VMware Tools): Using detected IPs for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
-			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
+
+			// Priority 1: Guest Network IPs from CRD (overwrites P2 if present)
+			if vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] {
-						ippm = append(ippm, nic.IPAddress)
+					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
+						ippm = []string{nic.IPAddress}
+						utils.PrintLog(fmt.Sprintf("Priority 1 (Guest Network): Using IP for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
+						break
 					}
 				}
 			}
+
+			// Priority 0: AssignedIP from ConfigMap (highest priority, overwrites all)
+			// Format: "IP1,IP2,IP3" where each IP corresponds to interface by index
 			if migobj.AssignedIP != "" {
-				ippm = []string{migobj.AssignedIP}
+				assignedIPs := strings.Split(migobj.AssignedIP, ",")
+				if idx < len(assignedIPs) {
+					ip := strings.TrimSpace(assignedIPs[idx])
+					if ip != "" {
+						ippm = []string{ip}
+						utils.PrintLog(fmt.Sprintf("Priority 0 (User-Assigned): Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+					}
+				}
 			}
-			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
+
+			utils.PrintLog(fmt.Sprintf("Final IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
