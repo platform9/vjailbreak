@@ -88,10 +88,6 @@ const DEFAULTS: SettingsForm = {
    Helpers (parsing, IO)
    -----------------------*/
 
-// Go duration regex (groups like 30s, 5m, 1h)
-const GO_DURATION_FULL_REGEX = /^([0-9]+(ns|us|µs|ms|s|m|h))+$/i
-const GO_DURATION_GROUP_RE = /([0-9]+)(ns|us|µs|ms|s|m|h)/gi
-
 const parseBool = (v: unknown, fallback: boolean) =>
   typeof v === 'string' ? v.toLowerCase() === 'true' : typeof v === 'boolean' ? v : fallback
 
