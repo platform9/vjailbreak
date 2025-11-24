@@ -24,6 +24,7 @@ import AccordionSummary from '@mui/material/AccordionSummary'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
 import IntervalField from 'src/components/forms/IntervalField'
+import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
 // Styles
 const FieldsContainer = styled('div')(({ theme }) => ({
@@ -81,11 +82,14 @@ export default function MigrationOptionsAlt({
   getErrorsUpdater,
   stepNumber
 }: MigrationOptionsPropsInterface) {
+  const { data: globalConfigMap, refetch: refetchConfigMap } = useSettingsConfigMapQuery()
+
   // Iniitialize fields
   useEffect(() => {
     onChange('dataCopyMethod')('cold')
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
-  }, [])
+    refetchConfigMap()
+  }, [refetchConfigMap])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
@@ -250,24 +254,25 @@ export default function MigrationOptionsAlt({
                         <Checkbox
                           checked={selectedMigrationOptions.periodicSyncEnabled}
                           onChange={(e) => {
-                            onChange('periodicSyncInterval')('') // Reset interval when disabling
+                            onChange('periodicSyncInterval')(
+                              globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
+                            ) // Reset interval when disabling
                             updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
                           }}
                         />
                       }
-                      label="Use Periodic Sync Interval"
+                      label="Periodic Sync"
                     />
                     <IntervalField
-                      label="Periodic Sync Interval"
+                      label="Periodic Sync"
                       name="periodicSyncInterval"
-                      required={selectedMigrationOptions.periodicSyncEnabled}
                       value={String(
                         params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
                           ? params.periodicSyncInterval
                           : ''
                       )}
                       onChange={(e) => {
-                        onChange('periodicSyncInterval')(e.target.value || '')
+                        onChange('periodicSyncInterval')(e.target.value?.trim() || '')
                       }}
                       error={errors.periodicSyncInterval}
                       getErrorsUpdater={getErrorsUpdater}

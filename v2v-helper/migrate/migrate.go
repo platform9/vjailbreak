@@ -833,7 +833,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			if isNetplanSupported(versionID) {
 				// Add Wildcard Netplan
 				utils.PrintLog("Adding wildcard netplan")
-				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
+				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP)
 				if err != nil {
 					return errors.Wrap(err, "failed to add wildcard netplan")
 				}
@@ -1161,11 +1161,6 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	healthChecks := make(map[string]bool)
 	healthChecks["Ping"] = false
 	healthChecks["HTTP Get"] = false
-	for i := 0; i < len(vminfo.IPs); i++ {
-		if ips[i] != vminfo.IPs[i] {
-			migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
-		}
-	}
 	for i := 0; i < 10; i++ {
 		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
 		// 1. Ping
@@ -1361,9 +1356,12 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 			networkids = append(networkids, retrPort.NetworkID)
 			portids = append(portids, retrPort.ID)
-			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
+			for _, fixedIP := range retrPort.FixedIPs {
+				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+			}
 		}
 	} else {
+
 		for idx, networkname := range networknames {
 			// Create Port Group with the same mac address as the source VM
 			// Find the network with the given ID
@@ -1376,33 +1374,35 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ip := ""
-			if len(vminfo.Mac) != len(vminfo.IPs) {
-				ip = ""
-			} else {
-				ip = vminfo.IPs[idx]
+			ippm, ok := vminfo.IPperMac[vminfo.Mac[idx]]
+			if !ok {
+				ippm = []string{}
 			}
-			if ip == "" && vminfo.NetworkInterfaces != nil {
+			if len(ippm) == 0 && vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
 					if nic.MAC == vminfo.Mac[idx] {
-						ip = nic.IPAddress
-						break
+						ippm = append(ippm, nic.IPAddress)
 					}
 				}
 			}
 			if migobj.AssignedIP != "" {
-				ip = migobj.AssignedIP
+				ippm = []string{migobj.AssignedIP}
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
+			utils.PrintLog(fmt.Sprintf("IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
-
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress))
+			addressesOfPort := []string{}
+			for _, fixedIP := range port.FixedIPs {
+				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
+			}
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
 		}
+		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
 }
