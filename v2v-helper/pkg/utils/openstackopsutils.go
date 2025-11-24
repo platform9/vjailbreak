@@ -541,7 +541,7 @@ return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has
 		}
 		createOpts.FixedIPs = fixedIPs
 	} else if len(ip) == 0 && !fallbackToDHCP {
-		PrintLog("Empty port detected")
+		PrintLog("Empty port on vcentre detected for mac " + mac)
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()

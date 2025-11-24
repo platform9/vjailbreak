@@ -834,7 +834,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				// Add Wildcard Netplan
 				utils.PrintLog("Adding wildcard netplan")
 				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP)
-				// err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
 				if err != nil {
 					return errors.Wrap(err, "failed to add wildcard netplan")
 				}
@@ -1162,11 +1161,6 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	healthChecks := make(map[string]bool)
 	healthChecks["Ping"] = false
 	healthChecks["HTTP Get"] = false
-	// for i := 0; i < len(vminfo.IPs); i++ {
-	// if ips[i] != vminfo.IPs[i] {
-	// migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
-	// }
-	// }
 	for i := 0; i < 10; i++ {
 		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
 		// 1. Ping
@@ -1362,7 +1356,9 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 			networkids = append(networkids, retrPort.NetworkID)
 			portids = append(portids, retrPort.ID)
-			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
+			for _, fixedIP := range retrPort.FixedIPs {
+				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+			}
 		}
 	} else {
 
