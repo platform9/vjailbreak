@@ -1113,9 +1113,27 @@ function VmsSelectionStep({
           const assignedIPs = assignedIPsPerVM[vm.name]
           if (!assignedIPs) return vm
           
+          // Update networkInterfaces with assigned IPs
+          let updatedNetworkInterfaces = vm.networkInterfaces
+          if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
+            updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
+              const assignedIP = assignedIPs[index]
+              if (assignedIP && assignedIP.trim() !== '') {
+                return { ...nic, ipAddress: assignedIP }
+              }
+              return nic
+            })
+          }
+          
+          // Filter out empty slots and join with comma-space for display
+          const validIPs = assignedIPs.filter(ip => ip && ip.trim() !== '')
+          const ipDisplay = validIPs.join(', ')
+          
           return {
             ...vm,
-            assignedIPs: assignedIPs.join(',') // Store as comma-separated string
+            assignedIPs: assignedIPs.join(','), // Store as comma-separated (no spaces) for backend
+            ipAddress: ipDisplay || vm.ipAddress, // Update display column (with spaces) or keep existing
+            networkInterfaces: updatedNetworkInterfaces // Update network interfaces
           }
         })
         
