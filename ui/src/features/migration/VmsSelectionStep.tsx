@@ -1104,7 +1104,9 @@ function VmsSelectionStep({
           while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
             assignedIPsPerVM[vmName].push('')
           }
-          assignedIPsPerVM[vmName][interfaceIndex] = ip
+          if (assignedIPsPerVM[vmName].length > interfaceIndex) {
+            assignedIPsPerVM[vmName][interfaceIndex] = ip
+          }
         })
 
         // Update vmsWithFlavor to include assigned IPs for display purposes only

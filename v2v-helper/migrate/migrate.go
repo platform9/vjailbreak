@@ -1401,6 +1401,8 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 					if ip != "" {
 						ippm = []string{ip}
 						utils.PrintLog(fmt.Sprintf("Using AssignedIP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+					} else {
+						utils.PrintLog(fmt.Sprintf("AssignedIP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 					}
 				}
 			}
