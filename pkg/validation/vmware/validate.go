@@ -3,6 +3,7 @@ package vmware
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"net/url"
 	"strings"
@@ -20,7 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -146,7 +147,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	// Exponential retry logic with retry limit from ConfigMap or passed parameter
 	var lastErr error
 	ctx = ensureLogger(ctx)
-	ctxlog := log.FromContext(ctx)
+	ctxlog := ctrllog.FromContext(ctx)
 
 	for attempt := 1; attempt <= retryLimit; attempt++ {
 		// Create a new empty client struct for Login to populate
@@ -249,7 +250,7 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	}
 
 	ctx = ensureLogger(ctx)
-	logger := log.FromContext(ctx)
+	logger := ctrllog.FromContext(ctx)
 
 	scope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
 		Logger:      logger,
@@ -259,34 +260,32 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create VMware scope")
 	}
-	// Note: Not calling defer scope.Close() here as we don't want to update the CR
-	// The CR will be updated by the caller after all operations complete
 
-	logger.Info("Creating VMware Clusters and Hosts")
+	log.Printf("Creating VMware Clusters and Hosts")
 	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create VMware clusters and hosts")
 	}
 
-	logger.Info("Fetching all VMs")
+	log.Printf("Fetching all VMs")
 	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch VMs")
 	}
 
-	logger.Info("Syncing RDM Disks")
+	log.Printf("Syncing RDM Disks")
 	err = utils.CreateOrUpdateRDMDisks(ctx, k8sClient, vmwcreds, rdmDiskMap)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create/update RDM disks")
 	}
 
-	logger.Info("Deleting Stale Machines")
+	log.Printf("Deleting Stale Machines")
 	err = utils.DeleteStaleVMwareMachines(ctx, k8sClient, vmwcreds, vminfo)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to delete stale VMware machines")
 	}
 
-	logger.Info("Deleting Stale Clusters and Hosts")
+	log.Printf("Deleting Stale Clusters and Hosts")
 	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to delete stale clusters and hosts")
@@ -300,10 +299,10 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 
 // ensureLogger ensures the context has a valid logger to prevent panics in shared packages
 func ensureLogger(ctx context.Context) context.Context {
-	l := log.FromContext(ctx)
+	l := ctrllog.FromContext(ctx)
 	if l.GetSink() == nil {
 		// Inject a dev logger if none exists
-		return log.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
+		return ctrllog.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
 	}
 	return ctx
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -204,31 +205,29 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	}
 	
 	ctx = ensureLogger(ctx)
-	logger := log.FromContext(ctx)
 
-	logger.Info("Updating Master Node Image ID")
+	log.Printf("Updating Master Node Image ID")
 	err := utils.UpdateMasterNodeImageID(ctx, k8sClient, false)
 	if err != nil {
-		logger.Error(err, "Warning: Failed to update master node image ID")
+		log.Printf("Warning: Failed to update master node image ID: %v", err)
 	}
 
-	logger.Info("Creating Dummy PCD Cluster if needed")
+	log.Printf("Creating Dummy PCD Cluster if needed")
 	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
 	if err != nil {
-		// Ignore "already exists" error - cluster may have been created by controller
 		if !strings.Contains(err.Error(), "already exists") {
 			return nil, errors.Wrap(err, "failed to create dummy PCD cluster")
 		}
-		logger.Info("Dummy PCD Cluster already exists, continuing")
+		log.Printf("Dummy PCD Cluster already exists, continuing")
 	}
 
-	logger.Info("Listing Flavors")
+	log.Printf("Listing Flavors")
 	flavorsList, err := utils.ListAllFlavors(ctx, k8sClient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list flavors")
 	}
 
-	logger.Info("Getting OpenStack Info")
+	log.Printf("Getting OpenStack Info")
 	openstackInfo, err := utils.GetOpenstackInfo(ctx, k8sClient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get OpenStack info")
@@ -247,9 +246,9 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 }
 
 func ensureLogger(ctx context.Context) context.Context {
-	l := log.FromContext(ctx)
+	l := ctrllog.FromContext(ctx)
 	if l.GetSink() == nil {
-		return log.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
+		return ctrllog.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
 	}
 	return ctx
 }
