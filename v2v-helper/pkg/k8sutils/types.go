@@ -17,4 +17,5 @@ type VjailbreakSettings struct {
 	ValidateRDMOwnerVMs                 bool
 	PeriodicSyncMaxRetries              uint64
 	PeriodicSyncRetryCap                string
+	AutoFstabUpdate                     bool
 }

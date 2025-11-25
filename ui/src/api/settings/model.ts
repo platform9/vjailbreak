@@ -13,6 +13,7 @@ export interface VjailbreakSettings {
     VCENTER_SCAN_CONCURRENCY_LIMIT: number
     VM_ACTIVE_WAIT_INTERVAL_SECONDS: number
     VM_ACTIVE_WAIT_RETRY_LIMIT: number
+    AUTO_FSTAB_UPDATE: string
   }
   kind: string
   metadata: {

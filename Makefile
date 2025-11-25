@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+export PATH := /usr/local/go/bin:$(PATH)
 
 RELEASE_VER=$(BUILD_VERSION)
 GIT_SHA    := $(shell git rev-parse --short HEAD)
@@ -36,7 +37,7 @@ ui:
 .PHONY: v2v-helper
 v2v-helper:
 	make -C v2v-helper build
-	docker build --platform linux/amd64 --build-arg RELEASE_VERSION=$(VERSION) -t $(V2V_IMG) v2v-helper/
+	docker build --platform linux/amd64 --build-arg RELEASE_VERSION=$(VERSION) -t $(V2V_IMG) -f v2v-helper/Dockerfile .
 
 .PHONY: test-v2v-helper
 test-v2v-helper:

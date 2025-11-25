@@ -426,6 +426,16 @@ export default function MigrationFormDrawer({
 
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
 
+    // Build AssignedIPsPerVM map for cold migration
+    const assignedIPsPerVM: Record<string, string> = {}
+    if (params.vms) {
+      params.vms.forEach((vm) => {
+        if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
+          assignedIPsPerVM[vm.name] = vm.assignedIPs
+        }
+      })
+    }
+
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
@@ -433,6 +443,7 @@ export default function MigrationFormDrawer({
         selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
           ? params.dataCopyMethod
           : 'cold',
+      ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime

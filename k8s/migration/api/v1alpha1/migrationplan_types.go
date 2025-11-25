@@ -77,6 +77,9 @@ type MigrationPlanSpec struct {
 	VirtualMachines [][]string `json:"virtualMachines"`
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
 	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
+	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
+	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan

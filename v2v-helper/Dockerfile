@@ -19,14 +19,14 @@ WORKDIR /workspace
 # Copy pre-built binary from local build
 # Note: The binary is built by 'make -C v2v-helper build' before docker build
 # This is part of the VM migration toolchain for converting between different platforms
-COPY manager manager
+COPY v2v-helper/manager manager
 
 # Stage 2: Runtime environment
 # Using same Fedora version for consistency and required runtime dependencies
 FROM fedora:42
 
 WORKDIR /tmp/rpms
-COPY nbdkit/*.rpm /tmp/rpms/
+COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
 
 RUN dnf install -y \
     ./libnbd-1.22.2-1.fc42.x86_64.rpm \
@@ -53,4 +53,8 @@ RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
+
+# Copy scripts directory for migration utilities
+COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
+COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 

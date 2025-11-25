@@ -583,6 +583,14 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
+		// Get assigned IPs for this VM from the migration plan
+		assignedIP := ""
+		if migrationplan.Spec.AssignedIPsPerVM != nil {
+			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
+				assignedIP = ips
+			}
+		}
+
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
@@ -593,11 +601,12 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan: migrationplan.Name,
-				VMName:        vm,
+				MigrationPlan:           migrationplan.Name,
+				VMName:                  vm,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
+				AssignedIP:              assignedIP,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -940,9 +949,9 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
 		}
 
-		// Check if assigned IP is set
-		if vmMachine.Spec.VMInfo.AssignedIP != "" {
-			configMap.Data["ASSIGNED_IP"] = vmMachine.Spec.VMInfo.AssignedIP
+		// Check if assigned IP is set from Migration spec
+		if migrationobj.Spec.AssignedIP != "" {
+			configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
 		} else {
 			configMap.Data["ASSIGNED_IP"] = ""
 		}

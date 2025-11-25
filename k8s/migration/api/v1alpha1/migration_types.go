@@ -76,6 +76,10 @@ type MigrationSpec struct {
 	// after a successful migration to prevent network conflicts. Defaults to false.
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+
+	// AssignedIP is the comma-separated list of user-assigned IPs for cold migration
+	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
+	AssignedIP string `json:"assignedIP,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
