@@ -2,9 +2,7 @@ package openstack
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -52,21 +51,21 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 	}
 
-	// Configure TLS
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	vjbNet := netutils.NewVjbNet()
 	if openstackCredential.Insecure {
-		tlsConfig.InsecureSkipVerify = true
+		vjbNet.Insecure = true
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-		Timeout:   60 * time.Second,
+	vjbNet.SetTimeout(60 * time.Second)
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		providerClient.HTTPClient = *vjbNet.GetClient()
+	} else {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("failed to create secure HTTP client"),
+			Error:   fmt.Errorf("failed to create secure HTTP client"),
+		}
 	}
 
 	// Authenticate
