@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { SyntheticEvent, useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -12,12 +12,19 @@ import {
   SelectChangeEvent,
   Snackbar,
   Switch,
+  Tab,
+  Tabs,
   TextField,
+  Tooltip,
   Typography,
   styled,
   useTheme
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
+import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
@@ -44,6 +51,43 @@ const Footer = styled(Box)(({ theme }) => ({
   paddingTop: theme.spacing(2),
   borderTop: `1px solid ${theme.palette.divider}`
 }))
+
+const SettingsGrid = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+  gap: theme.spacing(2)
+}))
+
+const FieldLabel = ({ label, tooltip }: { label: string; tooltip?: string }) => (
+  <Box display="flex" alignItems="center" gap={0.75}>
+    <Typography variant="body2" fontWeight={500} color="text.primary">
+      {label}
+    </Typography>
+    {tooltip ? (
+      <Tooltip
+        placement="top"
+        arrow
+        componentsProps={{
+          tooltip: {
+            sx: {
+              fontSize: '12px',
+              lineHeight: 1.5,
+              letterSpacing: 0
+            }
+          }
+        }}
+        title={
+          <Typography variant="caption" sx={{ fontSize: '12px', lineHeight: 1, letterSpacing: 0 }}>
+            {tooltip}
+          </Typography>
+        }
+      >
+        <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'pointer' }} />
+      </Tooltip>
+    ) : null}
+  </Box>
+)
+
 /* ------------------------
    Types & Defaults
    -----------------------*/
@@ -83,6 +127,147 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   DEPLOYMENT_NAME: 'vJailbreak'
 }
+
+type FormUpdater = (prev: SettingsForm) => SettingsForm
+type TabKey = 'general' | 'retry' | 'advanced'
+
+const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
+  general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
+  retry: [
+    'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
+    'VM_ACTIVE_WAIT_RETRY_LIMIT',
+    'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
+    'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
+    'VCENTER_LOGIN_RETRY_LIMIT',
+    'VCENTER_SCAN_CONCURRENCY_LIMIT'
+  ],
+  advanced: [
+    'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
+    'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
+    'DEFAULT_MIGRATION_METHOD',
+    'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+    'POPULATE_VMWARE_MACHINE_FLAVORS',
+    'VALIDATE_RDM_OWNER_VMS'
+  ]
+}
+
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced']
+
+const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
+  general: {
+    label: 'General',
+    helper: 'Keep the deployment identity and cadence consistent across the platform.',
+    icon: <SettingsOutlinedIcon fontSize="small" />
+  },
+  retry: {
+    label: 'Retry & Intervals',
+    helper:
+      'Control wait intervals, retry tolerances, and concurrency to balance speed vs. safety.',
+    icon: <HistoryToggleOffOutlinedIcon fontSize="small" />
+  },
+  advanced: {
+    label: 'Advanced & Flags',
+    helper: 'Tune integration defaults and automation flags for OpenStack and VMware flows.',
+    icon: <TuneOutlinedIcon fontSize="small" />
+  }
+}
+
+const TabLabel = ({
+  label,
+  showError,
+  icon
+}: {
+  label: string
+  showError: boolean
+  icon: React.ReactNode
+}) => (
+  <Box display="flex" alignItems="center" gap={0.75}>
+    <Box component="span" sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary' }}>
+      {icon}
+    </Box>
+    <Typography variant="body2" fontWeight={600}>
+      {label}
+    </Typography>
+    {showError ? (
+      <Box
+        component="span"
+        sx={{ width: 8, height: 8, bgcolor: 'error.main', borderRadius: '50%' }}
+      />
+    ) : null}
+  </Box>
+)
+
+const TabPanel = ({
+  children,
+  current,
+  value
+}: {
+  children: React.ReactNode
+  current: TabKey
+  value: TabKey
+}) => {
+  if (current !== value) return null
+  return (
+    <Box
+      role="tabpanel"
+      id={`settings-tabpanel-${value}`}
+      aria-labelledby={`settings-tab-${value}`}
+      sx={{ pt: 3 }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
+  DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD:
+    'Upper bound on incremental copy passes before forcing a full sync.',
+  PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Delay between retries while waiting for a VM to become active.',
+  VM_ACTIVE_WAIT_RETRY_LIMIT: 'Maximum number of attempts to check VM activity before failing.',
+  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS:
+    'Delay between retries while tracking volume availability.',
+  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: 'Maximum attempts to wait for volumes before failing the job.',
+  VCENTER_LOGIN_RETRY_LIMIT:
+    'Number of login retries before the workflow surfaces an authentication error.',
+  VCENTER_SCAN_CONCURRENCY_LIMIT: 'Parallel vCenter inventory scans allowed at once.',
+  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES:
+    'Time before failed OpenStack credentials are re-queued for another attempt.',
+  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 'Time before VMware credential rotations are retried.',
+  DEFAULT_MIGRATION_METHOD:
+    'Preferred migration strategy applied when creating new conversion plans.',
+  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE:
+    'Automatically delete intermediate volumes when a conversion fails.',
+  POPULATE_VMWARE_MACHINE_FLAVORS:
+    'Fetch VMware hardware flavors to enrich instance sizing details.',
+  VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.'
+}
+
+type ToggleKey = Extract<
+  keyof SettingsForm,
+  | 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE'
+  | 'POPULATE_VMWARE_MACHINE_FLAVORS'
+  | 'VALIDATE_RDM_OWNER_VMS'
+>
+
+const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string }> = [
+  {
+    key: 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+    label: 'Cleanup Volumes After Convert Failure',
+    description: 'Remove orphaned storage artifacts after a failed conversion run.'
+  },
+  {
+    key: 'POPULATE_VMWARE_MACHINE_FLAVORS',
+    label: 'Populate VMware Machine Flavors',
+    description: 'Sync VMware flavor data to pre-fill CPU, memory, and disk sizing hints.'
+  },
+  {
+    key: 'VALIDATE_RDM_OWNER_VMS',
+    label: 'Validate RDM Owner VMs',
+    description: 'Adds guard rails to ensure RDM devices still belong to the reported VM owner.'
+  }
+]
 
 /* ------------------------
    Helpers (parsing, IO)
@@ -204,12 +389,19 @@ type NumberFieldProps = {
   min?: number
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  tooltip?: string
 }
-const NumberField = ({ label, name, value, helper, error, onChange }: NumberFieldProps) => (
+const NumberField = ({
+  label,
+  name,
+  value,
+  helper,
+  error,
+  onChange,
+  tooltip
+}: NumberFieldProps) => (
   <Box display="flex" flexDirection="column" gap={0.5}>
-    <Typography variant="body2" fontWeight={500}>
-      {label}
-    </Typography>
+    <FieldLabel label={label} tooltip={tooltip} />
     <TextField
       fullWidth
       size="small"
@@ -230,12 +422,19 @@ type TextFieldProps = {
   helper?: string
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  tooltip?: string
 }
-const CustomTextField = ({ label, name, value, helper, error, onChange }: TextFieldProps) => (
+const CustomTextField = ({
+  label,
+  name,
+  value,
+  helper,
+  error,
+  onChange,
+  tooltip
+}: TextFieldProps) => (
   <Box display="flex" flexDirection="column" gap={0.5}>
-    <Typography variant="body2" fontWeight={500}>
-      {label}
-    </Typography>
+    <FieldLabel label={label} tooltip={tooltip} />
     <TextField
       fullWidth
       size="small"
@@ -255,12 +454,19 @@ type IntervalFieldProps = {
   helper?: string
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  tooltip?: string
 }
-const IntervalField = ({ label, name, value, helper, error, onChange }: IntervalFieldProps) => (
+const IntervalField = ({
+  label,
+  name,
+  value,
+  helper,
+  error,
+  onChange,
+  tooltip
+}: IntervalFieldProps) => (
   <Box display="flex" flexDirection="column" gap={0.5}>
-    <Typography variant="body2" fontWeight={500}>
-      {label}
-    </Typography>
+    <FieldLabel label={label} tooltip={tooltip} />
     <TextField
       fullWidth
       size="small"
@@ -272,6 +478,36 @@ const IntervalField = ({ label, name, value, helper, error, onChange }: Interval
     />
   </Box>
 )
+
+type ToggleFieldProps = {
+  label: string
+  name: keyof SettingsForm
+  checked: boolean
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  tooltip?: string
+  description?: string
+}
+
+const ToggleField = ({
+  label,
+  name,
+  checked,
+  onChange,
+  tooltip,
+  description
+}: ToggleFieldProps) => (
+  <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box display="flex" alignItems="center" justifyContent="space-between">
+      <FieldLabel label={label} tooltip={tooltip} />
+      <Switch name={String(name)} checked={checked} onChange={onChange} />
+    </Box>
+    {description ? (
+      <Typography variant="caption" color="text.secondary">
+        {description}
+      </Typography>
+    ) : null}
+  </Paper>
+)
 /* ------------------------
    Main component
    -----------------------*/
@@ -282,57 +518,26 @@ export default function GlobalSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState<TabKey>('general')
 
-  const [notification, setNotification] = useState<{
-    open: boolean
-    message: string
-    severity: 'error' | 'info' | 'success' | 'warning'
-  }>({ open: false, message: '', severity: 'info' })
-
-  const fetchSettings = async () => {
-    setLoading(true)
-    try {
-      const cm = await getSettingsConfigMap()
-      const next = fromConfigMapData(cm?.data as any)
-      setForm(next ?? DEFAULTS)
-      setInitial(next ?? DEFAULTS)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchSettings()
-  }, [])
-
-  const show = useCallback(
-    (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') =>
-      setNotification({ open: true, message, severity }),
-    []
-  )
-
-  const validate = useCallback((state: SettingsForm) => {
+  const buildErrors = useCallback((state: SettingsForm) => {
     const e: Record<string, string> = {}
 
-    // CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: integer >=1 && <=20
     const cb = state.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD
     if (!Number.isInteger(cb) || cb < 1 || cb > 20) {
       e.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD = 'Enter an integer between 1 and 20 (inclusive).'
     }
 
-    // PERIODIC_SYNC_INTERVAL: Go duration string and >= 5m
     const intervalStr = (state.PERIODIC_SYNC_INTERVAL ?? '').trim()
     const intervalError = parseInterval(intervalStr)
     if (intervalError) {
       e.PERIODIC_SYNC_INTERVAL = intervalError
     }
 
-    // DEFAULT_MIGRATION_METHOD: enum hot|cold
     if (state.DEFAULT_MIGRATION_METHOD !== 'hot' && state.DEFAULT_MIGRATION_METHOD !== 'cold') {
       e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'."
     }
 
-    // Integer fields with >= 1 constraint
     const requiredAtLeastOne: Array<keyof SettingsForm> = [
       'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
       'VM_ACTIVE_WAIT_RETRY_LIMIT',
@@ -350,13 +555,11 @@ export default function GlobalSettingsPage() {
       }
     })
 
-    // VCENTER_LOGIN_RETRY_LIMIT: integer >= 0
     const loginRetry = state.VCENTER_LOGIN_RETRY_LIMIT
     if (!Number.isFinite(loginRetry) || !Number.isInteger(loginRetry) || loginRetry < 0) {
       e.VCENTER_LOGIN_RETRY_LIMIT = 'Enter an integer >= 0.'
     }
 
-    // Boolean flags must be boolean (true/false)
     const bools: Array<keyof SettingsForm> = [
       'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
@@ -369,62 +572,123 @@ export default function GlobalSettingsPage() {
       }
     })
 
-    // DEPLOYMENT_NAME: non-empty, max 63 chars, match regex ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
     const dn = (state.DEPLOYMENT_NAME ?? '').trim()
-    //const DEPLOYMENT_NAME_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
     if (!dn) {
       e.DEPLOYMENT_NAME = 'Required.'
     } else if (dn.length > 63) {
       e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
     }
 
-    // else if (!DEPLOYMENT_NAME_RE.test(dn)) {
-    //   e.DEPLOYMENT_NAME =
-    //     'Must match /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/ (lowercase letters, numbers and hyphens).'
-    // }
+    return e
+  }, [])
 
-    setErrors(e)
-    return Object.keys(e).length === 0
+  const validateForm = useCallback(
+    (state: SettingsForm) => {
+      const nextErrors = buildErrors(state)
+      setErrors(nextErrors)
+      return Object.keys(nextErrors).length === 0
+    },
+    [buildErrors]
+  )
+
+  const updateForm = useCallback(
+    (updater: SettingsForm | FormUpdater) => {
+      setForm((prev) => {
+        const next = typeof updater === 'function' ? (updater as FormUpdater)(prev) : updater
+        setErrors(buildErrors(next))
+        return next
+      })
+    },
+    [buildErrors]
+  )
+
+  const [notification, setNotification] = useState<{
+    open: boolean
+    message: string
+    severity: 'error' | 'info' | 'success' | 'warning'
+  }>({ open: false, message: '', severity: 'info' })
+
+  const fetchSettings = async () => {
+    setLoading(true)
+    try {
+      const cm = await getSettingsConfigMap()
+      const next = fromConfigMapData(cm?.data as any)
+      updateForm(next ?? DEFAULTS)
+      setInitial(next ?? DEFAULTS)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSettings()
+  }, [])
+
+  const show = useCallback(
+    (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') =>
+      setNotification({ open: true, message, severity }),
+    []
+  )
+
+  const tabProps = (value: TabKey) => ({
+    id: `settings-tab-${value}`,
+    'aria-controls': `settings-tabpanel-${value}`
+  })
+
+  const handleTabChange = useCallback((_: SyntheticEvent, value: string | number) => {
+    setActiveTab(value as TabKey)
   }, [])
 
   /* ------------------------
      Event handlers
      -----------------------*/
-  const onText = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-  }, [])
+  const onText = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, value } = e.target
+      updateForm((prev) => ({ ...prev, [name]: value }))
+    },
+    [updateForm]
+  )
 
-  const onNumber = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    const n = value === '' ? ('' as unknown as number) : Number(value)
-    setForm((prev) => ({ ...prev, [name]: n }))
-  }, [])
+  const onNumber = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, value } = e.target
+      const n = value === '' ? ('' as unknown as number) : Number(value)
+      updateForm((prev) => ({ ...prev, [name]: n }))
+    },
+    [updateForm]
+  )
 
-  const onBool = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target
-    setForm((prev) => ({ ...prev, [name]: checked }))
-  }, [])
+  const onBool = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, checked } = e.target
+      updateForm((prev) => ({ ...prev, [name]: checked }))
+    },
+    [updateForm]
+  )
 
-  const onSelect = useCallback((e: SelectChangeEvent<string>) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value as 'hot' | 'cold' }))
-  }, [])
+  const onSelect = useCallback(
+    (e: SelectChangeEvent<string>) => {
+      const { name, value } = e.target
+      updateForm((prev) => ({ ...prev, [name]: value as 'hot' | 'cold' }))
+    },
+    [updateForm]
+  )
 
   const onResetDefaults = useCallback(() => {
-    setForm(DEFAULTS)
+    updateForm(DEFAULTS)
     setErrors({})
-  }, [])
+  }, [updateForm])
 
   const onCancel = useCallback(() => {
-    setForm(initial)
+    updateForm(initial)
     setErrors({})
-  }, [initial])
+  }, [initial, updateForm])
 
   const onSave = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      if (!validate(form)) {
+      if (!validateForm(form)) {
         show('Please fix the validation errors.', 'error')
         return
       }
@@ -445,10 +709,15 @@ export default function GlobalSettingsPage() {
         setSaving(false)
       }
     },
-    [form, validate, show]
+    [form, validateForm, show]
   )
 
   const numberError = useCallback((key: keyof SettingsForm) => errors[String(key)], [errors])
+
+  const tabHasError = useCallback(
+    (tab: TabKey) => TAB_FIELD_KEYS[tab].some((key) => Boolean(errors[String(key)])),
+    [errors]
+  )
 
   if (loading) {
     return (
@@ -474,35 +743,42 @@ export default function GlobalSettingsPage() {
           minHeight: 'calc(96vh - 92px)'
         }}
       >
-        {/* Header */}
-        {/* <Box sx={{ mb: 3 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
-            Global Settings
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Configure global cluster & migration related defaults. Changes apply cluster-wide.
-          </Typography>
-        </Box> */}
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          sx={{ borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
+        >
+          {TAB_ORDER.map((tab) => (
+            <Tab
+              key={tab}
+              value={tab}
+              label={
+                <TabLabel
+                  label={TAB_META[tab].label}
+                  showError={tabHasError(tab)}
+                  icon={TAB_META[tab].icon}
+                />
+              }
+              {...tabProps(tab)}
+            />
+          ))}
+        </Tabs>
 
-        {/* General Settings section (3-columns) */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            General Settings
-          </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          {TAB_META[activeTab].helper}
+        </Typography>
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-              gap: 2
-            }}
-          >
+        <TabPanel current={activeTab} value="general">
+          <SettingsGrid>
             <CustomTextField
               label="Deployment Name"
               name="DEPLOYMENT_NAME"
               value={form.DEPLOYMENT_NAME}
               onChange={onText}
               error={errors.DEPLOYMENT_NAME}
+              tooltip={FIELD_TOOLTIPS.DEPLOYMENT_NAME}
             />
 
             <NumberField
@@ -511,6 +787,7 @@ export default function GlobalSettingsPage() {
               value={form.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
               onChange={onNumber}
               error={numberError('CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD')}
+              tooltip={FIELD_TOOLTIPS.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
             />
 
             <IntervalField
@@ -519,29 +796,20 @@ export default function GlobalSettingsPage() {
               value={form.PERIODIC_SYNC_INTERVAL}
               onChange={onText}
               error={errors.PERIODIC_SYNC_INTERVAL}
+              tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL}
             />
-          </Box>
-        </Box>
+          </SettingsGrid>
+        </TabPanel>
 
-        {/* Retry & Interval Settings */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Retry & Interval Settings
-          </Typography>
-
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-              gap: 2
-            }}
-          >
+        <TabPanel current={activeTab} value="retry">
+          <SettingsGrid>
             <NumberField
               label="VM Active Wait Interval (sec)"
               name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
               value={form.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
               onChange={onNumber}
               error={numberError('VM_ACTIVE_WAIT_INTERVAL_SECONDS')}
+              tooltip={FIELD_TOOLTIPS.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
             />
 
             <NumberField
@@ -550,6 +818,7 @@ export default function GlobalSettingsPage() {
               value={form.VM_ACTIVE_WAIT_RETRY_LIMIT}
               onChange={onNumber}
               error={numberError('VM_ACTIVE_WAIT_RETRY_LIMIT')}
+              tooltip={FIELD_TOOLTIPS.VM_ACTIVE_WAIT_RETRY_LIMIT}
             />
 
             <NumberField
@@ -558,6 +827,7 @@ export default function GlobalSettingsPage() {
               value={form.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
               onChange={onNumber}
               error={numberError('VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS')}
+              tooltip={FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
             />
 
             <NumberField
@@ -566,6 +836,7 @@ export default function GlobalSettingsPage() {
               value={form.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
               onChange={onNumber}
               error={numberError('VOLUME_AVAILABLE_WAIT_RETRY_LIMIT')}
+              tooltip={FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
             />
 
             <NumberField
@@ -574,6 +845,7 @@ export default function GlobalSettingsPage() {
               value={form.VCENTER_LOGIN_RETRY_LIMIT}
               onChange={onNumber}
               error={numberError('VCENTER_LOGIN_RETRY_LIMIT')}
+              tooltip={FIELD_TOOLTIPS.VCENTER_LOGIN_RETRY_LIMIT}
             />
 
             <NumberField
@@ -582,30 +854,20 @@ export default function GlobalSettingsPage() {
               value={form.VCENTER_SCAN_CONCURRENCY_LIMIT}
               onChange={onNumber}
               error={numberError('VCENTER_SCAN_CONCURRENCY_LIMIT')}
+              tooltip={FIELD_TOOLTIPS.VCENTER_SCAN_CONCURRENCY_LIMIT}
             />
-          </Box>
-        </Box>
+          </SettingsGrid>
+        </TabPanel>
 
-        {/* Advanced & Flags */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Advanced & Flags
-          </Typography>
-
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-              gap: 2,
-              alignItems: 'center'
-            }}
-          >
+        <TabPanel current={activeTab} value="advanced">
+          <SettingsGrid>
             <NumberField
               label="OpenStack Creds Requeue After (minutes)"
               name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
               value={form.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
               onChange={onNumber}
               error={numberError('OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES')}
+              tooltip={FIELD_TOOLTIPS.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
             />
 
             <NumberField
@@ -614,58 +876,56 @@ export default function GlobalSettingsPage() {
               value={form.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
               onChange={onNumber}
               error={numberError('VMWARE_CREDS_REQUEUE_AFTER_MINUTES')}
+              tooltip={FIELD_TOOLTIPS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
             />
 
-            <FormControl fullWidth size="small" error={!!errors.DEFAULT_MIGRATION_METHOD}>
-              <Box display="flex" flexDirection="column" gap={0.5}>
-                <Typography variant="body2" fontWeight={500}>
-                  Default Migration Method{' '}
-                </Typography>
-                <Select
-                  name="DEFAULT_MIGRATION_METHOD"
-                  value={form.DEFAULT_MIGRATION_METHOD}
-                  onChange={onSelect}
-                >
-                  <MenuItem value="hot">hot</MenuItem>
-                  <MenuItem value="cold">cold</MenuItem>
-                </Select>
-                {errors.DEFAULT_MIGRATION_METHOD && (
-                  <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
-                )}
-              </Box>
+            <FormControl
+              fullWidth
+              size="small"
+              error={!!errors.DEFAULT_MIGRATION_METHOD}
+              sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+            >
+              <FieldLabel
+                label="Default Migration Method"
+                tooltip={FIELD_TOOLTIPS.DEFAULT_MIGRATION_METHOD}
+              />
+              <Select
+                name="DEFAULT_MIGRATION_METHOD"
+                value={form.DEFAULT_MIGRATION_METHOD}
+                onChange={onSelect}
+              >
+                <MenuItem value="hot">hot</MenuItem>
+                <MenuItem value="cold">cold</MenuItem>
+              </Select>
+              {errors.DEFAULT_MIGRATION_METHOD && (
+                <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
+              )}
             </FormControl>
+          </SettingsGrid>
 
-            {/* Flags - place them across the row to match design */}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', gridColumn: '1 / -1' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Switch
-                  name="CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"
-                  checked={form.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE}
-                  onChange={onBool}
-                />
-                <Typography variant="body2">Cleanup Volumes After Convert Failure</Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Switch
-                  name="POPULATE_VMWARE_MACHINE_FLAVORS"
-                  checked={form.POPULATE_VMWARE_MACHINE_FLAVORS}
-                  onChange={onBool}
-                />
-                <Typography variant="body2">Populate VMware Machine Flavors</Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Switch
-                  name="VALIDATE_RDM_OWNER_VMS"
-                  checked={form.VALIDATE_RDM_OWNER_VMS}
-                  onChange={onBool}
-                />
-                <Typography variant="body2">Validate RDM Owner VMs</Typography>
-              </Box>
-            </Box>
+          <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+            Automation Flags
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fit, minmax(260px, 1fr))' },
+              gap: 2
+            }}
+          >
+            {TOGGLE_FIELDS.map(({ key, label, description }) => (
+              <ToggleField
+                key={key}
+                label={label}
+                name={key}
+                checked={form[key] as boolean}
+                onChange={onBool}
+                tooltip={FIELD_TOOLTIPS[key]}
+                description={description}
+              />
+            ))}
           </Box>
-        </Box>
+        </TabPanel>
 
         <Box sx={{ flexGrow: 1 }} />
 
