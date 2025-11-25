@@ -1288,7 +1288,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 	if vjbNet.CreateSecureHTTPClient() == nil {
 		client = vjbNet.GetClient()
 	} else {
-		return errors.Errorf("Both HTTP and HTTPS failed for %s", port)
+		return errors.Errorf("Both HTTP and HTTPS failed ")
 	}
 	for _, ip := range ips {
 		// Try HTTP first
