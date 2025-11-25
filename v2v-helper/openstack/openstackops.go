@@ -3,9 +3,7 @@
 package openstack
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
@@ -22,6 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
@@ -59,19 +58,16 @@ func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider client: %s", err)
 	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-	if insecure {
-		tlsConfig.InsecureSkipVerify = true
-	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-	}
 
+	vjbNet := netutils.NewVjbNet()
+	if insecure {
+		vjbNet.Insecure = true
+	}
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		providerClient.HTTPClient = *vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
+	}
 	// Connection Retry Block
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = openstack.Authenticate(providerClient, opts)

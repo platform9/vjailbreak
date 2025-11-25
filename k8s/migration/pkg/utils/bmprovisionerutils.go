@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -448,12 +448,15 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get keystone authenticator")
 	}
-	resmgrHTTPClient := http.DefaultClient
+	var resmgrHTTPClient *http.Client
+	vjbNet := netutils.NewVjbNet()
 	if openstackCreds.Insecure {
-		transCfg := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections when needed
-		}
-		resmgrHTTPClient = &http.Client{Transport: transCfg}
+		vjbNet.Insecure = true
+	}
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		resmgrHTTPClient = vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
 	return resmgr.NewResmgrClient(
 		resmgr.Config{
