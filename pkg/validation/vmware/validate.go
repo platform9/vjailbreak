@@ -11,6 +11,8 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
@@ -19,6 +21,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const (
@@ -136,19 +139,18 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 			}
 			// Cached client is no longer valid, remove it
 			vmwareClientMap.Delete(mapKey)
-			c = nil // Will create fresh client below
+			// Will create fresh client in the retry loop
 		}
 	}
 
 	// Exponential retry logic with retry limit from ConfigMap or passed parameter
 	var lastErr error
+	ctx = ensureLogger(ctx)
 	ctxlog := log.FromContext(ctx)
 
 	for attempt := 1; attempt <= retryLimit; attempt++ {
-		// Ensure we have a client for this attempt
-		if c == nil {
-			c = new(vim25.Client)
-		}
+		// Create a new empty client struct for Login to populate
+		c = &vim25.Client{}
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
@@ -169,7 +171,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			ctxlog.Info("Retrying login after delay", "delayMs", delayNum)
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
-			c = nil // Force fresh client on next attempt
+			// Client will be recreated in next iteration
 		}
 	}
 
@@ -229,4 +231,79 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 	vmwareCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 
 	return vmwareCredsInfo, nil
+}
+
+// PostValidationResources holds resources fetched after successful validation
+type PostValidationResources struct {
+	VMInfo     []vjailbreakv1alpha1.VMInfo
+	RDMDiskMap *sync.Map
+}
+
+// FetchResourcesPostValidation fetches VMware resources after successful credential validation
+func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*PostValidationResources, error) {
+	if vmwcreds == nil {
+		return nil, fmt.Errorf("vmwcreds cannot be nil")
+	}
+	if k8sClient == nil {
+		return nil, fmt.Errorf("k8sClient cannot be nil")
+	}
+
+	ctx = ensureLogger(ctx)
+	logger := log.FromContext(ctx)
+
+	scope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
+		Logger:      logger,
+		Client:      k8sClient,
+		VMwareCreds: vmwcreds,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create VMware scope")
+	}
+	// Note: Not calling defer scope.Close() here as we don't want to update the CR
+	// The CR will be updated by the caller after all operations complete
+
+	logger.Info("Creating VMware Clusters and Hosts")
+	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create VMware clusters and hosts")
+	}
+
+	logger.Info("Fetching all VMs")
+	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch VMs")
+	}
+
+	logger.Info("Syncing RDM Disks")
+	err = utils.CreateOrUpdateRDMDisks(ctx, k8sClient, vmwcreds, rdmDiskMap)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create/update RDM disks")
+	}
+
+	logger.Info("Deleting Stale Machines")
+	err = utils.DeleteStaleVMwareMachines(ctx, k8sClient, vmwcreds, vminfo)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to delete stale VMware machines")
+	}
+
+	logger.Info("Deleting Stale Clusters and Hosts")
+	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to delete stale clusters and hosts")
+	}
+
+	return &PostValidationResources{
+		VMInfo:     vminfo,
+		RDMDiskMap: rdmDiskMap,
+	}, nil
+}
+
+// ensureLogger ensures the context has a valid logger to prevent panics in shared packages
+func ensureLogger(ctx context.Context) context.Context {
+	l := log.FromContext(ctx)
+	if l.GetSink() == nil {
+		// Inject a dev logger if none exists
+		return log.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
+	}
+	return ctx
 }

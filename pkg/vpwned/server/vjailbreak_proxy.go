@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	gophercloud "github.com/gophercloud/gophercloud"
 	openstack "github.com/gophercloud/gophercloud/openstack"
@@ -23,6 +24,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlLog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 type vjailbreakProxy struct {
@@ -239,6 +242,10 @@ func CreateInClusterClient() (client.Client, error) {
 }
 
 func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
+	zapLogger := zap.New(zap.UseDevMode(true))
+	ctx = ctrlLog.IntoContext(ctx, zapLogger)
+	reqLogger := ctrlLog.FromContext(ctx)
+
 	kind := in.GetKind()
 	name := in.GetName()
 	namespace := in.GetNamespace()
@@ -261,6 +268,49 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
 			log.Printf("VMware validation succeeded for %s", name)
+
+			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+				return nil, fmt.Errorf("failed to update status: %w", err)
+			}
+			
+			// Fetch resources in background to avoid timeout
+			log.Printf("Triggering background resource fetch for %s", name)
+			reqLogger.Info("Triggering background resource fetch", "name", name)
+		
+			// Capture name and namespace for background fetch
+			credName := vmwcreds.Name
+			credNamespace := vmwcreds.Namespace
+		
+			go func() {
+				// Use a new context with longer timeout for background operation
+				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+			
+				// Inject logger into background context
+				bgCtx = ctrlLog.IntoContext(bgCtx, reqLogger)
+			
+				// Re-fetch VMwareCreds to get complete spec in background context
+				freshVMCreds := &vjailbreakv1alpha1.VMwareCreds{}
+				if err := p.K8sClient.Get(bgCtx, k8stypes.NamespacedName{
+					Name:      credName,
+					Namespace: credNamespace,
+				}, freshVMCreds); err != nil {
+					log.Printf("[Background] Failed to fetch VMwareCreds %s: %v", credName, err)
+					reqLogger.Error(err, "Failed to fetch VMwareCreds in background", "name", credName)
+					return
+				}
+			
+				log.Printf("[Background] Fetching VMware resources for %s", credName)
+				resources, err := vmwarevalidation.FetchResourcesPostValidation(bgCtx, p.K8sClient, freshVMCreds)
+				if err != nil {
+					log.Printf("[Background] Warning: Failed to fetch VMware resources for %s: %v", credName, err)
+					reqLogger.Error(err, "Background fetch failed", "name", credName)
+				} else {
+					log.Printf("[Background] Successfully fetched %d VMs for %s", len(resources.VMInfo), credName)
+					reqLogger.Info("Background fetch completed", "name", credName, "vmCount", len(resources.VMInfo))
+				}
+			}()
+
 		} else {
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
@@ -289,6 +339,33 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			oscreds.Status.OpenStackValidationStatus = "Succeeded"
 			oscreds.Status.OpenStackValidationMessage = result.Message
 			log.Printf("OpenStack validation succeeded for %s", name)
+
+			// Fetch resources post-validation
+			log.Printf("Fetching OpenStack resources for %s", name)
+			resources, err := openstackvalidation.FetchResourcesPostValidation(ctx, p.K8sClient, oscreds)
+			if err != nil {
+				log.Printf("Warning: Failed to fetch OpenStack resources for %s: %v", name, err)
+				reqLogger.Error(err, "Failed to fetch OpenStack resources", "name", name)
+			} else {
+				// Update spec with flavors (no type assertion needed - already []flavors.Flavor)
+				oscreds.Spec.Flavors = resources.Flavors
+				
+				// Update the spec
+				if err := p.K8sClient.Update(ctx, oscreds); err != nil {
+					log.Printf("Warning: Failed to update OpenstackCreds spec: %v", err)
+					reqLogger.Error(err, "Failed to update OpenstackCreds spec", "name", name)
+				} else {
+					reqLogger.Info("Updated OpenstackCreds spec with flavors", "name", name, "flavorCount", len(resources.Flavors))
+				}
+
+				// Update status with OpenStack info
+				if resources.OpenstackInfo != nil {
+					oscreds.Status.Openstack = *resources.OpenstackInfo
+				}
+				
+				log.Printf("Successfully fetched %d flavors for %s", len(resources.Flavors), name)
+				reqLogger.Info("Successfully fetched OpenStack resources", "name", name, "flavorCount", len(resources.Flavors))
+			}
 		} else {
 			oscreds.Status.OpenStackValidationStatus = "Failed"
 			oscreds.Status.OpenStackValidationMessage = result.Message
