@@ -294,6 +294,67 @@ func TestVjbNet_NoProxyBypassesProxy(t *testing.T) {
 	}
 }
 
+func TestVjbNet_NoProxy_CommaSeparatedAndCIDR(t *testing.T) {
+	n := NewVjbNet()
+
+	httpProxy := "http-proxy.example:8080"
+	noProxy := "example.com,10.0.0.0/8"
+
+	// Configure HTTP proxy and comma-separated NO_PROXY including domain and CIDR
+	n.SetHTTPProxy(httpProxy)
+	n.SetNoProxy(noProxy)
+	n.SetUseProxyFromEnv(false)
+
+	if err := n.CreateHTTPClient(); err != nil {
+		t.Fatalf("CreateHTTPClient returned error: %v", err)
+	}
+	client := n.GetClient()
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client.Transport is not *http.Transport")
+	}
+	if transport.Proxy == nil {
+		t.Fatalf("expected non-nil Proxy function when HTTPProxy and NoProxy are set")
+	}
+
+	tests := []struct {
+		name        string
+		rawURL      string
+		wantNoProxy bool
+	}{
+		{"no_proxy_exact_domain", "http://example.com", true},
+		{"no_proxy_subdomain", "http://sub.example.com", true},
+		{"no_proxy_cidr_match", "http://10.1.2.3", true},
+		{"use_proxy_other_domain", "http://other.com", false},
+		{"use_proxy_other_ip", "http://192.168.1.1", false},
+	}
+
+	for _, ttcase := range tests {
+		t.Run(ttcase.name, func(t *testing.T) {
+			u, err := url.Parse(ttcase.rawURL)
+			if err != nil {
+				t.Fatalf("failed to parse URL %q: %v", ttcase.rawURL, err)
+			}
+			proxyURL, err := transport.Proxy(&http.Request{URL: u})
+			if err != nil {
+				t.Fatalf("Proxy callback returned error: %v", err)
+			}
+			if ttcase.wantNoProxy {
+				if proxyURL != nil {
+					t.Fatalf("expected nil proxy for %s, got %v", ttcase.rawURL, proxyURL)
+				}
+			} else {
+				if proxyURL == nil {
+					t.Fatalf("expected non-nil proxy for %s", ttcase.rawURL)
+				}
+				if proxyURL.Scheme != "http" || proxyURL.Host != httpProxy {
+					t.Fatalf("proxy for %s = %s://%s, want http://%s", ttcase.rawURL, proxyURL.Scheme, proxyURL.Host, httpProxy)
+				}
+			}
+		})
+	}
+}
+
 func TestVjbNet_GetClient_Default(t *testing.T) {
 	n := NewVjbNet()
 

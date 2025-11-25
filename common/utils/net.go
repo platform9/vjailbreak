@@ -31,26 +31,36 @@ func (v *VjbNet) getNetTransport(tlsConfig *tls.Config) *http.Transport {
 	if v.Insecure {
 		transport.TLSClientConfig.InsecureSkipVerify = true
 	}
-	if v.HTTPProxy != "" {
-		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			return v.proxy4URL(req.URL)
+	// Configure proxy behavior using httpproxy.Config, which correctly
+	// handles HTTP(S)_PROXY and NO_PROXY semantics including lists and
+	// domain / CIDR matching.
+	if v.UseProxyFromEnv || v.HTTPProxy != "" || v.HTTPSProxy != "" || v.NoProxy != "" {
+		if v.proxyCfg == nil {
+			v.proxyCfg = httpproxy.FromEnvironment()
 		}
-	}
-	if v.HTTPSProxy != "" {
-		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			return v.proxy4URL(req.URL)
+		if v.HTTPProxy != "" {
+			v.proxyCfg.HTTPProxy = v.HTTPProxy
 		}
-	}
-	if v.NoProxy != "" {
+		if v.HTTPSProxy != "" {
+			v.proxyCfg.HTTPSProxy = v.HTTPSProxy
+		}
+		if v.NoProxy != "" {
+			v.proxyCfg.NoProxy = v.NoProxy
+		}
+
 		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			// Skip proxy for no-proxy hosts
-			if v.proxyCfg != nil && v.proxyCfg.NoProxy != "" {
-				// Simple check - in practice you'd want more sophisticated matching
-				if req.URL.Host == v.NoProxy {
-					return nil, nil // No proxy
-				}
+			proxyURL, err := v.proxyCfg.ProxyFunc()(req.URL)
+			if err != nil {
+				return nil, err
 			}
-			return v.proxy4URL(req.URL)
+			// Preserve existing logging behavior.
+			if proxyURL != nil {
+				fmt.Printf("Proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
+					v.proxyCfg.HTTPProxy, v.proxyCfg.HTTPSProxy, v.proxyCfg.NoProxy)
+				fmt.Printf("VjbNet proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
+					v.HTTPProxy, v.HTTPSProxy, v.NoProxy)
+			}
+			return proxyURL, nil
 		}
 	}
 	return transport
@@ -128,8 +138,6 @@ func (v *VjbNet) GetClient() *http.Client {
 }
 
 func (v *VjbNet) proxy4URL(reqURL *url.URL) (*url.URL, error) {
-	var proxy *url.URL
-
 	if v.proxyCfg == nil {
 		v.proxyCfg = httpproxy.FromEnvironment()
 	}
@@ -145,18 +153,25 @@ func (v *VjbNet) proxy4URL(reqURL *url.URL) (*url.URL, error) {
 	if v.NoProxy != "" {
 		v.proxyCfg.NoProxy = v.NoProxy
 	}
-	// Use the proxy from environment if available and not overridden
-	if v.proxyCfg.HTTPProxy != "" && reqURL.Scheme == "http" {
-		proxy = &url.URL{Scheme: "http", Host: v.proxyCfg.HTTPProxy}
+	// Delegate proxy decision to httpproxy's ProxyFunc for correct
+	// NO_PROXY and scheme handling.
+	proxyURL, err := v.proxyCfg.ProxyFunc()(reqURL)
+	if err != nil {
+		return nil, err
 	}
-	if v.proxyCfg.HTTPSProxy != "" && reqURL.Scheme == "https" {
-		proxy = &url.URL{Scheme: "https", Host: v.proxyCfg.HTTPSProxy}
+	// Preserve historical behavior: for HTTPS requests, ensure the proxy URL
+	// uses the https scheme, even though httpproxy.ProxyFunc typically returns
+	// an http scheme (CONNECT over HTTP).
+	if proxyURL != nil && reqURL.Scheme == "https" && proxyURL.Scheme == "http" {
+		proxyURL.Scheme = "https"
 	}
-	fmt.Printf("Proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
-		v.proxyCfg.HTTPProxy, v.proxyCfg.HTTPSProxy, v.proxyCfg.NoProxy)
-	fmt.Printf("VjbNet proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
-		v.HTTPProxy, v.HTTPSProxy, v.NoProxy)
-	return proxy, nil
+	if proxyURL != nil {
+		fmt.Printf("Proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
+			v.proxyCfg.HTTPProxy, v.proxyCfg.HTTPSProxy, v.proxyCfg.NoProxy)
+		fmt.Printf("VjbNet proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
+			v.HTTPProxy, v.HTTPSProxy, v.NoProxy)
+	}
+	return proxyURL, nil
 
 }
 
