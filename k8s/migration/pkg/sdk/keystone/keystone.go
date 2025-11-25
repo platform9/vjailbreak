@@ -5,7 +5,6 @@ package keystone
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	"go.uber.org/zap"
 )
 
@@ -284,24 +284,24 @@ type HTTPClient struct {
 
 // NewClient creates a new HTTPClient instance for interacting with the Keystone API
 func NewClient(endpoint string, insecure bool) *HTTPClient {
-	client := http.DefaultClient
-
+	client := netutils.NewVjbNet()
+	returnClient := &HTTPClient{}
 	// Turn off cert verification if running in airgapped mode
 	pmkEnv := os.Getenv("PMK_ENVIRONMENT")
 	if pmkEnv == "airgap" || insecure {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
-		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections for airgap environments
-			Proxy:           http.ProxyFromEnvironment,
-		}
-		client = &http.Client{Transport: transport}
+		client.Insecure = true
+	}
+	if client.CreateSecureHTTPClient() == nil {
+		returnClient.httpClient = client.GetClient()
+	} else {
+		zap.L().Error("failed to create secure HTTP client")
+		return nil
 	}
 
-	return &HTTPClient{
-		endpoint:   strings.TrimRight(endpoint, "/"),
-		httpClient: client,
-		log:        zap.L(),
-	}
+	returnClient.endpoint = strings.TrimRight(endpoint, "/")
+	returnClient.log = zap.L()
+	return returnClient
 }
 
 // Auth authenticates the user with the provided credentials.
