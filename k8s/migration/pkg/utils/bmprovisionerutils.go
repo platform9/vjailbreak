@@ -452,6 +452,7 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	if openstackCreds.Insecure {
 		transCfg := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections when needed
+			Proxy:           http.ProxyFromEnvironment,
 		}
 		resmgrHTTPClient = &http.Client{Transport: transCfg}
 	}

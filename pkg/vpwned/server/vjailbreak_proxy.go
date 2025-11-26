@@ -13,9 +13,9 @@ import (
 	openstack "github.com/gophercloud/gophercloud/openstack"
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -204,6 +204,7 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 	}
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
+		Proxy:           http.ProxyFromEnvironment,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
