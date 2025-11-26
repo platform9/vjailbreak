@@ -1,53 +1,49 @@
-import {
-  Box,
-  FormControl,
-  FormHelperText,
-} from "@mui/material";
-import CredentialSelector from "./CredentialSelector";
+import { Box, FormControl, FormHelperText } from '@mui/material'
+import CredentialSelector from './CredentialSelector'
 
 export interface OpenstackCredential {
   metadata: {
-    name: string;
-    namespace?: string;
-  };
+    name: string
+    namespace?: string
+  }
   spec: {
     // Support for both direct credentials and secretRef
-    OS_AUTH_URL?: string;
-    OS_DOMAIN_NAME?: string;
-    OS_USERNAME?: string;
-    OS_PASSWORD?: string;
-    OS_REGION_NAME?: string;
-    OS_TENANT_NAME?: string;
+    OS_AUTH_URL?: string
+    OS_DOMAIN_NAME?: string
+    OS_USERNAME?: string
+    OS_PASSWORD?: string
+    OS_REGION_NAME?: string
+    OS_TENANT_NAME?: string
     secretRef?: {
-      name: string;
-    };
-  };
+      name: string
+    }
+  }
   status?: {
-    openstackValidationStatus?: string;
-    openstackValidationMessage?: string;
-  };
+    openstackValidationStatus?: string
+    openstackValidationMessage?: string
+  }
 }
 
 export interface OpenstackCredentialsFormProps {
-  credentialsList?: OpenstackCredential[];
-  loadingCredentials?: boolean;
-  error?: string;
-  onCredentialSelect?: (credId: string | null) => void;
-  selectedCredential?: string | null;
-  showCredentialNameField?: boolean;
-  showCredentialSelector?: boolean;
-  fullWidth?: boolean;
-  size?: "small" | "medium";
+  credentialsList?: OpenstackCredential[]
+  loadingCredentials?: boolean
+  error?: string
+  onCredentialSelect?: (credId: string | null) => void
+  selectedCredential?: string | null
+  showCredentialNameField?: boolean
+  showCredentialSelector?: boolean
+  fullWidth?: boolean
+  size?: 'small' | 'medium'
 }
 
 export default function OpenstackCredentialsForm({
   credentialsList = [],
   loadingCredentials = false,
   error,
-  size = "small",
+  size = 'small',
   onCredentialSelect,
   selectedCredential = null,
-  showCredentialSelector = true,
+  showCredentialSelector = true
 }: OpenstackCredentialsFormProps) {
   // Format credentials for the selector
   const credentialOptions = credentialsList.map((cred) => ({
@@ -56,9 +52,9 @@ export default function OpenstackCredentialsForm({
     metadata: cred.metadata,
     status: {
       validationStatus: cred.status?.openstackValidationStatus,
-      validationMessage: cred.status?.openstackValidationMessage,
-    },
-  }));
+      validationMessage: cred.status?.openstackValidationMessage
+    }
+  }))
 
   return (
     <div>
@@ -68,7 +64,7 @@ export default function OpenstackCredentialsForm({
             placeholder="Select OpenStack credentials"
             options={credentialOptions}
             value={selectedCredential}
-            onChange={onCredentialSelect || (() => { })}
+            onChange={onCredentialSelect || (() => {})}
             loading={loadingCredentials}
             size={size}
             emptyMessage="No OpenStack credentials found. Please use the credential drawer to create new ones."
@@ -82,5 +78,5 @@ export default function OpenstackCredentialsForm({
         </FormControl>
       )}
     </div>
-  );
+  )
 }

@@ -1,50 +1,36 @@
-import axios from "../axios"
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import { GetMigrationPlansList, MigrationPlan } from "./model"
+import axios from '../axios'
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { GetMigrationPlansList, MigrationPlan } from './model'
 
-export const getMigrationPlansList = async (
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getMigrationPlansList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans`
   const response = await axios.get<GetMigrationPlansList>({
-    endpoint,
+    endpoint
   })
   return response?.items
 }
 
-export const getMigrationPlan = async (
-  planName,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getMigrationPlan = async (planName, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
   const response = await axios.get<MigrationPlan>({
-    endpoint,
+    endpoint
   })
   return response
 }
 
-export const postMigrationPlan = async (
-  body,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const postMigrationPlan = async (body, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans`
   const response = await axios.post<MigrationPlan>({
     endpoint,
-    data: body,
+    data: body
   })
   return response
 }
 
-export const deleteMigrationPlan = async (
-  planName,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const deleteMigrationPlan = async (planName, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans/${planName}`
   const response = await axios.del<MigrationPlan>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -60,9 +46,9 @@ export const patchMigrationPlan = async (
     data: body,
     config: {
       headers: {
-        "Content-Type": "application/merge-patch+json",
-      },
-    },
+        'Content-Type': 'application/merge-patch+json'
+      }
+    }
   })
   return response
 }
@@ -72,7 +58,7 @@ export const getMigrationPlans = async (
 ): Promise<MigrationPlan[]> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrationplans`
   const response = await axios.get<{ items: MigrationPlan[] }>({
-    endpoint,
+    endpoint
   })
   return response?.items || []
 }

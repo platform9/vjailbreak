@@ -1,16 +1,13 @@
-import axios from "../axios"
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import { GetESXIMigrationsList, ESXIMigration } from "./model"
+import axios from '../axios'
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { GetESXIMigrationsList, ESXIMigration } from './model'
 
 export const getESXIMigrations = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<ESXIMigration[]> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esximigrations`
   const data = await axios.get<GetESXIMigrationsList>({
-    endpoint,
+    endpoint
   })
   return data?.items
 }
@@ -21,7 +18,7 @@ export const getESXIMigration = async (
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esximigrations/${esxiMigrationName}`
   const response = await axios.get<ESXIMigration>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -32,7 +29,7 @@ export const deleteESXIMigration = async (
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esximigrations/${esxiMigrationName}`
   const response = await axios.del<ESXIMigration>({
-    endpoint,
+    endpoint
   })
   return response
 }

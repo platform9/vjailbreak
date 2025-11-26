@@ -1,16 +1,12 @@
-import {
-  useQuery,
-  UseQueryOptions,
-  UseQueryResult,
-} from "@tanstack/react-query"
-import { getBMConfig, getBMConfigList } from "../../api/bmconfig/bmconfig"
-import { BMConfig } from "../../api/bmconfig/model"
-import { VJAILBREAK_DEFAULT_NAMESPACE } from "../../api/constants"
+import { useQuery, UseQueryOptions, UseQueryResult } from '@tanstack/react-query'
+import { getBMConfig, getBMConfigList } from '../../api/bmconfig/bmconfig'
+import { BMConfig } from '../../api/bmconfig/model'
+import { VJAILBREAK_DEFAULT_NAMESPACE } from '../../api/constants'
 
-export const BMCONFIG_QUERY_KEY = ["bmconfigs"]
+export const BMCONFIG_QUERY_KEY = ['bmconfigs']
 
-type ListOptions = Omit<UseQueryOptions<BMConfig[]>, "queryKey" | "queryFn">
-type DetailOptions = Omit<UseQueryOptions<BMConfig>, "queryKey" | "queryFn">
+type ListOptions = Omit<UseQueryOptions<BMConfig[]>, 'queryKey' | 'queryFn'>
+type DetailOptions = Omit<UseQueryOptions<BMConfig>, 'queryKey' | 'queryFn'>
 
 /**
  * Hook to fetch list of BMConfigs
@@ -24,7 +20,7 @@ export const useBMConfigsQuery = (
     queryFn: async () => getBMConfigList(namespace),
     staleTime: Infinity,
     refetchOnWindowFocus: true,
-    ...options,
+    ...options
   })
 }
 
@@ -37,11 +33,11 @@ export const useBMConfigQuery = (
   options: DetailOptions = {}
 ): UseQueryResult<BMConfig> => {
   return useQuery<BMConfig>({
-    queryKey: [...BMCONFIG_QUERY_KEY, "detail", name, namespace],
+    queryKey: [...BMCONFIG_QUERY_KEY, 'detail', name, namespace],
     queryFn: async () => getBMConfig(name, namespace),
     staleTime: Infinity,
     refetchOnWindowFocus: true,
     enabled: !!name,
-    ...options,
+    ...options
   })
 }
