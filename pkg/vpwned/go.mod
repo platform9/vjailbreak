@@ -41,6 +41,7 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
@@ -117,3 +118,5 @@ replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
 replace github.com/platform9/vjailbreak/pkg/validation => ../validation
+
+replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration

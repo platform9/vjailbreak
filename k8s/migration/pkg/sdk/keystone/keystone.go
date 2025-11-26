@@ -292,6 +292,7 @@ func NewClient(endpoint string, insecure bool) *HTTPClient {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections for airgap environments
+			Proxy:           http.ProxyFromEnvironment,
 		}
 		client = &http.Client{Transport: transport}
 	}
