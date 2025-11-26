@@ -11,6 +11,8 @@ import (
 	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
 	netutils "github.com/platform9/vjailbreak/common/utils"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
