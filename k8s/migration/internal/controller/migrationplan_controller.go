@@ -400,8 +400,38 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	if migrationplan.Status.MigrationStatus == corev1.PodFailed {
-		r.ctxlog.Info("Migration already failed, skipping job reconciliation", "migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
-		return ctrl.Result{}, nil
+		// Check if any Migration objects exist for this MigrationPlan
+		migrationList := &vjailbreakv1alpha1.MigrationList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(migrationplan.Namespace),
+			client.MatchingLabels{"migrationplan": migrationplan.Name},
+		}
+		if err := r.List(ctx, migrationList, listOpts...); err != nil {
+			r.ctxlog.Error(err, "Failed to list migrations for retry check", "migrationplan", migrationplan.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for retry check")
+		}
+
+		if len(migrationList.Items) == 0 {
+			// No Migration objects exist - this could be either:
+			// Checking the failure message to determine which scenario this is
+			// If migrationplan validation failure - should NOT retry
+			// If user-initiated retry - should retry
+			if strings.Contains(migrationplan.Status.MigrationMessage, "validation failed") {
+				r.ctxlog.Info("Migration plan validation failed, skipping retry", 
+					"migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
+				return ctrl.Result{}, nil
+			}
+			r.ctxlog.Info("No Migration objects found for failed MigrationPlan, resetting status for retry", "migrationplan", migrationplan.Name)
+			migrationplan.Status.MigrationStatus = ""
+			migrationplan.Status.MigrationMessage = ""
+			if err := r.Status().Update(ctx, migrationplan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to reset migration plan status for retry")
+			}
+		} else {
+			// Migration objects still exist, keep the failed status
+			r.ctxlog.Info("Migration already failed, skipping job reconciliation", "migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
