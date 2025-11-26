@@ -416,8 +416,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			// Checking the failure message to determine which scenario this is
 			// If migrationplan validation failure - should NOT retry
 			// If user-initiated retry - should retry
-			if strings.Contains(migrationplan.Status.MigrationMessage, "validation failed") {
-				r.ctxlog.Info("Migration plan validation failed, skipping retry", 
+			if strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
+				r.ctxlog.Info("Migration plan validation failed, skipping retry",
 					"migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
 				return ctrl.Result{}, nil
 			}
