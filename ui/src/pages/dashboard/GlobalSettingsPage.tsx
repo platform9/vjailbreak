@@ -160,13 +160,13 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     icon: <SettingsOutlinedIcon fontSize="small" />
   },
   retry: {
-    label: 'Retry & Intervals',
+    label: 'Intervals',
     helper:
       'Control wait intervals, retry tolerances, and concurrency to balance speed vs. safety.',
     icon: <HistoryToggleOffOutlinedIcon fontSize="small" />
   },
   advanced: {
-    label: 'Advanced & Flags',
+    label: 'Advanced',
     helper: 'Tune integration defaults and automation flags for OpenStack and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
   }
@@ -221,22 +221,21 @@ const TabPanel = ({
 
 const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD:
-    'Upper bound on incremental copy passes before forcing a full sync.',
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 'Number of iterations to copy changed blocks.',
   PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Delay between retries while waiting for a VM to become active.',
-  VM_ACTIVE_WAIT_RETRY_LIMIT: 'Maximum number of attempts to check VM activity before failing.',
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Interval to wait for VM to become active (in seconds).',
+  VM_ACTIVE_WAIT_RETRY_LIMIT: 'Number of retries to wait for VM to become active.',
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS:
     'Delay between retries while tracking volume availability.',
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: 'Maximum attempts to wait for volumes before failing the job.',
   VCENTER_LOGIN_RETRY_LIMIT:
     'Number of login retries before the workflow surfaces an authentication error.',
-  VCENTER_SCAN_CONCURRENCY_LIMIT: 'Parallel vCenter inventory scans allowed at once.',
+  VCENTER_SCAN_CONCURRENCY_LIMIT: 'Maximum number of vCenter VMs to scan concurrently.',
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES:
     'Time before failed OpenStack credentials are re-queued for another attempt.',
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 'Time before VMware credential rotations are retried.',
   DEFAULT_MIGRATION_METHOD:
-    'Preferred migration strategy applied when creating new conversion plans.',
+    'Default method for VM migration (placeholder for future releases, not currently used).',
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE:
     'Automatically delete intermediate volumes when a conversion fails.',
   POPULATE_VMWARE_MACHINE_FLAVORS:
@@ -254,7 +253,7 @@ type ToggleKey = Extract<
 const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string }> = [
   {
     key: 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
-    label: 'Cleanup Volumes After Convert Failure',
+    label: 'Cleanup Volumes After Conversion Failure',
     description: 'Remove orphaned storage artifacts after a failed conversion run.'
   },
   {
@@ -264,7 +263,7 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
   },
   {
     key: 'VALIDATE_RDM_OWNER_VMS',
-    label: 'Validate RDM Owner VMs',
+    label: 'Validate MigrationPlan for RDM VMs',
     description: 'Adds guard rails to ensure RDM devices still belong to the reported VM owner.'
   }
 ]
@@ -804,7 +803,7 @@ export default function GlobalSettingsPage() {
         <TabPanel current={activeTab} value="retry">
           <SettingsGrid>
             <NumberField
-              label="VM Active Wait Interval (sec)"
+              label="VM Active Wait Interval (seconds)"
               name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
               value={form.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
               onChange={onNumber}
@@ -822,7 +821,7 @@ export default function GlobalSettingsPage() {
             />
 
             <NumberField
-              label="Volume Wait Interval (sec)"
+              label="Volume Wait Interval (seconds)"
               name="VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"
               value={form.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
               onChange={onNumber}
