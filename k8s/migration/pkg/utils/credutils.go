@@ -408,6 +408,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	}
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
+		Proxy:           http.ProxyFromEnvironment,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
