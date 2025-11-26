@@ -364,7 +364,7 @@ const parseInterval = (val: string): string | undefined => {
   const match = trimmedVal.match(regex)
 
   if (!match || match[0] === '') {
-    return 'Use duration format like 30s, 5m, 1h, 1h30m, 5m30s (units: h,m,s).'
+    return 'Use duration format like 5m, 1h30m, 5m30s (units: h,m,s).'
   }
 
   const hours = match[1] ? Number(match[1]) : 0
@@ -473,7 +473,7 @@ const IntervalField = ({
       value={value}
       onChange={onChange}
       error={!!error}
-      helperText={error || helper || 'e.g. 30s, 5m, 1h30m'}
+      helperText={error || helper || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
     />
   </Box>
 )
