@@ -51,4 +51,15 @@ const Card = styled(Box)(({ theme }) => ({
 2. Replace bespoke switch cards with `ToggleField` for automation/feature flags.
 3. Centralize future primitives (Buttons, Drawers, Chips, Status indicators) under `src/design-system/components`.
 
+## Storybook Usage
+
+Use Storybook to review and document design-system primitives before integrating them into product flows.
+
+```bash
+yarn storybook          # Starts Storybook locally on http://localhost:6006
+yarn storybook:build    # Generates the static Storybook bundle for CI/deploy
+```
+
+The Storybook setup automatically wraps stories with `ThemeProvider`, `CssBaseline`, and a centered container so light/dark mode parity is visible by default. Place new component stories in `src/design-system/components/*.stories.tsx`.
+
 Adhering to these guidelines ensures the UI scales with minimal drift and accelerates future refinements.
