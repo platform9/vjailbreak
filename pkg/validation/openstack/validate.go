@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -17,6 +19,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const (
@@ -32,6 +36,8 @@ type ValidationResult struct {
 
 // Validate performs complete OpenStack credential validation
 func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ValidationResult {
+	// Ensure logger exists
+	ctx = ensureLogger(ctx)
 	// Get credentials from secret
 	openstackCredential, err := getCredentialsFromSecret(ctx, k8sClient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
@@ -183,4 +189,66 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 			"Please check if the provided credentials have compute:get_server permission", err)
 	}
 	return true, nil
+}
+
+// PostValidationResources holds resources fetched after successful validation
+type PostValidationResources struct {
+	Flavors       []flavors.Flavor
+	OpenstackInfo *vjailbreakv1alpha1.OpenstackInfo
+	ProjectName   string
+}
+
+// FetchResourcesPostValidation fetches OpenStack resources after successful credential validation
+func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*PostValidationResources, error) {
+	if openstackcreds == nil {
+		return nil, fmt.Errorf("openstackcreds cannot be nil")
+	}
+	
+	ctx = ensureLogger(ctx)
+
+	log.Printf("Updating Master Node Image ID")
+	err := utils.UpdateMasterNodeImageID(ctx, k8sClient, false)
+	if err != nil {
+		log.Printf("Warning: Failed to update master node image ID: %v", err)
+	}
+
+	log.Printf("Creating Dummy PCD Cluster if needed")
+	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return nil, errors.Wrap(err, "failed to create dummy PCD cluster")
+		}
+		log.Printf("Dummy PCD Cluster already exists, continuing")
+	}
+
+	log.Printf("Listing Flavors")
+	flavorsList, err := utils.ListAllFlavors(ctx, k8sClient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list flavors")
+	}
+
+	log.Printf("Getting OpenStack Info")
+	openstackInfo, err := utils.GetOpenstackInfo(ctx, k8sClient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenStack info")
+	}
+
+	openstackCredential, err := getCredentialsFromSecret(ctx, k8sClient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get credentials for project name")
+	}
+
+	return &PostValidationResources{
+		Flavors:       flavorsList,
+		OpenstackInfo: openstackInfo,
+		ProjectName:   openstackCredential.TenantName,
+	}, nil
+}
+
+func ensureLogger(ctx context.Context) context.Context {
+	l := ctrllog.FromContext(ctx)
+	if l.GetSink() == nil {
+		return ctrllog.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
+	}
+	return ctx
 }
