@@ -3799,6 +3799,9 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
+      - envFrom:
+        - configMapRef:
+            name: pf9-env
       - image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
         imagePullPolicy: IfNotPresent
         name: vpwned
@@ -3808,11 +3811,13 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+
         volumeMounts:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
