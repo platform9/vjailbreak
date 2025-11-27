@@ -1,23 +1,23 @@
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4 } from 'uuid'
 
 export const createMigrationTemplateJson = (params) => {
   const {
     name,
-    networkMapping = "",
-    storageMapping = "",
+    networkMapping = '',
+    storageMapping = '',
     virtioWinDriver,
     osFamily,
     datacenter,
     vmwareRef,
     openstackRef,
     targetPCDClusterName,
-    useFlavorless = false,
+    useFlavorless = false
   } = params || {}
   return {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "MigrationTemplate",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'MigrationTemplate',
     metadata: {
-      name: name || uuidv4(),
+      name: name || uuidv4()
     },
     spec: {
       networkMapping: networkMapping,
@@ -26,15 +26,15 @@ export const createMigrationTemplateJson = (params) => {
       osFamily: osFamily,
       source: {
         datacenter: datacenter,
-        vmwareRef: vmwareRef,
+        vmwareRef: vmwareRef
       },
       destination: {
-        openstackRef: openstackRef,
+        openstackRef: openstackRef
       },
       ...(targetPCDClusterName && {
-        targetPCDClusterName: targetPCDClusterName,
+        targetPCDClusterName: targetPCDClusterName
       }),
-      useFlavorless: useFlavorless,
-    },
+      useFlavorless: useFlavorless
+    }
   }
 }

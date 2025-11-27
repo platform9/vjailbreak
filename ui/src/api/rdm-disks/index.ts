@@ -1,2 +1,2 @@
-export * from "./model"
-export * from "./rdmDisks"
+export * from './model'
+export * from './rdmDisks'

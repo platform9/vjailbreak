@@ -27,7 +27,7 @@ export interface ItemMetadata {
 }
 
 export interface Annotations {
-  "kubectl.kubernetes.io/last-applied-configuration": string
+  'kubectl.kubernetes.io/last-applied-configuration': string
 }
 
 export interface GetBMConfigListMetadata {

@@ -1,15 +1,7 @@
-import { useCallback, useMemo } from "react"
-import {
-  trackEvent,
-  setUserContext,
-  resetUserContext,
-} from "../services/amplitudeService"
-import { enrichEventProperties } from "../config/amplitude"
-import type {
-  AmplitudeEventName,
-  EventProperties,
-  UserContext,
-} from "../types/amplitude"
+import { useCallback, useMemo } from 'react'
+import { trackEvent, setUserContext, resetUserContext } from '../services/amplitudeService'
+import { enrichEventProperties } from '../config/amplitude'
+import type { AmplitudeEventName, EventProperties, UserContext } from '../types/amplitude'
 
 export interface UseAmplitudeOptions {
   component?: string
@@ -23,7 +15,7 @@ export const useAmplitude = (options: UseAmplitudeOptions = {}) => {
     (): Partial<EventProperties> => ({
       component: options.component,
       userId: options.userId,
-      userEmail: options.userEmail,
+      userEmail: options.userEmail
     }),
     [options.component, options.userId, options.userEmail]
   )
@@ -31,10 +23,7 @@ export const useAmplitude = (options: UseAmplitudeOptions = {}) => {
   // Simplified track function
   const track = useCallback(
     (eventName: AmplitudeEventName, properties: EventProperties = {}) => {
-      const enrichedProperties = enrichEventProperties(
-        properties,
-        defaultProperties
-      )
+      const enrichedProperties = enrichEventProperties(properties, defaultProperties)
       trackEvent(eventName, enrichedProperties)
     },
     [defaultProperties]
@@ -53,8 +42,7 @@ export const useAmplitude = (options: UseAmplitudeOptions = {}) => {
         track(successEvent, baseProperties)
         return result
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
         track(failureEvent, { ...baseProperties, errorMessage })
         throw error
       }
@@ -75,7 +63,7 @@ export const useAmplitude = (options: UseAmplitudeOptions = {}) => {
     track,
     trackAsyncOperation,
     setUser,
-    resetUser,
+    resetUser
   }
 }
 

@@ -1,2 +1,2 @@
-export * from "./model"
-export * from "./vmwareHosts"
+export * from './model'
+export * from './vmwareHosts'

@@ -1,37 +1,28 @@
-import axios from "../axios"
-import axiosInstance from "axios"
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import {
-  NodeList,
-  NodeItem as Node,
-  Spec,
-  NodeItem,
-  OpenstackCredsRef,
-} from "./model"
-import { createOpenstackTokenRequestBody } from "../openstack-creds/helpers"
-import { OpenstackImagesResponse } from "../openstack-creds/model"
-import { customAlphabet } from "nanoid"
+import axios from '../axios'
+import axiosInstance from 'axios'
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { NodeList, NodeItem as Node, Spec, NodeItem, OpenstackCredsRef } from './model'
+import { createOpenstackTokenRequestBody } from '../openstack-creds/helpers'
+import { OpenstackImagesResponse } from '../openstack-creds/model'
+import { customAlphabet } from 'nanoid'
 
 // Private helper function for token generation
 const generateOpenstackToken = async (creds) => {
   try {
     const response = await axiosInstance({
-      method: "post",
-      url: creds?.OS_AUTH_URL + "/auth/tokens",
+      method: 'post',
+      url: creds?.OS_AUTH_URL + '/auth/tokens',
       data: createOpenstackTokenRequestBody(creds),
       headers: {
-        "Content-Type": "application/json",
-      },
+        'Content-Type': 'application/json'
+      }
     })
     return {
-      token: response.headers["x-subject-token"],
-      response: response.data,
+      token: response.headers['x-subject-token'],
+      response: response.data
     }
   } catch (error) {
-    console.error("Failed to generate OpenStack token:", error)
+    console.error('Failed to generate OpenStack token:', error)
     throw error
   }
 }
@@ -39,18 +30,15 @@ const generateOpenstackToken = async (creds) => {
 export const getNodes = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vjailbreaknodes`
   const response = await axios.get<NodeList>({
-    endpoint,
+    endpoint
   })
   return response?.items
 }
 
-export const deleteNode = async (
-  nodeName: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const deleteNode = async (nodeName: string, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vjailbreaknodes/${nodeName}`
   const response = await axios.del<Node>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -59,20 +47,20 @@ export const getOpenstackImages = async (creds) => {
   try {
     const { token } = await generateOpenstackToken(creds)
 
-    const baseUrl = creds.OS_AUTH_URL.replace("/keystone/v3", "")
+    const baseUrl = creds.OS_AUTH_URL.replace('/keystone/v3', '')
 
     const response = await axiosInstance({
-      method: "get",
+      method: 'get',
       url: `${baseUrl}/glance/v2/images`,
       headers: {
-        "Content-Type": "application/json",
-        "X-Auth-Token": token,
-      },
+        'Content-Type': 'application/json',
+        'X-Auth-Token': token
+      }
     })
 
     return response.data as OpenstackImagesResponse
   } catch (error) {
-    console.error("Failed to fetch OpenStack images:", error)
+    console.error('Failed to fetch OpenStack images:', error)
     throw error
   }
 }
@@ -85,38 +73,32 @@ const createNodeSpec = (params: {
   role?: string
 }): Spec => ({
   openstackImageID: params.imageId,
-  nodeRole: params.role || "worker",
+  nodeRole: params.role || 'worker',
   openstackCreds: params.openstackCreds,
-  openstackFlavorID: params.flavorId,
+  openstackFlavorID: params.flavorId
 })
 
-const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 6)
+const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6)
 
 function generateAgentName() {
   return `vjailbreak-agent-${nanoid()}`
 }
 
 // Create VjailbreakNode object
-const createNodeObject = (params: {
-  name?: string
-  namespace?: string
-  spec: Spec
-}): NodeItem => ({
-  apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-  kind: "VjailbreakNode",
+const createNodeObject = (params: { name?: string; namespace?: string; spec: Spec }): NodeItem => ({
+  apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+  kind: 'VjailbreakNode',
   metadata: {
     name: params.name || generateAgentName(),
-    namespace: params.namespace || "migration-system",
+    namespace: params.namespace || 'migration-system'
   },
-  spec: params.spec,
+  spec: params.spec
 })
 
 // Get master VjailbreakNode
-export const getMasterNode = async (
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getMasterNode = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const nodes = await getNodes(namespace)
-  const masterNode = nodes.find((node) => node.spec.nodeRole === "master")
+  const masterNode = nodes.find((node) => node.spec.nodeRole === 'master')
 
   return masterNode
 }
@@ -139,13 +121,13 @@ export const createNodes = async (params: {
       const spec = createNodeSpec({
         imageId: params.imageId,
         openstackCreds: params.openstackCreds,
-        flavorId: params.flavorId,
+        flavorId: params.flavorId
       })
       const node = createNodeObject({ spec, namespace })
 
       const result = await axios.post<NodeItem>({
         endpoint,
-        data: node,
+        data: node
       })
 
       results.push(result)
@@ -156,9 +138,7 @@ export const createNodes = async (params: {
   }
 
   if (errors.length > 0) {
-    throw new Error(
-      `Failed to create ${errors.length} out of ${params.count} nodes`
-    )
+    throw new Error(`Failed to create ${errors.length} out of ${params.count} nodes`)
   }
 
   return results

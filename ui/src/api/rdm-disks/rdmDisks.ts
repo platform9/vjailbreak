@@ -1,28 +1,20 @@
-import axios from "../axios"
+import axios from '../axios'
 
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import { RdmDisk, RdmDiskList } from "./model"
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { RdmDisk, RdmDiskList } from './model'
 
-export const getRdmDisksList = async (
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getRdmDisksList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/rdmdisks`
   const response = await axios.get<RdmDiskList>({
-    endpoint,
+    endpoint
   })
   return response?.items || []
 }
 
-export const getRdmDisk = async (
-  name: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getRdmDisk = async (name: string, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/rdmdisks/${name}`
   const response = await axios.get<RdmDisk>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -38,9 +30,9 @@ export const patchRdmDisk = async (
     data,
     config: {
       headers: {
-        "Content-Type": "application/merge-patch+json",
-      },
-    },
+        'Content-Type': 'application/merge-patch+json'
+      }
+    }
   })
   return response
 }

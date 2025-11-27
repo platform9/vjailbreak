@@ -1,13 +1,13 @@
 export interface NodeList {
   apiVersion: string
   items: NodeItem[]
-  kind: "VjailbreakNodeList"
+  kind: 'VjailbreakNodeList'
   metadata: NodeListMetadata
 }
 
 export interface NodeItem {
   apiVersion: string
-  kind: "VjailbreakNode"
+  kind: 'VjailbreakNode'
   metadata: ItemMetadata
   spec: Spec
   status?: Status
@@ -24,7 +24,7 @@ export interface ItemMetadata {
 }
 
 export interface OpenstackCredsRef {
-  kind: "openstackcreds"
+  kind: 'openstackcreds'
   name: string
   namespace: string
 }
@@ -47,8 +47,6 @@ export interface NodeListMetadata {
   continue: string
   resourceVersion: string
 }
-
-
 
 export interface OpenstackProject {
   id: string

@@ -1,4 +1,4 @@
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline"
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import {
   FormControl,
   FormHelperText,
@@ -8,11 +8,11 @@ import {
   Typography,
   TextField,
   InputAdornment,
-  Box,
-} from "@mui/material"
-import { useCallback, useMemo, useState, useEffect } from "react"
+  Box
+} from '@mui/material'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 
-import DeleteIcon from "@mui/icons-material/Delete"
+import DeleteIcon from '@mui/icons-material/Delete'
 import {
   IconButton,
   Paper,
@@ -21,8 +21,8 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
-} from "@mui/material"
+  TableRow
+} from '@mui/material'
 
 export interface ResourceMap {
   source: string
@@ -50,13 +50,13 @@ export default function ResourceMappingTable({
   values = [],
   onChange,
   error,
-  oneToManyMapping = false,
+  oneToManyMapping = false
 }: ResourceMappingProps) {
-  const [selectedSourceItem, setSelectedSourceItem] = useState("")
-  const [selectedTargetItem, setSelectedTargetItem] = useState("")
+  const [selectedSourceItem, setSelectedSourceItem] = useState('')
+  const [selectedTargetItem, setSelectedTargetItem] = useState('')
   const [showEmptyRow, setShowEmptyRow] = useState(true)
-  const [sourceSearch, setSourceSearch] = useState("")
-  const [targetSearch, setTargetSearch] = useState("")
+  const [sourceSearch, setSourceSearch] = useState('')
+  const [targetSearch, setTargetSearch] = useState('')
 
   // Automatically add mapping when both source and target are selected
   useEffect(() => {
@@ -65,13 +65,13 @@ export default function ResourceMappingTable({
         ...values,
         {
           source: selectedSourceItem,
-          target: selectedTargetItem,
-        },
+          target: selectedTargetItem
+        }
       ]
 
       onChange(updatedMappings)
-      setSelectedSourceItem("")
-      setSelectedTargetItem("")
+      setSelectedSourceItem('')
+      setSelectedTargetItem('')
 
       // Ensure an empty row is shown after adding a mapping
       setShowEmptyRow(true)
@@ -86,8 +86,7 @@ export default function ResourceMappingTable({
   const handleDeleteMapping = useCallback(
     (mapping: ResourceMap) => {
       const updatedMappings = values.filter(
-        ({ source, target }) =>
-          mapping.source !== source || mapping.target !== target
+        ({ source, target }) => mapping.source !== source || mapping.target !== target
       )
 
       onChange(updatedMappings)
@@ -97,10 +96,7 @@ export default function ResourceMappingTable({
 
   // Filter out already mapped source and target items
   const availableSourceItems = useMemo(
-    () =>
-      sourceItems.filter(
-        (item) => !values.some((mapping) => mapping.source === item)
-      ),
+    () => sourceItems.filter((item) => !values.some((mapping) => mapping.source === item)),
     [sourceItems, values]
   )
 
@@ -108,9 +104,7 @@ export default function ResourceMappingTable({
     if (oneToManyMapping) {
       return targetItems
     }
-    return targetItems.filter(
-      (item) => !values.some((mapping) => mapping.target === item)
-    )
+    return targetItems.filter((item) => !values.some((mapping) => mapping.target === item))
   }, [oneToManyMapping, targetItems, values])
 
   // Filtered by search terms (case-insensitive)
@@ -169,7 +163,7 @@ export default function ResourceMappingTable({
       <TableContainer component={Paper} sx={{ mt: 2, mb: 4 }}>
         <Table size="small" aria-label="resource-mapping">
           <TableHead>
-            <TableRow sx={{ height: "50px" }}>
+            <TableRow sx={{ height: '50px' }}>
               <TableCell>{sourceLabel}</TableCell>
               <TableCell>{targetLabel}</TableCell>
               <TableCell align="right">Action</TableCell>
@@ -178,13 +172,9 @@ export default function ResourceMappingTable({
           <TableBody>
             {renderValues()}
             {showEmptyRow && (
-              <TableRow sx={{ height: "60px" }}>
+              <TableRow sx={{ height: '60px' }}>
                 <TableCell width={550}>
-                  <FormControl
-                    fullWidth
-                    size="small"
-                    disabled={availableSourceItems.length === 0}
-                  >
+                  <FormControl fullWidth size="small" disabled={availableSourceItems.length === 0}>
                     <InputLabel id="source-item-label">{sourceLabel}</InputLabel>
                     <Select
                       labelId="source-item-label"
@@ -194,11 +184,19 @@ export default function ResourceMappingTable({
                       fullWidth
                       MenuProps={{
                         PaperProps: {
-                          style: { maxHeight: 300 },
-                        },
+                          style: { maxHeight: 300 }
+                        }
                       }}
                     >
-                      <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                      <Box
+                        sx={{
+                          p: 1,
+                          position: 'sticky',
+                          top: 0,
+                          bgcolor: 'background.paper',
+                          zIndex: 1
+                        }}
+                      >
                         <TextField
                           size="small"
                           placeholder={`Search ${sourceLabel.toLowerCase()}`}
@@ -214,9 +212,11 @@ export default function ResourceMappingTable({
                             startAdornment: (
                               <InputAdornment position="start">
                                 {/* use a simple magnifier character to avoid extra icon deps */}
-                                <span role="img" aria-label="search">🔎</span>
+                                <span role="img" aria-label="search">
+                                  🔎
+                                </span>
                               </InputAdornment>
-                            ),
+                            )
                           }}
                         />
                       </Box>
@@ -233,11 +233,7 @@ export default function ResourceMappingTable({
                   </FormControl>
                 </TableCell>
                 <TableCell width={550}>
-                  <FormControl
-                    fullWidth
-                    size="small"
-                    disabled={availableTargetItems.length === 0}
-                  >
+                  <FormControl fullWidth size="small" disabled={availableTargetItems.length === 0}>
                     <InputLabel id="target-item-label">{targetLabel}</InputLabel>
                     <Select
                       labelId="target-item-label"
@@ -246,11 +242,19 @@ export default function ResourceMappingTable({
                       label={targetLabel}
                       MenuProps={{
                         PaperProps: {
-                          style: { maxHeight: 300 },
-                        },
+                          style: { maxHeight: 300 }
+                        }
                       }}
                     >
-                      <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                      <Box
+                        sx={{
+                          p: 1,
+                          position: 'sticky',
+                          top: 0,
+                          bgcolor: 'background.paper',
+                          zIndex: 1
+                        }}
+                      >
                         <TextField
                           size="small"
                           placeholder={`Search ${targetLabel.toLowerCase()}`}
@@ -265,9 +269,11 @@ export default function ResourceMappingTable({
                           InputProps={{
                             startAdornment: (
                               <InputAdornment position="start">
-                                <span role="img" aria-label="search">🔎</span>
+                                <span role="img" aria-label="search">
+                                  🔎
+                                </span>
                               </InputAdornment>
-                            ),
+                            )
                           }}
                         />
                       </Box>
@@ -298,7 +304,9 @@ export default function ResourceMappingTable({
                     aria-label="add-row"
                   >
                     <AddCircleOutlineIcon />
-                    <Typography variant="caption" sx={{ ml: 1 }}>Add Another Mapping</Typography>
+                    <Typography variant="caption" sx={{ ml: 1 }}>
+                      Add Another Mapping
+                    </Typography>
                   </IconButton>
                 </TableCell>
               </TableRow>
