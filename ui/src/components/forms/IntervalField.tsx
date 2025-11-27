@@ -62,11 +62,11 @@ const IntervalField = ({
       const newValidationError = validate(newValue)
       setValidationError(newValidationError)
       if (getErrorsUpdater) {
-        getErrorsUpdater?.(name)(newValidationError || '')
+        getErrorsUpdater(name)(newValidationError || '')
       }
       onChange?.(event)
     },
-    [validate, onChange]
+    [validate, onChange, getErrorsUpdater, name]
   )
 
   return (
