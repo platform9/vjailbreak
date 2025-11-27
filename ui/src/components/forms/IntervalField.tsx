@@ -1,5 +1,5 @@
 import { Box, TextField } from '@mui/material'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 
 type IntervalFieldProps = {
   label: string
@@ -24,6 +24,8 @@ const IntervalField = ({
   onChange,
   getErrorsUpdater
 }: IntervalFieldProps) => {
+  const [validationError, setValidationError] = useState<string | undefined>(undefined)
+
   const validate = useCallback((val: string): string | undefined => {
     const trimmedVal = val?.trim()
     if (!trimmedVal) return undefined
@@ -37,7 +39,7 @@ const IntervalField = ({
       match[0] === '' ||
       (match[1] === undefined && match[2] === undefined && match[3] === undefined)
     ) {
-      return 'Use duration format like 30s, 5m, 1h, 1h30m, 5m30s (units: h,m,s).'
+      return 'Use duration format like 5m, 1h30m, 5m30s (units: h,m,s).'
     }
 
     const hours = match[1] ? Number(match[1]) : 0
@@ -54,8 +56,18 @@ const IntervalField = ({
     return undefined
   }, [])
 
-  const validationError = validate(value)
-  const hasError = !!error || !!validationError?.trim()
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = event.target.value
+      const newValidationError = validate(newValue)
+      setValidationError(newValidationError)
+      if (getErrorsUpdater) {
+        getErrorsUpdater?.(name)(newValidationError || '')
+      }
+      onChange?.(event)
+    },
+    [validate, onChange]
+  )
 
   return (
     <Box display="flex" flexDirection="column" gap={0.5}>
@@ -68,12 +80,11 @@ const IntervalField = ({
         name={String(name)}
         placeholder={`${label}${required ? ' *' : ''}`}
         value={value}
-        onChange={onChange}
+        onChange={handleInputChange}
         disabled={disabled}
         required={required}
-        error={hasError}
-        onBlur={() => getErrorsUpdater?.(name)(validationError || '')}
-        helperText={error || helper || validationError || 'e.g. 30s, 5m, 1h30m'}
+        error={!!error || !!validationError?.trim()}
+        helperText={error || helper || validationError || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
       />
     </Box>
   )
