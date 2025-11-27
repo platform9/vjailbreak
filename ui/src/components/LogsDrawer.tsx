@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Box,
   Typography,
@@ -10,12 +10,19 @@ import {
   Paper,
   ToggleButton,
   ToggleButtonGroup,
-  useTheme
+  useTheme,
+  TextField,
+  Tooltip,
+  Chip
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import SearchIcon from '@mui/icons-material/Search'
+import ClearIcon from '@mui/icons-material/Clear'
 import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
+import LogLine from './LogLine'
 import {
   DARK_BG_PAPER,
   DARK_TEXT_PRIMARY,
@@ -46,8 +53,11 @@ export default function LogsDrawer({
   const isDarkMode = theme.palette.mode === 'dark'
 
   const [follow, setFollow] = useState(true)
+  const [isPaused, setIsPaused] = useState(false)
   const [logSource, setLogSource] = useState<'pod' | 'controller'>('pod')
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [copySuccess, setCopySuccess] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
 
@@ -59,14 +69,14 @@ export default function LogsDrawer({
   } = useDirectPodLogs({
     podName,
     namespace,
-    enabled: open && logSource === 'pod'
+    enabled: open && logSource === 'pod' && !isPaused
   })
 
   const controllerLogs = useDeploymentLogs({
     deploymentName: 'migration-controller-manager',
     namespace: 'migration-system',
     labelSelector: 'control-plane=controller-manager',
-    enabled: open && logSource === 'controller'
+    enabled: open && logSource === 'controller' && !isPaused
   })
 
   // Get current logs and states based on log source
@@ -77,13 +87,22 @@ export default function LogsDrawer({
 
   // Auto-scroll to bottom when new logs arrive and follow is enabled
   useEffect(() => {
-    if (follow && logsEndRef.current && !isTransitioning) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    if (follow && logsEndRef.current && !isTransitioning && currentLogs.length > 0) {
+      setTimeout(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }, 0)
     }
-  }, [currentLogs, follow, isTransitioning])
+  }, [currentLogs.length, follow, isTransitioning])
 
   const handleFollowToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setFollow(event.target.checked)
+    const checked = event.target.checked
+    setFollow(checked)
+    // If enabling follow, scroll to bottom immediately
+    if (checked && logsEndRef.current) {
+      setTimeout(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }, 0)
+    }
   }, [])
 
   const handleLogSourceChange = useCallback(
@@ -103,10 +122,33 @@ export default function LogsDrawer({
 
   const handleClose = useCallback(() => {
     setFollow(true) // Reset follow state when closing
+    setIsPaused(false) // Reset pause state when closing
     setLogSource('pod') // Reset log source when closing
     setIsTransitioning(false) // Reset transition state when closing
+    setSearchTerm('') // Reset search term
     onClose()
   }, [onClose])
+
+  // Filter logs based on search term
+  const filteredLogs = useMemo(() => {
+    if (!searchTerm.trim()) return currentLogs
+    const searchLower = searchTerm.toLowerCase()
+    return currentLogs.filter((log) => log.toLowerCase().includes(searchLower))
+  }, [currentLogs, searchTerm])
+
+  // Copy filtered logs to clipboard
+  const handleCopyLogs = useCallback(() => {
+    const logsText = filteredLogs.join('\n')
+    navigator.clipboard.writeText(logsText).then(
+      () => {
+        setCopySuccess(true)
+        setTimeout(() => setCopySuccess(false), 2000)
+      },
+      (err) => {
+        console.error('Failed to copy logs:', err)
+      }
+    )
+  }, [filteredLogs])
 
   return (
     <StyledDrawer anchor="right" open={open} onClose={handleClose}>
@@ -129,13 +171,10 @@ export default function LogsDrawer({
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {logSource === 'pod'
-              ? `${podName} (${namespace})`
-              : `migration-controller-manager (migration-system)`}
-            {migrationName && (
-              <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                • Migration: {migrationName}
-              </Typography>
-            )}
+              ? migrationName
+                ? migrationName.replace(/^(migration-|basic-migration-)/, '')
+                : null
+              : 'migration-controller-manager'}
           </Typography>
         </Box>
         <IconButton onClick={handleClose} aria-label="close logs drawer" size="small">
@@ -177,25 +216,93 @@ export default function LogsDrawer({
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
+              gap: 1.5,
               mb: 2,
-              pb: 1,
+              pb: 2,
               borderBottom: 1,
               borderColor: 'divider'
             }}
           >
-            <FormControlLabel
-              control={
-                <Switch checked={follow} onChange={handleFollowToggle} name="follow" size="small" />
-              }
-              label="Follow logs"
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={!isPaused}
+                      onChange={(e) => setIsPaused(!e.target.checked)}
+                      name="streaming"
+                      size="small"
+                    />
+                  }
+                  label="Live"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={follow}
+                      onChange={handleFollowToggle}
+                      name="follow"
+                      size="small"
+                      disabled={isPaused}
+                    />
+                  }
+                  label="Follow"
+                />
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                {currentError && (
+                  <Tooltip title="Reconnect to log stream">
+                    <IconButton
+                      onClick={currentReconnect}
+                      size="small"
+                      color="error"
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'error.main'
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                        Retry
+                      </Typography>
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
+                  <IconButton
+                    onClick={handleCopyLogs}
+                    size="small"
+                    color={copySuccess ? 'success' : 'default'}
+                    disabled={filteredLogs.length === 0}
+                  >
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Chip
+                  label={`${filteredLogs.length} / ${currentLogs.length} lines`}
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
+            </Box>
+
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search logs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
+                ),
+                endAdornment: searchTerm && (
+                  <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                )
+              }}
             />
-            {currentError && (
-              <IconButton onClick={currentReconnect} size="small" color="primary" title="Reconnect">
-                <Typography variant="caption">Retry</Typography>
-              </IconButton>
-            )}
           </Box>
 
           {/* Loading State */}
@@ -274,18 +381,29 @@ export default function LogsDrawer({
                     No logs available
                   </Typography>
                 )}
-              {currentLogs.map((log, index) => (
-                <Box
-                  key={index}
-                  sx={{
-                    borderBottom:
-                      index < currentLogs.length - 1
-                        ? `1px solid ${isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER}`
-                        : 'none',
-                    py: 0.5
-                  }}
-                >
-                  {log}
+              {filteredLogs.map((log, index) => (
+                <Box key={index} sx={{ display: 'flex' }}>
+                  <Box
+                    sx={{
+                      minWidth: '50px',
+                      pr: 2,
+                      textAlign: 'right',
+                      color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
+                      userSelect: 'none',
+                      fontSize: '0.75rem',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    {index + 1}
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <LogLine
+                      log={log}
+                      index={index}
+                      showBorder={index < filteredLogs.length - 1}
+                      isDarkMode={isDarkMode}
+                    />
+                  </Box>
                 </Box>
               ))}
               <div ref={logsEndRef} />
