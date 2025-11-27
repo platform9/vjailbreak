@@ -186,7 +186,6 @@ export const useDeploymentLogs = ({
       connect()
     } else {
       cleanup()
-      setLogs([])
       setIsLoading(false)
       setError(null)
     }
