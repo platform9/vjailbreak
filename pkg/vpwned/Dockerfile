@@ -37,7 +37,7 @@ COPY --from=builder /app/pkg/vpwned/openapiv3 /opt/platform9/vpwned/openapiv3
 
 # Set the timezone (optional)
 ENV TZ=UTC
-ENV LOG_LEVEL=error
+ENV LOG_LEVEL=info
 # Expose port if your application uses a network port
 EXPOSE 3001
 EXPOSE 3000

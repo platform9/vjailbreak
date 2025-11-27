@@ -264,8 +264,7 @@ func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.Openstack
 func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenStackCredsInfo) (*gophercloud.ProviderClient, error) {
 	const fn = "ValidateAndGetProviderClient"
 	logrus.WithFields(logrus.Fields{"func": fn, "auth_url": openstackAccessInfo.AuthURL, "region": openstackAccessInfo.RegionName, "insecure": openstackAccessInfo.Insecure}).Debug("Entering ValidateAndGetProviderClient")
-	defer logrus.WithField("func", fn).Debug("Exiting ValidateAndGetProviderClient")
-	providerClient, err := openstack.NewClient(openstackAccessInfo.AuthURL)
+	defer logrus.WithFields(logrus.Fields{"func": fn, "auth_url": openstackAccessInfo.AuthURL, "region": openstackAccessInfo.RegionName, "insecure": openstackAccessInfo.Insecure}).Debug("Exiting ValidateAndGetProviderClient")	providerClient, err := openstack.NewClient(openstackAccessInfo.AuthURL)
 	if err != nil {
 		logrus.WithField("func", fn).WithError(err).Error("Failed to create OpenStack provider client")
 		return nil, err
@@ -339,8 +338,7 @@ func CreateInClusterClient() (client.Client, error) {
 func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.RevalidateCredentialsRequest) (*api.RevalidateCredentialsResponse, error) {
 	const fn = "RevalidateCredentials"
 	logrus.WithFields(logrus.Fields{"func": fn, "kind": in.GetKind(), "name": in.GetName(), "namespace": in.GetNamespace()}).Info("Entering RevalidateCredentials")
-	defer logrus.WithField("func", fn).Info("Exiting RevalidateCredentials")
-	zapLogger := zap.New(zap.UseDevMode(true))
+	defer logrus.WithFields(logrus.Fields{"func": fn, "kind": in.GetKind(), "name": in.GetName(), "namespace": in.GetNamespace()}).Info("Exiting RevalidateCredentials")	zapLogger := zap.New(zap.UseDevMode(true))
 	ctx = ctrlLog.IntoContext(ctx, zapLogger)
 	reqLogger := ctrlLog.FromContext(ctx)
 
