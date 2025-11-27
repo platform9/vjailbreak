@@ -5,7 +5,8 @@ import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { useState, useMemo } from 'react'
 import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
-// import LogsDrawer from "src/components/LogsDrawer";
+import ListAltIcon from '@mui/icons-material/ListAlt'
+import LogsDrawer from 'src/components/LogsDrawer'
 import { Condition, Migration, Phase } from 'src/api/migrations/model'
 import MigrationProgress from './MigrationProgress'
 import { QueryObserverResult } from '@tanstack/react-query'
@@ -155,28 +156,28 @@ const columns: GridColDef[] = [
 
       return (
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {/* {params.row.spec?.podRef && (
-                        <Tooltip title="View pod logs">
-                            <IconButton
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    params.row.setSelectedPod({
-                                        name: params.row.spec.podRef,
-                                        namespace: params.row.metadata?.namespace || '',
-                                        migrationName: params.row.metadata?.name || ''
-                                    });
-                                    params.row.setLogsDrawerOpen(true);
-                                }}
-                                size="small"
-                                sx={{
-                                    cursor: 'pointer',
-                                    position: 'relative'
-                                }}
-                            >
-                                <ListAltIcon />
-                            </IconButton>
-                        </Tooltip>
-                    )} */}
+          {params.row.spec?.podRef && (
+            <Tooltip title="View pod logs">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation()
+                  params.row.setSelectedPod({
+                    name: params.row.spec.podRef,
+                    namespace: params.row.metadata?.namespace || '',
+                    migrationName: params.row.metadata?.name || ''
+                  })
+                  params.row.setLogsDrawerOpen(true)
+                }}
+                size="small"
+                sx={{
+                  cursor: 'pointer',
+                  position: 'relative'
+                }}
+              >
+                <ListAltIcon />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {showAdminCutover && (
             <TriggerAdminCutoverButton
@@ -325,8 +326,12 @@ export default function MigrationsTable({
   const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
-  // const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-  // const [selectedPod, setSelectedPod] = useState<{ name: string; namespace: string; migrationName?: string } | null>(null);
+  const [logsDrawerOpen, setLogsDrawerOpen] = useState(false)
+  const [selectedPod, setSelectedPod] = useState<{
+    name: string
+    namespace: string
+    migrationName?: string
+  } | null>(null)
 
   const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
@@ -428,9 +433,9 @@ export default function MigrationsTable({
     filteredMigrations?.map((migration) => ({
       ...migration,
       onDelete: onDeleteMigration,
-      refetchMigrations
-      // setSelectedPod,
-      // setLogsDrawerOpen
+      refetchMigrations,
+      setSelectedPod,
+      setLogsDrawerOpen
     })) || []
 
   return (
@@ -505,13 +510,13 @@ export default function MigrationsTable({
         onErrorChange={setBulkCutoverError}
       />
 
-      {/* <LogsDrawer
-                open={logsDrawerOpen}
-                onClose={() => setLogsDrawerOpen(false)}
-                podName={selectedPod?.name || ''}
-                namespace={selectedPod?.namespace || ''}
-                migrationName={selectedPod?.migrationName || ''}
-            /> */}
+      <LogsDrawer
+        open={logsDrawerOpen}
+        onClose={() => setLogsDrawerOpen(false)}
+        podName={selectedPod?.name || ''}
+        namespace={selectedPod?.namespace || ''}
+        migrationName={selectedPod?.migrationName || ''}
+      />
     </>
   )
 }
