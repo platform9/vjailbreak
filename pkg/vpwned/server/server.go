@@ -114,6 +114,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
+	// ctx, muxer, "0.0.0.0:3000", option
 	if err := api.RegisterVersionHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for version")
 	}
