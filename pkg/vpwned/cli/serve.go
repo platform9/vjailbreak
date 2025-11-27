@@ -78,9 +78,11 @@ func init() {
 	viper.SetDefault("host", "127.0.0.1")
 	viper.SetDefault("port", "3000")
 	viper.SetDefault("api_port", "3001")
+	viper.SetDefault("api_host", "0.0.0.0")
 	serverCmd.PersistentFlags().StringP("host", "i", "127.0.0.1", "Set the IP-Address to listen on")
 	serverCmd.PersistentFlags().StringP("port", "g", "3000", "Set the gRPC port to open")
 	serverCmd.PersistentFlags().StringP("api_port", "r", "3001", "Set the REST API port to open")
+	serverCmd.PersistentFlags().StringP("api_host", "a", "0.0.0.0", "Set the REST API host to listen on")
 	logrus.SetLevel(Config.logLevel)
 }
 
@@ -88,7 +90,7 @@ func serve() {
 	// Run the server in a goroutine
 	go func() {
 		logrus.Info(Config.Host, Config.Port, Config.APIPort)
-		if err := server.StartServer(Config.Host, Config.Port, Config.APIPort); err != nil {
+		if err := server.StartServer(Config.Host, Config.Port, Config.APIPort, Config.APIHost); err != nil {
 			return
 		}
 	}()
