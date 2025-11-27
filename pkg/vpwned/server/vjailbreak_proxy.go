@@ -17,6 +17,7 @@ import (
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -44,40 +45,74 @@ type OpenstackCredsinfo struct {
 }
 
 func (p *vjailbreakProxy) ValidateOpenstackIp(ctx context.Context, in *api.ValidateOpenstackIpRequest) (*api.ValidateOpenstackIpResponse, error) {
+	logrus.Info("Starting ValidateOpenstackIp request")
 
 	retVal := &api.ValidateOpenstackIpResponse{}
 
 	ips := in.GetIp()
 	openstackAccessInfo := in.AccessInfo
 
+	logrus.WithFields(logrus.Fields{
+		"ip_count": len(ips),
+		"ips":      ips,
+	}).Info("Validating OpenStack IPs")
+
 	// Add a check if there are same ips present in the list
 	ipMap := make(map[string]bool)
 	for _, ip := range ips {
 		if _, ok := ipMap[ip]; ok {
 			ipMap[ip] = false
+			logrus.WithField("ip", ip).Warn("Duplicate IP detected")
 		} else {
 			ipMap[ip] = true
 		}
 	}
 
+	logrus.Info("Creating OpenStack clients")
 	openstackClients, err := GetOpenStackClients(ctx, openstackAccessInfo)
 	if err != nil {
+		logrus.WithError(err).Error("Failed to create OpenStack clients")
 		return nil, err
 	}
+	logrus.Info("Successfully created OpenStack clients")
 
-	for _, ip := range ips {
+	for idx, ip := range ips {
+		logrus.WithFields(logrus.Fields{
+			"ip":    ip,
+			"index": idx,
+		}).Debug("Validating IP")
+
 		if ipMap[ip] == false {
+			logrus.WithField("ip", ip).Warn("IP marked as duplicate, skipping validation")
 			retVal.IsValid = append(retVal.IsValid, false)
 			retVal.Reason = append(retVal.Reason, "Duplicate IP")
 			continue
 		}
+
 		isInUse, reason, err := isIPInUse(openstackClients.NetworkingClient, ip)
 		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"ip":    ip,
+				"error": err,
+			}).Error("Failed to check if IP is in use")
 			return nil, err
 		}
+
+		logrus.WithFields(logrus.Fields{
+			"ip":        ip,
+			"is_in_use": isInUse,
+			"reason":    reason,
+		}).Info("IP validation result")
+
 		retVal.IsValid = append(retVal.IsValid, !isInUse)
 		retVal.Reason = append(retVal.Reason, reason)
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"total_ips":     len(ips),
+		"valid_count":   countValid(retVal.IsValid),
+		"invalid_count": len(ips) - countValid(retVal.IsValid),
+	}).Info("Completed ValidateOpenstackIp request")
 
 	return retVal, nil
 }
@@ -144,46 +179,85 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 
 // GetOpenStackClients is a function to create openstack clients
 func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.OpenstackAccessInfo) (*OpenStackClients, error) {
+	logrus.Debug("GetOpenStackClients: Starting client creation")
 
 	if openstackAccessInfo == nil {
+		logrus.Error("GetOpenStackClients: openstackAccessInfo is nil")
 		return nil, fmt.Errorf("openstackAccessInfo cannot be nil")
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"secret_name":      openstackAccessInfo.SecretName,
+		"secret_namespace": openstackAccessInfo.SecretNamespace,
+	}).Debug("Creating in-cluster k8s client")
+
 	k8sclient, err := CreateInClusterClient()
 	if err != nil {
+		logrus.WithError(err).Error("Failed to create in-cluster k8s client")
 		return nil, err
 	}
+	logrus.Info("Successfully created in-cluster k8s client")
+
+	logrus.WithFields(logrus.Fields{
+		"secret_name":      openstackAccessInfo.SecretName,
+		"secret_namespace": openstackAccessInfo.SecretNamespace,
+	}).Info("Retrieving OpenStack credentials from secret")
 
 	openstackCreds, err := GetOpenstackCredentialsFromSecret(ctx, k8sclient, openstackAccessInfo.SecretName, openstackAccessInfo.SecretNamespace)
 	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"secret_name":      openstackAccessInfo.SecretName,
+			"secret_namespace": openstackAccessInfo.SecretNamespace,
+		}).Error("Failed to get OpenStack credentials from secret")
 		return nil, err
 	}
+	logrus.WithFields(logrus.Fields{
+		"auth_url": openstackCreds.AuthURL,
+		"region":   openstackCreds.RegionName,
+		"username": openstackCreds.Username,
+		"insecure": openstackCreds.Insecure,
+	}).Info("Successfully retrieved OpenStack credentials")
 
 	endpoint := gophercloud.EndpointOpts{
 		Region: openstackCreds.RegionName,
 	}
 
+	logrus.WithField("region", openstackCreds.RegionName).Info("Creating OpenStack provider client")
 	providerClient, err := ValidateAndGetProviderClient(&openstackCreds)
 	if err != nil {
+		logrus.WithError(err).WithField("region", openstackCreds.RegionName).Error("Failed to create provider client")
 		return nil, err
 	}
 	if providerClient == nil {
+		logrus.WithField("region", openstackCreds.RegionName).Error("Provider client is nil")
 		return nil, fmt.Errorf("failed to get provider client for region '%s'", openstackCreds.RegionName)
 	}
+	logrus.Info("Successfully created and authenticated provider client")
+
+	logrus.WithField("region", openstackCreds.RegionName).Debug("Creating compute client")
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
+		logrus.WithError(err).WithField("region", openstackCreds.RegionName).Error("Failed to create compute client")
 		return nil, fmt.Errorf("failed to create openstack compute client for region '%s'", openstackCreds.RegionName)
 	}
+
+	logrus.WithField("region", openstackCreds.RegionName).Debug("Creating block storage client")
 	blockStorageClient, err := openstack.NewBlockStorageV3(providerClient, endpoint)
 	if err != nil {
+		logrus.WithError(err).WithField("region", openstackCreds.RegionName).Error("Failed to create block storage client")
 		return nil, fmt.Errorf("failed to create openstack block storage client for region '%s'",
 			openstackCreds.RegionName)
 	}
+
+	logrus.WithField("region", openstackCreds.RegionName).Debug("Creating networking client")
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
+		logrus.WithError(err).WithField("region", openstackCreds.RegionName).Error("Failed to create networking client")
 		return nil, fmt.Errorf("failed to create openstack networking client for region '%s'",
 			openstackCreds.RegionName)
 	}
+
+	logrus.WithField("region", openstackCreds.RegionName).Info("Successfully created all OpenStack clients")
 	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
@@ -223,10 +297,23 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 	return providerClient, nil
 }
 
+// countValid is a helper function to count valid IPs
+func countValid(validFlags []bool) int {
+	count := 0
+	for _, valid := range validFlags {
+		if valid {
+			count++
+		}
+	}
+	return count
+}
+
 // Create in cluster k8s client
 func CreateInClusterClient() (client.Client, error) {
+	logrus.Debug("Creating in-cluster k8s client")
 	config, err := rest.InClusterConfig()
 	if err != nil {
+		logrus.WithError(err).Error("Failed to get in-cluster config")
 		return nil, err
 	}
 	scheme := runtime.NewScheme()
@@ -237,8 +324,10 @@ func CreateInClusterClient() (client.Client, error) {
 		Scheme: scheme,
 	})
 	if err != nil {
+		logrus.WithError(err).Error("Failed to create k8s client")
 		return nil, err
 	}
+	logrus.Info("Successfully created in-cluster k8s client")
 	return clientset, nil
 }
 
@@ -273,20 +362,20 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
 				return nil, fmt.Errorf("failed to update status: %w", err)
 			}
-			
+
 			// Fetch resources
 			log.Printf("Triggering resource fetch for %s", name)
-		
+
 			// Capture name and namespace
 			credName := vmwcreds.Name
 			credNamespace := vmwcreds.Namespace
-		
+
 			go func() {
 				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
-			
+
 				bgCtx = ctrlLog.IntoContext(bgCtx, reqLogger)
-			
+
 				freshVMCreds := &vjailbreakv1alpha1.VMwareCreds{}
 				if err := p.K8sClient.Get(bgCtx, k8stypes.NamespacedName{
 					Name:      credName,
@@ -295,7 +384,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 					log.Printf("Failed to fetch VMwareCreds %s: %v", credName, err)
 					return
 				}
-			
+
 				log.Printf("Fetching VMware resources for %s", credName)
 				resources, err := vmwarevalidation.FetchResourcesPostValidation(bgCtx, p.K8sClient, freshVMCreds)
 				if err != nil {
@@ -341,7 +430,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 				log.Printf("Warning: Failed to fetch OpenStack resources for %s: %v", name, err)
 			} else {
 				oscreds.Spec.Flavors = resources.Flavors
-				
+
 				// Update the spec
 				if err := p.K8sClient.Update(ctx, oscreds); err != nil {
 					log.Printf("Warning: Failed to update OpenstackCreds spec: %v", err)
@@ -353,7 +442,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 				if resources.OpenstackInfo != nil {
 					oscreds.Status.Openstack = *resources.OpenstackInfo
 				}
-				
+
 				log.Printf("Successfully fetched %d flavors for %s", len(resources.Flavors), name)
 			}
 		} else {
