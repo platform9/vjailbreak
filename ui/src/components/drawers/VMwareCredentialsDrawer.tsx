@@ -15,7 +15,8 @@ import {
   CircularProgress,
   FormControlLabel,
   Switch,
-  Tooltip
+  Tooltip,
+  FormHelperText
 } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 import CheckIcon from '@mui/icons-material/Check'
@@ -118,6 +119,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       [field]: value
     }))
 
+    // Clear result states when editing inputs
     setVmwareCredsValidated(null)
     setError(null)
 
@@ -226,6 +228,9 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   const handleSubmit = useCallback(async () => {
+    // Clear previous errors
+    setError(null)
+
     if (
       !formValues.credentialName ||
       !formValues.vcenterHost ||
@@ -238,7 +243,10 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     }
 
     if (!isValidCredentialName) {
-      setError('Please provide a valid credential name')
+      // Keep name-specific error separate
+      setCredNameError(
+        'Please provide a valid credential name (starts with a letter/number, uses letters/numbers/hyphens).'
+      )
       return
     }
 
@@ -318,15 +326,15 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       <Header title="Add VMware Credentials" />
       <DrawerContent>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <FormControl fullWidth error={!!error || !!credNameError} required>
+          <FormControl fullWidth error={!!credNameError} required>
             <TextField
               id="credentialName"
               label="Enter VMware Credential Name"
               variant="outlined"
               value={formValues.credentialName}
               onChange={handleFormChange('credentialName')}
-              error={!!error || !!credNameError}
-              helperText={credNameError || (error && !credNameError ? error : '')}
+              error={!!credNameError}
+              helperText={credNameError || ''}
               required
               fullWidth
               size="small"
@@ -339,7 +347,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
               variant="outlined"
               value={formValues.vcenterHost}
               onChange={handleFormChange('vcenterHost')}
-              error={!!error}
               required
               fullWidth
               size="small"
@@ -367,7 +374,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
               variant="outlined"
               value={formValues.datacenter}
               onChange={handleFormChange('datacenter')}
-              error={!!error}
               required
               fullWidth
               size="small"
@@ -380,7 +386,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
               variant="outlined"
               value={formValues.username}
               onChange={handleFormChange('username')}
-              error={!!error}
               required
               fullWidth
               size="small"
@@ -394,7 +399,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
               variant="outlined"
               value={formValues.password}
               onChange={handleFormChange('password')}
-              error={!!error}
               required
               fullWidth
               size="small"
@@ -442,12 +446,14 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
                   <FormLabel>VMware credentials created</FormLabel>
                 </>
               )}
-              {error && !credNameError && (
-                <FormLabel sx={{ fontSize: '12px' }} color="error">
-                  {error}
-                </FormLabel>
-              )}
             </Box>
+
+            {/* Show one clear place for global/form errors */}
+            {error && (
+              <FormHelperText error sx={{ mt: 1 }}>
+                {error}
+              </FormHelperText>
+            )}
           </FormControl>
         </Box>
       </DrawerContent>
@@ -459,10 +465,10 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           submitting ||
           validatingVmwareCreds ||
           !isValidCredentialName ||
-          !formValues.vcenterHost ||
-          !formValues.datacenter ||
-          !formValues.username ||
-          !formValues.password
+          !formValues.vcenterHost?.trim() ||
+          !formValues.datacenter?.trim() ||
+          !formValues.username?.trim() ||
+          !formValues.password?.trim()
         }
         submitting={submitting}
       />
