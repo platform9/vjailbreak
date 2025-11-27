@@ -14,7 +14,7 @@ interface UseDirectPodLogsReturn {
   reconnect: () => void
 }
 
-const MAX_LOG_LINES = 1000
+const MAX_LOG_LINES = 5000
 
 export const useDirectPodLogs = ({
   podName,
@@ -53,8 +53,8 @@ export const useDirectPodLogs = ({
 
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
-        tailLines: '100',
-        limitBytes: 500000,
+        tailLines: '2000',
+        limitBytes: 10000000,
         signal: abortController.signal
       })
 
