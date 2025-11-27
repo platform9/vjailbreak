@@ -18,7 +18,8 @@ import {
   FormLabel,
   CircularProgress,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  FormHelperText
 } from '@mui/material'
 import { isValidName } from 'src/utils'
 import CheckIcon from '@mui/icons-material/Check'
@@ -322,15 +323,15 @@ export default function OpenstackCredentialsDrawer({
       <Header title="Add OpenStack Credentials" />
       <DrawerContent>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <FormControl fullWidth error={!!error || !!credNameError} required>
+          <FormControl fullWidth error={!!credNameError} required>
             <TextField
               id="credentialName"
               label="Enter OpenStack Credential Name"
               variant="outlined"
               value={credentialName}
               onChange={handleCredentialNameChange}
-              error={!!error || !!credNameError}
-              helperText={credNameError || (error && !credNameError ? error : '')}
+              error={!!credNameError}
+              helperText={credNameError || ''}
               required
               fullWidth
               size="small"
@@ -381,12 +382,14 @@ export default function OpenstackCredentialsDrawer({
                   <FormLabel>OpenStack credentials created</FormLabel>
                 </>
               )}
-              {error && !credNameError && (
-                <FormLabel sx={{ fontSize: '12px' }} color="error">
-                  {error}
-                </FormLabel>
-              )}
             </Box>
+
+            {/* Show one clear place for global/form errors */}
+            {error && (
+              <FormHelperText error sx={{ mt: 1 }}>
+                {error}
+              </FormHelperText>
+            )}
           </FormControl>
         </Box>
       </DrawerContent>
