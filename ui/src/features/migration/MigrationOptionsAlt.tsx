@@ -282,58 +282,6 @@ export default function MigrationOptionsAlt({
                 )}
             </Fields>
 
-            <Fields sx={{ gridGap: '0' }}>
-              {/* Retry on failure */}
-              <FormControlLabel
-                label="Retry On Failure"
-                control={
-                  <Checkbox
-                    checked={!!params?.retryOnFailure}
-                    onChange={(e) => {
-                      onChange('retryOnFailure')(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
-                Select this option to retry the migration incase of failure
-              </Typography>
-            </Fields>
-
-            <Fields sx={{ gridGap: '0' }}>
-              <FormControlLabel
-                label="Disconnect Source VM Network"
-                control={
-                  <Checkbox
-                    checked={params?.disconnectSourceNetwork || false}
-                    onChange={(e) => {
-                      onChange('disconnectSourceNetwork')(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
-                Disconnect NICs on the source VM to prevent IP conflicts.
-              </Typography>
-            </Fields>
-
-            <Fields sx={{ gridGap: '0' }}>
-              <FormControlLabel
-                label="Fallback to DHCP"
-                control={
-                  <Checkbox
-                    checked={params?.fallbackToDHCP || false}
-                    onChange={(e) => {
-                      onChange('fallbackToDHCP')(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: '32px' }}>
-                Migrated VM will use IP from DHCP if static IP cannot be preserved.
-              </Typography>
-            </Fields>
-
             <Fields>
               <FormControlLabel
                 label="Rename VMware VM"
