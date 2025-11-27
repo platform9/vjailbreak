@@ -305,6 +305,12 @@ export default function LogsDrawer({
             />
           </Box>
 
+          {isPaused && currentLogs.length > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Logs are paused. Showing {currentLogs.length} lines captured before pause. Turn Live ON to resume streaming.
+            </Alert>
+          )}
+
           {/* Loading State */}
           {(currentIsLoading || isTransitioning) && (
             <Box
@@ -378,7 +384,9 @@ export default function LogsDrawer({
                       color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY
                     }}
                   >
-                    No logs available
+                    {isPaused
+                      ? 'No logs captured yet. Turn Live ON to start streaming.'
+                      : 'No logs available'}
                   </Typography>
                 )}
               {filteredLogs.map((log, index) => (

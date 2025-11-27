@@ -139,7 +139,6 @@ export const useDirectPodLogs = ({
       connect()
     } else {
       cleanup()
-      setLogs([])
       setIsLoading(false)
       setError(null)
     }
