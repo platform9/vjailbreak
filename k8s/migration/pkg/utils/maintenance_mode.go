@@ -168,7 +168,9 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		}
 
 		for _, vm := range vms {
-			blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(vm))
+			if reason := CheckVMForMaintenanceMode(vm); reason != "" {
+				blockedVMs = append(blockedVMs, reason)
+			}
 		}
 
 		if len(blockedVMs) > 0 {
