@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -101,7 +100,7 @@ func serve() {
 	<-stop
 
 	// Initiating graceful shutdown
-	log.Println("Shutting down server...")
+	logrus.Info("Shutting down server...")
 
 	// Create a deadline for the shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
