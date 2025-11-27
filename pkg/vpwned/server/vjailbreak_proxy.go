@@ -186,10 +186,7 @@ func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.Openstack
 		return nil, fmt.Errorf("openstackAccessInfo cannot be nil")
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"secret_name":      openstackAccessInfo.SecretName,
-		"secret_namespace": openstackAccessInfo.SecretNamespace,
-	}).Debug("Creating in-cluster k8s client")
+	logrus.Debug("Creating in-cluster k8s client")
 
 	k8sclient, err := CreateInClusterClient()
 	if err != nil {
@@ -198,23 +195,16 @@ func GetOpenStackClients(ctx context.Context, openstackAccessInfo *api.Openstack
 	}
 	logrus.Info("Successfully created in-cluster k8s client")
 
-	logrus.WithFields(logrus.Fields{
-		"secret_name":      openstackAccessInfo.SecretName,
-		"secret_namespace": openstackAccessInfo.SecretNamespace,
-	}).Info("Retrieving OpenStack credentials from secret")
+	logrus.Info("Retrieving OpenStack credentials from secret")
 
 	openstackCreds, err := GetOpenstackCredentialsFromSecret(ctx, k8sclient, openstackAccessInfo.SecretName, openstackAccessInfo.SecretNamespace)
 	if err != nil {
-		logrus.WithError(err).WithFields(logrus.Fields{
-			"secret_name":      openstackAccessInfo.SecretName,
-			"secret_namespace": openstackAccessInfo.SecretNamespace,
-		}).Error("Failed to get OpenStack credentials from secret")
+		logrus.WithError(err).Error("Failed to get OpenStack credentials from secret")
 		return nil, err
 	}
 	logrus.WithFields(logrus.Fields{
 		"auth_url": openstackCreds.AuthURL,
 		"region":   openstackCreds.RegionName,
-		"username": openstackCreds.Username,
 		"insecure": openstackCreds.Insecure,
 	}).Info("Successfully retrieved OpenStack credentials")
 
