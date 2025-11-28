@@ -355,10 +355,6 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse interval %s, using default interval (%s)", interval, defaultInterval))
 		interval = defaultInterval
 		waitTime, _ = time.ParseDuration(interval)
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse interval %s, using default interval (%s)", interval, defaultInterval))
-		interval = defaultInterval
-		waitTime, _ = time.ParseDuration(interval)
 	} else if waitTime < 5*time.Minute {
 		migobj.logMessage(fmt.Sprintf("WARNING: Interval %s is less than 5 minutes, falling back to 5m", interval))
 		waitTime = 5 * time.Minute
