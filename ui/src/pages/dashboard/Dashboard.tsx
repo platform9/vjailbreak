@@ -1,4 +1,4 @@
-import { Paper, styled, Tab, Tabs, Box } from '@mui/material'
+import { Paper, styled, Box } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
@@ -24,6 +24,7 @@ import BMConfigForm from './BMConfigForm'
 import RollingMigrationsTable from './RollingMigrationsTable'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useRollingMigrationPlansQuery } from '../../hooks/api/useRollingMigrationPlansQuery'
+import { NavTabs, NavTab } from 'src/design-system'
 
 const DashboardContainer = styled('div')({
   display: 'flex',
@@ -266,37 +267,13 @@ export default function Dashboard() {
   return (
     <DashboardContainer>
       <StyledPaper>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab label="Migrations" />
-          <Tab label="Agents" />
-          <Tab label="Credentials" />
-          <Tab
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box
-                  sx={{
-                    color: 'text.secondary',
-                    fontSize: '1rem',
-                    fontWeight: 300,
-                    mr: 2
-                  }}
-                >
-                  |
-                </Box>
-                Cluster Conversions
-              </Box>
-            }
-          />
-          <Tab
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>Bare Metal Config</Box>
-            }
-          />
-        </Tabs>
+        <NavTabs value={activeTab} onChange={handleTabChange} data-testid="dashboard-tabs">
+          <NavTab label="Migrations" value={0} description="Active plans" />
+          <NavTab label="Agents" value={1} description="Connected nodes" />
+          <NavTab label="Credentials" value={2} />
+          <NavTab label="Cluster Conversions" value={3} description="Rolling" />
+          <NavTab label="Bare Metal Config" value={4} />
+        </NavTabs>
 
         {activeTab === 0 ? (
           <MigrationsTable

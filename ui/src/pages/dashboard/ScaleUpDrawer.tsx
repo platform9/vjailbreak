@@ -14,9 +14,13 @@ import {
 } from '@mui/material'
 import React, { useState, useCallback, useEffect } from 'react'
 import Step from 'src/components/forms/Step'
-import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
-import Header from 'src/components/forms/Header'
-import Footer from 'src/components/forms/Footer'
+import {
+  DrawerShell,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  ActionButton
+} from 'src/design-system'
 import OpenstackCredentialsForm from 'src/components/forms/OpenstackCredentialsForm'
 import InfoIcon from '@mui/icons-material/Info'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
@@ -179,18 +183,39 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     }
   }
 
+  const isSubmitDisabled = !masterNode || !selectedFlavor || loading || !openstackCredsValidated
+
   useKeyboardSubmit({
     open,
-    isSubmitDisabled: !masterNode || !selectedFlavor || loading || !openstackCredsValidated,
+    isSubmitDisabled,
     onSubmit: handleSubmit,
     onClose: handleClose
   })
 
   return (
-    <StyledDrawer anchor="right" open={open} onClose={handleClose}>
-      <Header title="Scale Up Agents" />
-      <DrawerContent>
-        <Box sx={{ display: 'grid', gap: 4 }}>
+    <DrawerShell
+      open={open}
+      onClose={handleClose}
+      header={<DrawerHeader title="Scale Up Agents" onClose={handleClose} />}
+      footer={
+        <DrawerFooter>
+          <ActionButton tone="secondary" onClick={handleClose} data-testid="scaleup-cancel">
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleSubmit}
+            loading={loading}
+            disabled={isSubmitDisabled}
+            data-testid="scaleup-submit"
+          >
+            Scale Up
+          </ActionButton>
+        </DrawerFooter>
+      }
+    >
+      <DrawerBody>
+        <Box sx={{ display: 'grid', gap: 4 }} data-testid="scaleup-form">
           {/* Step 1: OpenStack Credentials */}
           <div>
             <StepHeader
@@ -348,14 +373,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             </Typography>
           )}
         </Box>
-      </DrawerContent>
-      <Footer
-        submitButtonLabel="Scale Up"
-        onClose={handleClose}
-        onSubmit={handleSubmit}
-        disableSubmit={!masterNode || !selectedFlavor || loading || !openstackCredsValidated}
-        submitting={loading}
-      />
-    </StyledDrawer>
+      </DrawerBody>
+    </DrawerShell>
   )
 }

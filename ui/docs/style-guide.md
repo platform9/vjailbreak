@@ -33,11 +33,15 @@ const Card = styled(Box)(({ theme }) => ({
 
 ## Components
 
-| Component     | Purpose                                 | Key Props                                                     |
-| ------------- | --------------------------------------- | ------------------------------------------------------------- |
-| `FieldLabel`  | Standardized label + tooltip treatment. | `label`, `tooltip`, `required`, `helperText`.                 |
-| `FormGrid`    | Responsive auto-fit grid for forms.     | `minWidth`, `gap`, accepts `BoxProps`.                        |
-| `ToggleField` | Outlined switch card with description.  | `label`, `tooltip`, `description`, passthrough `SwitchProps`. |
+| Component                                  | Purpose                                        | Key Props / Notes                                                                 |
+| ------------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `FieldLabel`                               | Standardized label + tooltip treatment.        | `label`, `tooltip`, `required`, `helperText`.                                     |
+| `FormGrid`                                 | Responsive auto-fit grid for forms.            | `minWidth`, `gap`, accepts `BoxProps`.                                            |
+| `ToggleField`                              | Outlined switch card with description.         | `label`, `tooltip`, `description`, passthrough `SwitchProps`.                     |
+| `SurfaceCard`                              | Tokenized Paper variant for content groupings. | `title`, `subtitle`, `actions`, `footer`; exposes `data-testid="surface-card"`.   |
+| `ActionButton`                             | CTA helper with tone + loading treatments.     | `tone` (`primary`/`secondary`/`danger`), `loading`, `data-testid` for automation. |
+| `NavTabs` / `NavTab`                       | Dashboard/tab navigation with descriptions.    | `description`, `count`, `data-testid="dashboard-tabs"` for entire control.        |
+| `DrawerShell` + `DrawerHeader/Body/Footer` | Shared drawer chrome + layout.                 | Always provide `onClose`; body/footer expose `data-testid`s for test targeting.   |
 
 ### Form Patterns
 
@@ -60,6 +64,6 @@ yarn storybook          # Starts Storybook locally on http://localhost:6006
 yarn storybook:build    # Generates the static Storybook bundle for CI/deploy
 ```
 
-The Storybook setup automatically wraps stories with `ThemeProvider`, `CssBaseline`, and a centered container so light/dark mode parity is visible by default. Place new component stories in `src/design-system/components/*.stories.tsx`.
+The Storybook setup automatically wraps stories with `ThemeProvider`, `CssBaseline`, and a centered container so light/dark mode parity is visible by default. Place new component stories in `src/design-system/components/*.stories.tsx` and include meaningful `data-testid`s in component code whenever they assist unit/automation tests (e.g., `drawer-shell`, `nav-tabs`, `*-submit`).
 
 Adhering to these guidelines ensures the UI scales with minimal drift and accelerates future refinements.

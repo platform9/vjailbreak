@@ -1,9 +1,13 @@
 import { Box } from '@mui/material'
 import axios from 'axios'
 import { useState, useRef, useCallback } from 'react'
-import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
-import Header from 'src/components/forms/Header'
-import Footer from 'src/components/forms/Footer'
+import {
+  DrawerShell,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  ActionButton
+} from 'src/design-system'
 import {
   createOpenstackCredsWithSecretFlow,
   deleteOpenStackCredsWithSecretFlow
@@ -210,11 +214,13 @@ export default function OpenstackCredentialsDrawer({
     }
   }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd, insecure])
 
+  const isSubmitDisabled =
+    submitting || validatingOpenstackCreds || !isValidCredentialName || !rcFileValues
+
   // Use the custom hook for keyboard events
   useKeyboardSubmit({
     open,
-    isSubmitDisabled:
-      submitting || validatingOpenstackCreds || !isValidCredentialName || !rcFileValues,
+    isSubmitDisabled,
     onSubmit: handleSubmit,
     onClose: closeDrawer
   })
@@ -319,10 +325,29 @@ export default function OpenstackCredentialsDrawer({
   )
 
   return (
-    <StyledDrawer anchor="right" open={open} onClose={closeDrawer}>
-      <Header title="Add OpenStack Credentials" />
-      <DrawerContent>
-        <Box sx={{ display: 'grid', gap: 3 }}>
+    <DrawerShell
+      open={open}
+      onClose={closeDrawer}
+      header={<DrawerHeader title="Add OpenStack Credentials" onClose={closeDrawer} />}
+      footer={
+        <DrawerFooter>
+          <ActionButton tone="secondary" onClick={closeDrawer} data-testid="openstack-cred-cancel">
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={isSubmitDisabled}
+            data-testid="openstack-cred-submit"
+          >
+            Save Credential
+          </ActionButton>
+        </DrawerFooter>
+      }
+    >
+      <DrawerBody>
+        <Box sx={{ display: 'grid', gap: 3 }} data-testid="openstack-cred-form">
           <FormControl fullWidth error={!!credNameError} required>
             <TextField
               id="credentialName"
@@ -392,16 +417,7 @@ export default function OpenstackCredentialsDrawer({
             )}
           </FormControl>
         </Box>
-      </DrawerContent>
-      <Footer
-        submitButtonLabel={validatingOpenstackCreds ? 'Validating...' : 'Create Credentials'}
-        onClose={closeDrawer}
-        onSubmit={handleSubmit}
-        disableSubmit={
-          submitting || validatingOpenstackCreds || !isValidCredentialName || !rcFileValues
-        }
-        submitting={submitting}
-      />
-    </StyledDrawer>
+      </DrawerBody>
+    </DrawerShell>
   )
 }

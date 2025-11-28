@@ -1,8 +1,12 @@
 import { Box } from '@mui/material'
 import { useState, useCallback } from 'react'
-import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
-import Header from 'src/components/forms/Header'
-import Footer from 'src/components/forms/Footer'
+import {
+  DrawerShell,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  ActionButton
+} from 'src/design-system'
 import { createVMwareCredsWithSecretFlow, deleteVMwareCredsWithSecretFlow } from 'src/api/helpers'
 import axios from 'axios'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
@@ -321,11 +325,39 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     onClose: closeDrawer
   })
 
+  const isSubmitDisabled =
+    submitting ||
+    validatingVmwareCreds ||
+    !isValidCredentialName ||
+    !formValues.vcenterHost ||
+    !formValues.datacenter ||
+    !formValues.username ||
+    !formValues.password
+
   return (
-    <StyledDrawer anchor="right" open={open} onClose={closeDrawer}>
-      <Header title="Add VMware Credentials" />
-      <DrawerContent>
-        <Box sx={{ display: 'grid', gap: 3 }}>
+    <DrawerShell
+      open={open}
+      onClose={closeDrawer}
+      header={<DrawerHeader title="Add VMware Credentials" onClose={closeDrawer} />}
+      footer={
+        <DrawerFooter>
+          <ActionButton tone="secondary" onClick={closeDrawer} data-testid="vmware-cred-cancel">
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={isSubmitDisabled}
+            data-testid="vmware-cred-submit"
+          >
+            Save Credential
+          </ActionButton>
+        </DrawerFooter>
+      }
+    >
+      <DrawerBody>
+        <Box sx={{ display: 'grid', gap: 3 }} data-testid="vmware-cred-form">
           <FormControl fullWidth error={!!credNameError} required>
             <TextField
               id="credentialName"
@@ -456,22 +488,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
             )}
           </FormControl>
         </Box>
-      </DrawerContent>
-      <Footer
-        submitButtonLabel={validatingVmwareCreds ? 'Validating...' : 'Create Credentials'}
-        onClose={closeDrawer}
-        onSubmit={handleSubmit}
-        disableSubmit={
-          submitting ||
-          validatingVmwareCreds ||
-          !isValidCredentialName ||
-          !formValues.vcenterHost?.trim() ||
-          !formValues.datacenter?.trim() ||
-          !formValues.username?.trim() ||
-          !formValues.password?.trim()
-        }
-        submitting={submitting}
-      />
-    </StyledDrawer>
+      </DrawerBody>
+    </DrawerShell>
   )
 }
