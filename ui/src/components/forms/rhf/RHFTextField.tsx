@@ -32,7 +32,7 @@ export default function RHFTextField({
       control={control}
       rules={rules}
       render={({ field, fieldState }) => (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {label ? (
             <FieldLabel
               label={label}

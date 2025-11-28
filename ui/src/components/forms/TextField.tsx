@@ -9,7 +9,7 @@ export default function TextField(props: TextFieldProps) {
       size="small"
       sx={{
         maxWidth: '400px',
-        margin: '12px 0'
+        margin: '8px 0'
       }}
       {...props}
     />
