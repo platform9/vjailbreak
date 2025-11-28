@@ -76,6 +76,15 @@ type MigrationTimes struct {
 	VMCutoverEnd   time.Time
 }
 
+type PeriodicSyncStates int
+
+const (
+	initial PeriodicSyncStates = iota
+	cleanedSnapshot
+	TookSnapshot
+	SyncCompleted
+)
+
 // disconnects the source VM's network interfaces
 func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
 	if !migobj.DisconnectSourceNetwork {
@@ -364,8 +373,13 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
+	var maxRetries uint64
+	var capInterval time.Duration
+	currentState := initial
 	vmops := migobj.VMops
+	maxRetries, capInterval = utils.GetRetryLimits()
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
+	elapsed := time.Duration(0)
 	for {
 		syncEnabled := migobj.getSyncEnabled()
 		if syncEnabled {
@@ -380,42 +394,59 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 				return nil
 			}
 		default:
-			if syncEnabled {
-				// Perform sync
-				migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
-				start := time.Now()
-				err := vmops.CleanUpSnapshots(false)
-				if err != nil {
-					return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-				}
-
-				err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-				if err != nil {
-					return errors.Wrap(err, "failed to take snapshot of source VM")
-				}
-				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-					return err
-				}
-				elapsed := time.Since(start)
-				// If sync took longer than interval → run next sync immediately
-				if elapsed >= syncInterval {
-					migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
-					continue
-				}
-				// Otherwise wait remaining time
-				waitTime := syncInterval - elapsed
-				migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-migobj.PodLabelWatcher:
-					return nil // admin triggered cutover during wait
-				case <-time.After(waitTime):
-					// wait completed → loop and sync again
-				}
-			} else {
+			if !syncEnabled {
 				continue
 			}
+			if elapsed >= syncInterval {
+				migobj.logMessage("Periodic Sync: Previous sync took longer than interval, starting next cycle immediately")
+				elapsed = syncInterval
+			}
+			// Otherwise wait remaining time
+			waitTime := syncInterval - elapsed
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle", waitTime))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-migobj.PodLabelWatcher:
+				return nil // admin triggered cutover during wait
+			case <-time.After(waitTime):
+				// wait completed → loop and sync again
+			}
+			// Perform sync
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting sync cycle (interval: %s)", syncInterval))
+			start := time.Now()
+			if currentState == initial {
+
+				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					return vmops.CleanUpSnapshots(false)
+				}, maxRetries, capInterval)
+				if err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to clean up snapshots after %d retries: %v", maxRetries, err))
+					continue
+				} else {
+					currentState = cleanedSnapshot
+				}
+			}
+			if currentState == cleanedSnapshot {
+				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					return vmops.TakeSnapshot(constants.MigrationSnapshotName)
+				}, maxRetries, capInterval)
+				if err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to take snapshot '%s' after %d retries: %v", constants.MigrationSnapshotName, maxRetries, err))
+					continue
+				} else {
+					currentState = TookSnapshot
+				}
+			}
+			if currentState == TookSnapshot {
+				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
+					continue
+				} else {
+					currentState = initial
+				}
+			}
+			elapsed = time.Since(start)
 		}
 	}
 }
