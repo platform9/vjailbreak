@@ -312,11 +312,11 @@ export default function MigrationOptionsAlt({
                 size="small"
                 label="VM Rename Suffix"
                 disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-                value={params.postMigrationAction?.suffix || '_migrated_to_pcd'}
+                value={params.postMigrationAction?.suffix || ''}
                 onChange={(e) => {
                   onChange('postMigrationAction')({
                     ...params.postMigrationAction,
-                    suffix: e.target.value
+                    suffix: e.target.value?.trim() || undefined
                   })
                 }}
                 placeholder="_migrated_to_pcd"
@@ -356,11 +356,11 @@ export default function MigrationOptionsAlt({
                 size="small"
                 label="Folder Name"
                 disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                value={params.postMigrationAction?.folderName || 'vjailbreakedVMs'}
+                value={params.postMigrationAction?.folderName || ''}
                 onChange={(e) => {
                   onChange('postMigrationAction')({
                     ...params.postMigrationAction,
-                    folderName: e.target.value
+                    folderName: e.target.value?.trim() || undefined
                   })
                 }}
                 placeholder="vjailbreakedVMs"
