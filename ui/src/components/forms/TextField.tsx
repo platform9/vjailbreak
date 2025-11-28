@@ -1,6 +1,8 @@
 import { TextField as BaseTextField, TextFieldProps as BaseTextFieldProps } from '@mui/material'
 
-export default function TextField(props: BaseTextFieldProps) {
+export type TextFieldProps = BaseTextFieldProps
+
+export default function TextField(props: TextFieldProps) {
   return (
     <BaseTextField
       variant="outlined"

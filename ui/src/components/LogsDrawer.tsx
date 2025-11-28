@@ -13,7 +13,7 @@ import {
   useTheme
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
+import { DrawerShell, DrawerHeader, DrawerBody } from 'src/design-system'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
 import {
@@ -108,42 +108,29 @@ export default function LogsDrawer({
     onClose()
   }, [onClose])
 
-  return (
-    <StyledDrawer anchor="right" open={open} onClose={handleClose}>
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 3,
-          py: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          backgroundColor: 'background.paper'
-        }}
-      >
-        <Box>
-          <Typography variant="h6" component="h2">
-            {logSource === 'pod' ? 'Migration Pod Logs' : 'Controller Logs'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {logSource === 'pod'
-              ? `${podName} (${namespace})`
-              : `migration-controller-manager (migration-system)`}
-            {migrationName && (
-              <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                • Migration: {migrationName}
-              </Typography>
-            )}
-          </Typography>
-        </Box>
-        <IconButton onClick={handleClose} aria-label="close logs drawer" size="small">
-          <CloseIcon />
-        </IconButton>
-      </Box>
+  const headerTitle = logSource === 'pod' ? 'Migration Pod Logs' : 'Controller Logs'
+  const headerSubtitleBase =
+    logSource === 'pod'
+      ? `${podName} (${namespace})`
+      : 'migration-controller-manager (migration-system)'
+  const headerSubtitle = migrationName
+    ? `${headerSubtitleBase} • Migration: ${migrationName}`
+    : headerSubtitleBase
 
-      <DrawerContent>
+  return (
+    <DrawerShell
+      open={open}
+      onClose={handleClose}
+      header={
+        <DrawerHeader
+          title={headerTitle}
+          subtitle={headerSubtitle}
+          onClose={handleClose}
+          icon={<CloseIcon sx={{ display: 'none' }} />}
+        />
+      }
+    >
+      <DrawerBody data-testid="logs-drawer-body">
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Log Source Toggle */}
           <Box
@@ -292,7 +279,7 @@ export default function LogsDrawer({
             </Box>
           </Paper>
         </Box>
-      </DrawerContent>
-    </StyledDrawer>
+      </DrawerBody>
+    </DrawerShell>
   )
 }
