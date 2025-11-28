@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "docker:build": "docker build -t vjailbreak -f ./Dockerfile .",
-    "format": "prettier \"src/**/*.{ts,tsx,js,jsx,json,css,md}\" --write"
+    "format": "prettier \"src/**/*.{ts,tsx,js,jsx,json,css,md}\" --write",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.5.0",
