@@ -1,4 +1,4 @@
-import DeleteIcon from "@mui/icons-material/Delete"
+import DeleteIcon from '@mui/icons-material/Delete'
 import {
   IconButton,
   Paper,
@@ -7,8 +7,8 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
-} from "@mui/material"
+  TableRow
+} from '@mui/material'
 
 interface ResourceMap {
   source: string
@@ -28,7 +28,7 @@ export default function ResourceMappingTable({
   targetLabel,
   mappings,
   onDeleteRow,
-  tableWidth = "600px",
+  tableWidth = '600px'
 }: ResourceMappingTableProps) {
   return (
     <TableContainer component={Paper} sx={{ mt: 2, mb: 4, width: tableWidth }}>

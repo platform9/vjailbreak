@@ -1,14 +1,10 @@
-import {
-  useQuery,
-  UseQueryOptions,
-  UseQueryResult,
-} from "@tanstack/react-query"
-import { getMigrations } from "src/api/migrations/migrations"
-import { Migration } from "src/api/migrations/model"
+import { useQuery, UseQueryOptions, UseQueryResult } from '@tanstack/react-query'
+import { getMigrations } from 'src/api/migrations/migrations'
+import { Migration } from 'src/api/migrations/model'
 
-export const MIGRATIONS_QUERY_KEY = ["migrations"]
+export const MIGRATIONS_QUERY_KEY = ['migrations']
 
-type Options = Omit<UseQueryOptions<Migration[]>, "queryKey" | "queryFn">
+type Options = Omit<UseQueryOptions<Migration[]>, 'queryKey' | 'queryFn'>
 
 export const useMigrationsQuery = (
   namespace = undefined,
@@ -19,6 +15,6 @@ export const useMigrationsQuery = (
     queryFn: async () => getMigrations(namespace),
     staleTime: Infinity,
     refetchOnWindowFocus: true,
-    ...options, // Override with custom options
+    ...options // Override with custom options
   })
 }

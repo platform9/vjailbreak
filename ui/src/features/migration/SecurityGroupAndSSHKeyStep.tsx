@@ -1,28 +1,28 @@
-import { Box, Typography } from "@mui/material";
-import Step from "../../components/forms/Step";
-import Autocomplete from '@mui/material/Autocomplete';
-import TextField from '@mui/material/TextField';
-import Checkbox from '@mui/material/Checkbox';
-import { OpenstackCreds, SecurityGroupOption } from "src/api/openstack-creds/model";
+import { Box, Typography } from '@mui/material'
+import Step from '../../components/forms/Step'
+import Autocomplete from '@mui/material/Autocomplete'
+import TextField from '@mui/material/TextField'
+import Checkbox from '@mui/material/Checkbox'
+import { OpenstackCreds, SecurityGroupOption } from 'src/api/openstack-creds/model'
 
 interface SecurityGroupAndSSHKeyStepProps {
   params: {
-    vms?: any[];
-    securityGroups?: string[];
-  };
-  onChange: (key: string) => (value: any) => void;
-  openstackCredentials?: OpenstackCreds;
-  stepNumber?: string;
+    vms?: any[]
+    securityGroups?: string[]
+  }
+  onChange: (key: string) => (value: any) => void
+  openstackCredentials?: OpenstackCreds
+  stepNumber?: string
 }
 
 export default function SecurityGroupAndSSHKeyStep({
   params,
   onChange,
   openstackCredentials,
-  stepNumber = "4",
+  stepNumber = '4'
 }: SecurityGroupAndSSHKeyStepProps) {
   const securityGroupOptions: SecurityGroupOption[] =
-    openstackCredentials?.status?.openstack?.securityGroups || [];
+    openstackCredentials?.status?.openstack?.securityGroups || []
 
   return (
     <Box>
@@ -41,20 +41,22 @@ export default function SecurityGroupAndSSHKeyStep({
                 : option.name
             }
             isOptionEqualToValue={(option, value) => option.id === value.id}
-            value={
-              securityGroupOptions.filter(option =>
-                (params.securityGroups || []).includes(option.id)
-              )
-            }
+            value={securityGroupOptions.filter((option) =>
+              (params.securityGroups || []).includes(option.id)
+            )}
             onChange={(_, value) => {
-              const selectedIds = value.map(option => option.id);
-              onChange("securityGroups")(selectedIds);
+              const selectedIds = value.map((option) => option.id)
+              onChange('securityGroups')(selectedIds)
             }}
             renderInput={(inputParams) => (
               <TextField
                 {...inputParams}
                 label="Security Groups"
-                placeholder={params.securityGroups && params.securityGroups.length > 0 ? "" : "Select Security Groups"}
+                placeholder={
+                  params.securityGroups && params.securityGroups.length > 0
+                    ? ''
+                    : 'Select Security Groups'
+                }
                 size="small"
               />
             )}
@@ -71,7 +73,7 @@ export default function SecurityGroupAndSSHKeyStep({
                     fontSize: 13,
                     height: 24,
                     marginRight: 4,
-                    padding: '0 8px',
+                    padding: '0 8px'
                   }}
                 >
                   {option.requiresIdDisplay
@@ -80,9 +82,9 @@ export default function SecurityGroupAndSSHKeyStep({
                   <span
                     style={{ marginLeft: 4, cursor: 'pointer' }}
                     onClick={() => {
-                      const currentIds = value.map(v => v.id);
-                      currentIds.splice(index, 1);
-                      onChange("securityGroups")(currentIds);
+                      const currentIds = value.map((v) => v.id)
+                      currentIds.splice(index, 1)
+                      onChange('securityGroups')(currentIds)
                     }}
                   >
                     ×
@@ -105,5 +107,5 @@ export default function SecurityGroupAndSSHKeyStep({
         </Box>
       </Box>
     </Box>
-  );
+  )
 }

@@ -1,11 +1,11 @@
-import { SecretData } from "./secrets"
+import { SecretData } from './secrets'
 
 export interface Secret {
   apiVersion: string
-  kind: "Secret"
+  kind: 'Secret'
   metadata: Metadata
   data: SecretData
-  type: "Opaque"
+  type: 'Opaque'
 }
 
 export interface Metadata {

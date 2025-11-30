@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { streamPodLogs } from "../api/kubernetes/pods"
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { streamPodLogs } from '../api/kubernetes/pods'
 
 interface UseDirectPodLogsParams {
   podName: string
@@ -19,7 +19,7 @@ const MAX_LOG_LINES = 1000
 export const useDirectPodLogs = ({
   podName,
   namespace,
-  enabled,
+  enabled
 }: UseDirectPodLogsParams): UseDirectPodLogsReturn => {
   const [logs, setLogs] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -53,9 +53,9 @@ export const useDirectPodLogs = ({
 
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
-        tailLines: "100",
+        tailLines: '100',
         limitBytes: 500000,
-        signal: abortController.signal,
+        signal: abortController.signal
       })
 
       setIsLoading(false)
@@ -71,15 +71,13 @@ export const useDirectPodLogs = ({
       const readStream = async (): Promise<void> => {
         try {
           const { done, value } = await reader.read()
-          
+
           if (done) {
             // Process any remaining buffer content
             if (buffer.trim()) {
-              setLogs(prevLogs => {
+              setLogs((prevLogs) => {
                 const newLogs = [...prevLogs, buffer.trim()]
-                return newLogs.length > MAX_LOG_LINES 
-                  ? newLogs.slice(-MAX_LOG_LINES) 
-                  : newLogs
+                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
               })
             }
             return
@@ -87,17 +85,15 @@ export const useDirectPodLogs = ({
 
           // Decode the chunk and add to buffer
           buffer += decoder.decode(value, { stream: true })
-          
+
           // Split by newlines and process complete lines
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // Keep incomplete line in buffer
-          
+
           if (lines.length > 0) {
-            setLogs(prevLogs => {
-              const newLogs = [...prevLogs, ...lines.filter(line => line.trim())]
-              return newLogs.length > MAX_LOG_LINES 
-                ? newLogs.slice(-MAX_LOG_LINES) 
-                : newLogs
+            setLogs((prevLogs) => {
+              const newLogs = [...prevLogs, ...lines.filter((line) => line.trim())]
+              return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
             })
           }
 
@@ -119,10 +115,11 @@ export const useDirectPodLogs = ({
         // Aborted, don't set error
         return
       }
-      
-      const errorMessage = err instanceof Error ? err.message : "Failed to connect to pod logs stream"
+
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to connect to pod logs stream'
       setError(errorMessage)
-      
+
       // Attempt to reconnect after 3 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
         if (enabled) {
@@ -158,6 +155,6 @@ export const useDirectPodLogs = ({
     logs,
     isLoading,
     error,
-    reconnect,
+    reconnect
   }
 }

@@ -22,7 +22,7 @@ export const pollForStatus = <T extends Resource>({
   stopPollingCond,
   onSuccess,
   onError,
-  pollingInterval = 5000, // Default polling interval to 5 seconds
+  pollingInterval = 5000 // Default polling interval to 5 seconds
 }: PollForStatusParams<T>) => {
   if (!resource?.metadata?.name) return
 
@@ -34,7 +34,7 @@ export const pollForStatus = <T extends Resource>({
     clearInterval(intervalId) // Stop polling
     if (onError) {
       // onError(`Polling timed out after ${timeoutDuration / 1000} seconds`)
-      onError("The request timed out. Please try again.")
+      onError('The request timed out. Please try again.')
     }
   }, timeoutDuration)
 

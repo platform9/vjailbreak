@@ -65,9 +65,9 @@ function App() {
       <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
       <AppContent>
         {openMigrationForm && migrationType === 'standard' && (
-          <MigrationFormDrawer 
-            open 
-            onClose={() => setOpenMigrationForm(false)} 
+          <MigrationFormDrawer
+            open
+            onClose={() => setOpenMigrationForm(false)}
             onSuccess={handleSuccess}
           />
         )}
@@ -90,7 +90,7 @@ function App() {
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+        onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         sx={{
           top: { xs: 80, sm: 90 },
@@ -98,10 +98,10 @@ function App() {
         }}
       >
         <Alert
-          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
           severity={notification.severity}
           variant="filled"
-          sx={{ 
+          sx={{
             minWidth: '350px',
             fontSize: '1rem',
             fontWeight: 600,

@@ -1,4 +1,4 @@
-export const defaultNamespace = "migration-system"
+export const defaultNamespace = 'migration-system'
 
 // Polling intervals
 export const THREE_SECONDS = 1000 * 3

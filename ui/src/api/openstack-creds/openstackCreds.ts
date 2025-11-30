@@ -1,59 +1,43 @@
-import axios from "../axios"
+import axios from '../axios'
 
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import { GetOpenstackCredsList, OpenstackCreds } from "./model"
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { GetOpenstackCredsList, OpenstackCreds } from './model'
 
-export const getOpenstackCredentialsList = async (
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getOpenstackCredentialsList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds`
   const response = await axios.get<GetOpenstackCredsList>({
-    endpoint,
+    endpoint
   })
   return response?.items
 }
 
-export const getOpenstackCredentials = async (
-  name,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getOpenstackCredentials = async (name, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds/${name}`
   const response = await axios.get<OpenstackCreds>({
-    endpoint,
+    endpoint
   })
 
   // TODO: REMOVE MOCK DATA - Add mock Cinder backend pools and data copy methods
   if (response && response.spec) {
     response.spec.cinderBackendPools = response.spec.cinderBackendPools || [
-      "primera@A600-TDV",
-      "primera@A650-PROD",
-      "ceph@rbd-pool",
-      "netapp@ontap-svm1",
-      "pure@flasharray-x70",
+      'primera@A600-TDV',
+      'primera@A650-PROD',
+      'ceph@rbd-pool',
+      'netapp@ontap-svm1',
+      'pure@flasharray-x70'
     ]
 
-    response.spec.dataCopyMethods = response.spec.dataCopyMethods || [
-      "live",
-      "hot",
-      "cold",
-      "warm",
-    ]
+    response.spec.dataCopyMethods = response.spec.dataCopyMethods || ['live', 'hot', 'cold', 'warm']
   }
 
   return response
 }
 
-export const postOpenstackCredentials = async (
-  data,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const postOpenstackCredentials = async (data, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds`
   const response = await axios.post<OpenstackCreds>({
     endpoint,
-    data,
+    data
   })
   return response
 }
@@ -64,7 +48,7 @@ export const deleteOpenstackCredentials = async (
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds/${name}`
   const response = await axios.del<OpenstackCreds>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -79,23 +63,23 @@ export const createOpenstackCredsWithSecret = async (
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds`
 
   const credBody = {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "OpenstackCreds",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'OpenstackCreds',
     metadata: {
       name,
-      namespace,
+      namespace
     },
     spec: {
       secretRef: {
-        name: secretName,
+        name: secretName
       },
-      projectName: projectName,
-    },
+      projectName: projectName
+    }
   }
 
   const response = await axios.post<OpenstackCreds>({
     endpoint,
-    data: credBody,
+    data: credBody
   })
 
   return response
@@ -118,10 +102,10 @@ interface IPValidationResponse {
 export const validateOpenstackIPs = async (
   request: IPValidationRequest
 ): Promise<IPValidationResponse> => {
-  const endpoint = "/dev-api/sdk/vpw/v1/validate_openstack_ip"
+  const endpoint = '/dev-api/sdk/vpw/v1/validate_openstack_ip'
   const response = await axios.post<IPValidationResponse>({
     endpoint,
-    data: request,
+    data: request
   })
 
   return response

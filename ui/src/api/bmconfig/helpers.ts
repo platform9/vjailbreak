@@ -1,15 +1,13 @@
-import { BMConfig } from "./model"
+import { BMConfig } from './model'
 
 export const isBMConfigValid = (bmconfig: BMConfig): boolean => {
   return (
-    bmconfig?.status?.validationStatus === "validated" ||
-    bmconfig?.status?.validationStatus === "valid"
+    bmconfig?.status?.validationStatus === 'validated' ||
+    bmconfig?.status?.validationStatus === 'valid'
   )
 }
 
-export const getBMConfigValidationMessage = (
-  bmconfig: BMConfig
-): string | null => {
+export const getBMConfigValidationMessage = (bmconfig: BMConfig): string | null => {
   if (!bmconfig?.status?.validationMessage) {
     return null
   }
@@ -18,9 +16,9 @@ export const getBMConfigValidationMessage = (
 }
 
 export const formatBMConfigApiUrl = (url: string): string => {
-  if (!url) return ""
+  if (!url) return ''
 
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
     return `http://${url}`
   }
 
@@ -28,8 +26,8 @@ export const formatBMConfigApiUrl = (url: string): string => {
 }
 
 export const getBMConfigDisplayName = (bmconfig: BMConfig): string => {
-  if (!bmconfig) return ""
+  if (!bmconfig) return ''
 
   const { name } = bmconfig.metadata
-  return name || "Unnamed BMConfig"
+  return name || 'Unnamed BMConfig'
 }

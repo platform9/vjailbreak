@@ -1270,8 +1270,8 @@ function VmsSelectionStep({
       const flavorName = isAutoAssign
         ? 'auto-assign'
         : selectedFlavorObj
-        ? selectedFlavorObj.name
-        : selectedFlavor
+          ? selectedFlavorObj.name
+          : selectedFlavor
 
       const updatedVms = vmsWithFlavor.map((vm) => {
         if (selectedVMs.has(vm.name)) {

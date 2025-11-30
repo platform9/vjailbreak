@@ -1,7 +1,6 @@
 export interface VjailbreakSettings {
   apiVersion: string
   data: {
-
     CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: string
     PERIODIC_SYNC_INTERVAL: string
     PERIODIC_SYNC_TIME_UNIT: string
@@ -17,7 +16,7 @@ export interface VjailbreakSettings {
   }
   kind: string
   metadata: {
-    annotations?: Record<string,string>
+    annotations?: Record<string, string>
     creationTimestamp: string
     name: string
     namespace: string
@@ -25,4 +24,3 @@ export interface VjailbreakSettings {
     uid: any
   }
 }
-

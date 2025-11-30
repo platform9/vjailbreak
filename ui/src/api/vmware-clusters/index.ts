@@ -1,2 +1,2 @@
-export * from "./model"
-export * from "./vmwareClusters"
+export * from './model'
+export * from './vmwareClusters'

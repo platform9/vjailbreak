@@ -1,11 +1,7 @@
-import * as amplitude from "@amplitude/analytics-browser"
-import type {
-  AmplitudeEventName,
-  EventProperties,
-  UserContext,
-} from "../types/amplitude"
-import type { AmplitudeConfig } from "../config/amplitude"
-import { getTrackingBehavior } from "../config/amplitude"
+import * as amplitude from '@amplitude/analytics-browser'
+import type { AmplitudeEventName, EventProperties, UserContext } from '../types/amplitude'
+import type { AmplitudeConfig } from '../config/amplitude'
+import { getTrackingBehavior } from '../config/amplitude'
 
 // Simple state management
 let isInitialized = false
@@ -13,7 +9,7 @@ let isInitialized = false
 // Initialize Amplitude
 export const initializeAmplitude = (config: AmplitudeConfig): boolean => {
   if (config.disabled) {
-    console.log("Amplitude disabled in current environment")
+    console.log('Amplitude disabled in current environment')
     return false
   }
 
@@ -21,8 +17,8 @@ export const initializeAmplitude = (config: AmplitudeConfig): boolean => {
     const initOptions = {
       useDynamicConfig: true, // Let the SDK fetch the best endpoint
       ...(config.trackingOptions && {
-        trackingOptions: config.trackingOptions,
-      }),
+        trackingOptions: config.trackingOptions
+      })
     }
 
     amplitude.init(config.apiKey, undefined, initOptions)
@@ -30,15 +26,15 @@ export const initializeAmplitude = (config: AmplitudeConfig): boolean => {
     // Set release stage as a global user property if available
     if (config.releaseStage) {
       const identify = new amplitude.Identify()
-      identify.setOnce("release_stage", config.releaseStage)
+      identify.setOnce('release_stage', config.releaseStage)
       amplitude.identify(identify)
     }
 
     isInitialized = true
-    console.log("Amplitude initialized successfully")
+    console.log('Amplitude initialized successfully')
     return true
   } catch (error) {
-    console.error("Failed to initialize Amplitude:", error)
+    console.error('Failed to initialize Amplitude:', error)
     return false
   }
 }
@@ -63,7 +59,7 @@ export const setUserContext = (user: UserContext): void => {
       amplitude.identify(identify)
     }
   } catch (error) {
-    console.error("Failed to set user context:", error)
+    console.error('Failed to set user context:', error)
   }
 }
 
@@ -77,14 +73,14 @@ export const trackEvent = (
   // Check if tracking is enabled
   if (!behavior.enabled) {
     if (behavior.logToConsole) {
-      console.log("Tracking disabled:", eventName, properties)
+      console.log('Tracking disabled:', eventName, properties)
     }
     return
   }
 
   // Check if Amplitude is ready
   if (!isAmplitudeReady()) {
-    console.warn("Amplitude not initialized, skipping event:", eventName)
+    console.warn('Amplitude not initialized, skipping event:', eventName)
     return
   }
 
@@ -97,10 +93,10 @@ export const trackEvent = (
     amplitude.track(eventName, cleanProperties)
 
     if (behavior.logToConsole) {
-      console.log("📊 Amplitude event:", eventName, cleanProperties)
+      console.log('📊 Amplitude event:', eventName, cleanProperties)
     }
   } catch (error) {
-    console.error("Failed to track event:", error)
+    console.error('Failed to track event:', error)
   }
 }
 
@@ -111,7 +107,7 @@ export const resetUserContext = (): void => {
   try {
     amplitude.reset()
   } catch (error) {
-    console.error("Failed to reset user context:", error)
+    console.error('Failed to reset user context:', error)
   }
 }
 
@@ -122,7 +118,7 @@ export const flushEvents = async (): Promise<void> => {
   try {
     await amplitude.flush()
   } catch (error) {
-    console.error("Failed to flush events:", error)
+    console.error('Failed to flush events:', error)
   }
 }
 
@@ -133,7 +129,7 @@ export const amplitudeService = {
   track: trackEvent,
   setUser: setUserContext,
   reset: resetUserContext,
-  flush: flushEvents,
+  flush: flushEvents
 }
 
 export default amplitudeService

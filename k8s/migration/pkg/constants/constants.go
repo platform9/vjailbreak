@@ -213,6 +213,9 @@ const (
 	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
 	ValidateRDMOwnerVMs = true
 
+	// MigrationPlan status message prefix
+	MigrationPlanValidationFailedPrefix = "Migration plan validation failed"
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 

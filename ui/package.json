@@ -4,12 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "docker:build": "docker build -t vjailbreak -f ./Dockerfile ."
-  },
+  "dev": "vite",
+  "build": "tsc -b && vite build",
+  "lint": "eslint .",
+  "preview": "vite preview",
+  "docker:build": "docker build -t vjailbreak -f ./Dockerfile .",
+  "format": "prettier \"src/**/*.{ts,tsx,js,jsx,json,css,md}\" --write"
+},
   "dependencies": {
     "@amplitude/analytics-browser": "^2.5.0",
     "@bugsnag/browser-performance": "^2.14.0",
@@ -58,6 +59,7 @@
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
+    "prettier": "^3.6.2",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",

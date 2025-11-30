@@ -1,4 +1,4 @@
-import AddIcon from "@mui/icons-material/Add"
+import AddIcon from '@mui/icons-material/Add'
 import {
   Box,
   Button,
@@ -7,10 +7,10 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  Typography,
-} from "@mui/material"
-import { useState } from "react"
-import ResourceMappingTable from "./ResourceMappingTable"
+  Typography
+} from '@mui/material'
+import { useState } from 'react'
+import ResourceMappingTable from './ResourceMappingTable'
 
 export interface ResourceMap {
   source: string
@@ -36,10 +36,10 @@ export default function ResourceMapping({
   targetLabel,
   values = [],
   onChange,
-  error,
+  error
 }: ResourceMappingProps) {
-  const [selectedSourceItem, setSelectedSourceItem] = useState("")
-  const [selectedTargetItem, setSelectedTargetItem] = useState("")
+  const [selectedSourceItem, setSelectedSourceItem] = useState('')
+  const [selectedTargetItem, setSelectedTargetItem] = useState('')
 
   const handleAddMapping = () => {
     if (selectedSourceItem && selectedTargetItem) {
@@ -47,20 +47,19 @@ export default function ResourceMapping({
         ...values,
         {
           source: selectedSourceItem,
-          target: selectedTargetItem,
-        },
+          target: selectedTargetItem
+        }
       ]
 
       onChange(updatedMappings)
-      setSelectedSourceItem("")
-      setSelectedTargetItem("")
+      setSelectedSourceItem('')
+      setSelectedTargetItem('')
     }
   }
 
   const handleDeleteMapping = (mapping: ResourceMap) => {
     const updatedMappings = values.filter(
-      ({ source, target }) =>
-        mapping.source !== source || mapping.target !== target
+      ({ source, target }) => mapping.source !== source || mapping.target !== target
     )
 
     onChange(updatedMappings)
@@ -87,18 +86,14 @@ export default function ResourceMapping({
       )}
       <Box
         sx={{
-          display: "grid",
+          display: 'grid',
           mt: 2,
           mb: 2,
           gap: 2,
-          gridTemplateColumns: "1fr 1fr max-content",
+          gridTemplateColumns: '1fr 1fr max-content'
         }}
       >
-        <FormControl
-          fullWidth
-          size="small"
-          disabled={availableSourceItems.length === 0}
-        >
+        <FormControl fullWidth size="small" disabled={availableSourceItems.length === 0}>
           <InputLabel id="source-item-label">{sourceLabel}</InputLabel>
           <Select
             labelId="source-item-label"
@@ -113,11 +108,7 @@ export default function ResourceMapping({
             ))}
           </Select>
         </FormControl>
-        <FormControl
-          fullWidth
-          size="small"
-          disabled={availableTargetItems.length === 0}
-        >
+        <FormControl fullWidth size="small" disabled={availableTargetItems.length === 0}>
           <InputLabel id="target-item-label">{targetLabel}</InputLabel>
           <Select
             labelId="target-item-label"

@@ -1,7 +1,4 @@
-import {
-  TextField as BaseTextField,
-  TextFieldProps as BaseTextFieldProps,
-} from "@mui/material"
+import { TextField as BaseTextField, TextFieldProps as BaseTextFieldProps } from '@mui/material'
 
 export default function TextField(props: BaseTextFieldProps) {
   return (
@@ -9,8 +6,8 @@ export default function TextField(props: BaseTextFieldProps) {
       variant="outlined"
       size="small"
       sx={{
-        maxWidth: "400px",
-        margin: "12px 0",
+        maxWidth: '400px',
+        margin: '12px 0'
       }}
       {...props}
     />

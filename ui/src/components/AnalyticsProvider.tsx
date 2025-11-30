@@ -7,6 +7,6 @@ interface AnalyticsProviderProps {
 
 export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
   useAnalytics()
-  
+
   return <>{children}</>
 }

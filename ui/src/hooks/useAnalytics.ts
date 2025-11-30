@@ -1,20 +1,15 @@
-import { useEffect, useState } from "react"
-import Bugsnag from "@bugsnag/js"
-import BugsnagPluginReact from "@bugsnag/plugin-react"
-import BugsnagPerformance from "@bugsnag/browser-performance"
-import {
-  getBugsnagConfig,
-  getBugsnagPerformanceConfig,
-} from "../config/bugsnag"
-import { createAmplitudeConfig } from "../config/amplitude"
-import { errorReportingService } from "../services/errorReporting"
-import { initializeAmplitude } from "../services/amplitudeService"
-import { ConfigService, AnalyticsConfig } from "../services/configService"
+import { useEffect, useState } from 'react'
+import Bugsnag from '@bugsnag/js'
+import BugsnagPluginReact from '@bugsnag/plugin-react'
+import BugsnagPerformance from '@bugsnag/browser-performance'
+import { getBugsnagConfig, getBugsnagPerformanceConfig } from '../config/bugsnag'
+import { createAmplitudeConfig } from '../config/amplitude'
+import { errorReportingService } from '../services/errorReporting'
+import { initializeAmplitude } from '../services/amplitudeService'
+import { ConfigService, AnalyticsConfig } from '../services/configService'
 
 export function useAnalytics() {
-  const [configMapData, setConfigMapData] = useState<AnalyticsConfig | null>(
-    null
-  )
+  const [configMapData, setConfigMapData] = useState<AnalyticsConfig | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [analyticsInitialized, setAnalyticsInitialized] = useState(false)
 
@@ -24,21 +19,21 @@ export function useAnalytics() {
 
     async function fetchConfig() {
       try {
-        console.log("Fetching analytics configuration from ConfigMap...")
+        console.log('Fetching analytics configuration from ConfigMap...')
         const data = await ConfigService.fetchAnalyticsConfig()
 
         if (isMounted) {
           if (data) {
-            console.log("ConfigMap data received successfully")
+            console.log('ConfigMap data received successfully')
             setConfigMapData(data)
           } else {
-            console.warn("ConfigMap fetch returned no data")
+            console.warn('ConfigMap fetch returned no data')
             setConfigMapData(null)
           }
           setIsLoading(false)
         }
       } catch (error) {
-        console.error("Failed to fetch ConfigMap:", error)
+        console.error('Failed to fetch ConfigMap:', error)
         if (isMounted) {
           setConfigMapData(null)
           setIsLoading(false)
@@ -60,14 +55,12 @@ export function useAnalytics() {
     }
 
     console.log(
-      "Initializing analytics...",
-      configMapData ? "with ConfigMap data" : "with environment variables"
+      'Initializing analytics...',
+      configMapData ? 'with ConfigMap data' : 'with environment variables'
     )
 
     const bugsnagConfig = getBugsnagConfig(configMapData || undefined)
-    const bugsnagPerformanceConfig = getBugsnagPerformanceConfig(
-      configMapData || undefined
-    )
+    const bugsnagPerformanceConfig = getBugsnagPerformanceConfig(configMapData || undefined)
     const amplitudeConfig = createAmplitudeConfig(configMapData || undefined)
 
     // Initialize Bugsnag if API key is available
@@ -75,17 +68,17 @@ export function useAnalytics() {
       try {
         Bugsnag.start({
           ...bugsnagConfig,
-          plugins: [new BugsnagPluginReact()],
+          plugins: [new BugsnagPluginReact()]
         })
 
         BugsnagPerformance.start(bugsnagPerformanceConfig)
         errorReportingService.initialize(Bugsnag)
-        errorReportingService.addMetadata("app", "name", "vjailbreak")
-        errorReportingService.addMetadata("app", "component", "ui")
+        errorReportingService.addMetadata('app', 'name', 'vjailbreak')
+        errorReportingService.addMetadata('app', 'component', 'ui')
 
-        console.log("Bugsnag initialized")
+        console.log('Bugsnag initialized')
       } catch (error) {
-        console.error("Failed to initialize Bugsnag:", error)
+        console.error('Failed to initialize Bugsnag:', error)
       }
     }
 
@@ -93,9 +86,9 @@ export function useAnalytics() {
     if (amplitudeConfig.apiKey) {
       try {
         initializeAmplitude(amplitudeConfig)
-        console.log("Amplitude initialized")
+        console.log('Amplitude initialized')
       } catch (error) {
-        console.error("Failed to initialize Amplitude:", error)
+        console.error('Failed to initialize Amplitude:', error)
       }
     }
 
@@ -105,6 +98,6 @@ export function useAnalytics() {
   return {
     configMapData,
     isLoading,
-    analyticsInitialized,
+    analyticsInitialized
   }
 }

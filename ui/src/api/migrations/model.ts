@@ -6,7 +6,7 @@ export interface GetMigrationsList {
 }
 
 export enum APIVersion {
-  VjailbreakK8SPf9IoV1Alpha1 = "vjailbreak.k8s.pf9.io/v1alpha1",
+  VjailbreakK8SPf9IoV1Alpha1 = 'vjailbreak.k8s.pf9.io/v1alpha1'
 }
 
 export interface Migration {
@@ -18,7 +18,7 @@ export interface Migration {
 }
 
 export enum Kind {
-  Migration = "Migration",
+  Migration = 'Migration'
 }
 
 export interface ItemMetadata {
@@ -37,26 +37,26 @@ export interface Labels {
 }
 
 export interface Annotations {
-  "kubectl.kubernetes.io/last-applied-configuration": string
+  'kubectl.kubernetes.io/last-applied-configuration': string
 }
 
 export enum Manager {
-  Kubectl = "kubectl",
-  KubectlEdit = "kubectl-edit",
-  KubectlLastApplied = "kubectl-last-applied",
+  Kubectl = 'kubectl',
+  KubectlEdit = 'kubectl-edit',
+  KubectlLastApplied = 'kubectl-last-applied'
 }
 
 export enum Operation {
-  Apply = "Apply",
-  Update = "Update",
+  Apply = 'Apply',
+  Update = 'Update'
 }
 
 export enum Subresource {
-  Status = "status",
+  Status = 'status'
 }
 
 export enum Namespace {
-  MigrationSystem = "migration-system",
+  MigrationSystem = 'migration-system'
 }
 
 export interface Spec {
@@ -66,17 +66,17 @@ export interface Spec {
 }
 
 export enum MigrationPlan {
-  VMMigrationU22 = "vm-migration-u22",
+  VMMigrationU22 = 'vm-migration-u22'
 }
 
 export enum PodRef {
-  V2VHelperMigTestCbtBakClone0 = "v2v-helper-mig-test-cbt-bak-clone-0",
-  V2VHelperMigTestCbtBakClone1 = "v2v-helper-mig-test-cbt-bak-clone-1",
+  V2VHelperMigTestCbtBakClone0 = 'v2v-helper-mig-test-cbt-bak-clone-0',
+  V2VHelperMigTestCbtBakClone1 = 'v2v-helper-mig-test-cbt-bak-clone-1'
 }
 
 export enum VMName {
-  MigTestCbtBakClone0 = "mig_test_cbt_bak-clone-0",
-  MigTestCbtBakClone1 = "mig_test_cbt_bak-clone-1",
+  MigTestCbtBakClone0 = 'mig_test_cbt_bak-clone-0',
+  MigTestCbtBakClone1 = 'mig_test_cbt_bak-clone-1'
 }
 
 export interface StatusClass {
@@ -93,36 +93,36 @@ export interface Condition {
 }
 
 export enum Message {
-  CopyingDisk0 = "Copying disk 0",
-  CopyingDisk1 = "Copying disk 1",
-  MigratingVMFromVMwareToOpenstack = "Migrating VM from VMware to OpenStack",
-  MigrationValidatedSuccessfully = "Migration validated successfully",
+  CopyingDisk0 = 'Copying disk 0',
+  CopyingDisk1 = 'Copying disk 1',
+  MigratingVMFromVMwareToOpenstack = 'Migrating VM from VMware to OpenStack',
+  MigrationValidatedSuccessfully = 'Migration validated successfully'
 }
 
 export enum StatusEnum {
-  False = "False",
-  True = "True",
-  Unknown = "Unknown",
+  False = 'False',
+  True = 'True',
+  Unknown = 'Unknown'
 }
 
 export enum Type {
-  DataCopy = "DataCopy",
-  Migrated = "Migrated",
-  Validated = "Validated",
+  DataCopy = 'DataCopy',
+  Migrated = 'Migrated',
+  Validated = 'Validated'
 }
 
 export enum Phase {
-  Pending = "Pending",
-  Validating = "Validating",
-  AwaitingDataCopyStart = "AwaitingDataCopyStart",
-  CopyingBlocks = "CopyingBlocks",
-  CopyingChangedBlocks = "CopyingChangedBlocks",
-  ConvertingDisk = "ConvertingDisk",
-  AwaitingCutOverStartTime = "AwaitingCutOverStartTime",
-  AwaitingAdminCutOver = "AwaitingAdminCutOver",
-  Succeeded = "Succeeded",
-  Failed = "Failed",
-  Unknown = "Unknown",
+  Pending = 'Pending',
+  Validating = 'Validating',
+  AwaitingDataCopyStart = 'AwaitingDataCopyStart',
+  CopyingBlocks = 'CopyingBlocks',
+  CopyingChangedBlocks = 'CopyingChangedBlocks',
+  ConvertingDisk = 'ConvertingDisk',
+  AwaitingCutOverStartTime = 'AwaitingCutOverStartTime',
+  AwaitingAdminCutOver = 'AwaitingAdminCutOver',
+  Succeeded = 'Succeeded',
+  Failed = 'Failed',
+  Unknown = 'Unknown'
 }
 
 export interface GetMigrationsListMetadata {

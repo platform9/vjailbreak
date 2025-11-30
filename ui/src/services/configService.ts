@@ -1,4 +1,4 @@
-import { getSecret } from "src/api/secrets/secrets"
+import { getSecret } from 'src/api/secrets/secrets'
 
 export interface AnalyticsConfig {
   amplitude?: {
@@ -12,8 +12,8 @@ export interface AnalyticsConfig {
 }
 
 export class ConfigService {
-  private static readonly SECRET_NAME = "analytics-keys"
-  private static readonly SECRET_NAMESPACE = "migration-system"
+  private static readonly SECRET_NAME = 'analytics-keys'
+  private static readonly SECRET_NAMESPACE = 'migration-system'
 
   static async fetchAnalyticsConfig(): Promise<AnalyticsConfig | null> {
     try {
@@ -24,31 +24,28 @@ export class ConfigService {
       const config: AnalyticsConfig = {}
 
       // Extract shared release stage
-      if (data["release-stage"]) {
-        config.releaseStage = data["release-stage"]
+      if (data['release-stage']) {
+        config.releaseStage = data['release-stage']
       }
 
       // Extract Amplitude config
-      if (data["amplitude-api-key"]) {
+      if (data['amplitude-api-key']) {
         config.amplitude = {
-          apiKey: data["amplitude-api-key"],
+          apiKey: data['amplitude-api-key']
         }
       }
 
       // Extract Bugsnag config
-      if (data["bugsnag-api-key"]) {
+      if (data['bugsnag-api-key']) {
         config.bugsnag = {
-          apiKey: data["bugsnag-api-key"],
-          appVersion: data["app-version"] || undefined,
+          apiKey: data['bugsnag-api-key'],
+          appVersion: data['app-version'] || undefined
         }
       }
 
       return config
     } catch (error) {
-      console.error(
-        "Failed to fetch analytics configuration from Secret:",
-        error
-      )
+      console.error('Failed to fetch analytics configuration from Secret:', error)
       return null
     }
   }

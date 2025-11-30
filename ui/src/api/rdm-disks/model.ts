@@ -35,10 +35,10 @@ export interface RdmDisk {
       message: string
       observedGeneration?: number
       reason: string
-      status: "True" | "False" | "Unknown"
+      status: 'True' | 'False' | 'Unknown'
       type: string
     }>
-    phase?: "Available" | "Managing" | "Managed" | "Error"
+    phase?: 'Available' | 'Managing' | 'Managed' | 'Error'
   }
 }
 

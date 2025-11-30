@@ -19,6 +19,7 @@ type config struct {
 	Host     string
 	Port     string
 	APIPort  string
+	APIHost  string
 	logLevel logrus.Level
 }
 
@@ -47,6 +48,7 @@ func (c *config) ParseConfig() {
 	c.Host = viper.GetString("host")        // default: localhost
 	c.Port = viper.GetString("port")        //default: 3000
 	c.APIPort = viper.GetString("api_port") //default: 3001
+	c.APIHost = viper.GetString("api_host")
 	logLevel := logrus.InfoLevel
 	env_logLevel := os.Getenv("LOG_LEVEL")
 	if env_logLevel != "" {

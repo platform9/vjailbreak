@@ -1,6 +1,6 @@
-import axios from "../axios"
-import { VJAILBREAK_DEFAULT_NAMESPACE } from "../constants"
-import { Secret } from "./model"
+import axios from '../axios'
+import { VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { Secret } from './model'
 
 // Interface for secret data
 export interface SecretData {
@@ -20,14 +20,14 @@ export const createSecret = async (
   }, {} as SecretData)
 
   const secretBody = {
-    apiVersion: "v1",
-    kind: "Secret",
+    apiVersion: 'v1',
+    kind: 'Secret',
     metadata: {
       name,
-      namespace,
+      namespace
     },
-    type: "Opaque",
-    data: base64Data,
+    type: 'Opaque',
+    data: base64Data
   }
 
   // Use the Kubernetes API endpoint for secrets
@@ -35,7 +35,7 @@ export const createSecret = async (
 
   const response = await axios.post({
     endpoint,
-    data: secretBody,
+    data: secretBody
   })
 
   return response
@@ -61,7 +61,7 @@ export const createOpenstackCredsSecret = async (
     OS_USERNAME: credentials.OS_USERNAME,
     OS_PASSWORD: credentials.OS_PASSWORD,
     OS_AUTH_URL: credentials.OS_AUTH_URL,
-    OS_DOMAIN_NAME: credentials.OS_DOMAIN_NAME,
+    OS_DOMAIN_NAME: credentials.OS_DOMAIN_NAME
   }
 
   // Add optional fields if they exist
@@ -98,9 +98,9 @@ export const createVMwareCredsSecret = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   let vcenterHost = credentials.VCENTER_HOST
-  if (vcenterHost.toLowerCase().startsWith("https://")) {
+  if (vcenterHost.toLowerCase().startsWith('https://')) {
     vcenterHost = vcenterHost.substring(8) // Remove 'https://'
-  } else if (vcenterHost.toLowerCase().startsWith("http://")) {
+  } else if (vcenterHost.toLowerCase().startsWith('http://')) {
     vcenterHost = vcenterHost.substring(7) // Remove 'http://'
   }
 
@@ -110,7 +110,7 @@ export const createVMwareCredsSecret = async (
     VCENTER_USERNAME: credentials.VCENTER_USERNAME,
     VCENTER_PASSWORD: credentials.VCENTER_PASSWORD,
     VCENTER_DATACENTER: credentials.VCENTER_DATACENTER,
-    VCENTER_INSECURE: credentials.VCENTER_INSECURE ? "true" : "false",
+    VCENTER_INSECURE: credentials.VCENTER_INSECURE ? 'true' : 'false'
   }
 
   return createSecret(name, secretData, namespace)
@@ -124,7 +124,7 @@ export const createBmconfigSecret = async (
 ) => {
   // Prepare data for the secret
   const secretData: SecretData = {
-    "user-data": cloudInit,
+    'user-data': cloudInit
   }
 
   return createSecret(name, secretData, namespace)
@@ -139,7 +139,7 @@ export const getSecret = async (
 
   try {
     const response: Secret = await axios.get({
-      endpoint,
+      endpoint
     })
 
     // If the secret has base64 encoded data, decode it
@@ -148,20 +148,17 @@ export const getSecret = async (
       const secretData = response.data || {}
 
       // Decode the base64 encoded values
-      const decodedData = Object.entries(secretData).reduce(
-        (acc, [key, value]) => {
-          try {
-            // Try to decode base64 values
-            acc[key] = typeof value === "string" ? atob(value) : value
-          } catch (error) {
-            console.error(`Error decoding secret data for key ${key}:`, error)
-            // If it's not base64 encoded, use the original value
-            acc[key] = value
-          }
-          return acc
-        },
-        {} as SecretData
-      )
+      const decodedData = Object.entries(secretData).reduce((acc, [key, value]) => {
+        try {
+          // Try to decode base64 values
+          acc[key] = typeof value === 'string' ? atob(value) : value
+        } catch (error) {
+          console.error(`Error decoding secret data for key ${key}:`, error)
+          // If it's not base64 encoded, use the original value
+          acc[key] = value
+        }
+        return acc
+      }, {} as SecretData)
 
       response.data = decodedData
 
@@ -175,10 +172,7 @@ export const getSecret = async (
   }
 }
 
-export const deleteSecret = async (
-  name: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const deleteSecret = async (name: string, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
   const response = await axios.del({ endpoint })
   return response

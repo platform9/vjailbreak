@@ -1,11 +1,11 @@
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4 } from 'uuid'
 import {
   VMSequence,
   MigrationStrategy,
   BMConfigRef,
   ClusterMapping,
-  RollingMigrationPlanSpec,
-} from "./model"
+  RollingMigrationPlanSpec
+} from './model'
 
 interface CreateRollingMigrationPlanParams {
   name?: string
@@ -20,9 +20,7 @@ interface CreateRollingMigrationPlanParams {
   namespace?: string
 }
 
-export const createRollingMigrationPlanJson = (
-  params: CreateRollingMigrationPlanParams
-) => {
+export const createRollingMigrationPlanJson = (params: CreateRollingMigrationPlanParams) => {
   const {
     name,
     clusterName,
@@ -33,18 +31,18 @@ export const createRollingMigrationPlanJson = (
     firstBootScript,
     migrationStrategy,
     migrationTemplate,
-    namespace,
+    namespace
   } = params || {}
 
   const spec: Partial<RollingMigrationPlanSpec> = {
     clusterSequence: [
       {
         clusterName,
-        vmSequence: vms,
-      },
+        vmSequence: vms
+      }
     ],
     clusterMapping,
-    bmConfigRef,
+    bmConfigRef
   }
 
   // Add optional fields if they exist
@@ -54,16 +52,16 @@ export const createRollingMigrationPlanJson = (
   if (migrationTemplate) spec.migrationTemplate = migrationTemplate
 
   return {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "RollingMigrationPlan",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'RollingMigrationPlan',
     metadata: {
       name: name || `rolling-migration-plan-${uuidv4().substring(0, 8)}`,
       namespace: namespace,
       labels: {
-        "app.kubernetes.io/name": "migration",
-        "app.kubernetes.io/part-of": "vjailbreak",
-      },
+        'app.kubernetes.io/name': 'migration',
+        'app.kubernetes.io/part-of': 'vjailbreak'
+      }
     },
-    spec,
+    spec
   }
 }

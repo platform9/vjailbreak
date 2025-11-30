@@ -1,8 +1,14 @@
-import { get, post } from "../axios"
-import { VersionConfigMap, VersionInfo, AvailableUpdates, UpgradeResponse, UpgradeProgressResponse } from "./model"
+import { get, post } from '../axios'
+import {
+  VersionConfigMap,
+  VersionInfo,
+  AvailableUpdates,
+  UpgradeResponse,
+  UpgradeProgressResponse
+} from './model'
 
-const VERSION_CONFIG_MAP_NAME = "version-config"
-const VERSION_NAMESPACE = "migration-system"
+const VERSION_CONFIG_MAP_NAME = 'version-config'
+const VERSION_NAMESPACE = 'migration-system'
 
 export const getVersionConfigMap = async (
   namespace: string = VERSION_NAMESPACE
@@ -10,7 +16,7 @@ export const getVersionConfigMap = async (
   const endpoint = `/api/v1/namespaces/${namespace}/configmaps/${VERSION_CONFIG_MAP_NAME}`
   return get<VersionConfigMap>({
     endpoint,
-    config: { mock: false }, // Force real API call, not mock
+    config: { mock: false } // Force real API call, not mock
   })
 }
 
@@ -21,35 +27,41 @@ export const getVersionInfo = async (
     const configMap = await getVersionConfigMap(namespace)
     return {
       version: configMap.data.version,
-      upgradeAvailable: configMap.data.upgradeAvailable === "true",
-      upgradeVersion: configMap.data.upgradeVersion,
+      upgradeAvailable: configMap.data.upgradeAvailable === 'true',
+      upgradeVersion: configMap.data.upgradeVersion
     }
   } catch (error) {
-    console.error("Failed to fetch version info:", error)
+    console.error('Failed to fetch version info:', error)
     throw error
   }
 }
 
-export const initiateUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
-    const endpoint = `/dev-api/sdk/vpw/v1/upgrade`
-    return post<UpgradeResponse>({
-        endpoint,
-        data: { targetVersion, autoCleanup },
-    })
+export const initiateUpgrade = async (
+  targetVersion: string,
+  autoCleanup: boolean
+): Promise<UpgradeResponse> => {
+  const endpoint = `/dev-api/sdk/vpw/v1/upgrade`
+  return post<UpgradeResponse>({
+    endpoint,
+    data: { targetVersion, autoCleanup }
+  })
 }
 
 export const getUpgradeProgress = async (): Promise<UpgradeProgressResponse> => {
-    const endpoint = `/dev-api/sdk/vpw/v1/upgrade/progress`
-    return get<UpgradeProgressResponse>({ endpoint })
+  const endpoint = `/dev-api/sdk/vpw/v1/upgrade/progress`
+  return get<UpgradeProgressResponse>({ endpoint })
 }
 
-export const confirmCleanupAndUpgrade = async (targetVersion: string, autoCleanup: boolean): Promise<UpgradeResponse> => {
-    const endpoint = `/dev-api/sdk/vpw/v1/upgrade/confirm_cleanup`;
-    return post<UpgradeResponse>({
-        endpoint,
-        data: { targetVersion, autoCleanup },
-    });
-};
+export const confirmCleanupAndUpgrade = async (
+  targetVersion: string,
+  autoCleanup: boolean
+): Promise<UpgradeResponse> => {
+  const endpoint = `/dev-api/sdk/vpw/v1/upgrade/confirm_cleanup`
+  return post<UpgradeResponse>({
+    endpoint,
+    data: { targetVersion, autoCleanup }
+  })
+}
 
 export const getAvailableTags = async (): Promise<AvailableUpdates> => {
   const endpoint = '/dev-api/sdk/vpw/v1/tags'
@@ -60,5 +72,5 @@ export async function cleanupStepApiCall(stepKey: string): Promise<{ success: bo
   return await post<{ success: boolean }>({
     endpoint: '/dev-api/sdk/vpw/v1/upgrade/cleanup_step',
     data: { step: stepKey }
-  });
+  })
 }

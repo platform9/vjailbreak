@@ -1,7 +1,7 @@
-import { getRdmDisksList } from "./rdmDisks"
-import { RdmDisk } from "./model"
-import { VMwareMachine } from "../vmware-machines/model"
-import { VmData } from "../migration-templates/model"
+import { getRdmDisksList } from './rdmDisks'
+import { RdmDisk } from './model'
+import { VMwareMachine } from '../vmware-machines/model'
+import { VmData } from '../migration-templates/model'
 
 /**
  * Check if a VM has shared RDM disks
@@ -13,9 +13,7 @@ export const hasSharedRdmDisks = (vm: VMwareMachine): boolean => {
 /**
  * Fetch all RDM disks and build a map for quick lookup
  */
-export const fetchRdmDisksMap = async (
-  namespace?: string
-): Promise<Map<string, RdmDisk>> => {
+export const fetchRdmDisksMap = async (namespace?: string): Promise<Map<string, RdmDisk>> => {
   try {
     const rdmDisks = await getRdmDisksList(namespace)
     const rdmDisksMap = new Map<string, RdmDisk>()
@@ -26,7 +24,7 @@ export const fetchRdmDisksMap = async (
 
     return rdmDisksMap
   } catch (error) {
-    console.error("Failed to fetch RDM disks:", error)
+    console.error('Failed to fetch RDM disks:', error)
     return new Map()
   }
 }
@@ -74,7 +72,7 @@ export const mapToVmDataWithRdm = (
     return {
       id: machine.spec.vms.name,
       name: machine.spec.vms.name,
-      vmState: machine.status.powerState === "running" ? "running" : "stopped",
+      vmState: machine.status.powerState === 'running' ? 'running' : 'stopped',
       ipAddress: machine.spec.vms.ipAddress,
       networks: machine.spec.vms.networks || [],
       datastores: machine.spec.vms.datastores || [],
@@ -85,18 +83,17 @@ export const mapToVmDataWithRdm = (
       targetFlavorId: machine.spec.targetFlavorId,
       labels: machine.metadata.labels,
       osFamily: machine.spec.vms.osFamily,
-      esxHost:
-        machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || "",
+      esxHost: machine.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || '',
       vmWareMachineName: machine.metadata.name,
       networkInterfaces: machine.spec.vms.networkInterfaces?.map((nic) => ({
         mac: nic.mac,
         network: nic.network,
-        ipAddress: nic.ipAddress,
+        ipAddress: nic.ipAddress
       })),
       // RDM-related properties
       rdmDisks,
       hasSharedRdm,
-      rdmDependencies,
+      rdmDependencies
     }
   })
 }
@@ -120,8 +117,7 @@ export const getRdmRequiredSelections = (
 
   // Find all VMs that have RDM dependencies
   const vmsWithRdm = allVms.filter(
-    (vm) =>
-      vm.hasSharedRdm && vm.rdmDependencies && vm.rdmDependencies.length > 0
+    (vm) => vm.hasSharedRdm && vm.rdmDependencies && vm.rdmDependencies.length > 0
   )
 
   // Build RDM groups
@@ -137,13 +133,11 @@ export const getRdmRequiredSelections = (
   })
 
   const allRequiredVms = Array.from(requiredVms)
-  const missingVms = allRequiredVms.filter(
-    (vmName) => !selectedVmNames.includes(vmName)
-  )
+  const missingVms = allRequiredVms.filter((vmName) => !selectedVmNames.includes(vmName))
 
   return {
     requiredVms: allRequiredVms,
     missingVms,
-    rdmGroups,
+    rdmGroups
   }
 }

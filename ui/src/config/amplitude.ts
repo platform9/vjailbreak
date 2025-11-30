@@ -1,5 +1,5 @@
-import { EventProperties } from "../types/amplitude"
-import { AnalyticsConfig } from "../services/configService"
+import { EventProperties } from '../types/amplitude'
+import { AnalyticsConfig } from '../services/configService'
 
 // Pure Amplitude configuration
 export interface AmplitudeConfig {
@@ -22,11 +22,11 @@ export interface TrackingBehavior {
 
 // Create Amplitude config from ConfigMap or environment fallback
 export const createAmplitudeConfig = (configMapData?: AnalyticsConfig): AmplitudeConfig => {
-  const isDevelopment = import.meta.env.MODE === "development"
-  
+  const isDevelopment = import.meta.env.MODE === 'development'
+
   // Use ConfigMap data if available, otherwise fall back to environment variables
-  const apiKey = configMapData?.amplitude?.apiKey || import.meta.env.VITE_AMPLITUDE_API_KEY || ""
-  const releaseStage = configMapData?.releaseStage || import.meta.env.MODE || "development"
+  const apiKey = configMapData?.amplitude?.apiKey || import.meta.env.VITE_AMPLITUDE_API_KEY || ''
+  const releaseStage = configMapData?.releaseStage || import.meta.env.MODE || 'development'
   const hasApiKey = Boolean(apiKey)
 
   return {
@@ -36,23 +36,21 @@ export const createAmplitudeConfig = (configMapData?: AnalyticsConfig): Amplitud
     trackingOptions: {
       ipAddress: true,
       deviceId: true,
-      platform: true,
-    },
+      platform: true
+    }
   }
 }
 
 // Global tracking behavior (simplified)
 let trackingBehavior: TrackingBehavior = {
   enabled: true,
-  logToConsole: import.meta.env.MODE === "development",
+  logToConsole: import.meta.env.MODE === 'development'
 }
 
 // Functional configuration management
 export const getTrackingBehavior = (): TrackingBehavior => trackingBehavior
 
-export const updateTrackingBehavior = (
-  updates: Partial<TrackingBehavior>
-): void => {
+export const updateTrackingBehavior = (updates: Partial<TrackingBehavior>): void => {
   trackingBehavior = { ...trackingBehavior, ...updates }
 }
 
@@ -67,7 +65,5 @@ export const enrichEventProperties = (
 ): EventProperties => {
   const merged = { ...defaults, ...properties }
   // Filter out undefined values
-  return Object.fromEntries(
-    Object.entries(merged).filter(([, value]) => value !== undefined)
-  )
+  return Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined))
 }
