@@ -63,21 +63,16 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		return errors.Wrap(err, "failed to get ESXi summary")
 	}
 
-	// Validate ESXi host has required hardware information
-	if hs.Hardware.SystemInfo.Uuid == "" {
-		ctxlog.Info("Warning: ESXi host has no hardware UUID")
-	}
-
 	// First, try to match by hardware UUID
 	var matchedResourceID string
-	var matchedResourceIdx int = -1
-	
+	var matchedResourceIdx = -1
+
 	if hs.Hardware.SystemInfo.Uuid != "" {
 		for i := 0; i < len(resources); i++ {
 			if resources[i].HardwareUuid != "" && resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
-				ctxlog.Info("Found a matching resource by hardware UUID", 
-					"hardwareUuid", resources[i].HardwareUuid, 
-					"name", resources[i].Hostname, 
+				ctxlog.Info("Found a matching resource by hardware UUID",
+					"hardwareUuid", resources[i].HardwareUuid,
+					"name", resources[i].Hostname,
 					"id", resources[i].Id)
 				matchedResourceID = resources[i].Id
 				matchedResourceIdx = i
@@ -88,11 +83,11 @@ func ConvertESXiToPCDHost(ctx context.Context,
 
 	// If no UUID match found, fall back to MAC address matching
 	if matchedResourceIdx == -1 {
-		ctxlog.Info("No hardware UUID match found, trying MAC address matching")
-		
+		ctxlog.Info("esxi has empty hardware UUID or no hardware UUID match found, trying MAC address matching")
+
 		// Extract MAC addresses from ESXi host's physical network adapters
 		var hostMacAddresses []string
-		if hs.Config != nil && hs.Config.Network != nil && len(hs.Config.Network.Pnic) > 0 {
+		if hs.Config != nil && hs.Config.Network != nil && hs.Config.Network.Pnic != nil && len(hs.Config.Network.Pnic) > 0 {
 			for _, pnic := range hs.Config.Network.Pnic {
 				if pnic.Mac != "" {
 					// Normalize MAC address to lowercase for comparison
@@ -112,9 +107,9 @@ func ConvertESXiToPCDHost(ctx context.Context,
 			if resources[i].MacAddress == "" {
 				continue
 			}
-			
+
 			resourceMac := strings.ToLower(resources[i].MacAddress)
-			
+
 			// Check if any host MAC address matches the resource MAC address
 			matched := false
 			for _, hostMac := range hostMacAddresses {
@@ -125,9 +120,9 @@ func ConvertESXiToPCDHost(ctx context.Context,
 			}
 
 			if matched {
-				ctxlog.Info("Found a matching resource by MAC address", 
-					"resourceMAC", resourceMac, 
-					"name", resources[i].Hostname, 
+				ctxlog.Info("Found a matching resource by MAC address",
+					"resourceMAC", resourceMac,
+					"name", resources[i].Hostname,
 					"id", resources[i].Id,
 					"hardwareUuid", resources[i].HardwareUuid)
 				matchedResourceID = resources[i].Id
@@ -298,6 +293,8 @@ func appendScriptToRunCmd(cloudInit string) (string, error) {
 	if existingRuncmd, ok := cloudInitMap["runcmd"]; ok {
 		if runcmdSlice, ok := existingRuncmd.([]interface{}); ok {
 			runcmd = runcmdSlice
+		} else {
+			return "", fmt.Errorf("runcmd exists in cloud-init but is not a valid array/slice type")
 		}
 	}
 
