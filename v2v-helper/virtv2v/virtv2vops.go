@@ -363,46 +363,46 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	}
 	netplanYAML := b.String()
 	log.Printf("NETPLAN YAML : %s", netplanYAML)
-	var ans string
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to create netplan file: %s", err)
+		return fmt.Errorf("failed to create netplan file: %w", err)
 	}
 	log.Println("Created local netplan file")
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
 	if useSingleDisk {
-		remove_command := "mv /etc/netplan /etc/netplan-bkp"
-		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		command := "mv /etc/netplan /etc/netplan-bkp"
+		ans, err = RunCommandInGuest(diskPath, command, true)
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		remove_command = "mkdir /etc/netplan"
-		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		command = "mkdir /etc/netplan"
+		ans, err = RunCommandInGuest(diskPath, command, true)
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		command := `upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml`
+		command = "upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml"
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
-		remove_command := "mv /etc/netplan /etc/netplan-bkp"
-		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		command := "mv"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		remove_command = "mkdir /etc/netplan"
-		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		command = "mkdir"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		command := "upload"
+		command = "upload"
 		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	}
 	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
-		return err
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
 	}
 	return nil
 }
