@@ -54,25 +54,102 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		return err
 	}
 
+	if len(resources) == 0 {
+		return errors.New("no resources available from BM provisioner")
+	}
+
 	hs, err := GetESXiSummary(ctx, scope.Client, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi summary")
 	}
 
-	for i := 0; i < len(resources); i++ {
-		if resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
-			ctxlog.Info("Found a matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
-			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id, hs.Hardware.SystemInfo.Uuid)
-			if err != nil {
-				scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
-				updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
-				if updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update ESXi migration status")
-				}
-				return errors.Wrap(err, "failed to reclaim ESXi")
+	// Validate ESXi host has required hardware information
+	if hs.Hardware.SystemInfo.Uuid == "" {
+		ctxlog.Info("Warning: ESXi host has no hardware UUID")
+	}
+
+	// First, try to match by hardware UUID
+	var matchedResourceID string
+	var matchedResourceIdx int = -1
+	
+	if hs.Hardware.SystemInfo.Uuid != "" {
+		for i := 0; i < len(resources); i++ {
+			if resources[i].HardwareUuid != "" && resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
+				ctxlog.Info("Found a matching resource by hardware UUID", 
+					"hardwareUuid", resources[i].HardwareUuid, 
+					"name", resources[i].Hostname, 
+					"id", resources[i].Id)
+				matchedResourceID = resources[i].Id
+				matchedResourceIdx = i
+				break
 			}
-			break
 		}
+	}
+
+	// If no UUID match found, fall back to MAC address matching
+	if matchedResourceIdx == -1 {
+		ctxlog.Info("No hardware UUID match found, trying MAC address matching")
+		
+		// Extract MAC addresses from ESXi host's physical network adapters
+		var hostMacAddresses []string
+		if hs.Config != nil && hs.Config.Network != nil && len(hs.Config.Network.Pnic) > 0 {
+			for _, pnic := range hs.Config.Network.Pnic {
+				if pnic.Mac != "" {
+					// Normalize MAC address to lowercase for comparison
+					hostMacAddresses = append(hostMacAddresses, strings.ToLower(pnic.Mac))
+				}
+			}
+		}
+
+		if len(hostMacAddresses) == 0 {
+			return errors.New("no hardware UUID or MAC addresses found for matching")
+		}
+
+		ctxlog.Info("ESXi host MAC addresses", "macs", hostMacAddresses)
+
+		// Match resources based on MAC addresses (many-to-many)
+		for i := 0; i < len(resources); i++ {
+			if resources[i].MacAddress == "" {
+				continue
+			}
+			
+			resourceMac := strings.ToLower(resources[i].MacAddress)
+			
+			// Check if any host MAC address matches the resource MAC address
+			matched := false
+			for _, hostMac := range hostMacAddresses {
+				if hostMac != "" && hostMac == resourceMac {
+					matched = true
+					break
+				}
+			}
+
+			if matched {
+				ctxlog.Info("Found a matching resource by MAC address", 
+					"resourceMAC", resourceMac, 
+					"name", resources[i].Hostname, 
+					"id", resources[i].Id,
+					"hardwareUuid", resources[i].HardwareUuid)
+				matchedResourceID = resources[i].Id
+				matchedResourceIdx = i
+				break
+			}
+		}
+	}
+
+	// If a match was found (either by UUID or MAC), reclaim the ESXi host
+	if matchedResourceIdx != -1 {
+		err := ReclaimESXi(ctx, scope, bmProvider, matchedResourceID, hs.Hardware.SystemInfo.Uuid)
+		if err != nil {
+			scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+			updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
+			if updateErr != nil {
+				return errors.Wrap(updateErr, "failed to update ESXi migration status")
+			}
+			return errors.Wrap(err, "failed to reclaim ESXi")
+		}
+	} else {
+		return errors.New("no matching resource found by hardware UUID or MAC address")
 	}
 
 	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
