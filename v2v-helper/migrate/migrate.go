@@ -389,7 +389,7 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 		case <-ctx.Done():
 			return ctx.Err()
 		case label := <-migobj.PodLabelWatcher:
-			if label == "yes" {
+			if label == "yes" && currentState == initial {
 				migobj.logMessage("Admin cutover triggered")
 				return nil
 			}
