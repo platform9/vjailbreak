@@ -56,26 +56,29 @@ const IntervalField = ({
     return undefined
   }, [])
 
-  const handleInputChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = event.target.value
+  const updateValidationError = useCallback(
+    (newValue: string) => {
       const newValidationError = validate(newValue)
       setValidationError(newValidationError)
       if (getErrorsUpdater) {
         getErrorsUpdater(name)(newValidationError || '')
       }
+    },
+    [validate, getErrorsUpdater, name]
+  )
+
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = event.target.value
+      updateValidationError(newValue)
       onChange?.(event)
     },
-    [validate, onChange, getErrorsUpdater, name]
+    [updateValidationError, onChange]
   )
 
   useEffect(() => {
-    const newValidationError = validate(value)
-    setValidationError(newValidationError)
-    if (getErrorsUpdater) {
-      getErrorsUpdater(name)(newValidationError || '')
-    }
-  }, [value, validate, getErrorsUpdater, name])
+    updateValidationError(value)
+  }, [value, updateValidationError])
 
   return (
     <Box display="flex" flexDirection="column" gap={0.5}>
