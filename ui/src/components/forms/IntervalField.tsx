@@ -1,5 +1,5 @@
 import { Box, TextField } from '@mui/material'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 type IntervalFieldProps = {
   label: string
@@ -68,6 +68,14 @@ const IntervalField = ({
     },
     [validate, onChange, getErrorsUpdater, name]
   )
+
+  useEffect(() => {
+    const newValidationError = validate(value)
+    setValidationError(newValidationError)
+    if (getErrorsUpdater) {
+      getErrorsUpdater(name)(newValidationError || '')
+    }
+  }, [value, validate, getErrorsUpdater, name])
 
   return (
     <Box display="flex" flexDirection="column" gap={0.5}>
