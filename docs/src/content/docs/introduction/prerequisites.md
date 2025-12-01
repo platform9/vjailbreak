@@ -61,7 +61,7 @@ No, vJailbreak will install it for you. For Windows, we allow you to specify a U
 
 - **Notes**
 
-  - This is a known and documented `virt-v2v` issue. See the upstream documentation for more details: https://libguestfs.org/virt-v2v.1.html#linux%3A-rename%3A-sysroot-etc-resolv.conf-failure
+  - This is a known and documented `virt-v2v` issue. [See here](https://libguestfs.org/virt-v2v.1.html#linux%3A-rename%3A-sysroot-etc-resolv.conf-failure)
   - If configuration management or security hardening marks `/etc/resolv.conf` immutable, ensure this is unset before conversion, or adjust your automation so that VMs intended for conversion do not have `/etc/resolv.conf` marked immutable.
 
 ### How does Vjailbreak handle flavors of the vm in the target openstack environment? 
