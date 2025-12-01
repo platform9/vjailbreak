@@ -1,3 +1,4 @@
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -7,28 +8,35 @@ import {
   IconButton,
   InputAdornment,
   Tooltip,
-  Typography
+  Typography,
+  CircularProgress
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
-import { DrawerShell, DrawerHeader, DrawerFooter, ActionButton, FormGrid } from 'src/design-system'
-import { createVMwareCredsWithSecretFlow, deleteVMwareCredsWithSecretFlow } from 'src/api/helpers'
-import axios from 'axios'
-import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
-import { CircularProgress } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 import CheckIcon from '@mui/icons-material/Check'
-import { isValidName } from 'src/utils'
-import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
-import { useInterval } from 'src/hooks/useInterval'
-import { THREE_SECONDS } from 'src/constants'
-import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { useAmplitude } from 'src/hooks/useAmplitude'
-import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import InfoOutlined from '@mui/icons-material/InfoOutlined'
+
 import { useForm } from 'react-hook-form'
+
+import { DrawerShell, DrawerHeader, DrawerFooter, ActionButton, FormGrid } from 'src/design-system'
 import DesignSystemForm from 'src/components/forms/rhf/DesignSystemForm'
 import RHFTextField from 'src/components/forms/rhf/RHFTextField'
 import RHFToggleField from 'src/components/forms/rhf/RHFToggleField'
+
+import { createVMwareCredsWithSecretFlow, deleteVMwareCredsWithSecretFlow } from 'src/api/helpers'
+import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
+
+import axios from 'axios'
+
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useInterval } from 'src/hooks/useInterval'
+import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+
+import { isValidName } from 'src/utils'
+import { THREE_SECONDS } from 'src/constants'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+
+/* ----------------------------- Types & Defaults ---------------------------- */
 
 interface VMwareCredentialsDrawerProps {
   open: boolean
@@ -53,18 +61,14 @@ const defaultValues: VMwareCredentialFormValues = {
   insecure: false
 }
 
+/* ------------------------------- Component -------------------------------- */
+
 export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'VMwareCredentialsDrawer' })
   const { track } = useAmplitude({ component: 'VMwareCredentialsDrawer' })
-  const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
-  const [vmwareCredsValidated, setVmwareCredsValidated] = useState<boolean | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
-
   const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery()
 
+  // Form
   const form = useForm<VMwareCredentialFormValues>({
     defaultValues,
     mode: 'onChange',
@@ -86,29 +90,38 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     password: passwordValue,
     insecure: insecureValue
   } = values
+
   const formId = 'vmware-credentials-form'
 
+  // UI state
+  const [showPassword, setShowPassword] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Validation / creation flow state
+  const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
+  const [vmwareCredsValidated, setVmwareCredsValidated] = useState<boolean | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
+
+  const shouldPollVmwareCreds = Boolean(createdCredentialName && validatingVmwareCreds)
+
+  /* -------------------------- Handlers & Callbacks -------------------------- */
+
+  const handleClickShowPassword = useCallback(() => setShowPassword((p) => !p), [])
+  const handleMouseDownPassword = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+  }, [])
+
   const closeDrawer = useCallback(() => {
-    // Check if we have a created credential that hasn't been fully validated (succeeded)
+    // If a credential was created but not fully validated, attempt cleanup
     if (createdCredentialName) {
-      console.log(`Cleaning up VMware credential on drawer close: ${createdCredentialName}`)
-      try {
-        deleteVMwareCredsWithSecretFlow(createdCredentialName)
-          .then(() =>
-            console.log(`Cancelled credential ${createdCredentialName} deleted successfully`)
-          )
-          .catch((err) =>
-            console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
-          )
-      } catch (err) {
-        console.error(
-          `Error initiating deletion of cancelled credential: ${createdCredentialName}`,
-          err
-        )
-      }
+      // best-effort deletion (no UI blocking)
+      deleteVMwareCredsWithSecretFlow(createdCredentialName).catch((err) => {
+        console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
+      })
     }
 
-    // Reset state
+    // reset form and state
     reset(defaultValues)
     setCreatedCredentialName(null)
     setValidatingVmwareCreds(false)
@@ -120,17 +133,8 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     onClose()
   }, [createdCredentialName, onClose, reset])
 
-  const shouldPollVmwareCreds = !!createdCredentialName && validatingVmwareCreds
-
-  const handleClickShowPassword = () => {
-    setShowPassword((prev) => !prev)
-  }
-
-  const handleMouseDownPassword = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-  }
-
   useEffect(() => {
+    // clear validation and errors when any watched field changes
     setVmwareCredsValidated(null)
     setFormError(null)
   }, [
@@ -142,73 +146,72 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     insecureValue
   ])
 
-  const handleValidationStatus = (status: string, message?: string) => {
-    if (status === 'Succeeded') {
-      setVmwareCredsValidated(true)
-      setValidatingVmwareCreds(false)
+  const handleValidationStatus = useCallback(
+    (status: string, message?: string) => {
+      if (status === 'Succeeded') {
+        setVmwareCredsValidated(true)
+        setValidatingVmwareCreds(false)
 
-      // Track successful credential validation
-      track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-        credentialType: 'vmware',
-        credentialName: createdCredentialName,
-        stage: 'validation_success'
-      })
+        // track success
+        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
+          credentialType: 'vmware',
+          credentialName: createdCredentialName,
+          stage: 'validation_success'
+        })
 
-      // Close the drawer after a short delay to show success state
-      setTimeout(() => {
-        refetchVmwareCreds()
-        onClose()
-      }, 1500)
-    } else if (status === 'Failed') {
-      setVmwareCredsValidated(false)
-      setValidatingVmwareCreds(false)
-      setFormError(message || 'Validation failed')
+        // show success briefly then refresh & close
+        setTimeout(() => {
+          refetchVmwareCreds()
+          onClose()
+        }, 1500)
+      } else if (status === 'Failed') {
+        setVmwareCredsValidated(false)
+        setValidatingVmwareCreds(false)
+        setFormError(message || 'Validation failed')
 
-      // Track credential validation failure
-      track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-        credentialType: 'vmware',
-        credentialName: createdCredentialName,
-        errorMessage: message || 'Validation failed',
-        stage: 'validation'
-      })
+        // track failure and report
+        track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
+          credentialType: 'vmware',
+          credentialName: createdCredentialName,
+          errorMessage: message || 'Validation failed',
+          stage: 'validation'
+        })
 
-      reportError(
-        new Error(`VMware credential validation failed: ${message || 'Unknown reason'}`),
-        {
-          context: 'vmware-validation-failure',
-          metadata: {
-            credentialName: createdCredentialName,
-            validationMessage: message,
-            action: 'vmware-validation-failed'
-          }
-        }
-      )
-
-      // Try to delete the failed credential to clean up
-      if (createdCredentialName) {
-        try {
-          deleteVMwareCredsWithSecretFlow(createdCredentialName)
-            .then(() => console.log(`Failed credential ${createdCredentialName} deleted`))
-            .catch((deleteErr) =>
-              console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr)
-            )
-        } catch (deleteErr) {
-          console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr)
-          reportError(deleteErr as Error, {
-            context: 'vmware-credential-deletion',
+        reportError(
+          new Error(`VMware credential validation failed: ${message || 'Unknown reason'}`),
+          {
+            context: 'vmware-validation-failure',
             metadata: {
               credentialName: createdCredentialName,
-              action: 'delete-failed-credential'
+              validationMessage: message,
+              action: 'vmware-validation-failed'
             }
+          }
+        )
+
+        // try to delete the failed credential
+        if (createdCredentialName) {
+          deleteVMwareCredsWithSecretFlow(createdCredentialName).catch((deleteErr) => {
+            console.error(`Error deleting failed credential: ${createdCredentialName}`, deleteErr)
+            reportError(deleteErr as Error, {
+              context: 'vmware-credential-deletion',
+              metadata: {
+                credentialName: createdCredentialName,
+                action: 'delete-failed-credential'
+              }
+            })
           })
         }
       }
-    }
-    setSubmitting(false)
-  }
+
+      setSubmitting(false)
+    },
+    [createdCredentialName, onClose, refetchVmwareCreds, reportError, track]
+  )
 
   useInterval(
     async () => {
+      if (!createdCredentialName) return
       try {
         const response = await getVmwareCredentials(createdCredentialName)
         if (response?.status?.vmwareValidationStatus) {
@@ -236,31 +239,27 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   const onSubmit = useCallback(
-    async (values: VMwareCredentialFormValues) => {
+    async (vals: VMwareCredentialFormValues) => {
       setFormError(null)
       setSubmitting(true)
       setValidatingVmwareCreds(true)
 
+      const credentialData = {
+        VCENTER_HOST: vals.vcenterHost,
+        VCENTER_DATACENTER: vals.datacenter,
+        VCENTER_USERNAME: vals.username,
+        VCENTER_PASSWORD: vals.password,
+        ...(vals.insecure && { VCENTER_INSECURE: true })
+      }
+
       try {
-        const credentialData = {
-          VCENTER_HOST: values.vcenterHost,
-          VCENTER_DATACENTER: values.datacenter,
-          VCENTER_USERNAME: values.username,
-          VCENTER_PASSWORD: values.password,
-          ...(values.insecure && { VCENTER_INSECURE: true })
-        }
-
-        const response = await createVMwareCredsWithSecretFlow(
-          values.credentialName,
-          credentialData
-        )
-
+        const response = await createVMwareCredsWithSecretFlow(vals.credentialName, credentialData)
         setCreatedCredentialName(response.metadata.name)
 
         track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
           credentialType: 'vmware',
-          credentialName: values.credentialName,
-          vcenterHost: values.vcenterHost,
+          credentialName: vals.credentialName,
+          vcenterHost: vals.vcenterHost,
           namespace: response.metadata.namespace
         })
       } catch (error) {
@@ -268,8 +267,8 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
         track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
           credentialType: 'vmware',
-          credentialName: values.credentialName,
-          vcenterHost: values.vcenterHost,
+          credentialName: vals.credentialName,
+          vcenterHost: vals.vcenterHost,
           errorMessage: error instanceof Error ? error.message : String(error),
           stage: 'creation'
         })
@@ -277,9 +276,9 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         reportError(error as Error, {
           context: 'vmware-credential-creation',
           metadata: {
-            credentialName: values.credentialName,
-            vcenterHost: values.vcenterHost,
-            username: values.username,
+            credentialName: vals.credentialName,
+            vcenterHost: vals.vcenterHost,
+            username: vals.username,
             action: 'create-vmware-credential'
           }
         })
@@ -288,7 +287,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         setValidatingVmwareCreds(false)
         setFormError(
           'Error creating VMware credentials: ' +
-            (axios.isAxiosError(error) ? error?.response?.data?.message : error)
+            (axios.isAxiosError(error) ? error?.response?.data?.message : String(error))
         )
         setSubmitting(false)
       }
@@ -297,6 +296,172 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   const isSubmitDisabled = submitting || validatingVmwareCreds || !isValid
+
+  /* ------------------------------- Renderers -------------------------------- */
+
+  const renderBasicsSection = () => (
+    <Box>
+      <Typography variant="overline" color="text.secondary">
+        Credential Basics
+      </Typography>
+      <Typography variant="h6" sx={{ mt: 0.25 }}>
+        Connection Details
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
+        Provide the name and endpoint details for the VMware environment you want to connect.
+      </Typography>
+
+      <FormGrid gap={2} minWidth={300}>
+        <RHFTextField
+          name="credentialName"
+          label="Credential name"
+          placeholder="production-vcenter"
+          required
+          fullWidth
+          size="small"
+          rules={{
+            required: 'Credential name is required',
+            validate: (value: string) =>
+              isValidName(value) ||
+              'Credential name must start with a letter/number and use only letters, numbers, or hyphens.'
+          }}
+        />
+
+        <RHFTextField
+          name="vcenterHost"
+          label="vCenter server"
+          placeholder="https://vcenter.example.com"
+          required
+          fullWidth
+          size="small"
+          rules={{ required: 'vCenter server is required' }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <Tooltip
+                  title="Enter the FQDN or full URL for the vCenter endpoint."
+                  arrow
+                  placement="left"
+                >
+                  <IconButton size="small" tabIndex={-1}>
+                    <InfoOutlined fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            )
+          }}
+        />
+
+        <RHFTextField
+          name="datacenter"
+          label="Datacenter name"
+          placeholder="Primary-DC"
+          required
+          fullWidth
+          size="small"
+          rules={{ required: 'Datacenter name is required' }}
+        />
+      </FormGrid>
+    </Box>
+  )
+
+  const renderAuthSection = () => (
+    <Box>
+      <Typography variant="overline" color="text.secondary">
+        Authentication
+      </Typography>
+      <Typography variant="h6" sx={{ mt: 0.25 }}>
+        User Credentials
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
+        These credentials need permission to manage inventory and read cluster configuration.
+      </Typography>
+
+      <FormGrid gap={2} minWidth={300}>
+        <RHFTextField
+          name="username"
+          label="Username"
+          placeholder="administrator@vsphere.local"
+          required
+          fullWidth
+          size="small"
+          rules={{ required: 'Username is required' }}
+        />
+
+        <RHFTextField
+          name="password"
+          label="Password"
+          type={showPassword ? 'text' : 'password'}
+          required
+          fullWidth
+          size="small"
+          rules={{ required: 'Password is required' }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={handleClickShowPassword}
+                  onMouseDown={handleMouseDownPassword}
+                  edge="end"
+                  size="small"
+                >
+                  {showPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              </InputAdornment>
+            )
+          }}
+        />
+      </FormGrid>
+    </Box>
+  )
+
+  const renderSecuritySection = () => (
+    <Box>
+      <Typography variant="overline" color="text.secondary">
+        Security
+      </Typography>
+      <Typography variant="h6" sx={{ mt: 0.25 }}>
+        Connection Options
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 1.5 }}>
+        Prefer TLS-secure connections. Only disable SSL verification if your environment requires
+        it.
+      </Typography>
+
+      <RHFToggleField
+        name="insecure"
+        label="Allow insecure connection"
+        description="Skip SSL verification for self-signed or lab environments."
+        helperText="Disabling verification may expose credentials in transit."
+      />
+
+      <Collapse in={Boolean(insecureValue)} unmountOnExit sx={{ mt: 1.5 }}>
+        <Alert severity="warning" variant="outlined">
+          Use this option only when you fully trust the network between Platform9 and the vCenter
+          host.
+        </Alert>
+      </Collapse>
+    </Box>
+  )
+
+  const renderStatusRow = () => (
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      {validatingVmwareCreds && (
+        <>
+          <CircularProgress size={24} />
+          <FormLabel>Validating VMware credentials...</FormLabel>
+        </>
+      )}
+      {vmwareCredsValidated === true && credentialNameValue && (
+        <>
+          <CheckIcon color="success" fontSize="small" />
+          <FormLabel>VMware credentials created</FormLabel>
+        </>
+      )}
+    </Box>
+  )
+
+  /* --------------------------------- JSX ----------------------------------- */
 
   return (
     <DrawerShell
@@ -329,162 +494,17 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         id={formId}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 2.5 }}>
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              Credential Basics
-            </Typography>
-            <Typography variant="h6" sx={{ mt: 0.25 }}>
-              Connection Details
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
-              Provide the name and endpoint details for the VMware environment you want to connect.
-            </Typography>
-            <FormGrid gap={2} minWidth={300}>
-              <RHFTextField
-                name="credentialName"
-                label="Credential name"
-                placeholder="production-vcenter"
-                required
-                fullWidth
-                size="small"
-                rules={{
-                  required: 'Credential name is required',
-                  validate: (value) =>
-                    isValidName(value) ||
-                    'Credential name must start with a letter/number and use only letters, numbers, or hyphens.'
-                }}
-                //  labelHelperText="Used to reference this credential across the platform."
-              />
-
-              <RHFTextField
-                name="vcenterHost"
-                label="vCenter server"
-                placeholder="https://vcenter.example.com"
-                required
-                fullWidth
-                size="small"
-                rules={{ required: 'vCenter server is required' }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip
-                        title="Enter the FQDN or full URL for the vCenter endpoint."
-                        arrow
-                        placement="left"
-                      >
-                        <IconButton size="small" tabIndex={-1}>
-                          <InfoOutlined fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </InputAdornment>
-                  )
-                }}
-              />
-
-              <RHFTextField
-                name="datacenter"
-                label="Datacenter name"
-                placeholder="Primary-DC"
-                required
-                fullWidth
-                size="small"
-                rules={{ required: 'Datacenter name is required' }}
-              />
-            </FormGrid>
-          </Box>
+          {renderBasicsSection()}
 
           <Divider />
 
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              Authentication
-            </Typography>
-            <Typography variant="h6" sx={{ mt: 0.25 }}>
-              User Credentials
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
-              These credentials need permission to manage inventory and read cluster configuration.
-            </Typography>
-            <FormGrid gap={2} minWidth={300}>
-              <RHFTextField
-                name="username"
-                label="Username"
-                placeholder="administrator@vsphere.local"
-                required
-                fullWidth
-                size="small"
-                rules={{ required: 'Username is required' }}
-              />
-
-              <RHFTextField
-                name="password"
-                label="Password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                fullWidth
-                size="small"
-                rules={{ required: 'Password is required' }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={handleClickShowPassword}
-                        onMouseDown={handleMouseDownPassword}
-                        edge="end"
-                        size="small"
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }}
-              />
-            </FormGrid>
-          </Box>
+          {renderAuthSection()}
 
           <Divider />
 
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              Security
-            </Typography>
-            <Typography variant="h6" sx={{ mt: 0.25 }}>
-              Connection Options
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 1.5 }}>
-              Prefer TLS-secure connections. Only disable SSL verification if your environment
-              requires it.
-            </Typography>
+          {renderSecuritySection()}
 
-            <RHFToggleField
-              name="insecure"
-              label="Allow insecure connection"
-              description="Skip SSL verification for self-signed or lab environments."
-              helperText="Disabling verification may expose credentials in transit."
-            />
-
-            <Collapse in={Boolean(insecureValue)} unmountOnExit sx={{ mt: 1.5 }}>
-              <Alert severity="warning" variant="outlined">
-                Use this option only when you fully trust the network between Platform9 and the
-                vCenter host.
-              </Alert>
-            </Collapse>
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {validatingVmwareCreds && (
-              <>
-                <CircularProgress size={24} />
-                <FormLabel>Validating VMware credentials...</FormLabel>
-              </>
-            )}
-            {vmwareCredsValidated === true && credentialNameValue && (
-              <>
-                <CheckIcon color="success" fontSize="small" />
-                <FormLabel>VMware credentials created</FormLabel>
-              </>
-            )}
-          </Box>
+          {renderStatusRow()}
 
           {formError && (
             <Alert severity="error" variant="outlined">
