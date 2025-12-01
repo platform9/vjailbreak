@@ -1,15 +1,24 @@
 ---
 title: "Inject Environment Variables"
-description: "Enabling environment variable injection for the v2v-helper pod using a Kubernetes ConfigMap"
+description: "Enabling environment variable injection for the VJB pods using a Kubernetes ConfigMap"
 ---
 
-Injecting environment variables into the v2v-helper pod is a feature that allows users to inject environment variables into the v2v-helper pod using a Kubernetes ConfigMap. 
-
-## How It Works
-
+Injecting environment variables into the VJB pods is a feature that allows users to inject environment variables into the VJB pods using a Kubernetes ConfigMap. 
+## Injecting Environment Variables During vJailbreak VM Provisioning
 1. **Cloud-init populates environment variables**
 
    Users must provide environment variables in the `/etc/pf9/env` file during provisioning, typically using a cloud-init script.
+   
+   Example cloud-init configuration using `write_files`:
+   ```yaml
+   write_files:
+     - path: /etc/pf9/env
+       content: |
+         http_proxy=http://<proxy-server>:<proxy-port>
+         https_proxy=http://<proxy-server>:<proxy-port>
+         no_proxy=localhost,127.0.0.1
+       permissions: '0644'
+   ```
 
 2. **ConfigMap creation from /etc/pf9/env**
 
@@ -17,14 +26,8 @@ Injecting environment variables into the v2v-helper pod is a feature that allows
    This is done while the vjailbreak VM is being provisioned.
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n migration-system
-
-# Example
-   If you want proxy variables to be injected into the v2v-helper pod, you can add the following to the `/etc/pf9/env` file via the cloud-init script:
-   ```bash
-   http_proxy=http://<proxy-server>:<proxy-port>
-   https_proxy=http://<proxy-server>:<proxy-port>
-   no_proxy=localhost,127.0.0.1
    ```
+
    You can either populate the `/etc/pf9/env` file via cloud-init or manually.
 
    If done manually please follow the steps mentioned in [Injecting Environment Variables Post-Provisioning](#injecting-environment-variables-post-provisioning):
@@ -53,7 +56,14 @@ If you would like to inject environment variables after the vjailbreak VM has be
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n migration-system
    ```
-4. **Trigger a new migration for the envs to be reflected in the pod**
+
+4. **Restart the controller manager deployment**
+
+   ```bash
+   kubectl rollout restart deployment migration-controller-manager -n migration-system
+   ```
+   
+5. **Trigger a new migration for the envs to be reflected in the pod**
 
     Trigger via UI or via api. 
 
