@@ -39,7 +39,8 @@ import (
 // RDMDiskReconciler reconciles a RDMDisk object
 type RDMDiskReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme    *runtime.Scheme
+	APIReader client.Reader
 }
 
 const (
@@ -83,7 +84,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Get the RDMDisk resource
 	rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
-	if err := r.Get(ctx, req.NamespacedName, rdmDisk); err != nil {
+	if err := r.APIReader.Get(ctx, req.NamespacedName, rdmDisk); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			ctxlog.Error(err, "unable to fetch RDMDisk")
 			return ctrl.Result{}, err
