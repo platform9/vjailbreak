@@ -3802,7 +3802,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
+        image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -3811,12 +3811,11 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
-
         volumeMounts:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
