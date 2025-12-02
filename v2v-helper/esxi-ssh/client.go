@@ -255,6 +255,70 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	return task, nil
 }
 
+// StartVmkfstoolsRDMClone starts a vmkfstools clone operation from source VMDK to target raw device (RDM)
+// This uses VAAI XCOPY to clone directly to a raw device without creating a datastore
+// Command format: vmkfstools -i <source> -d rdm:<target_device> <dummy_vmdk_path>
+func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*VmkfstoolsTask, error) {
+	klog.Infof("Starting vmkfstools RDM clone: source=%s, target=%s", sourceVMDK, targetDevicePath)
+
+	// First check if source exists
+	checkCmd := fmt.Sprintf("ls -l %s 2>&1", sourceVMDK)
+	checkOutput, _ := c.ExecuteCommand(checkCmd)
+	if !strings.Contains(checkOutput, sourceVMDK) {
+		return nil, fmt.Errorf("source VMDK does not exist: %s", sourceVMDK)
+	}
+
+	// Verify target device exists
+	checkDevCmd := fmt.Sprintf("ls -l %s 2>&1", targetDevicePath)
+	checkDevOutput, _ := c.ExecuteCommand(checkDevCmd)
+	if !strings.Contains(checkDevOutput, targetDevicePath) {
+		return nil, fmt.Errorf("target device does not exist: %s", targetDevicePath)
+	}
+
+	// Create a temporary directory for the RDM descriptor file
+	tmpDir := fmt.Sprintf("/tmp/vaai-rdm-%d", time.Now().Unix())
+	mkdirCmd := fmt.Sprintf("mkdir -p %s", tmpDir)
+	_, err := c.ExecuteCommand(mkdirCmd)
+	if err != nil {
+		klog.Warningf("Failed to create temp directory: %v", err)
+	} else {
+		klog.Infof("Created temp directory: %s", tmpDir)
+	}
+
+	// Create a log file for vmkfstools output
+	logFile := fmt.Sprintf("/tmp/vmkfstools_rdm_clone_%d.log", time.Now().Unix())
+
+	// RDM descriptor file path (vmkfstools will create this)
+	rdmDescriptor := fmt.Sprintf("%s/rdm-disk.vmdk", tmpDir)
+
+	// Run vmkfstools in background with RDM format
+	// vmkfstools -i <source> -d rdm:<device> <rdm_descriptor>
+	command := fmt.Sprintf("vmkfstools -i %s -d rdm:%s %s >%s 2>&1 & echo $!",
+		sourceVMDK, targetDevicePath, rdmDescriptor, logFile)
+
+	output, err := c.ExecuteCommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start RDM clone: %w", err)
+	}
+
+	pid := strings.TrimSpace(output)
+	klog.Infof("Started vmkfstools RDM clone with PID: %s, log: %s", pid, logFile)
+
+	// Return task info with PID so we can check status later
+	task := &VmkfstoolsTask{
+		TaskId:   fmt.Sprintf("vmkfstools-rdm-clone-%s", pid),
+		Pid:      0, // Will be parsed from output
+		LastLine: fmt.Sprintf("RDM clone started with PID %s, log: %s", pid, logFile),
+	}
+
+	// Try to parse PID
+	if pidInt, err := fmt.Sscanf(pid, "%d", &task.Pid); err == nil && pidInt == 1 {
+		klog.Infof("Parsed PID: %d", task.Pid)
+	}
+
+	return task, nil
+}
+
 // GetCloneLog retrieves the vmkfstools clone log output
 func (c *Client) GetCloneLog(pid int) (string, error) {
 	if c.sshClient == nil {
