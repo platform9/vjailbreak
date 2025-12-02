@@ -314,12 +314,16 @@ export default function MigrationFormDrawer({
         console.error('Error syncing migration template', err)
         getFieldErrorsUpdater('migrationTemplate')(
           'Error syncing migration template: ' +
-            (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+            (axios.isAxiosError(err)
+              ? err?.response?.data?.message
+              : err instanceof Error
+                ? err.message
+                : String(err))
         )
       }
     }
 
-    void syncMigrationTemplate()
+    syncMigrationTemplate()
   }, [
     vmwareCredsValidated,
     openstackCredsValidated,
