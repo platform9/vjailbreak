@@ -1,29 +1,35 @@
-import { Box } from '@mui/material'
+import { Box, TextField } from '@mui/material'
 import { Controller, ControllerProps, FieldValues, useFormContext } from 'react-hook-form'
 import { FieldLabel, FieldLabelProps } from 'src/design-system'
-import TextField, { TextFieldProps } from '../TextField'
 
 type ControllerRules = ControllerProps<FieldValues>['rules']
 
 type FieldLabelCustomProps = Omit<FieldLabelProps, 'label' | 'helperText'>
 
-export type RHFTextFieldProps = TextFieldProps & {
+export type RHFDateFieldProps = {
   name: ControllerProps<FieldValues>['name']
   rules?: ControllerRules
-  labelHelperText?: FieldLabelProps['helperText']
+  label?: string
+  disabled?: boolean
+  helperText?: string
+  error?: boolean
   labelProps?: FieldLabelCustomProps
+  labelHelperText?: FieldLabelProps['helperText']
+  placeholder?: string
 }
 
-export default function RHFTextField({
+export default function RHFDateField({
   name,
   rules,
+  label,
+  disabled,
   helperText,
   error: errorProp,
-  label,
-  labelHelperText,
   labelProps,
+  labelHelperText,
+  placeholder,
   ...rest
-}: RHFTextFieldProps) {
+}: RHFDateFieldProps) {
   const { control } = useFormContext()
 
   return (
@@ -32,12 +38,12 @@ export default function RHFTextField({
       control={control}
       rules={rules}
       render={({ field, fieldState }) => (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {label ? (
             <FieldLabel
               label={label}
               helperText={labelHelperText}
-              required={rest.required}
+              required={(rest as any).required}
               align="flex-start"
               {...labelProps}
             />
@@ -45,10 +51,17 @@ export default function RHFTextField({
           <TextField
             {...rest}
             {...field}
+            type="date"
             label={undefined}
-            value={field.value ?? ''}
+            placeholder={placeholder}
+            disabled={disabled}
             error={fieldState.invalid || errorProp}
-            helperText={fieldState.error?.message ?? helperText}
+            helperText={fieldState.error?.message || helperText}
+            size="small"
+            variant="outlined"
+            InputLabelProps={{
+              shrink: true
+            }}
           />
         </Box>
       )}

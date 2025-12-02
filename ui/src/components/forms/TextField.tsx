@@ -8,8 +8,8 @@ export default function TextField(props: TextFieldProps) {
       variant="outlined"
       size="small"
       sx={{
-        maxWidth: '400px',
-        margin: '8px 0'
+        width: '100%',
+        ...(props.sx || {})
       }}
       {...props}
     />

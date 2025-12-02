@@ -27,6 +27,7 @@ export default function ToggleField({
       variant="outlined"
       {...containerProps}
       sx={{
+        width: '100%',
         p: 2,
         display: 'flex',
         flexDirection: 'column',

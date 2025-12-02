@@ -1,5 +1,7 @@
-import { Box, Button, FormControl, FormHelperText, styled, TextField } from '@mui/material'
+import { Box, FormControl, FormHelperText, styled } from '@mui/material'
 import React, { useState, useImperativeHandle, forwardRef } from 'react'
+import { ActionButton, FieldLabel } from 'src/design-system'
+import TextField from './TextField'
 
 const requiredFields = [
   'OS_AUTH_URL',
@@ -121,31 +123,42 @@ const OpenstackRCFileUploader = forwardRef<
 
   return (
     <FileUploadFieldContainer>
-      <FormControl error={!!error} fullWidth>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto',
-            gridGap: (theme) => theme.spacing(2)
-          }}
-        >
-          <TextField
-            label="OpenStack RC File"
-            value={fileName}
-            variant="outlined"
-            component="label"
-            color="primary"
-            aria-readonly
-            size={size}
+      <FormControl error={!!(error || openstackCredsError)} fullWidth>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <FieldLabel
+            label="OpenStack RC file"
             required
-            error={!!openstackCredsError}
+            align="flex-start"
+            helperText="Upload the RC file exported from your OpenStack environment."
           />
-          <Button variant="contained" component="label" color="primary">
-            Choose File
-            <input type="file" hidden onChange={handleFileChange} key={fileInputKey} />
-          </Button>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              gridGap: (theme) => theme.spacing(2)
+            }}
+          >
+            <TextField
+              value={fileName}
+              placeholder="No file selected"
+              InputProps={{ readOnly: true }}
+              size={size}
+              required
+              error={!!(error || openstackCredsError)}
+            />
+            <ActionButton
+              tone="primary"
+              component="label"
+              size={size === 'small' ? 'small' : 'medium'}
+            >
+              Choose file
+              <input type="file" hidden onChange={handleFileChange} key={fileInputKey} />
+            </ActionButton>
+          </Box>
         </Box>
-        <FormHelperText error={!!error}>{error}</FormHelperText>
+        <FormHelperText error={!!(error || openstackCredsError)}>
+          {error || openstackCredsError || ' '}
+        </FormHelperText>
       </FormControl>
     </FileUploadFieldContainer>
   )

@@ -23,3 +23,15 @@ export type {
   DrawerBodyProps,
   DrawerFooterProps
 } from './DrawerShell'
+
+export { default as Section } from './Section'
+export type { SectionProps } from './Section'
+
+export { default as SectionHeader } from './SectionHeader'
+export type { SectionHeaderProps } from './SectionHeader'
+
+export { default as InlineHelp } from './InlineHelp'
+export type { InlineHelpProps, InlineHelpTone } from './InlineHelp'
+
+export { default as Row } from './Row'
+export type { RowProps } from './Row'

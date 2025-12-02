@@ -1,12 +1,17 @@
-import { Box } from '@mui/material'
+import { Box, CircularProgress } from '@mui/material'
 import axios from 'axios'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useForm, SubmitHandler } from 'react-hook-form'
 import {
   DrawerShell,
   DrawerHeader,
-  DrawerBody,
   DrawerFooter,
-  ActionButton
+  ActionButton,
+  Section,
+  SectionHeader,
+  InlineHelp,
+  Row,
+  FormGrid
 } from 'src/design-system'
 import {
   createOpenstackCredsWithSecretFlow,
@@ -16,21 +21,12 @@ import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredenti
 import { THREE_SECONDS } from 'src/constants'
 import { useInterval } from 'src/hooks/useInterval'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
-import {
-  TextField,
-  FormControl,
-  FormLabel,
-  CircularProgress,
-  Switch,
-  FormControlLabel,
-  FormHelperText
-} from '@mui/material'
 import { isValidName } from 'src/utils'
 import CheckIcon from '@mui/icons-material/Check'
-import OpenstackRCFileUploader, {
-  OpenstackRCFileUploaderRef
-} from 'src/components/forms/OpenstackRCFileUpload'
-import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
+import DesignSystemForm from 'src/components/forms/rhf/DesignSystemForm'
+import RHFTextField from 'src/components/forms/rhf/RHFTextField'
+import RHFToggleField from 'src/components/forms/rhf/RHFToggleField'
+import RHFOpenstackRCFileField from 'src/components/forms/rhf/RHFOpenstackRCFileField'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
@@ -40,21 +36,46 @@ interface OpenstackCredentialsDrawerProps {
   onClose: () => void
 }
 
+interface OpenstackCredentialsFormValues {
+  credentialName: string
+  rcFile?: File
+  isPcd: boolean
+  insecure: boolean
+}
+
 export default function OpenstackCredentialsDrawer({
   open,
   onClose
 }: OpenstackCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'OpenstackCredentialsDrawer' })
   const { track } = useAmplitude({ component: 'OpenstackCredentialsDrawer' })
+
+  const form = useForm<OpenstackCredentialsFormValues>({
+    defaultValues: {
+      credentialName: '',
+      rcFile: undefined,
+      isPcd: false,
+      insecure: false
+    }
+  })
+
+  const {
+    watch,
+    setValue,
+    reset,
+    formState: { errors }
+  } = form
+
   const [validatingOpenstackCreds, setValidatingOpenstackCreds] = useState(false)
   const [openstackCredsValidated, setOpenstackCredsValidated] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [credNameError, setCredNameError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
-  const [isPcd, setIsPcd] = useState(false)
-  const [insecure, setInsecure] = useState(false)
-  const rcFileUploaderRef = useRef<OpenstackRCFileUploaderRef>(null)
+  const [createdCredentialIsPcd, setCreatedCredentialIsPcd] = useState(false)
+
+  const watchedValues = watch()
+  const credentialName = watchedValues.credentialName
+  const rcFile = watchedValues.rcFile
 
   // Fetch credentials list for the form
   const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery()
@@ -80,58 +101,44 @@ export default function OpenstackCredentialsDrawer({
     }
 
     // Reset state
-    setCredentialName('')
+    reset({
+      credentialName: '',
+      rcFile: undefined,
+      isPcd: false,
+      insecure: false
+    })
     setRcFileValues(null)
     setCreatedCredentialName(null)
+    setCreatedCredentialIsPcd(false)
     setValidatingOpenstackCreds(false)
     setOpenstackCredsValidated(null)
     setError(null)
-    setCredNameError(null)
     setSubmitting(false)
-    setIsPcd(false)
-    setInsecure(false)
 
     onClose()
-  }, [createdCredentialName, onClose])
+  }, [createdCredentialName, onClose, reset])
 
-  // Track form values
-  const [credentialName, setCredentialName] = useState('')
+  // Track parsed RC file values
   const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null)
 
-  const isValidCredentialName = isValidName(credentialName)
+  const handleRCFileParsed = useCallback(
+    (values: Record<string, string>) => {
+      setRcFileValues(values)
+      setOpenstackCredsValidated(null)
+      setError(null)
 
-  const handleCredentialNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setCredentialName(event.target.value)
-
-    // Reset validation state when form values change
-    setOpenstackCredsValidated(null)
-    setError(null)
-
-    // Validate credential name
-    if (!isValidName(event.target.value)) {
-      setCredNameError(
-        'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
-      )
-    } else {
-      setCredNameError(null)
-    }
-  }
-
-  const handleRCFileChange = (values: unknown) => {
-    const parsedValues = values as Record<string, string>
-    setRcFileValues(parsedValues)
-    setOpenstackCredsValidated(null)
-    setError(null)
-
-    if (parsedValues.OS_INSECURE !== undefined) {
-      const val = parsedValues.OS_INSECURE.toString().toLowerCase().trim()
-      if (['true', '1', 'yes'].includes(val)) {
-        setInsecure(true)
-      } else if (['false', '0', 'no'].includes(val)) {
-        setInsecure(false)
+      // Auto-update insecure toggle if present in RC file
+      if (values.OS_INSECURE !== undefined) {
+        const val = values.OS_INSECURE.toString().toLowerCase().trim()
+        if (['true', '1', 'yes'].includes(val)) {
+          setValue('insecure', true)
+        } else if (['false', '0', 'no'].includes(val)) {
+          setValue('insecure', false)
+        }
       }
-    }
-  }
+    },
+    [setValue]
+  )
   const getApiErrorMessage = (error: unknown): string => {
     if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
       return error.response.data.message
@@ -142,88 +149,86 @@ export default function OpenstackCredentialsDrawer({
     return 'An unknown error occurred. Please try again.'
   }
 
-  const handleSubmit = useCallback(async () => {
-    if (!credentialName || !rcFileValues) {
-      setError('Please provide a credential name and upload an RC file')
-      return
-    }
+  const handleSubmit: SubmitHandler<OpenstackCredentialsFormValues> = useCallback(
+    async (values) => {
+      if (!rcFileValues) {
+        setError('Please provide a credential name and upload an RC file')
+        return
+      }
 
-    if (!isValidCredentialName) {
-      setError('Please provide a valid credential name')
-      return
-    }
+      setSubmitting(true)
+      setValidatingOpenstackCreds(true)
+      setError(null)
 
-    setSubmitting(true)
-    setValidatingOpenstackCreds(true)
-    setError(null)
+      try {
+        const projectName = rcFileValues.OS_PROJECT_NAME || rcFileValues.OS_TENANT_NAME
 
-    try {
-      const projectName = rcFileValues.OS_PROJECT_NAME || rcFileValues.OS_TENANT_NAME
+        // Use the new helper function that encapsulates the entire flow
+        const response = await createOpenstackCredsWithSecretFlow(
+          values.credentialName,
+          {
+            OS_AUTH_URL: rcFileValues.OS_AUTH_URL,
+            OS_DOMAIN_NAME: rcFileValues.OS_DOMAIN_NAME,
+            OS_USERNAME: rcFileValues.OS_USERNAME,
+            OS_PASSWORD: rcFileValues.OS_PASSWORD,
+            OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
+            OS_TENANT_NAME: projectName,
+            OS_INSECURE: values.insecure
+          },
+          values.isPcd,
+          projectName
+        )
 
-      // Use the new helper function that encapsulates the entire flow
-      const response = await createOpenstackCredsWithSecretFlow(
-        credentialName,
-        {
-          OS_AUTH_URL: rcFileValues.OS_AUTH_URL,
-          OS_DOMAIN_NAME: rcFileValues.OS_DOMAIN_NAME,
-          OS_USERNAME: rcFileValues.OS_USERNAME,
-          OS_PASSWORD: rcFileValues.OS_PASSWORD,
-          OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
-          OS_TENANT_NAME: projectName,
-          OS_INSECURE: insecure
-        },
-        isPcd,
-        projectName
-      )
+        setCreatedCredentialName(response.metadata.name)
+        setCreatedCredentialIsPcd(values.isPcd)
 
-      setCreatedCredentialName(response.metadata.name)
+        // Track successful credential creation
+        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
+          credentialType: 'openstack',
+          credentialName: values.credentialName,
+          isPcd: values.isPcd,
+          namespace: response.metadata.namespace
+        })
+      } catch (error: unknown) {
+        console.error('Error creating OpenStack credentials:', error)
 
-      // Track successful credential creation
-      track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-        credentialType: 'openstack',
-        credentialName,
-        isPcd,
-        namespace: response.metadata.namespace
-      })
-    } catch (error: unknown) {
-      console.error('Error creating OpenStack credentials:', error)
+        // Track credential creation failure
+        track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
+          credentialType: 'openstack',
+          credentialName: values.credentialName,
+          isPcd: values.isPcd,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          stage: 'creation'
+        })
 
-      // Track credential creation failure
-      track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-        credentialType: 'openstack',
-        credentialName,
-        isPcd,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        stage: 'creation'
-      })
+        reportError(error as Error, {
+          context: 'openstack-credential-creation',
+          metadata: {
+            credentialName: values.credentialName,
+            isPcd: values.isPcd,
+            action: 'create-openstack-credential'
+          }
+        })
+        setOpenstackCredsValidated(false)
+        setValidatingOpenstackCreds(false)
 
-      reportError(error as Error, {
-        context: 'openstack-credential-creation',
-        metadata: {
-          credentialName: credentialName,
-          isPcd: isPcd,
-          action: 'create-openstack-credential'
-        }
-      })
-      setOpenstackCredsValidated(false)
-      setValidatingOpenstackCreds(false)
-
-      const errorMessage = getApiErrorMessage(error)
-      setError(errorMessage)
-      setSubmitting(false)
-    }
-  }, [credentialName, rcFileValues, isValidCredentialName, submitting, isPcd, insecure])
+        const errorMessage = getApiErrorMessage(error)
+        setError(errorMessage)
+        setSubmitting(false)
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rcFileValues]
+  )
 
   const isSubmitDisabled =
-    submitting || validatingOpenstackCreds || !isValidCredentialName || !rcFileValues
-
-  // Use the custom hook for keyboard events
-  useKeyboardSubmit({
-    open,
-    isSubmitDisabled,
-    onSubmit: handleSubmit,
-    onClose: closeDrawer
-  })
+    submitting ||
+    validatingOpenstackCreds ||
+    !!errors.credentialName ||
+    !!errors.rcFile ||
+    !credentialName ||
+    !rcFile ||
+    !rcFileValues
 
   const handleValidationStatus = (status: string, message?: string) => {
     if (status === 'Succeeded') {
@@ -234,7 +239,7 @@ export default function OpenstackCredentialsDrawer({
       track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
         credentialType: 'openstack',
         credentialName: createdCredentialName,
-        isPcd,
+        isPcd: createdCredentialIsPcd,
         stage: 'validation_success'
       })
 
@@ -252,7 +257,7 @@ export default function OpenstackCredentialsDrawer({
       track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
         credentialType: 'openstack',
         credentialName: createdCredentialName,
-        isPcd,
+        isPcd: createdCredentialIsPcd,
         errorMessage: message || 'Validation failed',
         stage: 'validation'
       })
@@ -336,7 +341,8 @@ export default function OpenstackCredentialsDrawer({
           </ActionButton>
           <ActionButton
             tone="primary"
-            onClick={handleSubmit}
+            type="submit"
+            form="openstack-cred-form"
             loading={submitting}
             disabled={isSubmitDisabled}
             data-testid="openstack-cred-submit"
@@ -346,78 +352,89 @@ export default function OpenstackCredentialsDrawer({
         </DrawerFooter>
       }
     >
-      <DrawerBody>
-        <Box sx={{ display: 'grid', gap: 3 }} data-testid="openstack-cred-form">
-          <FormControl fullWidth error={!!credNameError} required>
-            <TextField
-              id="credentialName"
-              label="Enter OpenStack Credential Name"
-              variant="outlined"
-              value={credentialName}
-              onChange={handleCredentialNameChange}
-              error={!!credNameError}
-              helperText={credNameError || ''}
-              required
+      <DesignSystemForm
+        form={form}
+        id="openstack-cred-form"
+        onSubmit={handleSubmit}
+        keyboardSubmitProps={{
+          open,
+          onClose: closeDrawer,
+          isSubmitDisabled
+        }}
+      >
+        <Section>
+          <SectionHeader
+            title="OpenStack credential details"
+            subtitle="Give your credential a clear name and upload the RC file from your OpenStack environment."
+          />
+
+          <FormGrid minWidth={360} gap={2}>
+            <RHFTextField
+              name="credentialName"
+              label="OpenStack credential name"
+              placeholder="e.g. prod-openstack"
+              rules={{
+                required: 'Credential name is required',
+                validate: (value: string) =>
+                  isValidName(value) ||
+                  'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
+              }}
               fullWidth
+              required
+            />
+          </FormGrid>
+
+          <Box mt={2}>
+            <RHFOpenstackRCFileField
+              name="rcFile"
+              onParsed={handleRCFileParsed}
+              onError={(errorMsg) => setError(errorMsg)}
+              externalError={error || undefined}
               size="small"
-              sx={{ mb: 2 }}
+              required
             />
+          </Box>
 
-            <OpenstackRCFileUploader
-              ref={rcFileUploaderRef}
-              onChange={handleRCFileChange}
-              openstackCredsError={error || ''}
-              size="small"
-            />
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isPcd}
-                  onChange={(e) => setIsPcd(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Is PCD credential"
-              sx={{ mt: 2 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={insecure}
-                  onChange={(e) => setInsecure(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Allow insecure TLS (skip SSL verification)"
-              sx={{ mt: 2 }}
-            />
-
-            {/* OpenStack Validation Status */}
-            <Box sx={{ display: 'flex', gap: 2, mt: 2, alignItems: 'center' }}>
-              {validatingOpenstackCreds && (
-                <>
-                  <CircularProgress size={24} />
-                  <FormLabel>Validating OpenStack credentials...</FormLabel>
-                </>
-              )}
-              {openstackCredsValidated === true && credentialName && (
-                <>
-                  <CheckIcon color="success" fontSize="small" />
-                  <FormLabel>OpenStack credentials created</FormLabel>
-                </>
-              )}
+          <Row gap={3} mt={3} flexWrap="wrap">
+            <Box sx={{ flex: 1, minWidth: 260 }}>
+              <RHFToggleField
+                name="isPcd"
+                label="Is PCD credential"
+                description="Mark this if the credential is for a Platform9 Cloud Deployment (PCD)."
+              />
             </Box>
+            <Box sx={{ flex: 1, minWidth: 260 }}>
+              <RHFToggleField
+                name="insecure"
+                label="Allow insecure TLS (skip SSL verification)"
+                description="Use only for testing or environments with self-signed certificates."
+              />
+            </Box>
+          </Row>
 
-            {/* Show one clear place for global/form errors */}
-            {error && (
-              <FormHelperText error sx={{ mt: 1 }}>
-                {error}
-              </FormHelperText>
+          <Box mt={3} display="flex" flexDirection="column" gap={2}>
+            {validatingOpenstackCreds && (
+              <InlineHelp tone="warning">
+                <Row gap={1}>
+                  <CircularProgress size={16} />
+                  <span>Validating OpenStack credentials…</span>
+                </Row>
+              </InlineHelp>
             )}
-          </FormControl>
-        </Box>
-      </DrawerBody>
+
+            {openstackCredsValidated === true && credentialName && (
+              <InlineHelp tone="positive">
+                <Row gap={1}>
+                  <CheckIcon color="success" fontSize="small" />
+                  <span>OpenStack credentials created and validated.</span>
+                </Row>
+              </InlineHelp>
+            )}
+
+            {error && <InlineHelp tone="critical">{error}</InlineHelp>}
+          </Box>
+        </Section>
+      </DesignSystemForm>
     </DrawerShell>
   )
 }
