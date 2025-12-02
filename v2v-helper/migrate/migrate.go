@@ -80,6 +80,7 @@ type Migrate struct {
 	ArrayCredsMapping string
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
+	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 }
 
 type MigrationTimes struct {
@@ -1245,7 +1246,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
-	// Handle different storage copy methods
 	if migobj.StorageCopyMethod == "vendor-based" {
 		// Initialize storage provider if using vendor-based migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
@@ -1257,50 +1257,22 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 		}()
 
-		// Perform vendor-based storage copy
-		if err := migobj.VendorBasedStorageCopy(ctx, vminfo); err != nil {
-			return errors.Wrap(err, "failed to perform vendor-based storage copy")
-		}
-
-	} else if migobj.StorageCopyMethod == "vaai" {
-		// Initialize storage provider for VAAI copy
-		if err := migobj.InitializeStorageProvider(ctx); err != nil {
-			return errors.Wrap(err, "failed to initialize storage provider for VAAI")
-		}
-		defer func() {
-			if migobj.StorageProvider != nil {
-				migobj.StorageProvider.Disconnect()
-			}
-		}()
-
-		// Validate VAAI prerequisites
+		// Perform pre requisites for vaai
 		if err := migobj.ValidateVAAIPrerequisites(ctx); err != nil {
 			return errors.Wrap(err, "VAAI prerequisites validation failed")
 		}
 
-		// Create Cinder volumes first
-		vminfo, err = migobj.CreateVolumes(vminfo)
-		if err != nil {
-			return errors.Wrap(err, "failed to create volumes for VAAI copy")
-		}
-
-		// Perform VAAI-based copy (no CBT or NBD needed)
-		vminfo, err = migobj.VAAILiveReplicateDisks(ctx, vminfo)
-		if err != nil {
-			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to copy disks via VAAI: %s", err)); cleanuperror != nil {
-				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-			}
-			return errors.Wrap(err, "failed to copy disks via VAAI")
+		// Perform the copy here.
+		if _, err := migobj.VAAICopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform VAAI copy")
 		}
 
 	} else {
-		// Default: NBD-based copy
 		// Create and Add Volumes to Host
 		vminfo, err = migobj.CreateVolumes(vminfo)
 		if err != nil {
 			return errors.Wrap(err, "failed to add volumes to host")
 		}
-
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
@@ -1323,12 +1295,11 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			return errors.Wrap(err, "failed to live replicate disks")
 		}
 	}
-
-	// Continue with volume conversion (common for all methods)
 	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
+
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
@@ -1508,6 +1479,25 @@ func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
 
 	migobj.StorageProvider = provider
 	migobj.logMessage(fmt.Sprintf("Storage provider initialized successfully: %s", provider.WhoAmI()))
+
+	return nil
+}
+
+// LoadESXiSSHKey loads the ESXi SSH private key from the Kubernetes secret
+func (migobj *Migrate) LoadESXiSSHKey(ctx context.Context) error {
+	if migobj.ESXiSSHSecretName == "" {
+		return fmt.Errorf("ESXi SSH secret name not provided")
+	}
+
+	migobj.logMessage(fmt.Sprintf("Loading ESXi SSH private key from secret: %s", migobj.ESXiSSHSecretName))
+
+	privateKey, err := k8sutils.GetESXiSSHPrivateKey(ctx, migobj.K8sClient, migobj.ESXiSSHSecretName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to load ESXi SSH private key from secret %s", migobj.ESXiSSHSecretName)
+	}
+
+	migobj.ESXiSSHPrivateKey = privateKey
+	migobj.logMessage("ESXi SSH private key loaded successfully")
 
 	return nil
 }
