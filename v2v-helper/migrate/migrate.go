@@ -1245,6 +1245,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
+	// Handle different storage copy methods
 	if migobj.StorageCopyMethod == "vendor-based" {
 		// Initialize storage provider if using vendor-based migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
@@ -1261,34 +1262,69 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			return errors.Wrap(err, "failed to perform vendor-based storage copy")
 		}
 
-	}
-
-	// Create and Add Volumes to Host
-	vminfo, err = migobj.CreateVolumes(vminfo)
-	if err != nil {
-		return errors.Wrap(err, "failed to add volumes to host")
-	}
-	// Enable CBT
-	err = migobj.EnableCBTWrapper()
-	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
-		return errors.Wrap(err, "CBT Failure")
-	}
-
-	// Create NBD servers
-	for range vminfo.VMDisks {
-		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
-	}
-
-	// Live Replicate Disks
-	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+	} else if migobj.StorageCopyMethod == "vaai" {
+		// Initialize storage provider for VAAI copy
+		if err := migobj.InitializeStorageProvider(ctx); err != nil {
+			return errors.Wrap(err, "failed to initialize storage provider for VAAI")
 		}
-		return errors.Wrap(err, "failed to live replicate disks")
+		defer func() {
+			if migobj.StorageProvider != nil {
+				migobj.StorageProvider.Disconnect()
+			}
+		}()
+
+		// Validate VAAI prerequisites
+		if err := migobj.ValidateVAAIPrerequisites(ctx); err != nil {
+			return errors.Wrap(err, "VAAI prerequisites validation failed")
+		}
+
+		// Create Cinder volumes first
+		vminfo, err = migobj.CreateVolumes(vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to create volumes for VAAI copy")
+		}
+
+		// Perform VAAI-based copy (no CBT or NBD needed)
+		vminfo, err = migobj.VAAILiveReplicateDisks(ctx, vminfo)
+		if err != nil {
+			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to copy disks via VAAI: %s", err)); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "failed to copy disks via VAAI")
+		}
+
+	} else {
+		// Default: NBD-based copy
+		// Create and Add Volumes to Host
+		vminfo, err = migobj.CreateVolumes(vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to add volumes to host")
+		}
+
+		// Enable CBT
+		err = migobj.EnableCBTWrapper()
+		if err != nil {
+			migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
+			return errors.Wrap(err, "CBT Failure")
+		}
+
+		// Create NBD servers
+		for range vminfo.VMDisks {
+			migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
+		}
+
+		// Live Replicate Disks
+		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
+		if err != nil {
+			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+				// combine both errors
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "failed to live replicate disks")
+		}
 	}
+
+	// Continue with volume conversion (common for all methods)
 	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vcenter settings")
