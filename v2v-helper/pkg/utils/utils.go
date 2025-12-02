@@ -148,3 +148,27 @@ func GetRetryLimits() (uint64, time.Duration) {
 	}
 	return vjailbreakSettings.PeriodicSyncMaxRetries, retryCap
 }
+
+func DoRetryWithExponentialBackoff(ctx context.Context, task func() error, maxRetries uint64, capInterval time.Duration) error {
+	retries := uint64(0)
+	var err error
+	waitTime := 1 * time.Minute
+	for retries < maxRetries {
+		err = task()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Attempt %d failed with error %v", retries, err))
+		retries++
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitTime):
+			waitTime *= 2
+			if waitTime > capInterval {
+				waitTime = capInterval
+			}
+		}
+	}
+	return err
+}
