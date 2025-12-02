@@ -142,6 +142,9 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 	res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope)
 	if err != nil {
 		// update the status as failed
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "failed to reconcile migration plan job"); err != nil {
+			return res, errors.Wrap(err, "failed to update migration plan status after migration plan job failure")
+		}
 		return res, errors.Wrap(err, "failed to reconcile migration plan job")
 	}
 	return res, nil
@@ -585,14 +588,44 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
-	migrationplan.Status.MigrationStatus = status
-	migrationplan.Status.MigrationMessage = message
-	err := r.Status().Update(ctx, migrationplan)
-	if err != nil {
-		return errors.Wrap(err, "failed to update migration plan status")
-	}
-	return nil
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get the latest version of the MigrationPlan
+		latest := &vjailbreakv1alpha1.MigrationPlan{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      migrationplan.Name,
+			Namespace: migrationplan.Namespace,
+		}, latest); err != nil {
+			return err
+		}
+
+		// Only update if the status is different to prevent unnecessary updates
+		if latest.Status.MigrationStatus == status && latest.Status.MigrationMessage == message {
+			return nil
+		}
+
+		// Update the status
+		latest.Status.MigrationStatus = status
+		latest.Status.MigrationMessage = message
+
+		// Use Status().Update() for status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
+
+// func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
+// 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
+// 	migrationplan.Status.MigrationStatus = status
+// 	migrationplan.Status.MigrationMessage = message
+// 	err := r.Status().Update(ctx, migrationplan)
+// 	if err != nil {
+// 		return errors.Wrap(err, "failed to update migration plan status")
+// 	}
+// 	return nil
+// }
 
 // CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
@@ -1227,14 +1260,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				migrationplan.Status.MigrationStatus = corev1.PodFailed
-				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
-				if updateErr := r.Status().Update(ctx, migrationplan, &client.SubResourceUpdateOptions{
-					UpdateOptions: client.UpdateOptions{
-						FieldManager: "migrationplan-controller",
-					},
-				}); updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
+				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "failed to discover base flavor for flavorless migration"); err != nil {
+					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
 				}
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
 			}
