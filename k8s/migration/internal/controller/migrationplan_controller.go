@@ -141,10 +141,6 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope)
 	if err != nil {
-		// update the status as failed
-		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "failed to reconcile migration plan job"); err != nil {
-			return res, errors.Wrap(err, "failed to update migration plan status after migration plan job failure")
-		}
 		return res, errors.Wrap(err, "failed to reconcile migration plan job")
 	}
 	return res, nil
@@ -615,17 +611,6 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 		return nil
 	})
 }
-
-// func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
-// 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
-// 	migrationplan.Status.MigrationStatus = status
-// 	migrationplan.Status.MigrationMessage = message
-// 	err := r.Status().Update(ctx, migrationplan)
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to update migration plan status")
-// 	}
-// 	return nil
-// }
 
 // CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
@@ -1260,7 +1245,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "failed to discover base flavor for flavorless migration"); err != nil {
+				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)); err != nil {
 					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
 				}
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
