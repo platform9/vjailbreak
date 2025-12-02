@@ -127,6 +127,8 @@ build {
     "sudo df -h",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
     "sudo bash /tmp/user_setup_daemon.sh",
+    "sudo apt update",
+    "sudo apt install python3-openstackclient -y",
     ]
   }
 }
