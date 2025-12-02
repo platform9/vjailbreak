@@ -80,12 +80,18 @@ func (p *PureStorageProvider) ValidateCredentials(ctx context.Context) error {
 }
 
 // CreateVolume creates a new volume on the storage array
-func (p *PureStorageProvider) CreateVolume(volumeName string, size int64) error {
-	_, err := p.client.Volumes.CreateVolume(volumeName, int(size))
+func (p *PureStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
+	volume, err := p.client.Volumes.CreateVolume(volumeName, int(size))
 	if err != nil {
-		return fmt.Errorf("failed to create volume %s: %w", volumeName, err)
+		return storage.Volume{}, fmt.Errorf("failed to create volume %s: %w", volumeName, err)
 	}
-	return nil
+	return storage.Volume{
+		Name:         volume.Name,
+		Size:         volume.Size,
+		Id:           "", // Pure sdk doesn't provide volume ID
+		SerialNumber: volume.Serial,
+		NAA:          fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(volume.Serial)),
+	}, nil
 }
 
 // DeleteVolume deletes a volume from the storage array

@@ -2,6 +2,7 @@ package k8sutils
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -205,4 +206,27 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds configmap")
 	}
 	return arrayCreds, nil
+}
+
+// GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret
+func GetESXiSSHPrivateKey(ctx context.Context, k8sClient client.Client, secretName string) ([]byte, error) {
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      secretName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret); err != nil {
+		return nil, errors.Wrapf(err, "failed to get ESXi SSH secret %s", secretName)
+	}
+
+	// The secret should contain a key named "ssh-privatekey"
+	privateKey, ok := secret.Data["ssh-privatekey"]
+	if !ok {
+		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
+	}
+
+	if len(privateKey) == 0 {
+		return nil, fmt.Errorf("ESXi SSH private key in secret %s is empty", secretName)
+	}
+
+	return privateKey, nil
 }

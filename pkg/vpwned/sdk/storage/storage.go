@@ -20,7 +20,7 @@ type StorageProvider interface {
 	ValidateCredentials(ctx context.Context) error
 
 	// CreateVolume creates a new volume on the storage array
-	CreateVolume(volumeName string, size int64) error
+	CreateVolume(volumeName string, size int64) (Volume, error)
 
 	// DeleteVolume deletes a volume from the storage array
 	DeleteVolume(volumeName string) error
@@ -66,6 +66,12 @@ type Volume struct {
 	Id           string
 	SerialNumber string
 	NAA          string // Network Address Authority identifier
+	OpenstackVol OpenstackVolume
+}
+
+// OpenstackVolume represents a Cinder volume
+type OpenstackVolume struct {
+	ID string
 }
 
 // StorageAccessInfo holds connection information for storage arrays
