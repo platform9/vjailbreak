@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,11 +206,31 @@ func (c *Client) TestConnection() error {
 func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*VmkfstoolsTask, error) {
 	klog.Infof("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN)
 
+	// First check if source exists
+	checkCmd := fmt.Sprintf("ls -l %s 2>&1", sourceVMDK)
+	checkOutput, _ := c.ExecuteCommand(checkCmd)
+	if !strings.Contains(checkOutput, sourceVMDK) {
+		return nil, fmt.Errorf("source VMDK does not exist: %s", sourceVMDK)
+	}
+
+	// Create target directory if it doesn't exist
+	targetDir := targetLUN[:strings.LastIndex(targetLUN, "/")]
+	mkdirCmd := fmt.Sprintf("mkdir -p %s", targetDir)
+	_, err := c.ExecuteCommand(mkdirCmd)
+	if err != nil {
+		klog.Warningf("Failed to create target directory: %v", err)
+	} else {
+		klog.Infof("Created target directory: %s", targetDir)
+	}
+
+	// Create a log file for vmkfstools output so we can debug failures
+	logFile := fmt.Sprintf("/tmp/vmkfstools_clone_%d.log", time.Now().Unix())
+
 	// Run vmkfstools in background
 	// Use vmkfstools -i (clone/import) which automatically uses XCOPY on VAAI-capable storage
 	// -d thin creates thin provisioned disk (can also use eagerzeroedthick, zeroedthick)
-	// Redirect to /dev/null and run in background to avoid SSH hanging
-	command := fmt.Sprintf("vmkfstools -i %s %s -d thin >/dev/null 2>&1 & echo $!", sourceVMDK, targetLUN)
+	// Capture output to log file for debugging
+	command := fmt.Sprintf("vmkfstools -i %s %s -d thin >%s 2>&1 & echo $!", sourceVMDK, targetLUN, logFile)
 
 	output, err := c.ExecuteCommand(command)
 	if err != nil {
@@ -217,13 +238,13 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	}
 
 	pid := strings.TrimSpace(output)
-	klog.Infof("Started vmkfstools clone with PID: %s", pid)
+	klog.Infof("Started vmkfstools clone with PID: %s, log: %s", pid, logFile)
 
 	// Return task info with PID so we can check status later
 	task := &VmkfstoolsTask{
 		TaskId:   fmt.Sprintf("vmkfstools-clone-%s", pid),
 		Pid:      0, // Will be parsed from output
-		LastLine: fmt.Sprintf("Clone started with PID %s", pid),
+		LastLine: fmt.Sprintf("Clone started with PID %s, log: %s", pid, logFile),
 	}
 
 	// Try to parse PID
@@ -232,6 +253,20 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	}
 
 	return task, nil
+}
+
+// GetCloneLog retrieves the vmkfstools clone log output
+func (c *Client) GetCloneLog(pid int) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Try to find the log file for this PID
+	// We use a pattern since we don't know the exact timestamp
+	cmd := fmt.Sprintf("cat /tmp/vmkfstools_clone_*.log 2>/dev/null | tail -n 100")
+	output, _ := c.ExecuteCommand(cmd)
+
+	return output, nil
 }
 
 // CheckCloneStatus checks if a clone operation is still running
@@ -243,6 +278,131 @@ func (c *Client) CheckCloneStatus(pid int) (bool, error) {
 	isRunning := strings.Contains(output, fmt.Sprintf("%d", pid))
 
 	return isRunning, nil
+}
+
+// VerifyVMDKClone verifies that a cloned VMDK was created successfully
+func (c *Client) VerifyVMDKClone(vmdkPath string) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Use test -f to check if file exists (more reliable than ls)
+	descCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", vmdkPath)
+	descOutput, err := c.ExecuteCommand(descCmd)
+	if err != nil || !strings.Contains(descOutput, "exists") {
+		// Try with ls as fallback
+		lsOutput, _ := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>&1", vmdkPath))
+		return fmt.Errorf("descriptor file not found at %s (output: %s)", vmdkPath, lsOutput)
+	}
+
+	// Check flat file exists
+	flatFile := strings.Replace(vmdkPath, ".vmdk", "-flat.vmdk", 1)
+	flatCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", flatFile)
+	flatOutput, err := c.ExecuteCommand(flatCmd)
+	if err != nil || !strings.Contains(flatOutput, "exists") {
+		// Try with ls as fallback
+		lsOutput, _ := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>&1", flatFile))
+		return fmt.Errorf("flat file not found at %s (output: %s)", flatFile, lsOutput)
+	}
+
+	klog.Infof("VMDK clone verified: descriptor and flat files exist at %s", vmdkPath)
+	return nil
+}
+
+// GetVMDKSize returns the size of a VMDK in bytes by reading the descriptor
+func (c *Client) GetVMDKSize(vmdkPath string) (int64, error) {
+	if c.sshClient == nil {
+		return 0, fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Read VMDK descriptor to find size
+	descriptor, err := c.ExecuteCommand(fmt.Sprintf("cat %s 2>/dev/null", vmdkPath))
+	if err != nil || descriptor == "" {
+		return 0, fmt.Errorf("failed to read VMDK descriptor: %w", err)
+	}
+
+	// Look for lines like: RW 8388608 VMFS "disk-flat.vmdk"
+	// The number is in 512-byte sectors
+	for _, line := range strings.Split(descriptor, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "-flat.vmdk") && strings.Contains(line, "VMFS") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				if sectors, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+					klog.Infof("Found VMDK size in descriptor: %d sectors (%d bytes)", sectors, sectors*512)
+					return sectors * 512, nil // Convert sectors to bytes
+				}
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("could not find size in VMDK descriptor")
+}
+
+// CheckVMDKExists checks if a VMDK already exists at the given path
+func (c *Client) CheckVMDKExists(vmdkPath string) (bool, error) {
+	if c.sshClient == nil {
+		return false, fmt.Errorf("not connected to ESXi host")
+	}
+
+	output, _ := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>/dev/null", vmdkPath))
+	return output != "", nil
+}
+
+// DeleteVMDKFiles removes a VMDK and its flat file (for cleanup before clone)
+func (c *Client) DeleteVMDKFiles(vmdkPath string) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Delete flat file
+	flatFile := strings.Replace(vmdkPath, ".vmdk", "-flat.vmdk", 1)
+	_, _ = c.ExecuteCommand(fmt.Sprintf("rm -f %s", flatFile))
+
+	// Delete descriptor
+	_, err := c.ExecuteCommand(fmt.Sprintf("rm -f %s", vmdkPath))
+	if err != nil {
+		return fmt.Errorf("failed to delete VMDK files: %w", err)
+	}
+
+	klog.Infof("Deleted existing VMDK files at %s", vmdkPath)
+	return nil
+}
+
+// CheckVMKernelLogsForXCopy checks vmkernel logs for VAAI XCOPY operations
+// Returns recent log lines containing XCOPY/VAAI indicators
+func (c *Client) CheckVMKernelLogsForXCopy(timeWindowMinutes int) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Search for XCOPY-related keywords in vmkernel logs
+	// Common indicators: "XCOPY", "VAAI", "ExtendedCopy", "vmw_ahci"
+	cmd := fmt.Sprintf("tail -n 1000 /var/log/vmkernel.log | grep -i -E 'xcopy|vaai|extendedcopy|clone' | tail -n 50")
+
+	output, err := c.ExecuteCommand(cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to check vmkernel logs: %w", err)
+	}
+
+	return output, nil
+}
+
+// CheckStorageIOStats checks storage I/O statistics to verify VAAI usage
+func (c *Client) CheckStorageIOStats(deviceName string) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Get VAAI statistics for a device
+	cmd := fmt.Sprintf("esxcli storage core device vaai status get -d %s", deviceName)
+
+	output, err := c.ExecuteCommand(cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to get VAAI stats: %w", err)
+	}
+
+	return output, nil
 }
 
 // parseTaskResponse parses the XML response from vmkfstools operations
