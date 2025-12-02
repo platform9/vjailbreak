@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 // ListDatastores returns all datastores on the ESXi host
@@ -385,4 +387,222 @@ func (c *Client) ListStorageDevices() ([]StorageDeviceInfo, error) {
 	}
 
 	return devices, nil
+}
+
+// GetDatastoreBackingDevice returns the NAA device ID that backs a datastore
+func (c *Client) GetDatastoreBackingDevice(datastoreName string) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Use esxcli to get datastore extent information
+	output, err := c.ExecuteCommand(fmt.Sprintf("esxcli storage vmfs extent list | grep -A2 %s", datastoreName))
+	if err != nil {
+		return "", fmt.Errorf("failed to get datastore extent: %w", err)
+	}
+
+	// Parse output to extract NAA device
+	// Format: datastore_name  uuid  partition  device_name  partition_num
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "naa.") {
+			fields := strings.Fields(line)
+			// Find the field that starts with "naa."
+			for _, field := range fields {
+				if strings.HasPrefix(field, "naa.") {
+					return field, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("could not find NAA device for datastore %s", datastoreName)
+}
+
+// GetVMDKBackingNAA returns the NAA device that backs a VMDK file
+func (c *Client) GetVMDKBackingNAA(vmdkPath string) (string, error) {
+	// Extract datastore name from VMDK path
+	// Format: /vmfs/volumes/datastore-name/vm-folder/disk.vmdk or [datastore-name] vm-folder/disk.vmdk
+	var datastoreName string
+
+	if strings.HasPrefix(vmdkPath, "/vmfs/volumes/") {
+		// Path format: /vmfs/volumes/datastore-name/...
+		parts := strings.Split(strings.TrimPrefix(vmdkPath, "/vmfs/volumes/"), "/")
+		if len(parts) > 0 {
+			datastoreName = parts[0]
+		}
+	} else if strings.HasPrefix(vmdkPath, "[") {
+		// Path format: [datastore-name] vm-folder/disk.vmdk
+		endBracket := strings.Index(vmdkPath, "]")
+		if endBracket > 0 {
+			datastoreName = vmdkPath[1:endBracket]
+		}
+	}
+
+	if datastoreName == "" {
+		return "", fmt.Errorf("could not extract datastore name from VMDK path: %s", vmdkPath)
+	}
+
+	return c.GetDatastoreBackingDevice(datastoreName)
+}
+
+// PowerOffVM powers off a VM by its ID
+func (c *Client) PowerOffVM(vmID string) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Check current power state first
+	powerState, err := c.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmID))
+	if err != nil {
+		return fmt.Errorf("failed to get power state: %w", err)
+	}
+
+	if strings.Contains(powerState, "Powered off") {
+		return nil // Already powered off
+	}
+
+	// Power off the VM
+	_, err = c.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmID))
+	if err != nil {
+		return fmt.Errorf("failed to power off VM: %w", err)
+	}
+
+	return nil
+}
+
+// PowerOnVM powers on a VM by its ID
+func (c *Client) PowerOnVM(vmID string) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Check current power state first
+	powerState, err := c.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmID))
+	if err != nil {
+		return fmt.Errorf("failed to get power state: %w", err)
+	}
+
+	if strings.Contains(powerState, "Powered on") {
+		return nil // Already powered on
+	}
+
+	// Power on the VM
+	_, err = c.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.on %s", vmID))
+	if err != nil {
+		return fmt.Errorf("failed to power on VM: %w", err)
+	}
+
+	return nil
+}
+
+// GetVMPowerState returns the power state of a VM
+func (c *Client) GetVMPowerState(vmID string) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	powerState, err := c.ExecuteCommand(fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmID))
+	if err != nil {
+		return "", fmt.Errorf("failed to get power state: %w", err)
+	}
+
+	if strings.Contains(powerState, "Powered on") {
+		return "on", nil
+	} else if strings.Contains(powerState, "Powered off") {
+		return "off", nil
+	} else if strings.Contains(powerState, "Suspended") {
+		return "suspended", nil
+	}
+
+	return "unknown", nil
+}
+
+// RescanStorage rescans ESXi storage adapters to detect new volumes
+func (c *Client) RescanStorage() error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	klog.Info("Rescanning ESXi storage adapters...")
+	_, err := c.ExecuteCommand("esxcli storage core adapter rescan --all")
+	if err != nil {
+		return fmt.Errorf("failed to rescan storage: %w", err)
+	}
+
+	klog.Info("Storage rescan completed")
+	return nil
+}
+
+// CreateDatastore creates a new VMFS datastore on a NAA device
+func (c *Client) CreateDatastore(datastoreName, naaID string) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	devicePath := fmt.Sprintf("/vmfs/devices/disks/%s", naaID)
+
+	klog.Infof("Creating VMFS datastore %s on device %s", datastoreName, devicePath)
+
+	// Create partition table and VMFS filesystem
+	// Using vmkfstools with -C to create VMFS datastore
+	cmd := fmt.Sprintf("vmkfstools -C vmfs6 -S %s %s", datastoreName, devicePath)
+	_, err := c.ExecuteCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create datastore: %w", err)
+	}
+
+	klog.Infof("Created datastore %s", datastoreName)
+	return nil
+}
+
+// GetDatastorePath returns the full datastore path for a given datastore name
+func (c *Client) GetDatastorePath(datastoreName string) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// List datastores and find the matching one
+	output, err := c.ExecuteCommand("esxcli storage filesystem list")
+	if err != nil {
+		return "", fmt.Errorf("failed to list filesystems: %w", err)
+	}
+
+	// Parse output to find datastore path
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, datastoreName) {
+			// Extract mount point - typically /vmfs/volumes/<uuid> or /vmfs/volumes/<name>
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				return fields[0], nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("datastore %s not found", datastoreName)
+}
+
+// GetHostIQN returns the iSCSI IQN of the ESXi host
+func (c *Client) GetHostIQN() (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Get iSCSI adapter info
+	output, err := c.ExecuteCommand("esxcli iscsi adapter list")
+	if err != nil {
+		return "", fmt.Errorf("failed to get iSCSI adapter list: %w", err)
+	}
+
+	// Parse output to find IQN
+	// Format: vmhba64   iscsi_vmk  iqn.1998-01.com.vmware:hostname-12345678
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 3 && strings.HasPrefix(fields[2], "iqn.") {
+			klog.Infof("Found ESXi IQN: %s", fields[2])
+			return fields[2], nil
+		}
+	}
+
+	return "", fmt.Errorf("no iSCSI IQN found on ESXi host")
 }
