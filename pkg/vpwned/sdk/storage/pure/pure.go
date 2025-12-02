@@ -30,15 +30,15 @@ func (p *PureStorageProvider) Connect(ctx context.Context, accessInfo storage.St
 	p.accessInfo = accessInfo
 	// Create Pure Storage client
 	client, err := flasharray.NewClient(
-		accessInfo.Hostname,            // target
-		accessInfo.Username,            // username
-		accessInfo.Password,            // password
-		"",                             // apiToken
-		"",                             // restVersion
-		true,                           // verifyHTTPS
-		accessInfo.SkipSSLVerification, // sslCert
-		"",                             // userAgent
-		map[string]string{},            // requestKwargs
+		accessInfo.Hostname,             // target
+		accessInfo.Username,             // username
+		accessInfo.Password,             // password
+		"",                              // apiToken
+		"",                              // restVersion
+		!accessInfo.SkipSSLVerification, // verifyHTTPS (opposite of skip)
+		accessInfo.SkipSSLVerification,  // sslCert
+		"",                              // userAgent
+		map[string]string{},             // requestKwargs
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Pure Storage client: %w", err)
@@ -94,6 +94,16 @@ func (p *PureStorageProvider) DeleteVolume(volumeName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete volume %s: %w", volumeName, err)
 	}
+	return nil
+}
+
+// RenameVolume renames a volume on the Pure array to Cinder format
+func (p *PureStorageProvider) RenameVolume(oldName, newName string) error {
+	_, err := p.client.Volumes.RenameVolume(oldName, newName)
+	if err != nil {
+		return fmt.Errorf("failed to rename volume from %s to %s: %w", oldName, newName, err)
+	}
+	klog.Infof("Renamed Pure volume from %s to %s", oldName, newName)
 	return nil
 }
 
@@ -253,6 +263,40 @@ func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage
 	}
 
 	return lun, nil
+}
+
+// GetVolumeFromNAA retrieves a Pure volume by its NAA identifier
+func (p *PureStorageProvider) GetVolumeFromNAA(naaID string) (storage.Volume, error) {
+	// Extract serial number from NAA
+	// NAA format: naa.624a9370<serial_in_lowercase>
+	// Pure provider ID is 624a9370
+	if !strings.HasPrefix(naaID, "naa."+FlashProviderID) {
+		return storage.Volume{}, fmt.Errorf("NAA ID %s is not from Pure FlashArray (expected prefix: naa.%s)", naaID, FlashProviderID)
+	}
+
+	// Extract serial (everything after "naa.624a9370")
+	serial := strings.TrimPrefix(naaID, "naa."+FlashProviderID)
+	serial = strings.ToUpper(serial) // Pure stores serials in uppercase
+
+	// List all volumes and find matching serial
+	volumes, err := p.client.Volumes.ListVolumes(nil)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	for _, v := range volumes {
+		if strings.ToUpper(v.Serial) == serial {
+			klog.Infof("Found Pure volume %s with serial %s matching NAA %s", v.Name, v.Serial, naaID)
+			return storage.Volume{
+				Name:         v.Name,
+				Size:         v.Size,
+				SerialNumber: v.Serial,
+				NAA:          naaID,
+			}, nil
+		}
+	}
+
+	return storage.Volume{}, fmt.Errorf("no Pure volume found with NAA %s (serial: %s)", naaID, serial)
 }
 
 // WhoAmI returns the provider name
