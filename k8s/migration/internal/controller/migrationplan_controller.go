@@ -1245,6 +1245,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
+				// added constant prefix for the filter in reconciler
 				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)); err != nil {
 					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
 				}
