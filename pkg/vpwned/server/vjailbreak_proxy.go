@@ -409,11 +409,11 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			vmwcreds.Status.VMwareValidationStatus = "Failed"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "message": result.Message}).Warn("VMware validation failed")
-		}
 
-		if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
-			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Error("Failed to update VMwareCreds status")
-			return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
+				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Error("Failed to update VMwareCreds status")
+				return nil, fmt.Errorf("failed to update VMwareCreds status: %w", err)
+			}
 		}
 
 		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
@@ -434,36 +434,58 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			oscreds.Status.OpenStackValidationMessage = result.Message
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).Info("OpenStack validation succeeded")
 
+			// Update status immediately after validation succeeds
+			if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Error("Failed to update OpenstackCreds status after success")
+				return nil, fmt.Errorf("failed to update status: %w", err)
+			}
+
 			// Fetch resources post-validation
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).Info("Fetching OpenStack resources")
 			resources, err := openstackvalidation.FetchResourcesPostValidation(ctx, p.K8sClient, oscreds)
 			if err != nil {
 				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to fetch OpenStack resources")
 			} else {
-				oscreds.Spec.Flavors = resources.Flavors
-
-				// Update the spec
-				if err := p.K8sClient.Update(ctx, oscreds); err != nil {
-					logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to update OpenstackCreds spec")
+				// Refetch the latest version before updating spec
+				freshOSCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+				if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, freshOSCreds); err != nil {
+					logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to refetch OpenstackCreds for spec update")
 				} else {
-					logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "flavor_count": len(resources.Flavors)}).Info("Updated OpenstackCreds spec with flavors")
-				}
+					freshOSCreds.Spec.Flavors = resources.Flavors
 
-				// Update status with OpenStack info
-				if resources.OpenstackInfo != nil {
-					oscreds.Status.Openstack = *resources.OpenstackInfo
+					// Update the spec
+					if err := p.K8sClient.Update(ctx, freshOSCreds); err != nil {
+						logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to update OpenstackCreds spec")
+					} else {
+						logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "flavor_count": len(resources.Flavors)}).Info("Updated OpenstackCreds spec with flavors")
+					}
+
+					// Refetch again before updating status with OpenStack info
+					if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, freshOSCreds); err != nil {
+						logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to refetch OpenstackCreds for status update")
+					} else {
+						// Update status with OpenStack info
+						if resources.OpenstackInfo != nil {
+							freshOSCreds.Status.Openstack = *resources.OpenstackInfo
+						}
+
+						if err := p.K8sClient.Status().Update(ctx, freshOSCreds); err != nil {
+							logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to update OpenstackCreds status with OpenStack info")
+						} else {
+							logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "flavor_count": len(resources.Flavors)}).Info("Successfully fetched and updated OpenStack resources")
+						}
+					}
 				}
-				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "flavor_count": len(resources.Flavors)}).Info("Successfully fetched OpenStack resources")
 			}
 		} else {
 			oscreds.Status.OpenStackValidationStatus = "Failed"
 			oscreds.Status.OpenStackValidationMessage = result.Message
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace, "message": result.Message}).Warn("OpenStack validation failed")
-		}
 
-		if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
-			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Error("Failed to update OpenstackCreds status")
-			return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+			if err := p.K8sClient.Status().Update(ctx, oscreds); err != nil {
+				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Error("Failed to update OpenstackCreds status")
+				return nil, fmt.Errorf("failed to update OpenstackCreds status: %w", err)
+			}
 		}
 
 		responseMsg := fmt.Sprintf("Validation completed for %s: %s", name, result.Message)
