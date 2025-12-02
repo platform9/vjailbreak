@@ -29,6 +29,8 @@ export const useDeploymentLogs = ({
   const [error, setError] = useState<string | null>(null)
   const abortControllersRef = useRef<AbortController[]>([])
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasInitiallyLoadedRef = useRef(false)
+  const previousDeploymentRef = useRef<string>('')
 
   const cleanup = useCallback(() => {
     // Abort all active connections
@@ -182,6 +184,13 @@ export const useDeploymentLogs = ({
   }, [connect])
 
   useEffect(() => {
+    const currentDeploymentKey = `${namespace}/${deploymentName}/${labelSelector}`
+    if (previousDeploymentRef.current && previousDeploymentRef.current !== currentDeploymentKey) {
+      setLogs([])
+      hasInitiallyLoadedRef.current = false
+    }
+    previousDeploymentRef.current = currentDeploymentKey
+
     if (enabled && deploymentName && namespace && labelSelector) {
       connect()
     } else {

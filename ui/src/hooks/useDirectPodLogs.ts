@@ -26,6 +26,8 @@ export const useDirectPodLogs = ({
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasInitiallyLoadedRef = useRef(false)
+  const previousPodRef = useRef<string>('')
 
   const cleanup = useCallback(() => {
     if (abortControllerRef.current) {
@@ -135,6 +137,13 @@ export const useDirectPodLogs = ({
   }, [connect])
 
   useEffect(() => {
+    const currentPodKey = `${namespace}/${podName}`
+    if (previousPodRef.current && previousPodRef.current !== currentPodKey) {
+      setLogs([])
+      hasInitiallyLoadedRef.current = false
+    }
+    previousPodRef.current = currentPodKey
+
     if (enabled && podName && namespace) {
       connect()
     } else {

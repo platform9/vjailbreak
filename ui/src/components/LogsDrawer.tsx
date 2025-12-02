@@ -13,12 +13,16 @@ import {
   useTheme,
   TextField,
   Tooltip,
-  Chip
+  Chip,
+  MenuItem,
+  Menu,
+  Badge
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Clear'
+import FilterListIcon from '@mui/icons-material/FilterList'
 import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
@@ -57,7 +61,9 @@ export default function LogsDrawer({
   const [logSource, setLogSource] = useState<'pod' | 'controller'>('pod')
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [logLevelFilter, setLogLevelFilter] = useState<string>('ALL')
   const [copySuccess, setCopySuccess] = useState(false)
+  const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
 
@@ -126,15 +132,31 @@ export default function LogsDrawer({
     setLogSource('pod') // Reset log source when closing
     setIsTransitioning(false) // Reset transition state when closing
     setSearchTerm('') // Reset search term
+    setLogLevelFilter('ALL') // Reset log level filter
     onClose()
   }, [onClose])
 
-  // Filter logs based on search term
+  // Filter logs based on search term and log level
   const filteredLogs = useMemo(() => {
-    if (!searchTerm.trim()) return currentLogs
-    const searchLower = searchTerm.toLowerCase()
-    return currentLogs.filter((log) => log.toLowerCase().includes(searchLower))
-  }, [currentLogs, searchTerm])
+    let filtered = currentLogs
+
+    // Filter by log level - match level after timestamp, not just anywhere in line
+    if (logLevelFilter !== 'ALL') {
+      // Match log level immediately after timestamp (no space required)
+      // Patterns: "2025-12-02T11:45:07ZERROR" or "level=ERROR" or start with "ERROR"
+      const levelPattern = `(^|\\s|T\\d{2}:\\d{2}:\\d{2}Z\\s*|level=)${logLevelFilter}(\\s|:|$)`
+      const levelRegex = new RegExp(levelPattern, 'i')
+      filtered = filtered.filter((log) => levelRegex.test(log))
+    }
+
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase()
+      filtered = filtered.filter((log) => log.toLowerCase().includes(searchLower))
+    }
+
+    return filtered
+  }, [currentLogs, searchTerm, logLevelFilter])
 
   // Copy filtered logs to clipboard
   const handleCopyLogs = useCallback(() => {
@@ -268,6 +290,98 @@ export default function LogsDrawer({
                     </IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title={`Filter by level: ${logLevelFilter}`}>
+                  <IconButton
+                    onClick={(e) => setFilterMenuAnchor(e.currentTarget)}
+                    size="small"
+                    color={logLevelFilter !== 'ALL' ? 'primary' : 'default'}
+                  >
+                    <Badge
+                      variant="dot"
+                      color="primary"
+                      invisible={logLevelFilter === 'ALL'}
+                    >
+                      <FilterListIcon fontSize="small" />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={filterMenuAnchor}
+                  open={Boolean(filterMenuAnchor)}
+                  onClose={() => setFilterMenuAnchor(null)}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'right'
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right'
+                  }}
+                >
+                  <MenuItem
+                    selected={logLevelFilter === 'ALL'}
+                    onClick={() => {
+                      setLogLevelFilter('ALL')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    All Levels
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'ERROR'}
+                    onClick={() => {
+                      setLogLevelFilter('ERROR')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    ERROR
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'WARN'}
+                    onClick={() => {
+                      setLogLevelFilter('WARN')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    WARN
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'INFO'}
+                    onClick={() => {
+                      setLogLevelFilter('INFO')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    INFO
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'DEBUG'}
+                    onClick={() => {
+                      setLogLevelFilter('DEBUG')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    DEBUG
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'TRACE'}
+                    onClick={() => {
+                      setLogLevelFilter('TRACE')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    TRACE
+                  </MenuItem>
+                  <MenuItem
+                    selected={logLevelFilter === 'SUCCESS'}
+                    onClick={() => {
+                      setLogLevelFilter('SUCCESS')
+                      setFilterMenuAnchor(null)
+                    }}
+                  >
+                    SUCCESS
+                  </MenuItem>
+                </Menu>
                 <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
                   <IconButton
                     onClick={handleCopyLogs}
