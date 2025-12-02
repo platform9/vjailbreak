@@ -141,6 +141,7 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 
 	res, err := r.ReconcileMigrationPlanJob(ctx, migrationplan, scope)
 	if err != nil {
+		// update the status as failed
 		return res, errors.Wrap(err, "failed to reconcile migration plan job")
 	}
 	return res, nil
@@ -631,8 +632,8 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan:           migrationplan.Name,
-				VMName:                  vm,
+				MigrationPlan: migrationplan.Name,
+				VMName:        vm,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
@@ -1228,7 +1229,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			if err != nil {
 				migrationplan.Status.MigrationStatus = corev1.PodFailed
 				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
-				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
+				if updateErr := r.Status().Update(ctx, migrationplan, &client.SubResourceUpdateOptions{
+					UpdateOptions: client.UpdateOptions{
+						FieldManager: "migrationplan-controller",
+					},
+				}); updateErr != nil {
 					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
 				}
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
@@ -1380,12 +1385,12 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
-                return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
+				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
-            
+
 			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 			currentMigration.Status.Conditions = cleanedConditions
-            
+
 			return r.Status().Update(ctx, currentMigration)
 		})
 
