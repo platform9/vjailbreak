@@ -137,6 +137,32 @@ export const ManyOptions: Story = {
   }
 }
 
+export const Searchable: Story = {
+  render: (args) => (
+    <FormWrapper>
+      <RHFSelect {...args} name="searchableOption" />
+    </FormWrapper>
+  ),
+  args: {
+    label: 'Searchable Select',
+    placeholder: 'Select a city',
+    searchable: true,
+    searchPlaceholder: 'Search cities…',
+    options: [
+      { label: 'San Francisco', value: 'sf' },
+      { label: 'San Jose', value: 'sj' },
+      { label: 'Los Angeles', value: 'la' },
+      { label: 'San Diego', value: 'sd' },
+      { label: 'New York City', value: 'nyc' },
+      { label: 'Buffalo', value: 'buf' },
+      { label: 'Chicago', value: 'chi' },
+      { label: 'Houston', value: 'hou' },
+      { label: 'Austin', value: 'aus' },
+      { label: 'Dallas', value: 'dal' }
+    ]
+  }
+}
+
 export const WithValidation: Story = {
   render: (args) => (
     <FormWrapper>

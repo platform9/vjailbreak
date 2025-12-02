@@ -1,4 +1,6 @@
-import { Box, Select, MenuItem, FormControl, InputLabel } from '@mui/material'
+import { useMemo, useState } from 'react'
+import { Box, Select, MenuItem, FormControl, TextField, InputAdornment } from '@mui/material'
+import SearchIcon from '@mui/icons-material/Search'
 import { Controller, ControllerProps, FieldValues, useFormContext } from 'react-hook-form'
 import { FieldLabel, FieldLabelProps } from 'src/design-system'
 
@@ -22,6 +24,8 @@ export type RHFSelectProps = {
   disabled?: boolean
   helperText?: string
   error?: boolean
+  searchable?: boolean
+  searchPlaceholder?: string
 }
 
 export default function RHFSelect({
@@ -35,9 +39,23 @@ export default function RHFSelect({
   labelProps,
   placeholder,
   disabled,
+  searchable,
+  searchPlaceholder,
   ...rest
 }: RHFSelectProps) {
   const { control } = useFormContext()
+
+  const [open, setOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !searchTerm.trim()) {
+      return options
+    }
+
+    const term = searchTerm.trim().toLowerCase()
+    return options.filter((option) => option.label.toLowerCase().includes(term))
+  }, [options, searchable, searchTerm])
 
   return (
     <Controller
@@ -45,7 +63,7 @@ export default function RHFSelect({
       control={control}
       rules={rules}
       render={({ field, fieldState }) => (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {label ? (
             <FieldLabel
               label={label}
@@ -61,25 +79,98 @@ export default function RHFSelect({
             disabled={disabled}
             error={fieldState.invalid || errorProp}
           >
-            {label && <InputLabel id={`${name}-label`}>{label}</InputLabel>}
             <Select
-              {...rest}
+              {...(rest as any)}
               {...field}
               labelId={label ? `${name}-label` : undefined}
-              label={label}
+              label={''}
               value={field.value ?? ''}
               displayEmpty
+              open={searchable ? open : undefined}
+              onOpen={
+                searchable
+                  ? () => {
+                      setOpen(true)
+                    }
+                  : (rest as any).onOpen
+              }
+              onClose={
+                searchable
+                  ? (event) => {
+                      setOpen(false)
+                      setSearchTerm('')
+                      ;(rest as any).onClose?.(event)
+                    }
+                  : (rest as any).onClose
+              }
+              MenuProps={{
+                PaperProps: {
+                  style: {
+                    maxHeight: 300
+                  }
+                },
+                MenuListProps: {
+                  autoFocus: false
+                },
+                ...(((rest as any).MenuProps as any) ?? {})
+              }}
             >
+              {searchable && (
+                <Box
+                  sx={{
+                    p: 1,
+                    position: 'sticky',
+                    top: 0,
+                    bgcolor: 'background.paper',
+                    zIndex: 1
+                  }}
+                >
+                  <TextField
+                    size="small"
+                    placeholder={searchPlaceholder || 'Search...'}
+                    fullWidth
+                    value={searchTerm}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      setSearchTerm(e.target.value)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!open) {
+                        setOpen(true)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation()
+                      // Prevent backspace from closing the dropdown
+                      if (e.key === 'Backspace') {
+                        ;(e.nativeEvent as any).stopImmediatePropagation?.()
+                      }
+                    }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Box>
+              )}
               {placeholder && (
                 <MenuItem value="" disabled>
-                  {placeholder}
+                  <em>{placeholder}</em>
                 </MenuItem>
               )}
-              {options.map((option) => (
-                <MenuItem key={String(option.value)} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
+              {searchable && filteredOptions.length === 0 ? (
+                <MenuItem disabled>No matching options</MenuItem>
+              ) : (
+                (searchable ? filteredOptions : options).map((option) => (
+                  <MenuItem key={String(option.value)} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))
+              )}
             </Select>
           </FormControl>
           {fieldState.error?.message && (
