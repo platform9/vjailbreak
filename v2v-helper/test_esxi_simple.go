@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -27,7 +28,14 @@ func formatBytes(bytes int64) string {
 }
 
 func main() {
-	fmt.Println("Starting ESXi SSH test...")
+	programStart := time.Now()
+
+	// Disable klog output for cleaner display
+	flag.Set("logtostderr", "false")
+	flag.Set("v", "0")
+
+	fmt.Printf("=== ESXi VAAI XCOPY Clone Test ===\n")
+	fmt.Printf("Program started at: %s\n\n", programStart.Format("15:04:05.000"))
 
 	host := os.Getenv("ESXI_HOST")
 	user := os.Getenv("ESXI_USER")
@@ -48,20 +56,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Connecting to %s as %s...\n", host, user)
+	fmt.Printf("Connecting to ESXi: %s@%s\n", user, host)
 
 	client := esxissh.NewClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	if err := client.Connect(ctx, host, user, privateKey); err != nil {
-		fmt.Printf("Failed to connect: %v\n", err)
+		fmt.Printf("✗ Connection failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer client.Disconnect()
 
-	fmt.Println("Connected successfully!")
+	fmt.Println("✓ Connected\n")
 
+	// Commented out for cleaner clone testing output - uncomment to see ESXi inventory
+	/*
 	if err := client.TestConnection(); err != nil {
 		fmt.Printf("Connection test failed: %v\n", err)
 		os.Exit(1)
@@ -167,153 +177,153 @@ func main() {
 		fmt.Println("No VMs found on this ESXi host")
 	}
 
+	// Test VM power management
+	fmt.Println("\n=== Testing VM Power Management ===")
+	sourceVMName := os.Getenv("ESXI_SOURCE_VM_NAME")
+	if sourceVMName != "" && len(vms) > 0 {
+		// Find the VM by name
+		var sourceVM *esxissh.VMInfo
+		for _, vm := range vms {
+			if vm.Name == sourceVMName {
+				sourceVM = &vm
+				break
+			}
+		}
+
+		if sourceVM != nil {
+			fmt.Printf("\nTesting power operations on VM: %s (ID: %s)\n", sourceVM.Name, sourceVM.ID)
+
+			// Get current power state
+			powerState, err := client.GetVMPowerState(sourceVM.ID)
+			if err != nil {
+				fmt.Printf("Warning: Failed to get power state: %v\n", err)
+			} else {
+				fmt.Printf("Current power state: %s\n", powerState)
+
+				// If VM is powered on, offer to power it off for clone testing
+				if powerState == "on" {
+					fmt.Println("\nWARNING: VM is powered on. VMDK cloning requires VM to be powered off.")
+					fmt.Println("To test clone functionality, power off the VM first:")
+					fmt.Printf("  ssh root@%s \"vim-cmd vmsvc/power.off %s\"\n", host, sourceVM.ID)
+				} else {
+					fmt.Println("✓ VM is powered off - ready for VMDK cloning")
+				}
+			}
+		} else {
+			fmt.Printf("VM '%s' not found in VM list\n", sourceVMName)
+		}
+	} else if sourceVMName == "" {
+		fmt.Println("\nSkipping VM power management test (ESXI_SOURCE_VM_NAME not set)")
+		fmt.Println("To test power management:")
+		fmt.Println("  export ESXI_SOURCE_VM_NAME=<vm-name>")
+	}
+	*/
+
 	// Test vmkfstools clone functionality
-	fmt.Println("\n=== Testing vmkfstools clone functionality ===")
+	fmt.Println("=== VAAI XCOPY Clone Test ===\n")
 
 	// Get source and target from environment variables
 	sourceVMDK := os.Getenv("ESXI_SOURCE_VMDK")
 	targetLUN := os.Getenv("ESXI_TARGET_LUN")
 
 	if sourceVMDK != "" && targetLUN != "" {
-		fmt.Printf("\nTesting vmkfstools clone:\n")
-		fmt.Printf("  Source: %s\n", sourceVMDK)
-		fmt.Printf("  Target: %s\n", targetLUN)
+		fmt.Printf("Source VMDK: %s\n", sourceVMDK)
+		fmt.Printf("Target Path: %s\n\n", targetLUN)
 
-		// Reconnect to get a fresh SSH connection for the clone operation
-		// (previous commands may have exhausted the connection)
-		fmt.Println("\nRefreshing SSH connection...")
-		client.Disconnect()
-		ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel2()
-		if err := client.Connect(ctx2, host, user, privateKey); err != nil {
-			fmt.Printf("Failed to reconnect: %v\n", err)
-		} else {
-			fmt.Println("Reconnected successfully!")
+		// Check if target already exists
+		targetExists, err := client.CheckVMDKExists(targetLUN)
+		if err == nil && targetExists {
+			fmt.Printf("⚠ Target already exists - cleanup:\n")
+			fmt.Printf("  ssh root@%s \"vmkfstools -U %s\"\n\n", host, targetLUN)
 		}
 
+		preCloneTime := time.Now()
+		fmt.Printf("[%s] Calling StartVmkfstoolsClone...\n", time.Since(programStart).Round(time.Millisecond))
 		task, err := client.StartVmkfstoolsClone(sourceVMDK, targetLUN)
+		fmt.Printf("[%s] StartVmkfstoolsClone returned (took %s)\n",
+			time.Since(programStart).Round(time.Millisecond),
+			time.Since(preCloneTime).Round(time.Millisecond))
 		if err != nil {
-			fmt.Printf("Failed to start vmkfstools clone: %v\n", err)
+			fmt.Printf("✗ Failed to start clone: %v\n", err)
 		} else {
-			fmt.Println("\nSuccessfully started vmkfstools clone task:")
-			fmt.Printf("  Task ID: %s\n", task.TaskId)
-			fmt.Printf("  PID: %d\n", task.Pid)
-			fmt.Printf("  Info: %s\n", task.LastLine)
+			fmt.Printf("Clone started (PID: %d)\n", task.Pid)
+			fmt.Println("Monitoring progress...\n")
 
-			// Monitor clone progress
+			// Use CloneTracker for live monitoring
 			if task.Pid > 0 {
-				fmt.Println("\nMonitoring clone progress (checking every 5 seconds)...")
-				fmt.Println("This may take several minutes depending on disk size and network conditions...")
+
+				tracker := esxissh.NewCloneTracker(client, task, sourceVMDK, targetLUN)
+				tracker.SetPollInterval(3 * time.Second)
 
 				startTime := time.Now()
-				checkInterval := 5 * time.Second
-				maxDuration := 30 * time.Minute // Allow up to 30 minutes for large disks or slow networks
+				maxDuration := 30 * time.Minute
 
-				var lastSize int64 = 0
-				checkCount := 0
-
-				for {
-					time.Sleep(checkInterval)
-					checkCount++
+				// Monitor with callback
+				err := tracker.Monitor(func(status *esxissh.CloneStatus) bool {
 					elapsed := time.Since(startTime)
-
-					isRunning, err := client.CheckCloneStatus(task.Pid)
-					if err != nil {
-						fmt.Printf("Error checking status: %v\n", err)
-						break
-					}
-
-					if !isRunning {
-						fmt.Printf("\nClone process completed after %s!\n", elapsed.Round(time.Second))
-
-						// Wait a bit for descriptor file to be fully written
-						// vmkfstools may finish but still be writing metadata
-						fmt.Println("Waiting for descriptor file to be written...")
-						time.Sleep(3 * time.Second)
-
-						// Verify the clone actually succeeded by checking target files
-						fmt.Println("\nVerifying clone results...")
-
-						// Check descriptor file
-						descOutput, descErr := client.ExecuteCommand(fmt.Sprintf("ls -lh %s 2>/dev/null", targetLUN))
-						if descErr != nil || descOutput == "" {
-							fmt.Printf("ERROR: Descriptor file not found at %s\n", targetLUN)
-							fmt.Println("Clone may have failed!")
-							break
-						}
-
-						// Check flat file
-						flatFile := strings.Replace(targetLUN, ".vmdk", "-flat.vmdk", 1)
-						flatOutput, flatErr := client.ExecuteCommand(fmt.Sprintf("ls -lh %s 2>/dev/null", flatFile))
-						if flatErr != nil || flatOutput == "" {
-							fmt.Printf("ERROR: Flat file not found at %s\n", flatFile)
-							fmt.Println("Clone may have failed!")
-							break
-						}
-
-						// Check actual disk usage
-						targetDir := targetLUN[:strings.LastIndex(targetLUN, "/")]
-						duOutput, _ := client.ExecuteCommand(fmt.Sprintf("du -sh %s 2>/dev/null", targetDir))
-
-						fmt.Println("\nClone verification successful!")
-						fmt.Printf("Descriptor file:\n%s\n", descOutput)
-						fmt.Printf("Flat file:\n%s\n", flatOutput)
-						if duOutput != "" {
-							fmt.Printf("Actual disk usage: %s\n", strings.TrimSpace(duOutput))
-						}
-						break
-					}
-
-					// Still running - show progress
-					fmt.Printf("  [%s elapsed] Clone still running", elapsed.Round(time.Second))
-
-					// Try to show disk growth as progress indicator
-					if checkCount%3 == 0 { // Check size every 15 seconds
-						targetDir := targetLUN[:strings.LastIndex(targetLUN, "/")]
-						sizeOutput, err := client.ExecuteCommand(fmt.Sprintf("du -sb %s 2>/dev/null | awk '{print $1}'", targetDir))
-						if err == nil && sizeOutput != "" {
-							if currentSize, err := fmt.Sscanf(strings.TrimSpace(sizeOutput), "%d", &lastSize); err == nil && currentSize == 1 {
-								fmt.Printf(" - %s copied", formatBytes(lastSize))
-							}
-						}
-					}
-					fmt.Println("...")
 
 					// Check timeout
 					if elapsed > maxDuration {
 						fmt.Printf("\nWARNING: Clone exceeded maximum duration of %s\n", maxDuration)
-						fmt.Println("The process is still running but may be stuck.")
-						fmt.Println("Check ESXi logs for errors: grep vmkfstools /var/log/vmkernel.log")
-						break
+						return false
 					}
+
+					if status.IsRunning {
+						// Show progress on same line using \r
+						if status.TotalBytes > 0 && status.PercentDone > 0 {
+							fmt.Printf("\r  [%s] %.1f%% complete - %s / %s copied",
+								elapsed.Round(time.Second),
+								status.PercentDone,
+								formatBytes(status.BytesCopied),
+								formatBytes(status.TotalBytes))
+							if status.EstimatedTime > 0 {
+								fmt.Printf(" (ETA: %s)", status.EstimatedTime.Round(time.Second))
+							}
+						} else {
+							fmt.Printf("\r  [%s] Clone in progress...", elapsed.Round(time.Second))
+						}
+						return true
+					} else {
+						// Clone finished - clear line and show completion
+						fmt.Printf("\r\n✓ Clone completed in %s\n\n", elapsed.Round(time.Second))
+						return false // Stop monitoring
+					}
+				})
+
+				if err != nil {
+					fmt.Printf("✗ Clone error: %v\n", err)
+				} else {
+					cloneDuration := time.Since(startTime)
+
+					// Show vmkfstools log (only last few lines)
+					cloneLog, logErr := client.GetCloneLog(task.Pid)
+					if logErr == nil && cloneLog != "" && strings.Contains(cloneLog, "100%") {
+						fmt.Println("✓ VAAI XCOPY succeeded (hardware accelerated)")
+					}
+
+					// Performance metrics
+					fmt.Println("\n=== Performance Metrics ===")
+					fmt.Printf("Clone Duration: %s\n", cloneDuration.Round(time.Millisecond))
+					fmt.Printf("Source: %s\n", sourceVMDK)
+					fmt.Printf("Target: %s\n", targetLUN)
+
+					// Verification command
+					fmt.Println("\nVerify clone:")
+					fmt.Printf("  ssh root@%s \"ls -lh %s\"\n", host, targetLUN[:strings.LastIndex(targetLUN, "/")])
+
+					// Cleanup command
+					fmt.Println("\nCleanup:")
+					fmt.Printf("  ssh root@%s \"vmkfstools -U %s\"\n", host, targetLUN)
 				}
 			}
 		}
 	} else {
-		fmt.Println("\nSkipping vmkfstools clone test (environment variables not set)")
-		fmt.Println("\nTo test vmkfstools clone with XCOPY on Pure Storage:")
+		fmt.Println("Missing configuration. Set these environment variables:")
 		fmt.Println("")
-		fmt.Println("IMPORTANT: The source VM must be POWERED OFF to avoid file locks!")
-		fmt.Println("           Check the VM power states listed above.")
+		fmt.Println("  export ESXI_SOURCE_VMDK=/vmfs/volumes/pure-ds/vm-name/disk.vmdk")
+		fmt.Println("  export ESXI_TARGET_LUN=/vmfs/volumes/pure-ds/test-clone/cloned.vmdk")
 		fmt.Println("")
-		fmt.Println("Step 1: Power off the VM (if needed):")
-		fmt.Println("  ssh root@<esxi-host> \"vim-cmd vmsvc/power.off <VM-ID>\"")
-		fmt.Println("")
-		fmt.Println("Step 2: Create target directory:")
-		fmt.Println("  ssh root@<esxi-host> \"mkdir -p /vmfs/volumes/pure-ds/test-clone\"")
-		fmt.Println("")
-		fmt.Println("Step 3: Set source (use a POWERED OFF VM disk from above):")
-		fmt.Println("  export ESXI_SOURCE_VMDK=/vmfs/volumes/pure-ds/test-pure-vm/test-pure-vm.vmdk")
-		fmt.Println("")
-		fmt.Println("Step 4: Set target (NEW file path on SAME datastore for XCOPY):")
-		fmt.Println("  export ESXI_TARGET_LUN=/vmfs/volumes/pure-ds/test-clone/cloned-disk.vmdk")
-		fmt.Println("")
-		fmt.Println("Step 5: Run the test:")
-		fmt.Println("  go run test_esxi_simple.go")
-		fmt.Println("")
-		fmt.Println("NOTE: Source and target must be on the same Pure datastore for XCOPY to work!")
-		fmt.Println("      XCOPY will offload the clone to Pure FlashArray (hardware acceleration)")
+		fmt.Println("Note: Source VM must be powered off to avoid file locks")
+		fmt.Println("      Source and target must be on same Pure array for XCOPY (can be different datastores)")
 	}
-
-	fmt.Println("\nAll tests completed!")
 }
