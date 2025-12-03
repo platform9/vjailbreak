@@ -3,9 +3,9 @@ This document explains firstboot scripts usage in migrations performed using vir
 
 ---
 
-Allowed Script formats:
-- WindowsGuests: Batch (.bat) 
-- LinuxGuests: sh, bash (.sh)
+**Allowed Script formats:**
+- **WindowsGuests**: `Batch` (.bat)
+- **LinuxGuests**: `sh`, `bash` (.sh)
 
 ## Script Deployment
 ### How to Add the Script
