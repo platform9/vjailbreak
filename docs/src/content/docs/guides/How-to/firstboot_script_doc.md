@@ -87,6 +87,7 @@ After migration, check execution logs at: `C:\Program Files\Guestfs\log.txt`
 After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` with elevated privileges.
 
 ![img5](../../../../../public/images/firstboot-linux-log-path.png)
+![img5-1](../../../../../public/images/firstboot-linux-log-content.png)
 
 ---
 
