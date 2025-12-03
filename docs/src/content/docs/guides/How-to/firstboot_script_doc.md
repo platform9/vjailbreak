@@ -2,7 +2,7 @@
 The Firstboot Script feature allows users to run custom scripts automatically on virtual machines (VMs) immediately after they are migrated to Platform9 Cloud Director (PCD) or OpenStack environments. This capability is essential for automating post-migration configurations, installations, and other setup tasks that need to be performed on the VM upon its first boot.
 
 Following are some use cases for Firstboot Scripts:
-1. Users can automate tasks such as installing necessary software
+1. Users can automate tasks such as installing necessary software, driver removal, or system updates right after migration.
 2. Configuring network settings or any other custom setup required for their specific use cases.
 
 ---
