@@ -112,7 +112,7 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, availabilityZone string, setRDMLabel bool) (*volumes.Volume, error) {
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating volume with name %s with size %d, for OS type %s, UEFI %v, volume type %s, authurl %s, tenant %s", name, size, ostype, uefi, volumetype, osclient.AuthURL, osclient.Tenant))
@@ -122,10 +122,6 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		Name:       name,
 	}
 
-	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
-		// for PCD, this will be set to cluster name
-		opts.AvailabilityZone = availabilityZone
-	}
 	// Add 1GB to the size to account for the extra space
 	opts.Size += 1
 
