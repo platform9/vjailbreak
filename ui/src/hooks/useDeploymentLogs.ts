@@ -33,6 +33,7 @@ export const useDeploymentLogs = ({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitiallyLoadedRef = useRef(false)
   const previousDeploymentRef = useRef<string>('')
+  const seenLogsRef = useRef<Set<string>>(new Set())
 
   const cleanup = useCallback(() => {
     // Abort all active connections
@@ -81,10 +82,19 @@ export const useDeploymentLogs = ({
             // Process any remaining buffer content
             if (buffer.trim()) {
               const logLine = buffer.trim()
-              setLogs((prevLogs) => {
-                const newLogs = [...prevLogs, logLine]
-                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
-              })
+              if (!seenLogsRef.current.has(logLine)) {
+                seenLogsRef.current.add(logLine)
+                setLogs((prevLogs) => {
+                  const newLogs = [...prevLogs, logLine]
+                  if (newLogs.length > MAX_LOG_LINES) {
+                    // Remove oldest from seen set when trimming
+                    const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                    removed.forEach(log => seenLogsRef.current.delete(log))
+                    return newLogs.slice(-MAX_LOG_LINES)
+                  }
+                  return newLogs
+                })
+              }
             }
             break
           }
@@ -93,10 +103,18 @@ export const useDeploymentLogs = ({
           buffer = lines.pop() || ''
           if (lines.length > 0) {
             const filteredLines = lines.filter((line) => line.trim())
-            if (filteredLines.length > 0) {
+            const uniqueLines = filteredLines.filter(line => !seenLogsRef.current.has(line))
+            if (uniqueLines.length > 0) {
+              uniqueLines.forEach(line => seenLogsRef.current.add(line))
               setLogs((prevLogs) => {
-                const newLogs = [...prevLogs, ...filteredLines]
-                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
+                const newLogs = [...prevLogs, ...uniqueLines]
+                if (newLogs.length > MAX_LOG_LINES) {
+                  // Remove oldest from seen set when trimming
+                  const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                  removed.forEach(log => seenLogsRef.current.delete(log))
+                  return newLogs.slice(-MAX_LOG_LINES)
+                }
+                return newLogs
               })
             }
           }
@@ -168,12 +186,6 @@ export const useDeploymentLogs = ({
           : `Failed to connect to deployment ${deploymentName} logs stream`
       setError(errorMessage)
 
-      // Attempt to reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (enabled) {
-          connect()
-        }
-      }, 3000)
     }
   }, [
     enabled,
@@ -188,12 +200,14 @@ export const useDeploymentLogs = ({
   const reconnect = useCallback(() => {
     setLogs([])
     hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
     connect()
   }, [connect])
 
   useEffect(() => {
     setLogs([])
     hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
   }, [sessionKey])
 
   useEffect(() => {
@@ -201,6 +215,7 @@ export const useDeploymentLogs = ({
     if (previousDeploymentRef.current && previousDeploymentRef.current !== currentDeploymentKey) {
       setLogs([])
       hasInitiallyLoadedRef.current = false
+      seenLogsRef.current.clear()
     }
     previousDeploymentRef.current = currentDeploymentKey
 

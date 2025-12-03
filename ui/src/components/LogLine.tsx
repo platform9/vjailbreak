@@ -79,13 +79,13 @@ export default function LogLine({ log, showBorder, isDarkMode }: LogLineProps) {
     }
 
     const logLevelMatch = remaining.match(
-      /\s*(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|FAILED|FAILURE|SUCCESS|SUCCEEDED)\b/i
+      /^\s*(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|FAILED|FAILURE|SUCCESS|SUCCEEDED)\b/i
     )
 
     if (logLevelMatch) {
       const level = logLevelMatch[1].toUpperCase()
-      const beforeLevel = remaining.substring(0, logLevelMatch.index)
-      const afterLevel = remaining.substring(logLevelMatch.index! + logLevelMatch[0].length)
+      const beforeLevel = remaining.substring(0, logLevelMatch.index || 0)
+      const afterLevel = remaining.substring((logLevelMatch.index || 0) + logLevelMatch[0].length)
 
       if (beforeLevel) {
         segments.push({ text: beforeLevel, color: colors.default })

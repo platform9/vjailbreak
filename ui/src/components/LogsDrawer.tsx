@@ -23,6 +23,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Clear'
 import FilterListIcon from '@mui/icons-material/FilterList'
+import ReplayIcon from '@mui/icons-material/Replay'
 import { StyledDrawer, DrawerContent } from 'src/components/forms/StyledDrawer'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
@@ -67,20 +68,12 @@ export default function LogsDrawer({
   const [sessionKey, setSessionKey] = useState(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
-  const previousOpenRef = useRef(false)
-
-  useEffect(() => {
-    if (open && !previousOpenRef.current) {
-      setSessionKey((prev) => prev + 1)
-    }
-    previousOpenRef.current = open
-  }, [open])
+  const logsLengthRef = useRef(0)
 
   const {
     logs: directPodLogs,
     isLoading: directPodIsLoading,
-    error: directPodError,
-    reconnect: directPodReconnect
+    error: directPodError
   } = useDirectPodLogs({
     podName,
     namespace,
@@ -88,7 +81,11 @@ export default function LogsDrawer({
     sessionKey
   })
 
-  const controllerLogs = useDeploymentLogs({
+  const {
+    logs: controllerLogsList,
+    isLoading: controllerLogsLoading,
+    error: controllerLogsError
+  } = useDeploymentLogs({
     deploymentName: 'migration-controller-manager',
     namespace: 'migration-system',
     labelSelector: 'control-plane=controller-manager',
@@ -97,17 +94,20 @@ export default function LogsDrawer({
   })
 
   // Get current logs and states based on log source
-  const currentLogs = logSource === 'pod' ? directPodLogs : controllerLogs.logs
-  const currentIsLoading = logSource === 'pod' ? directPodIsLoading : controllerLogs.isLoading
-  const currentError = logSource === 'pod' ? directPodError : controllerLogs.error
-  const currentReconnect = logSource === 'pod' ? directPodReconnect : controllerLogs.reconnect
+  const currentLogs = logSource === 'pod' ? directPodLogs : controllerLogsList
+  const currentIsLoading = logSource === 'pod' ? directPodIsLoading : controllerLogsLoading
+  const currentError = logSource === 'pod' ? directPodError : controllerLogsError
 
   // Auto-scroll to bottom when new logs arrive and follow is enabled
   useEffect(() => {
     if (follow && logsEndRef.current && !isTransitioning && currentLogs.length > 0) {
-      setTimeout(() => {
-        logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      }, 0)
+      // Only scroll if logs length actually changed
+      if (logsLengthRef.current !== currentLogs.length) {
+        logsLengthRef.current = currentLogs.length
+        setTimeout(() => {
+          logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+        }, 0)
+      }
     }
   }, [currentLogs.length, follow, isTransitioning])
 
@@ -120,13 +120,15 @@ export default function LogsDrawer({
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
       }, 0)
     }
-  }, [])
+  }, [logsEndRef])
 
   const handleLogSourceChange = useCallback(
     (_event: React.MouseEvent<HTMLElement>, newLogSource: 'pod' | 'controller' | null) => {
       if (newLogSource !== null && newLogSource !== logSource) {
         setIsTransitioning(true)
         setLogSource(newLogSource)
+        // Increment session key to reset connection when switching sources
+        setSessionKey((prev) => prev + 1)
 
         // Reset transition state after a brief delay to show loading state
         setTimeout(() => {
@@ -136,6 +138,11 @@ export default function LogsDrawer({
     },
     [logSource]
   )
+
+  const handleReconnect = useCallback(() => {
+    // Increment session key to force fresh connection and clear logs
+    setSessionKey((prev) => prev + 1)
+  }, [])
 
   const handleClose = useCallback(() => {
     setFollow(true) // Reset follow state when closing
@@ -297,23 +304,6 @@ export default function LogsDrawer({
                 />
               </Box>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                {currentError && (
-                  <Tooltip title="Reconnect to log stream">
-                    <IconButton
-                      onClick={currentReconnect}
-                      size="small"
-                      color="error"
-                      sx={{
-                        border: '1px solid',
-                        borderColor: 'error.main'
-                      }}
-                    >
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Retry
-                      </Typography>
-                    </IconButton>
-                  </Tooltip>
-                )}
                 <Tooltip title={`Filter by level: ${logLevelFilter}`}>
                   <IconButton
                     onClick={(e) => setFilterMenuAnchor(e.currentTarget)}
@@ -474,9 +464,11 @@ export default function LogsDrawer({
               severity="error"
               sx={{ mb: 2 }}
               action={
-                <IconButton color="inherit" size="small" onClick={currentReconnect}>
-                  <Typography variant="caption">Retry</Typography>
-                </IconButton>
+                <Tooltip title="Retry connection">
+                  <IconButton color="inherit" size="small" onClick={handleReconnect}>
+                    <ReplayIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               }
             >
               Failed to connect to {logSource === 'pod' ? 'pod' : 'controller'} log stream:{' '}
@@ -484,18 +476,18 @@ export default function LogsDrawer({
             </Alert>
           )}
 
-          {/* Logs Display */}
-          <Paper
-            variant="outlined"
-            sx={{
-              flex: 1,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
-              borderColor: isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER
-            }}
-          >
+          {(currentLogs.length > 0 || currentIsLoading || isTransitioning || !currentError) && (
+            <Paper
+              variant="outlined"
+              sx={{
+                flex: 1,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
+                borderColor: isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER
+              }}
+            >
             <Box
               ref={logsContainerRef}
               sx={{
@@ -533,11 +525,13 @@ export default function LogsDrawer({
                     sx={{
                       minWidth: '50px',
                       pr: 2,
+                      py: 0.5,
                       textAlign: 'right',
                       color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
                       userSelect: 'none',
                       fontSize: '0.75rem',
-                      fontFamily: 'monospace'
+                      fontFamily: 'monospace',
+                      lineHeight: 1.6
                     }}
                   >
                     {index + 1}
@@ -555,6 +549,7 @@ export default function LogsDrawer({
               <div ref={logsEndRef} />
             </Box>
           </Paper>
+          )}
         </Box>
       </DrawerContent>
     </StyledDrawer>

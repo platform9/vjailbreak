@@ -30,6 +30,7 @@ export const useDirectPodLogs = ({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitiallyLoadedRef = useRef(false)
   const previousPodRef = useRef<string>('')
+  const seenLogsRef = useRef<Set<string>>(new Set())
 
   const cleanup = useCallback(() => {
     if (abortControllerRef.current) {
@@ -84,10 +85,17 @@ export const useDirectPodLogs = ({
           if (done) {
             // Process any remaining buffer content
             const remainingLine = buffer.trim()
-            if (remainingLine) {
+            if (remainingLine && !seenLogsRef.current.has(remainingLine)) {
+              seenLogsRef.current.add(remainingLine)
               setLogs((prevLogs) => {
                 const newLogs = [...prevLogs, remainingLine]
-                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
+                if (newLogs.length > MAX_LOG_LINES) {
+                  // Remove oldest from seen set when trimming
+                  const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                  removed.forEach(log => seenLogsRef.current.delete(log))
+                  return newLogs.slice(-MAX_LOG_LINES)
+                }
+                return newLogs
               })
             }
             return
@@ -102,10 +110,18 @@ export const useDirectPodLogs = ({
 
           if (lines.length > 0) {
             const filteredLines = lines.filter((line) => line.trim())
-            if (filteredLines.length > 0) {
+            const uniqueLines = filteredLines.filter(line => !seenLogsRef.current.has(line))
+            if (uniqueLines.length > 0) {
+              uniqueLines.forEach(line => seenLogsRef.current.add(line))
               setLogs((prevLogs) => {
-                const newLogs = [...prevLogs, ...filteredLines]
-                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
+                const newLogs = [...prevLogs, ...uniqueLines]
+                if (newLogs.length > MAX_LOG_LINES) {
+                  // Remove oldest from seen set when trimming
+                  const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                  removed.forEach(log => seenLogsRef.current.delete(log))
+                  return newLogs.slice(-MAX_LOG_LINES)
+                }
+                return newLogs
               })
             }
           }
@@ -133,24 +149,20 @@ export const useDirectPodLogs = ({
         err instanceof Error ? err.message : 'Failed to connect to pod logs stream'
       setError(errorMessage)
 
-      // Attempt to reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (enabled) {
-          connect()
-        }
-      }, 3000)
     }
   }, [enabled, podName, namespace, cleanup])
 
   const reconnect = useCallback(() => {
     setLogs([])
     hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
     connect()
   }, [connect])
 
   useEffect(() => {
     setLogs([])
     hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
   }, [sessionKey])
 
   useEffect(() => {
@@ -158,6 +170,7 @@ export const useDirectPodLogs = ({
     if (previousPodRef.current && previousPodRef.current !== currentPodKey) {
       setLogs([])
       hasInitiallyLoadedRef.current = false
+      seenLogsRef.current.clear()
     }
     previousPodRef.current = currentPodKey
 
