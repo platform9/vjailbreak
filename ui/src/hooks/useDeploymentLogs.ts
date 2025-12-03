@@ -89,7 +89,7 @@ export const useDeploymentLogs = ({
                   if (newLogs.length > MAX_LOG_LINES) {
                     // Remove oldest from seen set when trimming
                     const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
-                    removed.forEach(log => seenLogsRef.current.delete(log))
+                    removed.forEach((log) => seenLogsRef.current.delete(log))
                     return newLogs.slice(-MAX_LOG_LINES)
                   }
                   return newLogs
@@ -103,15 +103,15 @@ export const useDeploymentLogs = ({
           buffer = lines.pop() || ''
           if (lines.length > 0) {
             const filteredLines = lines.filter((line) => line.trim())
-            const uniqueLines = filteredLines.filter(line => !seenLogsRef.current.has(line))
+            const uniqueLines = filteredLines.filter((line) => !seenLogsRef.current.has(line))
             if (uniqueLines.length > 0) {
-              uniqueLines.forEach(line => seenLogsRef.current.add(line))
+              uniqueLines.forEach((line) => seenLogsRef.current.add(line))
               setLogs((prevLogs) => {
                 const newLogs = [...prevLogs, ...uniqueLines]
                 if (newLogs.length > MAX_LOG_LINES) {
                   // Remove oldest from seen set when trimming
                   const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
-                  removed.forEach(log => seenLogsRef.current.delete(log))
+                  removed.forEach((log) => seenLogsRef.current.delete(log))
                   return newLogs.slice(-MAX_LOG_LINES)
                 }
                 return newLogs
@@ -185,7 +185,6 @@ export const useDeploymentLogs = ({
           ? err.message
           : `Failed to connect to deployment ${deploymentName} logs stream`
       setError(errorMessage)
-
     }
   }, [
     enabled,

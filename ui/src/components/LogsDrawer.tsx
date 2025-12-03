@@ -110,15 +110,18 @@ export default function LogsDrawer({
     }
   }, [currentLogs.length, follow, isTransitioning])
 
-  const handleFollowToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = event.target.checked
-    setFollow(checked)
-    if (checked && logsEndRef.current) {
-      setTimeout(() => {
-        logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      }, 0)
-    }
-  }, [logsEndRef])
+  const handleFollowToggle = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const checked = event.target.checked
+      setFollow(checked)
+      if (checked && logsEndRef.current) {
+        setTimeout(() => {
+          logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+        }, 0)
+      }
+    },
+    [logsEndRef]
+  )
 
   const handleLogSourceChange = useCallback(
     (_event: React.MouseEvent<HTMLElement>, newLogSource: 'pod' | 'controller' | null) => {
@@ -158,8 +161,11 @@ export default function LogsDrawer({
         const structuredMatch = new RegExp(`level=${logLevelFilter}\\b`, 'i')
         if (structuredMatch.test(log)) return true
 
-        const cleanLog = log.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/, '')
-        
+        const cleanLog = log.replace(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/,
+          ''
+        )
+
         if (cleanLog.toUpperCase().startsWith(logLevelFilter)) {
           return true
         }
@@ -296,11 +302,7 @@ export default function LogsDrawer({
                     size="small"
                     color={logLevelFilter !== 'ALL' ? 'primary' : 'default'}
                   >
-                    <Badge
-                      variant="dot"
-                      color="primary"
-                      invisible={logLevelFilter === 'ALL'}
-                    >
+                    <Badge variant="dot" color="primary" invisible={logLevelFilter === 'ALL'}>
                       <FilterListIcon fontSize="small" />
                     </Badge>
                   </IconButton>
@@ -421,7 +423,8 @@ export default function LogsDrawer({
 
           {isPaused && currentLogs.length > 0 && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              Logs are paused. Showing {currentLogs.length} lines captured before pause. Turn Live ON to resume streaming.
+              Logs are paused. Showing {currentLogs.length} lines captured before pause. Turn Live
+              ON to resume streaming.
             </Alert>
           )}
 
@@ -474,67 +477,67 @@ export default function LogsDrawer({
                 borderColor: isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER
               }}
             >
-            <Box
-              ref={logsContainerRef}
-              sx={{
-                flex: 1,
-                overflow: 'auto',
-                p: 2,
-                backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
-                color: isDarkMode ? DARK_TEXT_PRIMARY : LIGHT_TEXT_PRIMARY,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.4,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}
-            >
-              {currentLogs.length === 0 &&
-                !currentIsLoading &&
-                !currentError &&
-                !isTransitioning && (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontFamily: 'monospace',
-                      color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY
-                    }}
-                  >
-                    {isPaused
-                      ? 'No logs captured yet. Turn Live ON to start streaming.'
-                      : 'No logs available'}
-                  </Typography>
-                )}
-              {filteredLogs.map((log, index) => (
-                <Box key={index} sx={{ display: 'flex' }}>
-                  <Box
-                    sx={{
-                      minWidth: '50px',
-                      pr: 2,
-                      py: 0.5,
-                      textAlign: 'right',
-                      color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
-                      userSelect: 'none',
-                      fontSize: '0.75rem',
-                      fontFamily: 'monospace',
-                      lineHeight: 1.6
-                    }}
-                  >
-                    {index + 1}
+              <Box
+                ref={logsContainerRef}
+                sx={{
+                  flex: 1,
+                  overflow: 'auto',
+                  p: 2,
+                  backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
+                  color: isDarkMode ? DARK_TEXT_PRIMARY : LIGHT_TEXT_PRIMARY,
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  lineHeight: 1.4,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}
+              >
+                {currentLogs.length === 0 &&
+                  !currentIsLoading &&
+                  !currentError &&
+                  !isTransitioning && (
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: 'monospace',
+                        color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY
+                      }}
+                    >
+                      {isPaused
+                        ? 'No logs captured yet. Turn Live ON to start streaming.'
+                        : 'No logs available'}
+                    </Typography>
+                  )}
+                {filteredLogs.map((log, index) => (
+                  <Box key={index} sx={{ display: 'flex' }}>
+                    <Box
+                      sx={{
+                        minWidth: '50px',
+                        pr: 2,
+                        py: 0.5,
+                        textAlign: 'right',
+                        color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
+                        userSelect: 'none',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace',
+                        lineHeight: 1.6
+                      }}
+                    >
+                      {index + 1}
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <LogLine
+                        log={log}
+                        index={index}
+                        showBorder={index < filteredLogs.length - 1}
+                        isDarkMode={isDarkMode}
+                      />
+                    </Box>
                   </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <LogLine
-                      log={log}
-                      index={index}
-                      showBorder={index < filteredLogs.length - 1}
-                      isDarkMode={isDarkMode}
-                    />
-                  </Box>
-                </Box>
-              ))}
-              <div ref={logsEndRef} />
-            </Box>
-          </Paper>
+                ))}
+                <div ref={logsEndRef} />
+              </Box>
+            </Paper>
           )}
         </Box>
       </DrawerContent>

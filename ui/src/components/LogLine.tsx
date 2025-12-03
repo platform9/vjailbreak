@@ -8,7 +8,8 @@ interface LogLineProps {
   isDarkMode: boolean
 }
 
-const LEVEL_REGEX = /\b(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED|FAILURE)\b/i
+const LEVEL_REGEX =
+  /\b(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED|FAILURE)\b/i
 
 export const extractLogLevel = (line: string): string | null => {
   const match = line.match(LEVEL_REGEX)
@@ -109,7 +110,10 @@ export default function LogLine({ log, showBorder, isDarkMode }: LogLineProps) {
         levelColor = colors.success
       }
 
-      const leadingSpaces = logLevelMatch[0].substring(0, logLevelMatch[0].length - logLevelMatch[1].length)
+      const leadingSpaces = logLevelMatch[0].substring(
+        0,
+        logLevelMatch[0].length - logLevelMatch[1].length
+      )
       if (leadingSpaces) {
         segments.push({ text: leadingSpaces, color: colors.default })
       }
