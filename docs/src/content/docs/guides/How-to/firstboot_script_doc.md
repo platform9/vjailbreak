@@ -24,7 +24,7 @@ The script is deployed through the migration form interface:
 The script executes **automatically after the migration completes and VM boots for the first time in OpenStack.**
 
 
-### Guestfs Usage Overview in virt-v2v First Boot scripts Execution
+### Overview
 
 #### What is Guestfs?
 Guestfs (libguestfs) is a set of tools for accessing and modifying virtual machine disk images. During migration, guestfs runs as part of virt-v2v in-place conversion process.
