@@ -266,36 +266,74 @@ export default function MigrationFormDrawer({
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
-  useEffect(() => {
-    const createMigrationTemplate = async () => {
-      let targetPCDClusterName: string | undefined = undefined
-      if (params.pcdCluster) {
-        const selectedPCD = pcdData.find((p) => p.id === params.pcdCluster)
-        targetPCDClusterName = selectedPCD?.name
-      }
+  const targetPCDClusterName = useMemo(() => {
+    if (!params.pcdCluster) return undefined
+    const selectedPCD = pcdData.find((p) => p.id === params.pcdCluster)
+    return selectedPCD?.name
+  }, [params.pcdCluster, pcdData])
 
-      const body = createMigrationTemplateJson({
-        datacenter: params.vmwareCreds?.datacenter,
-        vmwareRef: vmwareCredentials?.metadata.name,
-        openstackRef: openstackCredentials?.metadata.name,
-        targetPCDClusterName: targetPCDClusterName,
-        useFlavorless: params.useFlavorless || false
-      })
-      const response = await postMigrationTemplate(body)
-      setMigrationTemplate(response)
+  useEffect(() => {
+    if (!vmwareCredsValidated || !openstackCredsValidated) return
+
+    const syncMigrationTemplate = async () => {
+      try {
+        // If a template already exists, update it instead of creating a new one
+        if (migrationTemplate?.metadata?.name) {
+          const patchBody = {
+            spec: {
+              source: {
+                datacenter: params.vmwareCreds?.datacenter,
+                vmwareRef: vmwareCredentials?.metadata.name
+              },
+              destination: {
+                openstackRef: openstackCredentials?.metadata.name
+              },
+              ...(targetPCDClusterName && {
+                targetPCDClusterName
+              }),
+              useFlavorless: params.useFlavorless || false
+            }
+          }
+
+          const updated = await patchMigrationTemplate(migrationTemplate.metadata.name, patchBody)
+          setMigrationTemplate(updated)
+          return
+        }
+
+        // Otherwise create a new template once
+        const body = createMigrationTemplateJson({
+          datacenter: params.vmwareCreds?.datacenter,
+          vmwareRef: vmwareCredentials?.metadata.name,
+          openstackRef: openstackCredentials?.metadata.name,
+          targetPCDClusterName,
+          useFlavorless: params.useFlavorless || false
+        })
+        const created = await postMigrationTemplate(body)
+        setMigrationTemplate(created)
+      } catch (err) {
+        console.error('Error syncing migration template', err)
+        getFieldErrorsUpdater('migrationTemplate')(
+          'Error syncing migration template: ' +
+            (axios.isAxiosError(err)
+              ? err?.response?.data?.message
+              : err instanceof Error
+                ? err.message
+                : String(err))
+        )
+      }
     }
 
-    if (!vmwareCredsValidated || !openstackCredsValidated) return
-    createMigrationTemplate()
+    syncMigrationTemplate()
   }, [
     vmwareCredsValidated,
     openstackCredsValidated,
     params.vmwareCreds?.datacenter,
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
-    params.pcdCluster,
+    targetPCDClusterName,
     params.useFlavorless,
-    pcdData
+    migrationTemplate?.metadata?.name,
+    getFieldErrorsUpdater
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
