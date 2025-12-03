@@ -8,6 +8,13 @@ interface LogLineProps {
   isDarkMode: boolean
 }
 
+const LEVEL_REGEX = /\b(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED|FAILURE)\b/i
+
+export const extractLogLevel = (line: string): string | null => {
+  const match = line.match(LEVEL_REGEX)
+  return match ? match[1].toUpperCase() : null
+}
+
 // Log level colors for dark mode
 const DARK_COLORS = {
   error: '#ff5252', // Bright red
@@ -100,6 +107,12 @@ export default function LogLine({ log, showBorder, isDarkMode }: LogLineProps) {
         levelColor = colors.trace
       } else if (level.includes('SUCCESS') || level.includes('SUCCEED')) {
         levelColor = colors.success
+      }
+
+      // Extract and add any leading spaces that were matched by \s* in the regex
+      const leadingSpaces = logLevelMatch[0].substring(0, logLevelMatch[0].length - logLevelMatch[1].length)
+      if (leadingSpaces) {
+        segments.push({ text: leadingSpaces, color: colors.default })
       }
 
       segments.push({ text: logLevelMatch[1], color: levelColor, bold: true })

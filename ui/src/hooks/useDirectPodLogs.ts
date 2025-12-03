@@ -5,6 +5,7 @@ interface UseDirectPodLogsParams {
   podName: string
   namespace: string
   enabled: boolean
+  sessionKey: number
 }
 
 interface UseDirectPodLogsReturn {
@@ -19,7 +20,8 @@ const MAX_LOG_LINES = 5000
 export const useDirectPodLogs = ({
   podName,
   namespace,
-  enabled
+  enabled,
+  sessionKey
 }: UseDirectPodLogsParams): UseDirectPodLogsReturn => {
   const [logs, setLogs] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -53,12 +55,17 @@ export const useDirectPodLogs = ({
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
+      const shouldFetchHistory = !hasInitiallyLoadedRef.current
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
-        tailLines: '2000',
-        limitBytes: 10000000,
+        tailLines: shouldFetchHistory ? '2000' : undefined,
+        limitBytes: 8 * 1024 * 1024,
         signal: abortController.signal
       })
+
+      if (shouldFetchHistory) {
+        hasInitiallyLoadedRef.current = true
+      }
 
       setIsLoading(false)
 
@@ -76,9 +83,10 @@ export const useDirectPodLogs = ({
 
           if (done) {
             // Process any remaining buffer content
-            if (buffer.trim()) {
+            const remainingLine = buffer.trim()
+            if (remainingLine) {
               setLogs((prevLogs) => {
-                const newLogs = [...prevLogs, buffer.trim()]
+                const newLogs = [...prevLogs, remainingLine]
                 return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
               })
             }
@@ -93,10 +101,13 @@ export const useDirectPodLogs = ({
           buffer = lines.pop() || '' // Keep incomplete line in buffer
 
           if (lines.length > 0) {
-            setLogs((prevLogs) => {
-              const newLogs = [...prevLogs, ...lines.filter((line) => line.trim())]
-              return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
-            })
+            const filteredLines = lines.filter((line) => line.trim())
+            if (filteredLines.length > 0) {
+              setLogs((prevLogs) => {
+                const newLogs = [...prevLogs, ...filteredLines]
+                return newLogs.length > MAX_LOG_LINES ? newLogs.slice(-MAX_LOG_LINES) : newLogs
+              })
+            }
           }
 
           // Continue reading
@@ -133,8 +144,14 @@ export const useDirectPodLogs = ({
 
   const reconnect = useCallback(() => {
     setLogs([])
+    hasInitiallyLoadedRef.current = false
     connect()
   }, [connect])
+
+  useEffect(() => {
+    setLogs([])
+    hasInitiallyLoadedRef.current = false
+  }, [sessionKey])
 
   useEffect(() => {
     const currentPodKey = `${namespace}/${podName}`
@@ -153,7 +170,7 @@ export const useDirectPodLogs = ({
     }
 
     return cleanup
-  }, [enabled, podName, namespace, connect, cleanup])
+  }, [enabled, podName, namespace, sessionKey, connect, cleanup])
 
   useEffect(() => {
     return cleanup

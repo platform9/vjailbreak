@@ -64,8 +64,17 @@ export default function LogsDrawer({
   const [logLevelFilter, setLogLevelFilter] = useState<string>('ALL')
   const [copySuccess, setCopySuccess] = useState(false)
   const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null)
+  const [sessionKey, setSessionKey] = useState(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
+  const previousOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (open && !previousOpenRef.current) {
+      setSessionKey((prev) => prev + 1)
+    }
+    previousOpenRef.current = open
+  }, [open])
 
   const {
     logs: directPodLogs,
@@ -75,14 +84,16 @@ export default function LogsDrawer({
   } = useDirectPodLogs({
     podName,
     namespace,
-    enabled: open && logSource === 'pod' && !isPaused
+    enabled: open && logSource === 'pod' && !isPaused,
+    sessionKey
   })
 
   const controllerLogs = useDeploymentLogs({
     deploymentName: 'migration-controller-manager',
     namespace: 'migration-system',
     labelSelector: 'control-plane=controller-manager',
-    enabled: open && logSource === 'controller' && !isPaused
+    enabled: open && logSource === 'controller' && !isPaused,
+    sessionKey
   })
 
   // Get current logs and states based on log source
@@ -140,13 +151,26 @@ export default function LogsDrawer({
   const filteredLogs = useMemo(() => {
     let filtered = currentLogs
 
-    // Filter by log level - match level after timestamp, not just anywhere in line
+    // Filter by log level - Strict check
     if (logLevelFilter !== 'ALL') {
-      // Match log level immediately after timestamp (no space required)
-      // Patterns: "2025-12-02T11:45:07ZERROR" or "level=ERROR" or start with "ERROR"
-      const levelPattern = `(^|\\s|T\\d{2}:\\d{2}:\\d{2}Z\\s*|level=)${logLevelFilter}(\\s|:|$)`
-      const levelRegex = new RegExp(levelPattern, 'i')
-      filtered = filtered.filter((log) => levelRegex.test(log))
+      filtered = filtered.filter((log) => {
+        // 1. Strict check for "level=LEVEL" format (structured logs)
+        const structuredMatch = new RegExp(`level=${logLevelFilter}\\b`, 'i')
+        if (structuredMatch.test(log)) return true
+
+        // 2. Strict check for standard logs: Timestamp -> Level -> Message
+        // We strip the timestamp from the beginning to check specifically for the level
+        // Matches: 2023-...Z ERROR ... or 2023-...ZERROR ...
+        const cleanLog = log.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/, '')
+        
+        // Check if the message part starts with the Log Level (case insensitive)
+        // This prevents matching "error" inside a message body
+        if (cleanLog.toUpperCase().startsWith(logLevelFilter)) {
+          return true
+        }
+
+        return false
+      })
     }
 
     // Filter by search term
