@@ -112,7 +112,7 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, availabilityZone string, setRDMLabel bool) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating volume with name %s with size %d, for OS type %s, UEFI %v, volume type %s, authurl %s, tenant %s", name, size, ostype, uefi, volumetype, osclient.AuthURL, osclient.Tenant))
@@ -122,6 +122,10 @@ func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype s
 		Name:       name,
 	}
 
+	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
+		// for PCD, this will be set to cluster name
+		opts.AvailabilityZone = availabilityZone
+	}
 	// Add 1GB to the size to account for the extra space
 	opts.Size += 1
 
@@ -463,7 +467,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
 func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
+	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -571,7 +575,7 @@ PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, t
 		if dhcpErr != nil {
 			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-
+		gatewayIP[mac] = dhcpPort.FixedIPs[0].SubnetID
 		PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
 		return dhcpPort, nil
 	}

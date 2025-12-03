@@ -27,7 +27,7 @@ import (
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
 
 type OpenstackOperations interface {
-	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error)
+	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, availabilityZone string, setRDMLabel bool) (*volumes.Volume, error)
 	WaitForVolume(volumeID string) error
 	AttachVolumeToVM(volumeID string) error
 	WaitForVolumeAttachment(volumeID string) error
