@@ -58,6 +58,7 @@ Guestfs (libguestfs) is a set of tools for accessing and modifying virtual machi
 ### Accessing FirstBoot Logs
 
 > **For Windows Guests:**
+
 After migration, check execution logs at: `C:\Program Files\Guestfs\log.txt`
 
 ![img3](../../../../../public/images/firstboot-guestfs-log-file.png)
@@ -82,6 +83,7 @@ After migration, check execution logs at: `C:\Program Files\Guestfs\log.txt`
 ---
 
 > **For Linux Guests:**
+
 After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` with elevated privileges.
 
 ![img5](../../../../../public/images/firstboot-linux-log-path.png)
@@ -101,7 +103,6 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 #### If the script failed during execution, it will remain in: `/usr/lib/virt-sysprep/scripts/`
 
 ![img6](../../../../../public/images/firstboot-linux-firstboot-path.png)
-
 
 ## Link to readily available firstboot scripts
 [firstbootscripts](https://github.com/platform9/vjailbreak/tree/main/scripts/firstboot/)
