@@ -109,7 +109,6 @@ export default function LogLine({ log, showBorder, isDarkMode }: LogLineProps) {
         levelColor = colors.success
       }
 
-      // Extract and add any leading spaces that were matched by \s* in the regex
       const leadingSpaces = logLevelMatch[0].substring(0, logLevelMatch[0].length - logLevelMatch[1].length)
       if (leadingSpaces) {
         segments.push({ text: leadingSpaces, color: colors.default })
@@ -117,12 +116,10 @@ export default function LogLine({ log, showBorder, isDarkMode }: LogLineProps) {
 
       segments.push({ text: logLevelMatch[1], color: levelColor, bold: true })
 
-      // Rest of the line in default color
       if (afterLevel) {
         segments.push({ text: afterLevel, color: colors.default })
       }
     } else {
-      // No log level found, just add remaining text as default
       if (remaining) {
         segments.push({ text: remaining, color: colors.default })
       }

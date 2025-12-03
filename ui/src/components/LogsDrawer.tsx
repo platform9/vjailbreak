@@ -101,7 +101,6 @@ export default function LogsDrawer({
   // Auto-scroll to bottom when new logs arrive and follow is enabled
   useEffect(() => {
     if (follow && logsEndRef.current && !isTransitioning && currentLogs.length > 0) {
-      // Only scroll if logs length actually changed
       if (logsLengthRef.current !== currentLogs.length) {
         logsLengthRef.current = currentLogs.length
         setTimeout(() => {
@@ -114,7 +113,6 @@ export default function LogsDrawer({
   const handleFollowToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked
     setFollow(checked)
-    // If enabling follow, scroll to bottom immediately
     if (checked && logsEndRef.current) {
       setTimeout(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -127,7 +125,6 @@ export default function LogsDrawer({
       if (newLogSource !== null && newLogSource !== logSource) {
         setIsTransitioning(true)
         setLogSource(newLogSource)
-        // Increment session key to reset connection when switching sources
         setSessionKey((prev) => prev + 1)
 
         // Reset transition state after a brief delay to show loading state
@@ -140,7 +137,6 @@ export default function LogsDrawer({
   )
 
   const handleReconnect = useCallback(() => {
-    // Increment session key to force fresh connection and clear logs
     setSessionKey((prev) => prev + 1)
   }, [])
 
@@ -154,24 +150,16 @@ export default function LogsDrawer({
     onClose()
   }, [onClose])
 
-  // Filter logs based on search term and log level
   const filteredLogs = useMemo(() => {
     let filtered = currentLogs
 
-    // Filter by log level - Strict check
     if (logLevelFilter !== 'ALL') {
       filtered = filtered.filter((log) => {
-        // 1. Strict check for "level=LEVEL" format (structured logs)
         const structuredMatch = new RegExp(`level=${logLevelFilter}\\b`, 'i')
         if (structuredMatch.test(log)) return true
 
-        // 2. Strict check for standard logs: Timestamp -> Level -> Message
-        // We strip the timestamp from the beginning to check specifically for the level
-        // Matches: 2023-...Z ERROR ... or 2023-...ZERROR ...
         const cleanLog = log.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/, '')
         
-        // Check if the message part starts with the Log Level (case insensitive)
-        // This prevents matching "error" inside a message body
         if (cleanLog.toUpperCase().startsWith(logLevelFilter)) {
           return true
         }
@@ -180,7 +168,6 @@ export default function LogsDrawer({
       })
     }
 
-    // Filter by search term
     if (searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase()
       filtered = filtered.filter((log) => log.toLowerCase().includes(searchLower))
@@ -189,7 +176,6 @@ export default function LogsDrawer({
     return filtered
   }, [currentLogs, searchTerm, logLevelFilter])
 
-  // Copy filtered logs to clipboard
   const handleCopyLogs = useCallback(() => {
     const logsText = filteredLogs.join('\n')
     navigator.clipboard.writeText(logsText).then(
