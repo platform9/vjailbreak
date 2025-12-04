@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/schedulerhints"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -617,7 +618,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		SecurityGroups: securityGroups,
 	}
 
-	schedulerHints := servers.SchedulerHintOpts{}
+	schedulerHints := schedulerhints.SchedulerHints{}
 	if serverGroupID != "" {
 		schedulerHints.Group = serverGroupID
 	}
@@ -644,7 +645,7 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	}
 
 	createOpts := bootfromvolume.CreateOptsExt{
-		CreateOptsBuilder: servers.CreateOptsExt{
+		CreateOptsBuilder: schedulerhints.CreateOptsExt{
 			CreateOptsBuilder: serverCreateOpts,
 			SchedulerHints:    schedulerHints,
 		},
