@@ -148,4 +148,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
+	ESXiSSHSecretName = "esxi-ssh-key"
 )
