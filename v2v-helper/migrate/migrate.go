@@ -1231,7 +1231,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != "vendor-based" {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1485,15 +1485,12 @@ func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
 
 // LoadESXiSSHKey loads the ESXi SSH private key from the Kubernetes secret
 func (migobj *Migrate) LoadESXiSSHKey(ctx context.Context) error {
-	if migobj.ESXiSSHSecretName == "" {
-		return fmt.Errorf("ESXi SSH secret name not provided")
-	}
 
-	migobj.logMessage(fmt.Sprintf("Loading ESXi SSH private key from secret: %s", migobj.ESXiSSHSecretName))
+	migobj.logMessage(fmt.Sprintf("Loading ESXi SSH private key from secret: %s", constants.ESXiSSHSecretName))
 
-	privateKey, err := k8sutils.GetESXiSSHPrivateKey(ctx, migobj.K8sClient, migobj.ESXiSSHSecretName)
+	privateKey, err := k8sutils.GetESXiSSHPrivateKey(ctx, migobj.K8sClient, constants.ESXiSSHSecretName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to load ESXi SSH private key from secret %s", migobj.ESXiSSHSecretName)
+		return errors.Wrapf(err, "failed to load ESXi SSH private key from secret %s", constants.ESXiSSHSecretName)
 	}
 
 	migobj.ESXiSSHPrivateKey = privateKey
