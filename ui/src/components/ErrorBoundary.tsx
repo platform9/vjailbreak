@@ -1,59 +1,59 @@
-import React, { Component, ReactNode } from 'react';
-import { Box, Typography, Button, Paper } from '@mui/material';
-import { ErrorOutline } from '@mui/icons-material';
-import { errorReportingService } from '../services/errorReporting';
+import React, { Component, ReactNode } from 'react'
+import { Box, Typography, Button, Paper } from '@mui/material'
+import { ErrorOutline } from '@mui/icons-material'
+import { errorReportingService } from '../services/errorReporting'
 
 interface ErrorBoundaryState {
-  hasError: boolean;
-  error?: Error;
-  errorInfo?: React.ErrorInfo;
+  hasError: boolean
+  error?: Error
+  errorInfo?: React.ErrorInfo
 }
 
 interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  children: ReactNode
+  fallback?: ReactNode
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
+    super(props)
+    this.state = { hasError: false }
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    this.setState({ errorInfo });
+    this.setState({ errorInfo })
 
     errorReportingService.notify(error, {
       severity: 'error',
       context: 'React Error Boundary',
       metadata: {
         component: 'ErrorBoundary',
-        errorInfo: errorInfo.componentStack,
-      },
-    });
+        errorInfo: errorInfo.componentStack
+      }
+    })
 
     if (this.props.onError) {
-      this.props.onError(error, errorInfo);
+      this.props.onError(error, errorInfo)
     }
   }
 
   handleReload = () => {
-    window.location.reload();
-  };
+    window.location.reload()
+  }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
-  };
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined })
+  }
 
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return this.props.fallback
       }
 
       return (
@@ -71,14 +71,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               p: 4,
               maxWidth: 600,
               textAlign: 'center',
-              borderRadius: 2,
+              borderRadius: 2
             }}
           >
             <ErrorOutline
               sx={{
                 fontSize: 64,
                 color: 'error.main',
-                mb: 2,
+                mb: 2
               }}
             />
 
@@ -87,8 +87,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             </Typography>
 
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              We're sorry, but something unexpected happened. The error has been
-              reported to our team.
+              We're sorry, but something unexpected happened. The error has been reported to our
+              team.
             </Typography>
 
             {process.env.NODE_ENV === 'development' && this.state.error && (
@@ -100,7 +100,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   borderRadius: 1,
                   textAlign: 'left',
                   overflow: 'auto',
-                  maxHeight: 200,
+                  maxHeight: 200
                 }}
               >
                 <Typography variant="caption" component="pre">
@@ -111,28 +111,20 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             )}
 
             <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
-              <Button
-                variant="outlined"
-                onClick={this.handleReset}
-                size="large"
-              >
+              <Button variant="outlined" onClick={this.handleReset} size="large">
                 Try Again
               </Button>
-              <Button
-                variant="contained"
-                onClick={this.handleReload}
-                size="large"
-              >
+              <Button variant="contained" onClick={this.handleReload} size="large">
                 Reload Page
               </Button>
             </Box>
           </Paper>
         </Box>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }
 
-export default ErrorBoundary;
+export default ErrorBoundary

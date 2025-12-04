@@ -78,6 +78,13 @@ spec:
                       migration plan should be synced
                     type: string
                 type: object
+              assignedIPsPerVM:
+                additionalProperties:
+                  type: string
+                description: |-
+                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
+                type: object
               fallbackToDHCP:
                 type: boolean
               firstBootScript:

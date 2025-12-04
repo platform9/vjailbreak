@@ -1,5 +1,5 @@
 import { Box, TextField } from '@mui/material'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 type IntervalFieldProps = {
   label: string
@@ -24,24 +24,61 @@ const IntervalField = ({
   onChange,
   getErrorsUpdater
 }: IntervalFieldProps) => {
+  const [validationError, setValidationError] = useState<string | undefined>(undefined)
+
   const validate = useCallback((val: string): string | undefined => {
     const trimmedVal = val?.trim()
     if (!trimmedVal) return undefined
 
-    const regex = /^([0-9]+)(s|m|h)$/
+    // Allow composite formats like 1h30m, 5m30s, etc.
+    const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
     const match = trimmedVal.match(regex)
-    if (!match) return 'Use duration format like 30s, 5m, 1h (units: s,m,h).'
 
-    const num = Number(match[1])
-    const unit = match[2].toLowerCase()
-    const minutes = unit === 's' ? num / 60 : unit === 'm' ? num : unit === 'h' ? num * 60 : NaN
+    if (
+      !match ||
+      match[0] === '' ||
+      (match[1] === undefined && match[2] === undefined && match[3] === undefined)
+    ) {
+      return 'Use duration format like 5m, 1h30m, 5m30s (units: h,m,s).'
+    }
 
-    if (isNaN(minutes) || minutes < 5) return 'Interval must be at least 5 minutes'
+    const hours = match[1] ? Number(match[1]) : 0
+    const minutes = match[2] ? Number(match[2]) : 0
+    const seconds = match[3] ? Number(match[3]) : 0
+
+    // Convert total duration to minutes
+    const totalMinutes = hours * 60 + minutes + seconds / 60
+
+    if (isNaN(totalMinutes) || totalMinutes < 5) {
+      return 'Interval must be at least 5 minutes'
+    }
+
     return undefined
   }, [])
 
-  const validationError = validate(value)
-  const hasError = !!error || !!validationError?.trim()
+  const updateValidationError = useCallback(
+    (newValue: string) => {
+      const newValidationError = validate(newValue)
+      setValidationError(newValidationError)
+      if (getErrorsUpdater) {
+        getErrorsUpdater(name)(newValidationError || '')
+      }
+    },
+    [validate, getErrorsUpdater, name]
+  )
+
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = event.target.value
+      updateValidationError(newValue)
+      onChange?.(event)
+    },
+    [updateValidationError, onChange]
+  )
+
+  useEffect(() => {
+    updateValidationError(value)
+  }, [value, updateValidationError])
 
   return (
     <Box display="flex" flexDirection="column" gap={0.5}>
@@ -54,12 +91,11 @@ const IntervalField = ({
         name={String(name)}
         placeholder={`${label}${required ? ' *' : ''}`}
         value={value}
-        onChange={onChange}
+        onChange={handleInputChange}
         disabled={disabled}
         required={required}
-        error={hasError}
-        onBlur={() => getErrorsUpdater?.(name)(validationError || '')}
-        helperText={error || helper || validationError || 'e.g. 30s, 5m, 1h30m'}
+        error={!!error || !!validationError?.trim()}
+        helperText={error || helper || validationError || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
       />
     </Box>
   )

@@ -257,22 +257,34 @@ export default function SourceDestinationClusterSelection({
               ) : (
                 (() => {
                   const term = vmwareSearchTerm.trim().toLowerCase()
-                  const grouped = sourceData.reduce((acc, item) => {
-                    if (!acc[item.vcenterName]) {
-                      acc[item.vcenterName] = {
-                        credName: item.credName,
-                        datacenters: {}
-                      } as {
+                  const grouped = sourceData.reduce(
+                    (acc, item) => {
+                      if (!acc[item.vcenterName]) {
+                        acc[item.vcenterName] = {
+                          credName: item.credName,
+                          datacenters: {}
+                        } as {
+                          credName: string
+                          datacenters: Record<
+                            string,
+                            { id: string; name: string; displayName: string }[]
+                          >
+                        }
+                      }
+                      acc[item.vcenterName].datacenters[item.datacenter] = item.clusters
+                      return acc
+                    },
+                    {} as Record<
+                      string,
+                      {
                         credName: string
                         datacenters: Record<
                           string,
                           { id: string; name: string; displayName: string }[]
                         >
                       }
-                    }
-                    acc[item.vcenterName].datacenters[item.datacenter] = item.clusters
-                    return acc
-                  }, {} as Record<string, { credName: string; datacenters: Record<string, { id: string; name: string; displayName: string }[]> }>)
+                    >
+                  )
 
                   const items: JSX.Element[] = []
                   Object.entries(grouped).forEach(([vcenterName, { credName, datacenters }]) => {

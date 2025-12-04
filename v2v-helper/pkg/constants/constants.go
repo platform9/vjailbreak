@@ -153,4 +153,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	PeriodicSyncRetryCap = "3h"
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// AutoFstabUpdate is the default value for automatic fstab update
+	AutoFstabUpdate = false
+	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
+	AutoFstabUpdateKey = "AUTO_FSTAB_UPDATE"
 )

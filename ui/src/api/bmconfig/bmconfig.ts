@@ -1,10 +1,7 @@
-import axios from "../axios"
-import axiosOriginal from "axios"
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
-import { GetBMConfigList, BMConfig } from "./model"
+import axios from '../axios'
+import axiosOriginal from 'axios'
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { GetBMConfigList, BMConfig } from './model'
 
 interface ApiError {
   response?: {
@@ -13,46 +10,35 @@ interface ApiError {
   message: string
 }
 
-export const getBMConfigList = async (
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getBMConfigList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs`
   const response = await axios.get<GetBMConfigList>({
-    endpoint,
+    endpoint
   })
   return response?.items
 }
 
-export const getBMConfig = async (
-  bmconfigName,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const getBMConfig = async (bmconfigName, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs/${bmconfigName}`
   const response = await axios.get<BMConfig>({
-    endpoint,
+    endpoint
   })
   return response
 }
 
-export const postBMConfig = async (
-  body,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const postBMConfig = async (body, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs`
   const response = await axios.post<BMConfig>({
     endpoint,
-    data: body,
+    data: body
   })
   return response
 }
 
-export const deleteBMConfig = async (
-  bmconfigName,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
+export const deleteBMConfig = async (bmconfigName, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs/${bmconfigName}`
   const response = await axios.del<BMConfig>({
-    endpoint,
+    endpoint
   })
   return response
 }
@@ -71,15 +57,15 @@ export const createBMConfigWithSecret = async (
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs`
 
   const bmConfigBody = {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "BMConfig",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'BMConfig',
     metadata: {
       name: configName,
       namespace,
       labels: {
-        "app.kubernetes.io/name": "migration",
-        "app.kubernetes.io/part-of": "vjailbreak",
-      },
+        'app.kubernetes.io/name': 'migration',
+        'app.kubernetes.io/part-of': 'vjailbreak'
+      }
     },
     spec: {
       providerType,
@@ -87,16 +73,16 @@ export const createBMConfigWithSecret = async (
       apiKey,
       userDataSecretRef: {
         name: userDataSecretName,
-        namespace,
+        namespace
       },
       insecure,
-      ...(os ? { os } : {}),
-    },
+      ...(os ? { os } : {})
+    }
   }
 
   const response = await axios.post<BMConfig>({
     endpoint,
-    data: bmConfigBody,
+    data: bmConfigBody
   })
 
   return response
@@ -109,7 +95,7 @@ export const checkBMConfigExists = async (
   try {
     const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/bmconfigs/${bmconfigName}`
     const response = await axios.get<BMConfig>({
-      endpoint,
+      endpoint
     })
     return { exists: true, config: response }
   } catch (error: unknown) {
@@ -138,11 +124,7 @@ export interface BootSourceResponse {
 }
 
 // Fetch boot sources from MAAS
-export const fetchBootSources = async (
-  maasUrl: string,
-  apiKey: string,
-  insecure: boolean
-) => {
+export const fetchBootSources = async (maasUrl: string, apiKey: string, insecure: boolean) => {
   try {
     const apiUrl = `/dev-api/sdk/vpw/v1/list_boot_source?accessInfo.apiKey=${encodeURIComponent(
       apiKey
@@ -152,13 +134,13 @@ export const fetchBootSources = async (
 
     const response = await axiosOriginal.get(apiUrl, {
       headers: {
-        accept: "application/json",
-      },
+        accept: 'application/json'
+      }
     })
 
     return response.data
   } catch (error) {
-    console.error("Error in fetchBootSources:", error)
+    console.error('Error in fetchBootSources:', error)
     throw error
   }
 }

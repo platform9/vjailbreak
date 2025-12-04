@@ -118,6 +118,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
 			PeriodicSyncMaxRetries:              constants.PeriodicSyncMaxRetries,
 			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
+			AutoFstabUpdate:                     constants.AutoFstabUpdate,
 		}, nil
 	}
 
@@ -180,6 +181,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] = strconv.FormatBool(constants.ValidateRDMOwnerVMs)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] == "" {
+		vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] = strconv.FormatBool(constants.AutoFstabUpdate)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -197,5 +202,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
 		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
 		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
+		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
 	}, nil
 }

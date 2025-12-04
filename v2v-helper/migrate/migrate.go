@@ -76,6 +76,15 @@ type MigrationTimes struct {
 	VMCutoverEnd   time.Time
 }
 
+type PeriodicSyncStates int
+
+const (
+	initial PeriodicSyncStates = iota
+	cleanedSnapshot
+	TookSnapshot
+	SyncCompleted
+)
+
 // disconnects the source VM's network interfaces
 func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
 	if !migobj.DisconnectSourceNetwork {
@@ -355,15 +364,22 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to parse interval %s, using default interval (%s)", interval, defaultInterval))
 		interval = defaultInterval
 		waitTime, _ = time.ParseDuration(interval)
-
+	} else if waitTime < 5*time.Minute {
+		migobj.logMessage(fmt.Sprintf("WARNING: Interval %s is less than 5 minutes, falling back to 5m", interval))
+		waitTime = 5 * time.Minute
 	}
 	return waitTime
 }
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
 	var syncInterval time.Duration
+	var maxRetries uint64
+	var capInterval time.Duration
+	currentState := initial
 	vmops := migobj.VMops
+	maxRetries, capInterval = utils.GetRetryLimits()
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
+	elapsed := time.Duration(0)
 	for {
 		syncEnabled := migobj.getSyncEnabled()
 		if syncEnabled {
@@ -373,52 +389,72 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 		case <-ctx.Done():
 			return ctx.Err()
 		case label := <-migobj.PodLabelWatcher:
-			if label == "yes" {
+			if label == "yes" && currentState == initial {
 				migobj.logMessage("Admin cutover triggered")
 				return nil
 			}
 		default:
-			if syncEnabled {
-				// Perform sync
-				migobj.logMessage(fmt.Sprintf("Starting Periodic sync (interval: %s)", syncInterval))
-				start := time.Now()
-				err := vmops.CleanUpSnapshots(false)
-				if err != nil {
-					return errors.Wrap(err, "failed to cleanup snapshot of source VM")
-				}
-
-				err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
-				if err != nil {
-					return errors.Wrap(err, "failed to take snapshot of source VM")
-				}
-				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-					return err
-				}
-				elapsed := time.Since(start)
-				// If sync took longer than interval → run next sync immediately
-				if elapsed >= syncInterval {
-					migobj.logMessage("Sync took longer than interval → immediately starting next cycle")
-					continue
-				}
-				// Otherwise wait remaining time
-				waitTime := syncInterval - elapsed
-				migobj.logMessage(fmt.Sprintf("Sync finished early → waiting %s before next sync", waitTime))
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-migobj.PodLabelWatcher:
-					return nil // admin triggered cutover during wait
-				case <-time.After(waitTime):
-					// wait completed → loop and sync again
-				}
-			} else {
+			if !syncEnabled {
 				continue
 			}
+			if elapsed >= syncInterval {
+				migobj.logMessage("Periodic Sync: Previous sync took longer than interval, starting next cycle immediately")
+				elapsed = syncInterval
+			}
+			// Otherwise wait remaining time
+			waitTime := syncInterval - elapsed
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle", waitTime))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-migobj.PodLabelWatcher:
+				return nil // admin triggered cutover during wait
+			case <-time.After(waitTime):
+				// wait completed → loop and sync again
+			}
+			// Perform sync
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting sync cycle (interval: %s)", syncInterval))
+			start := time.Now()
+			if currentState == initial {
+
+				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					return vmops.CleanUpSnapshots(false)
+				}, maxRetries, capInterval)
+				if err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to clean up snapshots after %d retries: %v", maxRetries, err))
+					continue
+				} else {
+					currentState = cleanedSnapshot
+				}
+			}
+			if currentState == cleanedSnapshot {
+				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					return vmops.TakeSnapshot(constants.MigrationSnapshotName)
+				}, maxRetries, capInterval)
+				if err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to take snapshot '%s' after %d retries: %v", constants.MigrationSnapshotName, maxRetries, err))
+					continue
+				} else {
+					currentState = TookSnapshot
+				}
+			}
+			if currentState == TookSnapshot {
+				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
+					continue
+				} else {
+					currentState = initial
+				}
+			}
+			elapsed = time.Since(start)
 		}
 	}
 }
 
 func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
+	if migobj.Reporter == nil {
+		return false
+	}
 	value, err := migobj.Reporter.GetCutoverLabel()
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
@@ -641,260 +677,386 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	return vminfo, nil
 }
 
-func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
-	migobj.logMessage("Converting disk")
-
-	var (
-		osRelease                   = ""
-		bootVolumeIndex             = -1
-		err                         error
-		lvm, osPath, getBootCommand string
-		useSingleDisk               bool
-	)
-
-	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		getBootCommand = "ls /Windows"
-	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
-		getBootCommand = "ls /boot"
-	} else {
-		getBootCommand = "inspect-os"
+// getBootCommand returns the appropriate command to detect boot volume based on OS type
+func (migobj *Migrate) getBootCommand(osType string) string {
+	switch strings.ToLower(osType) {
+	case constants.OSFamilyWindows:
+		return "ls /Windows"
+	case constants.OSFamilyLinux:
+		return "ls /boot"
+	default:
+		return "inspect-os"
 	}
+}
 
-	// attach all volumes at once
+// attachAllVolumes attaches all volumes and updates their paths in vminfo
+func (migobj *Migrate) attachAllVolumes(vminfo *vm.VMInfo) error {
 	for idx, vmdisk := range vminfo.VMDisks {
-		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
+		path, err := migobj.AttachVolume(vmdisk)
 		if err != nil {
 			return errors.Wrap(err, "failed to attach volume")
 		}
+		vminfo.VMDisks[idx].Path = path
 	}
+	return nil
+}
 
-	// create XML for conversion
-	err = vmutils.GenerateXMLConfig(vminfo)
-	if err != nil {
-		return errors.Wrap(err, "failed to generate XML")
-	}
+// detectBootVolume identifies which volume contains the boot partition
+func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, useSingleDisk bool, err error) {
+	bootVolumeIndex = -1
 
 	for idx := range vminfo.VMDisks {
-		// check if individual disks are bootable
-		ans, err := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
-		if err != nil {
-			utils.PrintLog(fmt.Sprintf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, err, strings.TrimSpace(ans)))
+		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
+		if cmdErr != nil {
+			utils.PrintLog(fmt.Sprintf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, cmdErr, strings.TrimSpace(ans)))
 			continue
 		}
 
 		if ans == "" {
-			// OS is not installed on this disk
 			continue
 		}
-		utils.PrintLog(fmt.Sprintf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans)))
 
+		utils.PrintLog(fmt.Sprintf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans)))
 		osPath = strings.TrimSpace(ans)
 		bootVolumeIndex = idx
 		useSingleDisk = true
 		break
 	}
 
-	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
-		if useSingleDisk {
-			// skip checking LVM, because its a single disk
-			osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
-			if err != nil {
-				return errors.Wrap(err, "failed to get os release")
-			}
-		} else {
-			// check for LVM
-			lvm, err = virtv2v.CheckForLVM(vminfo.VMDisks)
-			if err != nil || lvm == "" {
-				return errors.Wrap(err, "OS install location not found, Failed to check for LVM")
-			}
-			osPath = strings.TrimSpace(lvm)
-			// check for bootable volume in case of LVM
-			bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
-			if err != nil {
-				return errors.Wrap(err, "Failed to get bootable volume index")
-			}
-			osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
-			if err != nil {
-				return errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
-			}
-		}
-		osDetected := strings.ToLower(strings.TrimSpace(osRelease))
-		utils.PrintLog(fmt.Sprintf("OS detected by guestfish: %s", osDetected))
-		// Supported OSes
-		supportedOS := []string{
-			"redhat",
-			"red hat",
-			"rhel",
-			"centos",
-			"scientific linux",
-			"oracle linux",
-			"fedora",
-			"sles",
-			"sled",
-			"opensuse",
-			"alt linux",
-			"debian",
-			"ubuntu",
-			"rocky linux",
-			"suse linux enterprise server",
-			"alma linux",
-		}
+	return bootVolumeIndex, osPath, useSingleDisk, nil
+}
 
-		supported := false
-		for _, s := range supportedOS {
-			if strings.Contains(osDetected, s) {
-				supported = true
-				break
-			}
-		}
+// handleLinuxOSDetection handles OS detection and validation for Linux systems
+func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, err error) {
+	finalBootIndex = bootVolumeIndex
+	finalOsPath = osPath
 
-		if !supported {
-			return errors.Errorf("unsupported OS detected by guestfish: %s", osDetected)
-		}
-		utils.PrintLog("operating system compatibility check passed")
-
-	} else if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		utils.PrintLog("operating system compatibility check passed")
-		if !useSingleDisk {
-			utils.PrintLog("checking for bootable volume in case of LDM")
-			// check for bootable volume in case of LVM
-			bootVolumeIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
-			if err != nil {
-				return errors.Wrap(err, "Failed to get bootable volume index")
-			}
+	if useSingleDisk {
+		osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
+		if err != nil {
+			return -1, "", "", errors.Wrap(err, "failed to get os release")
 		}
 	} else {
+		// Run get-bootable-partition.sh script
+		migobj.logMessage("Running get-bootable-partition.sh script")
+		var ans string
+		var cmdErr error
+
+		if ans, cmdErr = virtv2v.RunGetBootablePartitionScript(vminfo.VMDisks); cmdErr != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
+			// Don't fail the migration, just log the warning
+		} else {
+			if ans == "" {
+				migobj.logMessage("Failed to run get-bootable-partition.sh script, empty output")
+			} else {
+				migobj.logMessage(fmt.Sprintf("Successfully ran get-bootable-partition.sh script with output: %s", ans))
+			}
+		}
+
+		if ans == "" {
+			return -1, "", "", errors.New("empty bootable partition from the script")
+		}
+
+		index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
+			return -1, "", "", err
+		}
+
+		finalBootIndex, err = strconv.Atoi(strings.TrimSpace(index))
+		if err != nil {
+			return -1, "", "", errors.Wrap(err, "failed to convert bootable partition index to int")
+		}
+		migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
+
+		lvm, lvmErr := virtv2v.CheckForLVM(vminfo.VMDisks)
+		if lvmErr != nil || lvm == "" {
+			return -1, "", "", errors.Wrap(lvmErr, "OS install location not found, Failed to check for LVM")
+		}
+		finalOsPath = strings.TrimSpace(lvm)
+		if finalBootIndex < 0 {
+			finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+			if err != nil {
+				return -1, "", "", errors.Wrap(err, "Failed to get bootable volume index")
+			}
+		}
+
+		osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
+		if err != nil {
+			return -1, "", "", errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
+		}
+	}
+
+	if err := migobj.validateLinuxOS(osRelease); err != nil {
+		return -1, "", "", err
+	}
+
+	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
+	if autoFstabUpdate {
+		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
+			// Don't fail the migration, just log the warning
+		} else {
+			migobj.logMessage("Successfully ran generate-mount-persistence.sh script")
+		}
+	} else {
+		migobj.logMessage("Skipping generate-mount-persistence.sh script (AUTO_FSTAB_UPDATE is disabled)")
+	}
+
+	return finalBootIndex, finalOsPath, osRelease, nil
+}
+
+// validateLinuxOS checks if the detected Linux OS is supported
+func (migobj *Migrate) validateLinuxOS(osRelease string) error {
+	osDetected := strings.ToLower(strings.TrimSpace(osRelease))
+	utils.PrintLog(fmt.Sprintf("OS detected by guestfish: %s", osDetected))
+
+	supportedOS := []string{
+		"redhat", "red hat", "rhel", "centos", "scientific linux",
+		"oracle linux", "fedora", "sles", "sled", "opensuse",
+		"alt linux", "debian", "ubuntu", "rocky linux",
+		"suse linux enterprise server", "alma linux",
+	}
+
+	for _, s := range supportedOS {
+		if strings.Contains(osDetected, s) {
+			utils.PrintLog("operating system compatibility check passed")
+			return nil
+		}
+	}
+
+	return errors.Errorf("unsupported OS detected by guestfish: %s", osDetected)
+}
+
+// handleWindowsBootDetection handles boot volume detection for Windows systems
+func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, error) {
+	utils.PrintLog("operating system compatibility check passed")
+
+	if !useSingleDisk {
+		utils.PrintLog("checking for bootable volume in case of LDM")
+		finalBootIndex, err := virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+		if err != nil {
+			return -1, errors.Wrap(err, "Failed to get bootable volume index")
+		}
+		return finalBootIndex, nil
+	}
+
+	return bootVolumeIndex, nil
+}
+
+// performDiskConversion runs virt-v2v conversion on the boot disk
+func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
+	if !migobj.Convert {
+		return nil
+	}
+
+	firstbootscripts := []string{}
+
+	// Fix NTFS for Windows
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+			return errors.Wrap(err, "failed to run ntfsfix")
+		}
+	}
+
+	// Add first boot scripts for RHEL family
+	if virtv2v.IsRHELFamily(osRelease) {
+		versionID := parseVersionID(osRelease)
+		if versionID == "" {
+			return errors.Errorf("failed to get version ID")
+		}
+
+		majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse major version: %v", err)
+		}
+
+		if majorVersion >= 7 {
+			firstbootscriptname := "rhel_enable_dhcp"
+			firstbootscript := constants.RhelFirstBootScript
+			firstbootscripts = append(firstbootscripts, firstbootscriptname)
+
+			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
+				return errors.Wrap(err, "failed to add first boot script")
+			}
+			utils.PrintLog("First boot script added successfully")
+		}
+	}
+
+	// Run virt-v2v conversion
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+		return errors.Wrap(err, "failed to run virt-v2v")
+	}
+
+	// Set volume as bootable
+	if err := migobj.Openstackclients.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
+		return errors.Wrap(err, "failed to set volume as bootable")
+	}
+
+	return nil
+}
+
+// configureLinuxNetwork handles network configuration for Linux systems
+func (migobj *Migrate) configureLinuxNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+	if strings.Contains(osRelease, "ubuntu") {
+		return migobj.configureUbuntuNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
+	}
+
+	if virtv2v.IsRHELFamily(osRelease) {
+		return migobj.configureRHELNetwork(vminfo, bootVolumeIndex, osRelease)
+	}
+
+	return nil
+}
+
+// configureUbuntuNetwork handles Ubuntu-specific network configuration
+func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+	versionID := parseVersionID(osRelease)
+	utils.PrintLog(fmt.Sprintf("Version ID: %s", versionID))
+
+	if versionID == "" {
+		return errors.Errorf("failed to get version ID")
+	}
+
+	if isNetplanSupported(versionID) {
+		utils.PrintLog("Adding wildcard netplan")
+		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP); err != nil {
+			return errors.Wrap(err, "failed to add wildcard netplan")
+		}
+		utils.PrintLog("Wildcard netplan added successfully")
+		return nil
+	}
+
+	return migobj.addUdevRulesForUbuntu(vminfo, bootVolumeIndex, useSingleDisk)
+}
+
+// addUdevRulesForUbuntu adds udev rules for older Ubuntu versions
+func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) error {
+	utils.PrintLog("Ubuntu version does not support netplan, going to use udev rules")
+
+	interfaces, err := virtv2v.GetNetworkInterfaceNames(vminfo.VMDisks[bootVolumeIndex].Path)
+	if err != nil {
+		return errors.Wrap(err, "failed to get network interface names")
+	}
+
+	if len(interfaces) == 0 {
+		log.Printf("Failed to get network interface names, cannot add udev rules, network might not come up post migration, please check the network configuration post migration")
+		return nil
+	}
+
+	utils.PrintLog("Adding udev rules")
+	utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
+
+	macs := []string{}
+	for _, nic := range vminfo.NetworkInterfaces {
+		macs = append(macs, nic.MAC)
+	}
+	utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
+
+	if err := virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs); err != nil {
+		log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
+                        network might not come up post migration, please check the network configuration post migration`, err)
+		log.Println("Continuing with migration")
+	}
+
+	return nil
+}
+
+// configureRHELNetwork handles RHEL-specific network configuration
+func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
+	versionID := parseVersionID(osRelease)
+	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse major version: %v", err)
+	}
+
+	if majorVersion < 7 {
+		diskPath := vminfo.VMDisks[bootVolumeIndex].Path
+		if err := DetectAndHandleNetwork(diskPath, osRelease, vminfo); err != nil {
+			utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
+                    network might not come up post migration, please check the network configuration post migration`, err))
+		}
+	}
+
+	return nil
+}
+
+func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
+	migobj.logMessage("Converting disk")
+
+	// Step 1: Determine boot command based on OS type
+	getBootCommand := migobj.getBootCommand(vminfo.OSType)
+
+	// Step 2: Attach all volumes
+	if err := migobj.attachAllVolumes(&vminfo); err != nil {
+		return err
+	}
+
+	// Step 3: Generate XML configuration for conversion
+	if err := vmutils.GenerateXMLConfig(vminfo); err != nil {
+		return errors.Wrap(err, "failed to generate XML")
+	}
+
+	// Step 3.5: Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	// Step 4: Detect boot volume
+	bootVolumeIndex, osPath, useSingleDisk, err := migobj.detectBootVolume(vminfo, getBootCommand)
+	if err != nil {
+		return err
+	}
+
+	// Step 5: Handle OS-specific detection and validation
+	var osRelease string
+	osType := strings.ToLower(vminfo.OSType)
+
+	switch osType {
+	case constants.OSFamilyLinux:
+		bootVolumeIndex, osPath, osRelease, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, useSingleDisk, osPath, vjailbreakSettings.AutoFstabUpdate)
+		if err != nil {
+			return err
+		}
+
+	case constants.OSFamilyWindows:
+		bootVolumeIndex, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
+		if err != nil {
+			return err
+		}
+
+	default:
 		return errors.Errorf("unsupported OS type: %s", vminfo.OSType)
 	}
 
+	// Step 6: Validate boot volume was found
 	if bootVolumeIndex == -1 {
 		return errors.Errorf("boot volume not found, cannot create target VM")
 	}
 
-	// save the index of bootVolume
+	// Step 7: Mark boot volume
 	utils.PrintLog(fmt.Sprintf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
-	if migobj.Convert {
-		firstbootscripts := []string{}
-		// Fix NTFS
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-			err = virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path)
-			if err != nil {
-				return errors.Wrap(err, "failed to run ntfsfix")
-			}
-		}
 
-		if virtv2v.IsRHELFamily(osRelease) {
-			// If RHEL family, we need to inject a script to make interface come up with DHCP,
-			// We preserve the ip because we have a port created with the same IP
-			// If NM is present, we inject a script to force neutron DHCP on first boot.
-			// If NM is not present, we add udev rules to pin the interface names
-			versionID := parseVersionID(osRelease)
-			if versionID == "" {
-				return errors.Errorf("failed to get version ID")
-			}
-			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
-			if err != nil {
-				return fmt.Errorf("failed to parse major version: %v", err)
-			}
+	// Step 8: Perform disk conversion
+	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, useSingleDisk); err != nil {
+		return err
+	}
 
-			if majorVersion >= 7 {
-				firstbootscriptname := "rhel_enable_dhcp"
-				firstbootscript := constants.RhelFirstBootScript
-				firstbootscripts = append(firstbootscripts, firstbootscriptname)
-				err = virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname)
-				if err != nil {
-					return errors.Wrap(err, "failed to add first boot script")
-				}
-				utils.PrintLog("First boot script added successfully")
-			}
-		}
-
-		err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
-		if err != nil {
-			return errors.Wrap(err, "failed to run virt-v2v")
-		}
-
-		openstackops := migobj.Openstackclients
-		err = openstackops.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol)
-		if err != nil {
-			return errors.Wrap(err, "failed to set volume as bootable")
+	// Step 9: Configure network for Linux systems
+	if osType == constants.OSFamilyLinux {
+		if err := migobj.configureLinuxNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
+			return err
 		}
 	}
 
-	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
-		if strings.Contains(osRelease, "ubuntu") {
-			// Check if netplan is supported
-			versionID := parseVersionID(osRelease)
-			utils.PrintLog(fmt.Sprintf("Version ID: %s", versionID))
-			if versionID == "" {
-				return errors.Errorf("failed to get version ID")
-			}
-			if isNetplanSupported(versionID) {
-				// Add Wildcard Netplan
-				utils.PrintLog("Adding wildcard netplan")
-				err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path)
-				if err != nil {
-					return errors.Wrap(err, "failed to add wildcard netplan")
-				}
-				utils.PrintLog("Wildcard netplan added successfully")
-			} else {
-				utils.PrintLog("Ubuntu version does not support netplan, going to use udev rules")
-				// Since netplan is not supported need to get the ip,mac and network interface mapping
-				// To inject udev rules so that after migration the network interfaces names are consistent
-				// and they get the correct ip address.
-				// Get the network interface mapping from /etc/network/interfaces
-
-				interfaces, err := virtv2v.GetNetworkInterfaceNames(vminfo.VMDisks[bootVolumeIndex].Path)
-				if err != nil {
-					return errors.Wrap(err, "failed to get network interface names")
-				}
-				if len(interfaces) == 0 {
-					log.Printf("Failed to get network interface names, cannot add udev rules, network might not come up post migration, please check the network configuration post migration")
-				} else {
-					utils.PrintLog("Adding udev rules")
-					utils.PrintLog(fmt.Sprintf("Interfaces: %v", interfaces))
-					macs := []string{}
-
-					// By default the network interfaces macs are in the same order as the interfaces
-					for _, nic := range vminfo.NetworkInterfaces {
-						macs = append(macs, nic.MAC)
-					}
-					utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
-					err = virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs)
-					if err != nil {
-						log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
-                        network might not come up post migration, please check the network configuration post migration`, err)
-						log.Println("Continuing with migration")
-						err = nil
-					}
-				}
-			}
-		} else if virtv2v.IsRHELFamily(osRelease) {
-			versionID := parseVersionID(osRelease)
-			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
-			if err != nil {
-				return fmt.Errorf("failed to parse major version: %v", err)
-			}
-			if majorVersion < 7 {
-				diskPath := vminfo.VMDisks[bootVolumeIndex].Path
-				// For RHEL family, we need to inject a script to make interface come up with DHCP,
-				// We preserve the ip because we have a port created with the same IP
-				// If NM is present, we inject a script to force DHCP on first boot.
-				// If NM is not present, we add udev rules to pin the interface names
-				err = DetectAndHandleNetwork(diskPath, osRelease, vminfo)
-				if err != nil {
-					utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
-                    network might not come up post migration, please check the network configuration post migration`, err))
-					err = nil
-				}
-			}
-		}
-	}
-	err = migobj.DetachAllVolumes(vminfo)
-	if err != nil {
+	// Step 10: Detach all volumes
+	if err := migobj.DetachAllVolumes(vminfo); err != nil {
 		return errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
+
 	migobj.logMessage("Successfully converted disk")
 	return nil
 }
@@ -1114,6 +1276,7 @@ func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			Proxy:           http.ProxyFromEnvironment,
 		},
 		Timeout: time.Second * 10,
 	}
@@ -1161,11 +1324,6 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	healthChecks := make(map[string]bool)
 	healthChecks["Ping"] = false
 	healthChecks["HTTP Get"] = false
-	for i := 0; i < len(vminfo.IPs); i++ {
-		if ips[i] != vminfo.IPs[i] {
-			migobj.logMessage(fmt.Sprintf("VM has been assigned a new IP: %s instead of the original IP %s. Using the new IP for tests", ips[i], vminfo.IPs[i]))
-		}
-	}
 	for i := 0; i < 10; i++ {
 		migobj.logMessage(fmt.Sprintf("Health Check Attempt %d", i+1))
 		// 1. Ping
@@ -1361,9 +1519,12 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 			networkids = append(networkids, retrPort.NetworkID)
 			portids = append(portids, retrPort.ID)
-			ipaddresses = append(ipaddresses, retrPort.FixedIPs[0].IPAddress)
+			for _, fixedIP := range retrPort.FixedIPs {
+				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+			}
 		}
 	} else {
+
 		for idx, networkname := range networknames {
 			// Create Port Group with the same mac address as the source VM
 			// Find the network with the given ID
@@ -1376,33 +1537,70 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			ip := ""
-			if len(vminfo.Mac) != len(vminfo.IPs) {
-				ip = ""
-			} else {
-				ip = vminfo.IPs[idx]
-			}
-			if ip == "" && vminfo.NetworkInterfaces != nil {
+			var ippm []string
+
+			// NetworkInterfaces from CRD spec (lowest priority, fallback)
+			if vminfo.NetworkInterfaces != nil {
 				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] {
-						ip = nic.IPAddress
+					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
+						ippm = []string{nic.IPAddress}
+						utils.PrintLog(fmt.Sprintf("IP from NetworkInterface for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
 						break
 					}
 				}
 			}
-			if migobj.AssignedIP != "" {
-				ip = migobj.AssignedIP
+
+			// VMware Tools detected IPs
+			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
+				ippm = detectedIPs
+				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ip, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP)
+
+			// Guest Network IPs
+			if vminfo.GuestNetworks != nil {
+				var guestIPs []string
+				for _, gn := range vminfo.GuestNetworks {
+					if strings.EqualFold(gn.MAC, vminfo.Mac[idx]) && gn.IP != "" {
+						if !strings.Contains(gn.IP, ":") {
+							guestIPs = append(guestIPs, gn.IP)
+						}
+					}
+				}
+				if len(guestIPs) > 0 {
+					ippm = guestIPs
+					utils.PrintLog(fmt.Sprintf("IPs from Guest Network for MAC %s: %v", vminfo.Mac[idx], guestIPs))
+				}
+			}
+
+			// User-assigned IP from ConfigMap
+			if migobj.AssignedIP != "" {
+				assignedIPs := strings.Split(migobj.AssignedIP, ",")
+				if idx < len(assignedIPs) {
+					ip := strings.TrimSpace(assignedIPs[idx])
+					if ip != "" {
+						ippm = []string{ip}
+						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+					} else {
+						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
+					}
+				}
+			}
+
+			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
-
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, port.FixedIPs[0].IPAddress))
+			addressesOfPort := []string{}
+			for _, fixedIP := range port.FixedIPs {
+				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
+			}
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
 		}
+		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
 }

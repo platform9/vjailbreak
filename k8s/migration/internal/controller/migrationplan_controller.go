@@ -399,6 +399,41 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	if migrationplan.Status.MigrationStatus == corev1.PodFailed {
+		// Check if any Migration objects exist for this MigrationPlan
+		migrationList := &vjailbreakv1alpha1.MigrationList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(migrationplan.Namespace),
+			client.MatchingLabels{"migrationplan": migrationplan.Name},
+		}
+		if err := r.List(ctx, migrationList, listOpts...); err != nil {
+			r.ctxlog.Error(err, "Failed to list migrations for retry check", "migrationplan", migrationplan.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for retry check")
+		}
+
+		if len(migrationList.Items) == 0 {
+			// No Migration objects exist - this could be either:
+			// Checking the failure message to determine which scenario this is
+			// If migrationplan validation failure - should NOT retry
+			// If user-initiated retry - should retry
+			if strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
+				r.ctxlog.Info("Migration plan validation failed, skipping retry",
+					"migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
+				return ctrl.Result{}, nil
+			}
+			r.ctxlog.Info("No Migration objects found for failed MigrationPlan, resetting status for retry", "migrationplan", migrationplan.Name)
+			migrationplan.Status.MigrationStatus = ""
+			migrationplan.Status.MigrationMessage = ""
+			if err := r.Status().Update(ctx, migrationplan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to reset migration plan status for retry")
+			}
+		} else {
+			// Migration objects still exist, keep the failed status
+			r.ctxlog.Info("Migration already failed, skipping job reconciliation", "migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
+			return ctrl.Result{}, nil
+		}
+	}
+
 	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
 	if err != nil {
 		r.ctxlog.Error(err, "Failed to get migration template and credentials")
@@ -549,13 +584,32 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
-	migrationplan.Status.MigrationStatus = status
-	migrationplan.Status.MigrationMessage = message
-	err := r.Status().Update(ctx, migrationplan)
-	if err != nil {
-		return errors.Wrap(err, "failed to update migration plan status")
-	}
-	return nil
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get the latest version of the MigrationPlan
+		latest := &vjailbreakv1alpha1.MigrationPlan{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      migrationplan.Name,
+			Namespace: migrationplan.Namespace,
+		}, latest); err != nil {
+			return err
+		}
+
+		// Only update if the status is different to prevent unnecessary updates
+		if latest.Status.MigrationStatus == status && latest.Status.MigrationMessage == message {
+			return nil
+		}
+
+		// Update the status
+		latest.Status.MigrationStatus = status
+		latest.Status.MigrationMessage = message
+
+		// Use Status().Update() for status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // CreateMigration creates a new Migration resource
@@ -578,6 +632,14 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
+		// Get assigned IPs for this VM from the migration plan
+		assignedIP := ""
+		if migrationplan.Spec.AssignedIPsPerVM != nil {
+			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
+				assignedIP = ips
+			}
+		}
+
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
@@ -593,6 +655,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
+				AssignedIP:              assignedIP,
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -935,9 +998,9 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
 		}
 
-		// Check if assigned IP is set
-		if vmMachine.Spec.VMInfo.AssignedIP != "" {
-			configMap.Data["ASSIGNED_IP"] = vmMachine.Spec.VMInfo.AssignedIP
+		// Check if assigned IP is set from Migration spec
+		if migrationobj.Spec.AssignedIP != "" {
+			configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
 		} else {
 			configMap.Data["ASSIGNED_IP"] = ""
 		}
@@ -1182,10 +1245,9 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				migrationplan.Status.MigrationStatus = corev1.PodFailed
-				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
-				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
+				// added constant prefix for the filter in reconciler
+				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)); err != nil {
+					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
 				}
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
 			}
@@ -1336,12 +1398,12 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
-                return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
+				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
-            
+
 			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 			currentMigration.Status.Conditions = cleanedConditions
-            
+
 			return r.Status().Update(ctx, currentMigration)
 		})
 
@@ -1574,16 +1636,28 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 		}
 	}
 
+	if len(validVMs) == 0 {
+		if len(skippedVMs) > 0 {
+			skippedVMNames := make([]string, len(skippedVMs))
+			for i, vm := range skippedVMs {
+				skippedVMNames[i] = vm.Spec.VMInfo.Name
+			}
+			msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
+			r.ctxlog.Info(msg)
+		}
+		return nil, skippedVMs, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
+	}
+
 	if len(skippedVMs) > 0 {
-		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMs)
+		skippedVMNames := make([]string, len(skippedVMs))
+		for i, vm := range skippedVMs {
+			skippedVMNames[i] = vm.Spec.VMInfo.Name
+		}
+		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
 		r.ctxlog.Info(msg)
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg); updateErr != nil {
 			r.ctxlog.Error(updateErr, "Failed to update migration plan status for skipped VMs")
 		}
-	}
-
-	if len(validVMs) == 0 {
-		return nil, skippedVMs, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 	}
 
 	return validVMs, skippedVMs, nil
