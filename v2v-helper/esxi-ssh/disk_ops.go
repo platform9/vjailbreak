@@ -593,7 +593,7 @@ func (c *Client) GetHostIQN() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get iSCSI adapter list: %w", err)
 	}
-
+	klog.Infof("iSCSI adapter list: %s", output)
 	// Parse output to find IQN
 	// Format: vmhba64   iscsi_vmk  iqn.1998-01.com.vmware:hostname-12345678
 	for _, line := range strings.Split(output, "\n") {
