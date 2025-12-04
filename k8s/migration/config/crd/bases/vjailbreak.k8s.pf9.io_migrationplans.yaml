@@ -144,6 +144,8 @@ spec:
                 items:
                   type: string
                 type: array
+              serverGroup:
+                type: string
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:

@@ -60,12 +60,21 @@ type SecurityGroupInfo struct {
 	RequiresIDDisplay bool   `json:"requiresIdDisplay"`
 }
 
+// ServerGroupInfo holds the server group name, ID, and policy information
+type ServerGroupInfo struct {
+	Name     string `json:"name"`
+	ID       string `json:"id"`
+	Policy   string `json:"policy"`  // affinity, anti-affinity, soft-affinity, soft-anti-affinity
+	Members  int    `json:"members,omitempty"`
+}
+
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
 	VolumeTypes    []string            `json:"volumeTypes,omitempty"`
 	VolumeBackends []string            `json:"volumeBackends,omitempty"`
 	Networks       []string            `json:"networks,omitempty"`
 	SecurityGroups []SecurityGroupInfo `json:"securityGroups,omitempty"`
+	ServerGroups   []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds

@@ -37,6 +37,7 @@ type MigrationParams struct {
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
 	SecurityGroups          string
+	ServerGroup             string
 	RDMDisks                string
 	FallbackToDHCP          bool
 	PeriodicSyncInterval    string
@@ -79,6 +80,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		VMwareMachineName:       string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork: string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
 		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
+		ServerGroup:             string(configMap.Data["SERVER_GROUP"]),
 		RDMDisks:                string(configMap.Data["RDM_DISK_NAMES"]),
 		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
 		PeriodicSyncInterval:    string(configMap.Data["PERIODIC_SYNC_INTERVAL"]),

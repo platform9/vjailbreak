@@ -202,6 +202,25 @@ spec:
                       - requiresIdDisplay
                       type: object
                     type: array
+                  serverGroups:
+                    items:
+                      description: ServerGroupInfo holds the server group name, ID,
+                        and policy information
+                      properties:
+                        id:
+                          type: string
+                        members:
+                          type: integer
+                        name:
+                          type: string
+                        policy:
+                          type: string
+                      required:
+                      - id
+                      - name
+                      - policy
+                      type: object
+                    type: array
                   volumeBackends:
                     items:
                       type: string
