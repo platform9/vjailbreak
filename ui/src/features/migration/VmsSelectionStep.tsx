@@ -419,8 +419,13 @@ function VmsSelectionStep({
         const detectedOsFamily = params.row?.osFamily
         const assignedOsFamily = vmOSAssignments[vmId]
         const currentOsFamily = assignedOsFamily === undefined ? detectedOsFamily : assignedOsFamily
-        // Show dropdown for ALL powered-off VMs (allows changing selection)
-        if (isSelected && powerState === 'powered-off') {
+        // Show dropdown when:
+        // - VM is selected or
+        // - VM is selected AND OS is unknown/missing (for any power state)
+        const shouldShowOsSelector =
+          isSelected && (!currentOsFamily || currentOsFamily === 'Unknown')
+
+        if (shouldShowOsSelector) {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
               <Select
