@@ -201,5 +201,5 @@ echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMwareCAFC
 echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMwareCAFManagementAgentHost" /f >> "%startupScriptPath%"
 echo echo "Deleted all entries" >> "%startupScriptPath%"
 echo timeout /t 60 >> "%startupScriptPath%"
-echo start /b "" cmd /c del "%~f0"&exit /b >> "%startupScriptPath%"
+echo start /b "" cmd /c del "%%~f0"^&exit /b >> "%startupScriptPath%"
 echo Script execution completed.
