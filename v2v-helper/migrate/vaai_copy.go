@@ -355,7 +355,15 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 	}
 
 	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
-	cinderBackend := arrayCreds.Spec.OpenStackMapping.CinderBackendPool
+	cinderBackendName := arrayCreds.Spec.OpenStackMapping.CinderBackendName
+	cinderBackendPool := arrayCreds.Spec.OpenStackMapping.CinderBackendPool
+
+	// Construct the Cinder host string
+	// Format: backend@pool or just backend if no pool
+	cinderHost := cinderBackendName
+	if cinderBackendPool != "" {
+		cinderHost = fmt.Sprintf("%s@%s", cinderBackendName, cinderBackendPool)
+	}
 
 	// Create the manage volume request
 	// The reference format depends on the storage backend
@@ -369,7 +377,7 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 	managedVolume, err := migobj.Openstackclients.ManageExistingVolume(
 		volumeName,
 		volumeRef,
-		cinderBackend,
+		cinderHost,
 		volumeType,
 	)
 	if err != nil {
