@@ -469,6 +469,66 @@ func (c *Client) CheckStorageIOStats(deviceName string) (string, error) {
 	return output, nil
 }
 
+// RunEsxcliCommand runs an esxcli command with XML formatter and returns parsed results
+// Returns a slice of maps, where each map represents a row with column name -> value
+func (c *Client) RunEsxcliCommand(namespace string, args []string) ([]map[string]string, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	// Build command with XML formatter for structured output
+	cmd := fmt.Sprintf("esxcli --formatter=xml %s %s", namespace, strings.Join(args, " "))
+	klog.Infof("Running esxcli command: %s", cmd)
+
+	output, err := c.ExecuteCommand(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("esxcli command failed: %w", err)
+	}
+
+	return parseEsxcliXMLOutput(output)
+}
+
+// EsxcliListResponse represents the XML list response from esxcli
+type EsxcliListResponse struct {
+	XMLName xml.Name            `xml:"output"`
+	List    EsxcliStructureList `xml:"list"`
+}
+
+// EsxcliStructureList represents a list of structures
+type EsxcliStructureList struct {
+	Structures []EsxcliStructure `xml:"structure"`
+}
+
+// EsxcliStructure represents a single structure with fields
+type EsxcliStructure struct {
+	Fields []EsxcliField `xml:"field"`
+}
+
+// EsxcliField represents a field in the structure
+type EsxcliField struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"string"`
+}
+
+// parseEsxcliXMLOutput parses XML output from esxcli --formatter=xml
+func parseEsxcliXMLOutput(output string) ([]map[string]string, error) {
+	var resp EsxcliListResponse
+	if err := xml.Unmarshal([]byte(output), &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse esxcli XML output: %w", err)
+	}
+
+	var results []map[string]string
+	for _, structure := range resp.List.Structures {
+		row := make(map[string]string)
+		for _, field := range structure.Fields {
+			row[field.Name] = field.Value
+		}
+		results = append(results, row)
+	}
+
+	return results, nil
+}
+
 // parseTaskResponse parses the XML response from vmkfstools operations
 func parseTaskResponse(output string) (*VmkfstoolsTask, error) {
 	var xmlResp XMLResponse
