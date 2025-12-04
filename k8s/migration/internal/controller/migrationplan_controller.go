@@ -432,11 +432,24 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
 	// Check if StorageCopyMethod is vendor-based
 	if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
-		// Fetch ArrayCreds CR
-		arraycreds = &vjailbreakv1alpha1.ArrayCreds{}
-		if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.ArrayCredsMapping,
-			false, arraycreds); !ok {
-			return ctrl.Result{}, errors.Wrapf(err, "failed to check arraycreds status '%s'", migrationtemplate.Spec.ArrayCredsMapping)
+		// Fetch ArrayCredsMapping CR first
+		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCredsMapping '%s'", migrationtemplate.Spec.ArrayCredsMapping)
+		}
+
+		// Validate ArrayCredsMapping has mappings
+		if len(arrayCredsMapping.Spec.Mappings) == 0 {
+			return ctrl.Result{}, errors.Errorf("ArrayCredsMapping '%s' has no mappings defined", migrationtemplate.Spec.ArrayCredsMapping)
+		}
+		for _, mapping := range arrayCredsMapping.Spec.Mappings {
+			arraycreds = &vjailbreakv1alpha1.ArrayCreds{}
+			if err := r.Get(ctx, types.NamespacedName{Name: mapping.Target, Namespace: migrationtemplate.Namespace}, arraycreds); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCreds '%s' from mapping", mapping.Target)
+			}
+			if arraycreds.Status.ArrayValidationStatus != string(corev1.PodSucceeded) {
+				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
+			}
 		}
 	} else {
 		arraycreds = nil
