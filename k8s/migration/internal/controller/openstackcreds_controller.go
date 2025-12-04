@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -313,7 +314,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 			memory := vmwaremachine.Spec.VMInfo.Memory
 
 			// Now get the closest flavor based on the cpu and memory
-			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors, false)
+			flavor, err := openstackpkg.GetClosestFlavour(cpu, memory, flavors, false)
 			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 				return errors.Wrap(err, "failed to get closest flavor")

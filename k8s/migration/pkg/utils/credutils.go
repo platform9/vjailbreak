@@ -966,54 +966,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	return nil
 }
 
-// GetClosestFlavour gets the closest flavor for the given CPU and memory
-func GetClosestFlavour(cpu, memory int, allFlavors []flavors.Flavor, useGPUFlavor bool) (*flavors.Flavor, error) {
-	// Check if the flavor slice is empty
-	if len(allFlavors) == 0 {
-		return nil, fmt.Errorf("no flavors available to select from")
-	}
-
-	bestFlavor := new(flavors.Flavor)
-	bestFlavor.VCPUs = constants.MaxVCPUs
-	bestFlavor.RAM = constants.MaxRAM
-
-	// Find the smallest flavor that meets the requirements
-	for _, flavor := range allFlavors {
-		// If useGPUFlavor is true, filter for GPU-enabled flavors
-		if useGPUFlavor && !isGPUFlavor(flavor) {
-			continue
-		}
-
-		if flavor.VCPUs >= cpu && flavor.RAM >= memory {
-			if flavor.VCPUs < bestFlavor.VCPUs ||
-				(flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
-				bestFlavor = &flavor
-			}
-		}
-	}
-
-	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		return bestFlavor, nil
-	}
-	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
-}
-
-// isGPUFlavor checks if a flavor has GPU-related extra_specs
-func isGPUFlavor(flavor flavors.Flavor) bool {
-	if flavor.ExtraSpecs == nil {
-		return false
-	}
-
-	for key := range flavor.ExtraSpecs {
-		if key == "pci_passthrough:alias" ||
-			strings.Contains(key, "trait:") ||
-			key == "resources:VGPU" {
-			return true
-		}
-	}
-	return false
-}
-
 // CreateOrUpdateLabel creates or updates a label on a VMwareMachine resource
 func CreateOrUpdateLabel(ctx context.Context, client client.Client,
 	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {

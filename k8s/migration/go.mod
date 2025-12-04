@@ -1,8 +1,6 @@
 module github.com/platform9/vjailbreak/k8s/migration
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
@@ -10,12 +8,12 @@ replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/gophercloud/gophercloud v1.14.1
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
+	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
@@ -114,3 +112,5 @@ require (
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
 replace github.com/platform9/vjailbreak/pkg/validation => ../../pkg/validation
+
+replace github.com/platform9/vjailbreak/pkg/openstack => ../../pkg/openstack

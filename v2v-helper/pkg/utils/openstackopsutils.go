@@ -19,6 +19,7 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -381,25 +382,15 @@ func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int
 
 	PrintLog(fmt.Sprintf("Current requirements: %d CPUs and %d MB of RAM", cpu, memory))
 
-	bestFlavor := new(flavors.Flavor)
-	bestFlavor.VCPUs = constants.MaxCPU
-	bestFlavor.RAM = constants.MaxRAM
-	// Find the smallest flavor that meets the requirements
-	for _, flavor := range allFlavors {
-		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
-			if flavor.VCPUs < bestFlavor.VCPUs || (flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
-				bestFlavor = &flavor
-			}
-		}
+	// Use the shared flavor selection logic (without GPU filtering for v2v-helper fallback)
+	bestFlavor, err := openstackpkg.GetClosestFlavour(int(cpu), int(memory), allFlavors, false)
+	if err != nil {
+		PrintLog("No suitable flavor found.")
+		return nil, errors.Wrap(err, "failed to get closest flavor")
 	}
 
-	if bestFlavor.VCPUs != constants.MaxCPU {
-		PrintLog(fmt.Sprintf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
-			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk))
-	} else {
-		PrintLog("No suitable flavor found.")
-		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
-	}
+	PrintLog(fmt.Sprintf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
+		bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk))
 
 	return bestFlavor, nil
 }
