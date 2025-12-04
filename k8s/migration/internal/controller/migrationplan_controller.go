@@ -1089,9 +1089,13 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
-	openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to reconcile storage")
+	// Skip storage mapping reconciliation for vendor-based storage copy method
+	// as it uses ArrayCredsMapping instead of StorageMapping
+	if migrationtemplate.Spec.StorageCopyMethod != "vendor-based" {
+		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
+		}
 	}
 	return openstacknws, openstackvolumetypes, nil
 }
