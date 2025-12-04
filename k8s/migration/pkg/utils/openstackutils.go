@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -47,7 +48,7 @@ func ImportLUNToCinder(ctx context.Context, openstackClient *utils.OpenStackClie
 	ctxlog.Info("LUN imported successfully, waiting for volume to become available", "VolumeID", volume.ID)
 
 	// Wait for the volume to become available
-	err = openstackClient.WaitForVolume(volume.ID)
+	err = openstackClient.WaitForVolume(ctx, volume.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to wait for volume %s to become available: %w", volume.ID, err)
 	}
@@ -111,7 +112,7 @@ func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk v1alpha1.RDMDisk, o
 	}
 
 	var result map[string]interface{}
-	response, err := osclient.BlockStorageClient.Post(osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
+	response, err := osclient.BlockStorageClient.Post(ctx, osclient.BlockStorageClient.ServiceURL("manageable_volumes"), body, &result, &gophercloud.RequestOpts{
 		OkCodes:     []int{http.StatusAccepted},
 		MoreHeaders: map[string]string{"OpenStack-API-Version": openstackAPIVersion},
 	})

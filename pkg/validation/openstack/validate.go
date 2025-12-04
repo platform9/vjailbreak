@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
@@ -84,7 +84,7 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
 	}
-	if err := openstack.Authenticate(providerClient, authOpts); err != nil {
+	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
 		var message string
 		switch {
 		case strings.Contains(err.Error(), "401"):
@@ -180,7 +180,7 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {

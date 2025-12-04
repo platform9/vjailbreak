@@ -11,6 +11,7 @@ replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v
 require (
 	github.com/go-logr/logr v1.4.3
 	github.com/gophercloud/gophercloud v1.14.1
+	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0

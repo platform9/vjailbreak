@@ -313,7 +313,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 			memory := vmwaremachine.Spec.VMInfo.Memory
 
 			// Now get the closest flavor based on the cpu and memory
-			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors)
+			flavor, err := utils.GetClosestFlavour(cpu, memory, flavors, false)
 			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
 				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 				return errors.Wrap(err, "failed to get closest flavor")
