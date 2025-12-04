@@ -44,13 +44,11 @@ RUN dnf install -y \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
-RUN mkdir -p /usr/local/lib/guestfs/supermin.d && \
-    echo "fstrim" > /usr/local/lib/guestfs/supermin.d/zz-disable-fstrim.skip
-
 RUN libguestfs-test-tool > /tmp/libguestfs-test.log 2>&1 || true
 
 ENV LIBGUESTFS_BACKEND=direct
 ENV LIBGUESTFS_CACHEDIR=/var/tmp
+ENV LIBGUESTFS_SKIP_FSTRIM=1
 
 #version lock 
 RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \

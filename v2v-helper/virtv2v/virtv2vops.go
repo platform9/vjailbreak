@@ -185,8 +185,9 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		os.Setenv("VIRTIO_WIN", filePath)
 	}
 
-	// Step 2: Set guestfs backend
+	// Step 2: Set guestfs backend and disable fstrim
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	// Step 3: Prepare virt-v2v args
 	args := []string{"-v", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
@@ -217,6 +218,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 func GetOsRelease(path string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	releaseFiles := []string{
 		"/etc/os-release",
@@ -274,6 +276,7 @@ DHCP=yes`
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	if useSingleDisk {
 		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
 		ans, err = RunCommandInGuest(diskPath, command, true)
@@ -302,6 +305,7 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 // Runs command inside temporary qemu-kvm that virt-v2v creates
 func RunCommandInGuest(path string, command string, write bool) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	option := "--ro"
 	if write {
 		option = "--rw"
@@ -324,6 +328,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 // Runs command inside temporary qemu-kvm that virt-v2v creates
 func CheckForLVM(disks []vm.VMDisk) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	// Get the installed os info
 	command := "inspect-os"
@@ -366,6 +371,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 
 func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
 	out, err := cmd.CombinedOutput()
@@ -439,6 +445,7 @@ func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interf
 	log.Println("Uploading udev rules file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	if useSingleDisk {
 		command := `upload /home/fedora/70-persistent-net.rules /etc/udev/rules.d/70-persistent-net.rules`
 		ans, err = RunCommandInGuest(diskPath, command, true)
