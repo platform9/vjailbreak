@@ -339,8 +339,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	// Fetch server groups
 	openstackservergroups := make([]vjailbreakv1alpha1.ServerGroupInfo, 0)
 	allServerGroupPages, err := servergroups.List(openstackClients.ComputeClient, servergroups.ListOpts{}).AllPages()
-	if err != nil {
-	} else {
+	if err == nil {
 		allServerGroups, err := servergroups.ExtractServerGroups(allServerGroupPages)
 		if err == nil {
 			for _, group := range allServerGroups {

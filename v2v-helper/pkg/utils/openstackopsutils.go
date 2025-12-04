@@ -621,6 +621,9 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 	schedulerHints := schedulerhints.SchedulerHints{}
 	if serverGroupID != "" {
 		schedulerHints.Group = serverGroupID
+		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
+	} else {
+		PrintLog(fmt.Sprintf("No server group specified for VM %s - using default scheduling", vminfo.Name))
 	}
 
 	if useFlavorless {

@@ -1141,6 +1141,12 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	}
 	utils.PrintLog(fmt.Sprintf("Using security group IDs: %v", securityGroupIDs))
 
+	if migobj.ServerGroup != "" {
+		utils.PrintLog(fmt.Sprintf("Using server group ID: %s", migobj.ServerGroup))
+	} else {
+		utils.PrintLog("No server group specified - VMs will be placed based on default scheduling")
+	}
+
 	// Get vjailbreak settings
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), migobj.K8sClient)
 	if err != nil {
@@ -1507,6 +1513,11 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 		return nil, nil, nil, errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
 	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
+
+	// Log server group
+	if migobj.ServerGroup != "" {
+		utils.PrintLog(fmt.Sprintf("Server group ID for VM placement: %s", migobj.ServerGroup))
+	}
 
 	// Create ports
 	if len(migobj.Networkports) != 0 {

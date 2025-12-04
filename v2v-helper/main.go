@@ -148,6 +148,13 @@ func main() {
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
+
+	if migrationobj.ServerGroup != "" {
+		utils.PrintLog(fmt.Sprintf("Server group configured: %s", migrationobj.ServerGroup))
+	} else {
+		utils.PrintLog("No server group configured for this migration")
+	}
+
 	PreMigrationPowerState, err := vmops.GetVmPowerState()
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to get VM power state: %v", err))
