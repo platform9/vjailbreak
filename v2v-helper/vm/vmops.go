@@ -198,12 +198,14 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 			if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
 				continue
 			}
-			
-			// Get datastore information from disk backing
+
+			// Get datastore information and VMDK path from disk backing
 			var datastoreName string
 			var datastoreID string
-			
+			var vmdkPath string
+
 			if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
 				if backing.Datastore != nil {
 					datastoreID = backing.Datastore.Value
 					// Get datastore name
@@ -214,6 +216,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 					}
 				}
 			} else if backing, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
 				if backing.Datastore != nil {
 					datastoreID = backing.Datastore.Value
 					ds := object.NewDatastore(vmops.vcclient.VCClient, *backing.Datastore)
@@ -223,11 +226,12 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 					}
 				}
 			}
-			
+
 			vmdisks = append(vmdisks, VMDisk{
 				Name:        disk.DeviceInfo.GetDescription().Label,
 				Size:        disk.CapacityInBytes,
 				Disk:        disk,
+				Path:        vmdkPath,
 				Datastore:   datastoreName,
 				DatastoreID: datastoreID,
 			})
