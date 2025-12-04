@@ -760,11 +760,6 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
-                  arrayCredsRef:
-                    type: string
-                  arrayOffload:
-                    default: false
-                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string
@@ -781,10 +776,6 @@ spec:
                     enum:
                     - hot
                     - cold
-                    type: string
-                  vendorType:
-                    enum:
-                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -911,10 +902,6 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
-              arrayOffload:
-                description: ArrayOffload specifies whether to use array offload for
-                  data copy
-                type: boolean
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -928,9 +915,6 @@ spec:
                 type: string
               podRef:
                 description: PodRef is the name of the pod
-                type: string
-              vendorType:
-                description: VendorType specifies the vendor type of the storage system
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
@@ -1973,11 +1957,6 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
-                  arrayCredsRef:
-                    type: string
-                  arrayOffload:
-                    default: false
-                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string
@@ -1994,10 +1973,6 @@ spec:
                     enum:
                     - hot
                     - cold
-                    type: string
-                  vendorType:
-                    enum:
-                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -4035,7 +4010,7 @@ spec:
         env:
         - name: MAX_CONCURRENT_RECONCILES
           value: "5"
-        image: quay.io/platform9/vjailbreak-controller:v0.3.5
+        image: quay.io/platform9/vjailbreak-controller:v0.3.6
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4115,7 +4090,7 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.5
+      - image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
