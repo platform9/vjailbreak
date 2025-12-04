@@ -44,15 +44,9 @@ RUN dnf install -y \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/rpms/
 
-RUN libguestfs-test-tool > /tmp/libguestfs-test.log 2>&1 || true
-
-ENV LIBGUESTFS_BACKEND=direct
-ENV LIBGUESTFS_CACHEDIR=/var/tmp
-ENV LIBGUESTFS_SKIP_FSTRIM=1
-
 #version lock 
 RUN dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
-    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \
+    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
     nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
     nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
     nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.13-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch
@@ -63,4 +57,3 @@ COPY --from=builder /workspace/manager /home/fedora/manager
 # Copy scripts directory for migration utilities
 COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
 COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
-
