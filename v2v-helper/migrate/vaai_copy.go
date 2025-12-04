@@ -49,6 +49,11 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 		return []storage.Volume{}, errors.Wrap(err, "failed to connect to ESXi via SSH")
 	}
 
+	// Test the connection
+	if err := esxiClient.TestConnection(); err != nil {
+		return []storage.Volume{}, errors.Wrap(err, "failed to test ESXi connection")
+	}
+
 	migobj.logMessage("Connected to ESXi host via SSH")
 
 	volumes := []storage.Volume{}
