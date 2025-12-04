@@ -588,19 +588,32 @@ func (c *Client) GetHostIQN() (string, error) {
 		return "", fmt.Errorf("not connected to ESXi host")
 	}
 
-	// Get iSCSI adapter info
-	output, err := c.ExecuteCommand("esxcli iscsi adapter list")
+	// Use storage core adapter list which provides UID field containing IQN/NQN/FC WWN
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
 	if err != nil {
-		return "", fmt.Errorf("failed to get iSCSI adapter list: %w", err)
+		return "", fmt.Errorf("failed to get storage adapter list: %w", err)
 	}
-	klog.Infof("iSCSI adapter list: %s", output)
-	// Parse output to find IQN
-	// Format: vmhba64   iscsi_vmk  iqn.1998-01.com.vmware:hostname-12345678
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 3 && strings.HasPrefix(fields[2], "iqn.") {
-			klog.Infof("Found ESXi IQN: %s", fields[2])
-			return fields[2], nil
+
+	klog.Infof("Found %d storage adapters", len(results))
+
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		driver, hasDriver := adapter["Driver"]
+
+		if !hasUID || !hasLink || !hasDriver {
+			continue
+		}
+
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		klog.Infof("Adapter: Driver=%s, LinkState=%s, UID=%s", driver, linkState, uid)
+
+		// Check if the UID is iSCSI IQN (could also check for FC or NVMe-oF)
+		isIQN := strings.HasPrefix(uid, "iqn.")
+
+		if (linkState == "link-up" || linkState == "online") && isIQN {
+			klog.Infof("Found ESXi IQN: %s", uid)
+			return uid, nil
 		}
 	}
 
