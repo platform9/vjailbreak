@@ -63,6 +63,7 @@ type Migrate struct {
 	TargetAvailabilityZone  string
 	AssignedIP              string
 	SecurityGroups          []string
+	ServerGroup             string
 	RDMDisks                []string
 	UseFlavorless           bool
 	TenantName              string
@@ -1148,7 +1149,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, *vjailbreakSettings, migobj.UseFlavorless)
+	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
