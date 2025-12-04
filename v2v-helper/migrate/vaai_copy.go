@@ -115,7 +115,13 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	}
 
 	// Step 5: Create target volume
-	targetVolume, err := migobj.StorageProvider.CreateVolume(vmDisk.Name, int64(vmDisk.OpenstackVol.Size))
+	// Use vmDisk.Size (VMware disk size in bytes), convert to GB for storage provider
+	diskSizeGB := vmDisk.Size / (1024 * 1024 * 1024)
+	if diskSizeGB == 0 {
+		diskSizeGB = 1 // Minimum 1GB
+	}
+	migobj.logMessage(fmt.Sprintf("Creating target volume %s with size %d GB", vmDisk.Name, diskSizeGB))
+	targetVolume, err := migobj.StorageProvider.CreateVolume(vmDisk.Name, diskSizeGB)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", vmDisk.Name)
 	}
