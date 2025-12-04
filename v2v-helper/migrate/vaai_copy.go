@@ -5,6 +5,7 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,37 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 )
+
+// sanitizeVolumeName converts a volume name to meet storage array naming requirements:
+// - 1-63 characters long
+// - Alphanumeric, '_', and '-' only
+// - Must begin and end with a letter or number
+// - Must include at least one letter, '_', or '-'
+func sanitizeVolumeName(name string) string {
+	// Replace spaces and other invalid characters with hyphens
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+	sanitized := reg.ReplaceAllString(name, "-")
+
+	// Remove leading/trailing hyphens or underscores
+	sanitized = strings.Trim(sanitized, "-_")
+
+	// Ensure it starts and ends with alphanumeric
+	sanitized = regexp.MustCompile(`^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$`).ReplaceAllString(sanitized, "")
+
+	// Truncate to 63 characters if needed
+	if len(sanitized) > 63 {
+		sanitized = sanitized[:63]
+		// Re-trim trailing non-alphanumeric after truncation
+		sanitized = regexp.MustCompile(`[^a-zA-Z0-9]+$`).ReplaceAllString(sanitized, "")
+	}
+
+	// If empty or too short, provide a default
+	if len(sanitized) == 0 {
+		sanitized = "disk-1"
+	}
+
+	return sanitized
+}
 
 // VAAICopyDisks performs VAAI XCOPY-based disk copy for all VM disks
 // This offloads the copy operation to the storage array, which is much faster than NBD
@@ -114,24 +146,26 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to create initiator group %s", initiatorGroup)
 	}
 
-	// Step 5: Create target volume
+	// Step 5: Create target volume with sanitized name
 	// Use vmDisk.Size (VMware disk size in bytes) - Pure API expects size in bytes
 	diskSizeBytes := vmDisk.Size
 	// Ensure size is a multiple of 512 (sector alignment)
 	if diskSizeBytes%512 != 0 {
 		diskSizeBytes = ((diskSizeBytes / 512) + 1) * 512
 	}
-	migobj.logMessage(fmt.Sprintf("Creating target volume %s with size %d bytes (%d GB)", vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
-	targetVolume, err := migobj.StorageProvider.CreateVolume(vmDisk.Name, diskSizeBytes)
+	sanitizedName := sanitizeVolumeName(vmDisk.Name)
+	migobj.logMessage(fmt.Sprintf("Creating target volume %s (sanitized from: %s) with size %d bytes (%d GB)",
+		sanitizedName, vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
+	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, diskSizeBytes)
 	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", vmDisk.Name)
+		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", sanitizedName)
 	}
 
 	// Step 6: Cinder manage the volume
-	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", vmDisk.Name))
+	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", targetVolume.Name))
 	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
 	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", vmDisk.Name)
+		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", targetVolume.Name)
 	}
 	// Step 7: Map target volume to ESXi host
 	migobj.logMessage(fmt.Sprintf("Mapping target volume to ESXi host"))
