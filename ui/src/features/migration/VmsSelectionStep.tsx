@@ -420,12 +420,8 @@ function VmsSelectionStep({
         const assignedOsFamily = vmOSAssignments[vmId]
         const currentOsFamily = assignedOsFamily === undefined ? detectedOsFamily : assignedOsFamily
         // Show dropdown when:
-        // - VM is selected or
-        // - VM is selected AND OS is unknown/missing (for any power state)
-        const shouldShowOsSelector =
-          isSelected && (!currentOsFamily || currentOsFamily === 'Unknown')
-
-        if (shouldShowOsSelector) {
+        // - VM is selected
+        if (isSelected) {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
               <Select
@@ -735,7 +731,7 @@ function VmsSelectionStep({
 
     setVmsWithFlavor((prev) =>
       prev.map((vm) => {
-        if (vmOSAssignments && vmOSAssignments[vm.name]) {
+        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.name)) {
           return {
             ...vm,
             osFamily: vmOSAssignments[vm.name]
