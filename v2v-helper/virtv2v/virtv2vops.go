@@ -89,6 +89,46 @@ func IsRHELFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "alma")
 }
 
+// DisableFstrimInAppliance creates a supermin overlay to disable fstrim in libguestfs appliance
+func DisableFstrimInAppliance() error {
+	superminDir := "/usr/local/lib/guestfs/supermin.d"
+	overlayDir := "/tmp/fstrim-overlay"
+	fstrimPath := overlayDir + "/usr/sbin/fstrim"
+	tarPath := superminDir + "/zz-no-fstrim.tar"
+
+	// Check if already created
+	if _, err := os.Stat(tarPath); err == nil {
+		log.Println("fstrim override already exists, skipping creation")
+		return nil
+	}
+
+	// Create directory structure
+	if err := os.MkdirAll(overlayDir+"/usr/sbin", 0755); err != nil {
+		return fmt.Errorf("failed to create overlay directory: %w", err)
+	}
+	defer os.RemoveAll(overlayDir)
+
+	// Create fake fstrim script that does nothing
+	fstrimScript := "#!/bin/sh\n# Disabled fstrim to reduce migration latency\nexit 0\n"
+	if err := os.WriteFile(fstrimPath, []byte(fstrimScript), 0755); err != nil {
+		return fmt.Errorf("failed to create fake fstrim: %w", err)
+	}
+
+	// Create supermin directory if it doesn't exist
+	if err := os.MkdirAll(superminDir, 0755); err != nil {
+		return fmt.Errorf("failed to create supermin directory: %w", err)
+	}
+
+	// Create tar archive
+	cmd := exec.Command("tar", "-cf", tarPath, "-C", overlayDir, ".")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create tar overlay: %w, output: %s", err, output)
+	}
+
+	log.Printf("Successfully created fstrim override at %s", tarPath)
+	return nil
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -216,7 +256,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Step 2: Set guestfs backend and disable fstrim
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	// Step 3: Prepare virt-v2v args
 	args := []string{"-v", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
@@ -248,7 +287,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 func GetOsRelease(path string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	releaseFiles := []string{
 		"/etc/os-release",
@@ -374,7 +412,6 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	var ans string
 	if useSingleDisk {
 		command := "mv /etc/netplan /etc/netplan-bkp"
@@ -424,7 +461,6 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 // Runs command inside temporary qemu-kvm that virt-v2v creates
 func RunCommandInGuest(path string, command string, write bool) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	option := "--ro"
 	if write {
 		option = "--rw"
@@ -447,7 +483,6 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 // Runs command inside temporary qemu-kvm that virt-v2v creates
 func CheckForLVM(disks []vm.VMDisk) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 
 	// Get the installed os info
 	command := "inspect-os"
@@ -490,7 +525,6 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 
 func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
 	out, err := cmd.CombinedOutput()
@@ -575,7 +609,6 @@ func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interf
 	log.Println("Uploading udev rules file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	os.Setenv("LIBGUESTFS_SKIP_FSTRIM", "1")
 	if useSingleDisk {
 		command := `upload /home/fedora/70-persistent-net.rules /etc/udev/rules.d/70-persistent-net.rules`
 		ans, err = RunCommandInGuest(diskPath, command, true)
