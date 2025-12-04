@@ -489,9 +489,15 @@ func (c *Client) RunEsxcliCommand(namespace string, args []string) ([]map[string
 }
 
 // EsxcliListResponse represents the XML list response from esxcli
+// Structure: <output><root><list><structure>...</structure></list></root></output>
 type EsxcliListResponse struct {
-	XMLName xml.Name            `xml:"output"`
-	List    EsxcliStructureList `xml:"list"`
+	XMLName xml.Name   `xml:"output"`
+	Root    EsxcliRoot `xml:"root"`
+}
+
+// EsxcliRoot represents the root element
+type EsxcliRoot struct {
+	List EsxcliStructureList `xml:"list"`
 }
 
 // EsxcliStructureList represents a list of structures
@@ -506,8 +512,8 @@ type EsxcliStructure struct {
 
 // EsxcliField represents a field in the structure
 type EsxcliField struct {
-	Name  string `xml:"name,attr"`
-	Value string `xml:"string"`
+	Name   string `xml:"name,attr"`
+	String string `xml:"string"`
 }
 
 // parseEsxcliXMLOutput parses XML output from esxcli --formatter=xml
@@ -518,10 +524,10 @@ func parseEsxcliXMLOutput(output string) ([]map[string]string, error) {
 	}
 
 	var results []map[string]string
-	for _, structure := range resp.List.Structures {
+	for _, structure := range resp.Root.List.Structures {
 		row := make(map[string]string)
 		for _, field := range structure.Fields {
-			row[field.Name] = field.Value
+			row[field.Name] = field.String
 		}
 		results = append(results, row)
 	}
