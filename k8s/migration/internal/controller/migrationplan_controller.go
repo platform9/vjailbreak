@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -1017,7 +1017,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			}
 
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors)
+			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors, migrationtemplate.Spec.UseGPUFlavor)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}

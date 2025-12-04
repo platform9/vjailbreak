@@ -5,14 +5,16 @@
 package openstack
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	volumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	flavors "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	servers "github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	networks "github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	volumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	flavors "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	servers "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	networks "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	ports "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	subnets "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	k8sutils "github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -41,104 +43,104 @@ func (m *MockOpenstackOperations) EXPECT() *MockOpenstackOperationsMockRecorder 
 }
 
 // AttachVolumeToVM mocks base method.
-func (m *MockOpenstackOperations) AttachVolumeToVM(volumeID string) error {
+func (m *MockOpenstackOperations) AttachVolumeToVM(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AttachVolumeToVM", volumeID)
+	ret := m.ctrl.Call(m, "AttachVolumeToVM", ctx, volumeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AttachVolumeToVM indicates an expected call of AttachVolumeToVM.
-func (mr *MockOpenstackOperationsMockRecorder) AttachVolumeToVM(volumeID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) AttachVolumeToVM(ctx, volumeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachVolumeToVM", reflect.TypeOf((*MockOpenstackOperations)(nil).AttachVolumeToVM), volumeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachVolumeToVM", reflect.TypeOf((*MockOpenstackOperations)(nil).AttachVolumeToVM), ctx, volumeID)
 }
 
 // CreatePort mocks base method.
-func (m *MockOpenstackOperations) CreatePort(networkid *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
+func (m *MockOpenstackOperations) CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePort", networkid, mac, ip, vmname, securityGroups, fallbackToDHCP)
+	ret := m.ctrl.Call(m, "CreatePort", ctx, networkid, mac, ip, vmname, securityGroups, fallbackToDHCP, gatewayIP)
 	ret0, _ := ret[0].(*ports.Port)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreatePort indicates an expected call of CreatePort.
-func (mr *MockOpenstackOperationsMockRecorder) CreatePort(networkid, mac, ip, vmname, securityGroups, fallbackToDHCP interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreatePort(ctx, networkid, mac, ip, vmname, securityGroups, fallbackToDHCP, gatewayIP interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), networkid, mac, ip, vmname, securityGroups, fallbackToDHCP)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).CreatePort), ctx, networkid, mac, ip, vmname, securityGroups, fallbackToDHCP, gatewayIP)
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
+	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
 }
 
 // CreateVolume mocks base method.
-func (m *MockOpenstackOperations) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
+func (m *MockOpenstackOperations) CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVolume", name, size, ostype, uefi, volumetype, setRDMLabel)
+	ret := m.ctrl.Call(m, "CreateVolume", ctx, name, size, ostype, uefi, volumetype, setRDMLabel)
 	ret0, _ := ret[0].(*volumes.Volume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVolume indicates an expected call of CreateVolume.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(name, size, ostype, uefi, volumetype, setRDMLabel interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(ctx, name, size, ostype, uefi, volumetype, setRDMLabel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), name, size, ostype, uefi, volumetype, setRDMLabel)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), ctx, name, size, ostype, uefi, volumetype, setRDMLabel)
 }
 
 // DeleteVolume mocks base method.
-func (m *MockOpenstackOperations) DeleteVolume(volumeID string) error {
+func (m *MockOpenstackOperations) DeleteVolume(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteVolume", volumeID)
+	ret := m.ctrl.Call(m, "DeleteVolume", ctx, volumeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteVolume indicates an expected call of DeleteVolume.
-func (mr *MockOpenstackOperationsMockRecorder) DeleteVolume(volumeID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) DeleteVolume(ctx, volumeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteVolume), volumeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteVolume), ctx, volumeID)
 }
 
 // DetachVolumeFromVM mocks base method.
-func (m *MockOpenstackOperations) DetachVolumeFromVM(volumeID string) error {
+func (m *MockOpenstackOperations) DetachVolumeFromVM(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DetachVolumeFromVM", volumeID)
+	ret := m.ctrl.Call(m, "DetachVolumeFromVM", ctx, volumeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DetachVolumeFromVM indicates an expected call of DetachVolumeFromVM.
-func (mr *MockOpenstackOperationsMockRecorder) DetachVolumeFromVM(volumeID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) DetachVolumeFromVM(ctx, volumeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DetachVolumeFromVM", reflect.TypeOf((*MockOpenstackOperations)(nil).DetachVolumeFromVM), volumeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DetachVolumeFromVM", reflect.TypeOf((*MockOpenstackOperations)(nil).DetachVolumeFromVM), ctx, volumeID)
 }
 
 // EnableQGA mocks base method.
-func (m *MockOpenstackOperations) EnableQGA(volume *volumes.Volume) error {
+func (m *MockOpenstackOperations) EnableQGA(ctx context.Context, volume *volumes.Volume) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnableQGA", volume)
+	ret := m.ctrl.Call(m, "EnableQGA", ctx, volume)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // EnableQGA indicates an expected call of EnableQGA.
-func (mr *MockOpenstackOperationsMockRecorder) EnableQGA(volume interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) EnableQGA(ctx, volume interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableQGA", reflect.TypeOf((*MockOpenstackOperations)(nil).EnableQGA), volume)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableQGA", reflect.TypeOf((*MockOpenstackOperations)(nil).EnableQGA), ctx, volume)
 }
 
 // FindDevice mocks base method.
@@ -157,161 +159,176 @@ func (mr *MockOpenstackOperationsMockRecorder) FindDevice(volumeID interface{}) 
 }
 
 // GetClosestFlavour mocks base method.
-func (m *MockOpenstackOperations) GetClosestFlavour(cpu, memory int32) (*flavors.Flavor, error) {
+func (m *MockOpenstackOperations) GetClosestFlavour(ctx context.Context, cpu, memory int32) (*flavors.Flavor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClosestFlavour", cpu, memory)
+	ret := m.ctrl.Call(m, "GetClosestFlavour", ctx, cpu, memory)
 	ret0, _ := ret[0].(*flavors.Flavor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClosestFlavour indicates an expected call of GetClosestFlavour.
-func (mr *MockOpenstackOperationsMockRecorder) GetClosestFlavour(cpu, memory interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetClosestFlavour(ctx, cpu, memory interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClosestFlavour", reflect.TypeOf((*MockOpenstackOperations)(nil).GetClosestFlavour), cpu, memory)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClosestFlavour", reflect.TypeOf((*MockOpenstackOperations)(nil).GetClosestFlavour), ctx, cpu, memory)
 }
 
 // GetFlavor mocks base method.
-func (m *MockOpenstackOperations) GetFlavor(flavorId string) (*flavors.Flavor, error) {
+func (m *MockOpenstackOperations) GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFlavor", flavorId)
+	ret := m.ctrl.Call(m, "GetFlavor", ctx, flavorId)
 	ret0, _ := ret[0].(*flavors.Flavor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetFlavor indicates an expected call of GetFlavor.
-func (mr *MockOpenstackOperationsMockRecorder) GetFlavor(flavorId interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetFlavor(ctx, flavorId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFlavor", reflect.TypeOf((*MockOpenstackOperations)(nil).GetFlavor), flavorId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFlavor", reflect.TypeOf((*MockOpenstackOperations)(nil).GetFlavor), ctx, flavorId)
 }
 
 // GetNetwork mocks base method.
-func (m *MockOpenstackOperations) GetNetwork(networkname string) (*networks.Network, error) {
+func (m *MockOpenstackOperations) GetNetwork(ctx context.Context, networkname string) (*networks.Network, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNetwork", networkname)
+	ret := m.ctrl.Call(m, "GetNetwork", ctx, networkname)
 	ret0, _ := ret[0].(*networks.Network)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNetwork indicates an expected call of GetNetwork.
-func (mr *MockOpenstackOperationsMockRecorder) GetNetwork(networkname interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetNetwork(ctx, networkname interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetwork", reflect.TypeOf((*MockOpenstackOperations)(nil).GetNetwork), networkname)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetwork", reflect.TypeOf((*MockOpenstackOperations)(nil).GetNetwork), ctx, networkname)
 }
 
 // GetPort mocks base method.
-func (m *MockOpenstackOperations) GetPort(portID string) (*ports.Port, error) {
+func (m *MockOpenstackOperations) GetPort(ctx context.Context, portID string) (*ports.Port, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPort", portID)
+	ret := m.ctrl.Call(m, "GetPort", ctx, portID)
 	ret0, _ := ret[0].(*ports.Port)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPort indicates an expected call of GetPort.
-func (mr *MockOpenstackOperationsMockRecorder) GetPort(portID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetPort(ctx, portID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPort", reflect.TypeOf((*MockOpenstackOperations)(nil).GetPort), portID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPort", reflect.TypeOf((*MockOpenstackOperations)(nil).GetPort), ctx, portID)
 }
 
 // GetSecurityGroupIDs mocks base method.
-func (m *MockOpenstackOperations) GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error) {
+func (m *MockOpenstackOperations) GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSecurityGroupIDs", groupNames, projectName)
+	ret := m.ctrl.Call(m, "GetSecurityGroupIDs", ctx, groupNames, projectName)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSecurityGroupIDs indicates an expected call of GetSecurityGroupIDs.
-func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(groupNames, projectName interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(ctx, groupNames, projectName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), groupNames, projectName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), ctx, groupNames, projectName)
+}
+
+// GetSubnet mocks base method.
+func (m *MockOpenstackOperations) GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSubnet", ctx, network, ip)
+	ret0, _ := ret[0].(*subnets.Subnet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSubnet indicates an expected call of GetSubnet.
+func (mr *MockOpenstackOperationsMockRecorder) GetSubnet(ctx, network, ip interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnet", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSubnet), ctx, network, ip)
 }
 
 // SetVolumeBootable mocks base method.
-func (m *MockOpenstackOperations) SetVolumeBootable(volume *volumes.Volume) error {
+func (m *MockOpenstackOperations) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetVolumeBootable", volume)
+	ret := m.ctrl.Call(m, "SetVolumeBootable", ctx, volume)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetVolumeBootable indicates an expected call of SetVolumeBootable.
-func (mr *MockOpenstackOperationsMockRecorder) SetVolumeBootable(volume interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) SetVolumeBootable(ctx, volume interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeBootable", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeBootable), volume)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeBootable", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeBootable), ctx, volume)
 }
 
 // SetVolumeImageMetadata mocks base method.
-func (m *MockOpenstackOperations) SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error {
+func (m *MockOpenstackOperations) SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetVolumeImageMetadata", volume, setRDMLabel)
+	ret := m.ctrl.Call(m, "SetVolumeImageMetadata", ctx, volume, setRDMLabel)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetVolumeImageMetadata indicates an expected call of SetVolumeImageMetadata.
-func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(volume, setRDMLabel interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(ctx, volume, setRDMLabel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeImageMetadata), volume, setRDMLabel)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeImageMetadata), ctx, volume, setRDMLabel)
 }
 
 // SetVolumeUEFI mocks base method.
-func (m *MockOpenstackOperations) SetVolumeUEFI(volume *volumes.Volume) error {
+func (m *MockOpenstackOperations) SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetVolumeUEFI", volume)
+	ret := m.ctrl.Call(m, "SetVolumeUEFI", ctx, volume)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetVolumeUEFI indicates an expected call of SetVolumeUEFI.
-func (mr *MockOpenstackOperationsMockRecorder) SetVolumeUEFI(volume interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) SetVolumeUEFI(ctx, volume interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeUEFI", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeUEFI), volume)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeUEFI", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeUEFI), ctx, volume)
 }
 
 // WaitForVolume mocks base method.
-func (m *MockOpenstackOperations) WaitForVolume(volumeID string) error {
+func (m *MockOpenstackOperations) WaitForVolume(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForVolume", volumeID)
+	ret := m.ctrl.Call(m, "WaitForVolume", ctx, volumeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WaitForVolume indicates an expected call of WaitForVolume.
-func (mr *MockOpenstackOperationsMockRecorder) WaitForVolume(volumeID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) WaitForVolume(ctx, volumeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolume), volumeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolume), ctx, volumeID)
 }
 
 // WaitForVolumeAttachment mocks base method.
-func (m *MockOpenstackOperations) WaitForVolumeAttachment(volumeID string) error {
+func (m *MockOpenstackOperations) WaitForVolumeAttachment(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForVolumeAttachment", volumeID)
+	ret := m.ctrl.Call(m, "WaitForVolumeAttachment", ctx, volumeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WaitForVolumeAttachment indicates an expected call of WaitForVolumeAttachment.
-func (mr *MockOpenstackOperationsMockRecorder) WaitForVolumeAttachment(volumeID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) WaitForVolumeAttachment(ctx, volumeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolumeAttachment", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolumeAttachment), volumeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolumeAttachment", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolumeAttachment), ctx, volumeID)
 }
 
 // WaitUntilVMActive mocks base method.
-func (m *MockOpenstackOperations) WaitUntilVMActive(vmID string) (bool, error) {
+func (m *MockOpenstackOperations) WaitUntilVMActive(ctx context.Context, vmID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitUntilVMActive", vmID)
+	ret := m.ctrl.Call(m, "WaitUntilVMActive", ctx, vmID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // WaitUntilVMActive indicates an expected call of WaitUntilVMActive.
-func (mr *MockOpenstackOperationsMockRecorder) WaitUntilVMActive(vmID interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) WaitUntilVMActive(ctx, vmID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilVMActive", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitUntilVMActive), vmID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilVMActive", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitUntilVMActive), ctx, vmID)
 }

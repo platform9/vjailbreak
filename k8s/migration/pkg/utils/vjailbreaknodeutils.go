@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -228,7 +228,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	}
 
 	// Create the VM
-	server, err := servers.Create(openstackClients.ComputeClient, serverCreateOpts).Extract()
+	server, err := servers.Create(ctx, openstackClients.ComputeClient, serverCreateOpts, nil).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to create server")
 	}
@@ -325,7 +325,7 @@ func GetOpenstackVMIP(ctx context.Context, uuid string, k3sclient client.Client)
 	}
 
 	// Fetch the VM details
-	server, err := servers.Get(openstackClients.ComputeClient, uuid).Extract()
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to get server details")
 	}
@@ -359,7 +359,7 @@ func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string,
 	}
 
 	// Fetch the VM details
-	server, err := servers.Get(openstackClients.ComputeClient, uuid).Extract()
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to get server details")
 	}
@@ -388,7 +388,7 @@ func GetImageIDOfVMBootFromVolume(ctx context.Context, uuid string, k3sclient cl
 	}
 
 	// Fetch the VM details
-	server, err := servers.Get(openstackClients.ComputeClient, uuid).Extract()
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get server details")
 	}
@@ -399,7 +399,7 @@ func GetImageIDOfVMBootFromVolume(ctx context.Context, uuid string, k3sclient cl
 	// Check if the root volume is an image
 	for _, volume := range attachedVolumes {
 		// Get volume details
-		volume, err := volumes.Get(openstackClients.BlockStorageClient, volume.ID).Extract()
+		volume, err := volumes.Get(ctx, openstackClients.BlockStorageClient, volume.ID).Extract()
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get volume details")
 		}
@@ -420,7 +420,7 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 	}
 
 	// List flavors
-	allPages, err := flavors.ListDetail(openstackClients.ComputeClient, nil).AllPages()
+	allPages, err := flavors.ListDetail(openstackClients.ComputeClient, nil).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to list flavors")
 	}
@@ -440,7 +440,7 @@ func DeleteOpenstackVM(ctx context.Context, uuid string, k3sclient client.Client
 	}
 
 	// delete the VM
-	err = servers.Delete(openstackClients.ComputeClient, uuid).ExtractErr()
+	err = servers.Delete(ctx, openstackClients.ComputeClient, uuid).ExtractErr()
 	if err != nil && !strings.Contains(err.Error(), "404") {
 		return errors.Wrap(err, "Failed to delete server")
 	}
@@ -473,7 +473,7 @@ func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Cli
 	}
 
 	listOpts := servers.ListOpts{Name: name}
-	allPages, err := servers.List(openstackClients.ComputeClient, listOpts).AllPages()
+	allPages, err := servers.List(openstackClients.ComputeClient, listOpts).AllPages(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to list servers")
 	}

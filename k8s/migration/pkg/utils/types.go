@@ -1,6 +1,8 @@
 package utils
 
-import gophercloud "github.com/gophercloud/gophercloud"
+import (
+	gophercloud "github.com/gophercloud/gophercloud/v2"
+)
 
 // CloudInitParams holds OpenStack authentication parameters for cloud-init configuration.
 // These parameters are used when generating cloud-init configurations for bare metal nodes.
