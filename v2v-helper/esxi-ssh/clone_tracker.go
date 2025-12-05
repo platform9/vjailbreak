@@ -64,44 +64,70 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 	}
 	status.IsRunning = isRunning
 
-	// If not running, verify completion
+	// Always check the log file for progress and errors
+	logContent := ""
+	if ct.task.LogFile != "" {
+		logCmd := fmt.Sprintf("cat %s 2>/dev/null", ct.task.LogFile)
+		logContent, _ = ct.client.ExecuteCommand(logCmd)
+		logContent = strings.TrimSpace(logContent)
+		klog.V(2).Infof("Log file content: %s", logContent)
+	}
+
+	// Parse progress from log (vmkfstools outputs "Clone: XX% done.")
+	if strings.Contains(logContent, "% done") {
+		// Extract percentage from log
+		for _, line := range strings.Split(logContent, "\n") {
+			if strings.Contains(line, "% done") {
+				var pct float64
+				if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil {
+					status.PercentDone = pct
+					klog.V(2).Infof("Parsed progress: %.1f%%", pct)
+				}
+			}
+		}
+	}
+
+	// If not running, check log for success/failure
 	if !isRunning {
-		// Check if target files exist
-		exists, _ := ct.client.CheckVMDKExists(ct.targetPath)
-		if exists {
-			// Clone completed successfully
+		klog.Infof("Process %d is no longer running, checking log for result", ct.task.Pid)
+		klog.Infof("Log content: %s", logContent)
+
+		// Check for errors in log
+		if strings.Contains(logContent, "Failed") || strings.Contains(logContent, "Error") || strings.Contains(logContent, "error") {
+			status.Error = fmt.Sprintf("vmkfstools failed: %s", logContent)
+			return status, nil
+		}
+
+		// Check for successful completion (100% done in log)
+		if strings.Contains(logContent, "100% done") {
+			klog.Infof("Clone completed successfully (100%% done in log)")
 			status.PercentDone = 100.0
-			status.BytesCopied = status.TotalBytes
+			return status, nil
+		}
+
+		// Also check if RDM descriptor was created (indicates success)
+		if ct.task.RDMDescriptorPath != "" {
+			checkCmd := fmt.Sprintf("test -f %s && echo 'exists'", ct.task.RDMDescriptorPath)
+			output, _ := ct.client.ExecuteCommand(checkCmd)
+			if strings.Contains(output, "exists") {
+				klog.Infof("RDM descriptor exists at %s, clone successful", ct.task.RDMDescriptorPath)
+				status.PercentDone = 100.0
+				return status, nil
+			}
+		}
+
+		// Process ended but no success indicators
+		if logContent == "" {
+			status.Error = "Clone process ended but log file is empty - process may have failed to start"
 		} else {
-			// Clone may have failed
-			status.Error = "Clone process ended but target files not found"
+			status.Error = fmt.Sprintf("Clone process ended unexpectedly. Log: %s", logContent)
 		}
 		return status, nil
 	}
 
-	// Get target directory size to estimate progress
-	targetDir := ct.targetPath[:strings.LastIndex(ct.targetPath, "/")]
-	sizeCmd := fmt.Sprintf("du -sb %s 2>/dev/null | awk '{print $1}'", targetDir)
-	sizeOutput, err := ct.client.ExecuteCommand(sizeCmd)
-	if err == nil && sizeOutput != "" {
-		var bytesCopied int64
-		if _, err := fmt.Sscanf(strings.TrimSpace(sizeOutput), "%d", &bytesCopied); err == nil {
-			status.BytesCopied = bytesCopied
-
-			// Get total size from source
-			if sourceSize, err := ct.client.GetVMDKSize(ct.sourcePath); err == nil {
-				status.TotalBytes = sourceSize
-				if sourceSize > 0 {
-					status.PercentDone = float64(bytesCopied) / float64(sourceSize) * 100.0
-
-					// Estimate time remaining
-					if status.PercentDone > 0 && status.PercentDone < 100 {
-						totalEstimated := time.Duration(float64(status.ElapsedTime) / (status.PercentDone / 100.0))
-						status.EstimatedTime = totalEstimated - status.ElapsedTime
-					}
-				}
-			}
-		}
+	// Process is still running - get size info for progress estimation
+	if sourceSize, err := ct.client.GetVMDKSize(ct.sourcePath); err == nil {
+		status.TotalBytes = sourceSize
 	}
 
 	return status, nil
