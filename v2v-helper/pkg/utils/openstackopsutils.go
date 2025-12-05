@@ -55,7 +55,6 @@ var (
 )
 
 func GetCurrentInstanceUUID() (string, error) {
-
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
@@ -440,6 +439,7 @@ func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	}
 	return port, nil
 }
+
 func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*subnets.Subnet, error) {
 	parsedIp := net.ParseIP(ip)
 	if parsedIp == nil {
@@ -461,6 +461,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
+
 func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
@@ -508,18 +509,18 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 
 	if ip != "" {
 		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
-		
+
 		subnet, err := osclient.GetSubnet(network.Subnets, ip)
 		fixedIP := []ports.IP{}
-		if err != nil  && !fallbackToDHCP {
+		if err != nil && !fallbackToDHCP {
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
-		
-		if subnet != nil{				
+
+		if subnet != nil {
 			fixedIP = append(fixedIP, ports.IP{
-			SubnetID:  subnet.ID,
-			IPAddress: ip,
-		    })
+				SubnetID:  subnet.ID,
+				IPAddress: ip,
+			})
 		}
 		createOpts.FixedIPs = fixedIP
 	}
@@ -679,13 +680,13 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 		return nil, fmt.Errorf("projectName is required for security group lookup")
 	}
 
-	//check if string is UUID
+	// check if string is UUID
 	isUUID := func(s string) bool {
 		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 		return re.MatchString(s)
 	}
 
-	//build a map name -> ID
+	// build a map name -> ID
 	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create identity client: %w", err)
@@ -741,7 +742,7 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s, authurl %s, tenant %s", name, host, volumeType, osclient.AuthURL, osclient.Tenant))
-	
+
 	// Build the manage request
 	// The Cinder manage API requires specific fields
 	createOpts := map[string]interface{}{
@@ -752,30 +753,29 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 			"volume_type": volumeType,
 		},
 	}
-	
-	// Make the API call to manage the volume
+
 	var result gophercloud.Result
 	_, result.Err = osclient.BlockStorageClient.Post(
-		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
+		osclient.BlockStorageClient.ServiceURL("os-volume-manage"),
 		createOpts,
 		&result.Body,
 		&gophercloud.RequestOpts{
 			OkCodes: []int{202}, // Accepted
 		},
 	)
-	
+
 	if result.Err != nil {
 		return nil, fmt.Errorf("failed to manage existing volume: %w", result.Err)
 	}
-	
+
 	// Extract the volume from the response
 	var volume volumes.Volume
 	err := result.ExtractInto(&volume)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract managed volume: %w", err)
 	}
-	
+
 	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
-	
+
 	return &volume, nil
 }
