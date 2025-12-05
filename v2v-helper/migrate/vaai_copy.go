@@ -90,24 +90,12 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 	migobj.logMessage("Connected to ESXi host via SSH")
 
 	// Verify VM is powered off before attempting VAAI copy
-	// Get VM ID from vminfo
-	vmID := vminfo.VMID
-	if vmID == "" {
-		return []storage.Volume{}, fmt.Errorf("VM ID is empty, cannot check power state")
+	// The VM should already be powered off by the migration flow before calling this function
+	if vminfo.State != "poweredOff" {
+		return []storage.Volume{}, fmt.Errorf("VM %s is not powered off (state: %s). VM must be powered off before VAAI copy can proceed", vminfo.Name, vminfo.State)
 	}
 
-	migobj.logMessage(fmt.Sprintf("Checking power state of VM %s (ID: %s)", vminfo.VMName, vmID))
-	powerStateCmd := fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmID)
-	powerState, err := esxiClient.ExecuteCommand(powerStateCmd)
-	if err != nil {
-		return []storage.Volume{}, errors.Wrap(err, "failed to check VM power state")
-	}
-
-	if strings.Contains(powerState, "Powered on") {
-		return []storage.Volume{}, fmt.Errorf("VM %s is still powered on. VM must be powered off before VAAI copy can proceed. Power state: %s", vminfo.VMName, powerState)
-	}
-
-	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.VMName))
+	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.Name))
 
 	// Wait for ESXi to release file locks on VMDK files after VM power off
 	// This is necessary to avoid "Failed to lock the file" errors during vmkfstools clone
