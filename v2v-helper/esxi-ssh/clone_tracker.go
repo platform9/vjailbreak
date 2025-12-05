@@ -57,14 +57,8 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 		ElapsedTime: time.Since(ct.startTime),
 	}
 
-	// Check if process is still running
-	isRunning, err := ct.client.CheckCloneStatus(ct.task.Pid)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check clone status: %w", err)
-	}
-	status.IsRunning = isRunning
-
-	// Always check the log file for progress and errors
+	// Always check the log file FIRST for progress and errors
+	// This is more reliable than checking process status immediately after start
 	logContent := ""
 	if ct.task.LogFile != "" {
 		logCmd := fmt.Sprintf("cat %s 2>/dev/null", ct.task.LogFile)
@@ -72,6 +66,13 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 		logContent = strings.TrimSpace(logContent)
 		klog.V(2).Infof("Log file content: %s", logContent)
 	}
+
+	// Check if process is still running
+	isRunning, err := ct.client.CheckCloneStatus(ct.task.Pid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check clone status: %w", err)
+	}
+	status.IsRunning = isRunning
 
 	// Parse progress from log (vmkfstools outputs "Clone: XX% done.")
 	if strings.Contains(logContent, "% done") {
@@ -91,6 +92,14 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 	if !isRunning {
 		klog.Infof("Process %d is no longer running, checking log for result", ct.task.Pid)
 		klog.Infof("Log content: %s", logContent)
+
+		// If log is empty and we just started (< 2 seconds), the process might still be starting
+		// Don't fail immediately - treat as still running to give it time to actually start
+		if logContent == "" && time.Since(ct.startTime) < 2*time.Second {
+			klog.Infof("Process not found but just started %v ago, treating as still starting", time.Since(ct.startTime))
+			status.IsRunning = true
+			return status, nil
+		}
 
 		// Check for errors in log
 		if strings.Contains(logContent, "Failed") || strings.Contains(logContent, "Error") || strings.Contains(logContent, "error") {
