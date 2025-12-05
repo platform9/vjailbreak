@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -525,13 +526,87 @@ func (c *Client) RescanStorage() error {
 	}
 
 	klog.Info("Rescanning ESXi storage adapters...")
-	_, err := c.ExecuteCommand("esxcli storage core adapter rescan --all")
+
+	// Method 1: Rescan all HBAs using esxcli
+	output, err := c.ExecuteCommand("esxcli storage core adapter rescan --all")
 	if err != nil {
-		return fmt.Errorf("failed to rescan storage: %w", err)
+		klog.Warningf("esxcli rescan failed (output: %s): %v", output, err)
+		// Try alternative method
+	} else {
+		klog.Info("esxcli storage rescan completed")
+	}
+
+	// Method 2: Rescan iSCSI adapter specifically
+	// First get the iSCSI adapter name
+	adapters, adapterErr := c.RunEsxcliCommand("iscsi", []string{"adapter", "list"})
+	if adapterErr == nil {
+		for _, adapter := range adapters {
+			if adapterName, ok := adapter["Adapter"]; ok && adapterName != "" {
+				klog.Infof("Rescanning iSCSI adapter: %s", adapterName)
+				rescanCmd := fmt.Sprintf("esxcli iscsi adapter rescan --adapter=%s", adapterName)
+				rescanOutput, rescanErr := c.ExecuteCommand(rescanCmd)
+				if rescanErr != nil {
+					klog.Warningf("iSCSI adapter rescan failed for %s (output: %s): %v", adapterName, rescanOutput, rescanErr)
+				} else {
+					klog.Infof("iSCSI adapter %s rescanned successfully", adapterName)
+				}
+			}
+		}
+	} else {
+		klog.Warningf("Failed to list iSCSI adapters: %v", adapterErr)
+	}
+
+	// Method 3: Rescan using vim-cmd (alternative approach)
+	vimOutput, vimErr := c.ExecuteCommand("vim-cmd hostsvc/storage/refresh")
+	if vimErr != nil {
+		klog.Warningf("vim-cmd storage refresh failed (output: %s): %v", vimOutput, vimErr)
+	} else {
+		klog.Info("vim-cmd storage refresh completed")
 	}
 
 	klog.Info("Storage rescan completed")
 	return nil
+}
+
+// RescanStorageForDevice rescans storage and waits for a specific device to appear
+func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to ESXi host")
+	}
+
+	devicePath := fmt.Sprintf("/vmfs/devices/disks/%s", naaID)
+	klog.Infof("Waiting for device %s to appear (timeout: %s)", devicePath, timeout)
+
+	startTime := time.Now()
+	pollInterval := 5 * time.Second
+	rescanInterval := 15 * time.Second
+	lastRescan := time.Time{}
+
+	for time.Since(startTime) < timeout {
+		// Check if device exists
+		checkCmd := fmt.Sprintf("test -e %s && echo 'exists' || echo 'missing'", devicePath)
+		output, _ := c.ExecuteCommand(checkCmd)
+
+		if strings.Contains(output, "exists") {
+			klog.Infof("Device %s is now visible (took %s)", naaID, time.Since(startTime).Round(time.Second))
+			return nil
+		}
+
+		// Trigger rescan periodically
+		if time.Since(lastRescan) >= rescanInterval {
+			klog.Infof("Device not yet visible, triggering rescan...")
+			_ = c.RescanStorage()
+			lastRescan = time.Now()
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	// Final check - list available devices for debugging
+	allDisks, _ := c.ExecuteCommand("ls /vmfs/devices/disks/ | grep -i naa | head -30")
+	klog.Infof("Available NAA devices after timeout:\n%s", allDisks)
+
+	return fmt.Errorf("device %s not visible after %s", naaID, timeout)
 }
 
 // CreateDatastore creates a new VMFS datastore on a NAA device
