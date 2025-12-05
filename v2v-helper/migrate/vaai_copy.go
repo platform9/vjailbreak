@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	cindervolumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
@@ -100,8 +101,16 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via VAAI", vmdisk.Name)
 		}
 
+		// Update the disk with the OpenStack volume info from the cloned volume
+		vminfo.VMDisks[idx].OpenstackVol = &cindervolumes.Volume{
+			ID:   clonedVolume.OpenstackVol.ID,
+			Name: clonedVolume.Name,
+			Size: int(clonedVolume.Size / (1024 * 1024 * 1024)), // Convert bytes to GB
+		}
+		migobj.logMessage(fmt.Sprintf("Updated disk %s with Cinder volume ID: %s", vmdisk.Name, clonedVolume.OpenstackVol.ID))
+
 		// Attach the Cinder volume to get the device path
-		devicePath, err := migobj.AttachVolume(vmdisk)
+		devicePath, err := migobj.AttachVolume(vminfo.VMDisks[idx])
 		if err != nil {
 			return []storage.Volume{}, errors.Wrapf(err, "failed to attach volume for disk %s", vmdisk.Name)
 		}
@@ -315,9 +324,11 @@ func (migobj *Migrate) getHostIPAddress(ctx context.Context, host *object.HostSy
 }
 
 // manageVolumeToCinder manages an existing storage array volume into Cinder
+// Uses the ManageExistingVolume function which matches the tested RDM controller pattern
 func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName string, vmDisk vm.VMDisk) (string, error) {
 	migobj.logMessage(fmt.Sprintf("Managing volume %s into Cinder", volumeName))
-	// Get array creds mapping
+
+	// Get array creds mapping to find the correct ArrayCreds for this datastore
 	arrayCredsMapping, err := k8sutils.GetArrayCredsMapping(ctx, migobj.K8sClient, migobj.ArrayCredsMapping)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get array creds mapping")
@@ -328,6 +339,7 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 	for _, mapping := range arrayCredsMapping.Spec.Mappings {
 		if mapping.Source == dataStoreName {
 			arrayCredsName = mapping.Target
+			break
 		}
 	}
 
@@ -340,34 +352,31 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 		return "", errors.Wrap(err, "failed to get array creds")
 	}
 
-	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
-
-	// Use the full Cinder host string from ArrayCreds for the manage API
-	// This includes the hostname@backend format required by Cinder
-	// Example: "pcd-ce@pure-iscsi-1" or "pcd-ce@pure-iscsi-1#pool"
+	// Build the Cinder host string
 	cinderHost := arrayCreds.Spec.OpenStackMapping.CinderHost
 	if cinderHost == "" {
-		// Fallback to backend name if CinderHost is not set (backwards compatibility)
 		cinderHost = arrayCreds.Spec.OpenStackMapping.CinderBackendName
 	}
 
-	// Create the manage volume request
-	// The reference format depends on the storage backend
-	// For Pure Storage, it's typically the volume name
+	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
+
+	// Volume reference for Pure Storage - use source-name
 	volumeRef := map[string]interface{}{
 		"source-name": volumeName,
 	}
 
-	// Call OpenStack to manage the volume
-	// This uses the Cinder manage API to import the existing volume
-	managedVolume, err := migobj.Openstackclients.ManageExistingVolume(
-		volumeName,
-		volumeRef,
-		cinderHost,
-		volumeType,
-	)
+	migobj.logMessage(fmt.Sprintf("Importing volume to Cinder: host=%s, type=%s, ref=%v", cinderHost, volumeType, volumeRef))
+
+	// Use ManageExistingVolume which uses the manageable_volumes endpoint
+	managedVolume, err := migobj.Openstackclients.ManageExistingVolume(volumeName, volumeRef, cinderHost, volumeType)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to manage volume %s in Cinder", volumeName)
+		return "", errors.Wrapf(err, "failed to import volume %s to Cinder", volumeName)
+	}
+
+	// Wait for volume to become available
+	migobj.logMessage(fmt.Sprintf("Waiting for volume %s to become available", managedVolume.ID))
+	if err := migobj.Openstackclients.WaitForVolume(managedVolume.ID); err != nil {
+		return "", errors.Wrapf(err, "failed to wait for volume %s to become available", managedVolume.ID)
 	}
 
 	migobj.logMessage(fmt.Sprintf("Volume %s managed successfully with Cinder ID: %s", volumeName, managedVolume.ID))

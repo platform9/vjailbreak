@@ -740,39 +740,59 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 }
 
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
+// Uses the manageable_volumes endpoint which is the standard Cinder manage API
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s, authurl %s, tenant %s", name, host, volumeType, osclient.AuthURL, osclient.Tenant))
+	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s", name, host, volumeType))
 
-	// Build the manage request
-	// The Cinder manage API requires specific fields
-	createOpts := map[string]interface{}{
+	// Build the manage request payload
+	// This matches the format used by the tested RDM disk controller
+	volumePayload := map[string]interface{}{
 		"volume": map[string]interface{}{
 			"host":        host,
 			"ref":         ref,
 			"name":        name,
 			"volume_type": volumeType,
+			"description": "Volume managed by vjailbreak VAAI copy",
+			"bootable":    false,
 		},
 	}
 
-	var result gophercloud.Result
-	_, result.Err = osclient.BlockStorageClient.Post(
-		osclient.BlockStorageClient.ServiceURL("os-volume-manage"),
-		createOpts,
-		&result.Body,
+	PrintLog(fmt.Sprintf("OPENSTACK API: Manage volume payload: %+v", volumePayload))
+
+	var result map[string]interface{}
+	response, err := osclient.BlockStorageClient.Post(
+		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
+		volumePayload,
+		&result,
 		&gophercloud.RequestOpts{
-			OkCodes: []int{202}, // Accepted
+			OkCodes:     []int{202}, // Accepted
+			MoreHeaders: map[string]string{"OpenStack-API-Version": "volume 3.8"},
 		},
 	)
 
-	if result.Err != nil {
-		return nil, fmt.Errorf("failed to manage existing volume: %w", result.Err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to manage existing volume: %w", err)
 	}
 
-	// Extract the volume from the response
-	var volume volumes.Volume
-	err := result.ExtractInto(&volume)
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+
+	// Extract volume from response
+	volumeMap, ok := result["volume"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to extract volume from response: %+v", result)
+	}
+
+	// Marshal and unmarshal to convert to volumes.Volume struct
+	volumeJSON, err := json.Marshal(volumeMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract managed volume: %w", err)
+		return nil, fmt.Errorf("failed to marshal volume map: %w", err)
+	}
+
+	var volume volumes.Volume
+	if err := json.Unmarshal(volumeJSON, &volume); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal volume: %w", err)
 	}
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
