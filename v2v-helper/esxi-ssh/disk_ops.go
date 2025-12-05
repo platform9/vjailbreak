@@ -559,8 +559,12 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 		return fmt.Errorf("not connected to ESXi host")
 	}
 
+	// Clean the naaID - remove any whitespace or hidden characters
+	naaID = strings.TrimSpace(naaID)
+
 	devicePath := fmt.Sprintf("/vmfs/devices/disks/%s", naaID)
 	klog.Infof("Waiting for device %s to appear (timeout: %s)", devicePath, timeout)
+	klog.Infof("Looking for NAA ID: %q (len=%d)", naaID, len(naaID))
 
 	startTime := time.Now()
 	pollInterval := 5 * time.Second
@@ -568,18 +572,25 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 	lastRescan := time.Time{}
 
 	for time.Since(startTime) < timeout {
-		// Check if device exists
-		checkCmd := fmt.Sprintf("test -e %s && echo 'exists' || echo 'missing'", devicePath)
-		output, _ := c.ExecuteCommand(checkCmd)
+		// Check if device exists by listing all devices and checking in Go
+		// This is more reliable than shell grep which can have issues with special chars
+		listCmd := "ls /vmfs/devices/disks/"
+		output, err := c.ExecuteCommand(listCmd)
 
-		if strings.Contains(output, "exists") {
-			klog.Infof("Device %s is now visible (took %s)", naaID, time.Since(startTime).Round(time.Second))
-			return nil
+		if err == nil {
+			// Check each line for exact match
+			for _, line := range strings.Split(output, "\n") {
+				device := strings.TrimSpace(line)
+				if device == naaID {
+					klog.Infof("Device %s is now visible (took %s)", naaID, time.Since(startTime).Round(time.Second))
+					return nil
+				}
+			}
 		}
 
 		// Trigger rescan periodically
 		if time.Since(lastRescan) >= rescanInterval {
-			klog.Infof("Device not yet visible, triggering rescan...")
+			klog.Infof("Device %s not yet visible, triggering rescan...", naaID)
 			_ = c.RescanStorage()
 			lastRescan = time.Now()
 		}
@@ -588,13 +599,31 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 	}
 
 	// Final check - list available devices for debugging
-	allDisks, _ := c.ExecuteCommand("ls /vmfs/devices/disks/ | grep -i naa | head -30")
-	klog.Infof("Available NAA devices after timeout:\n%s", allDisks)
+	allDisks, _ := c.ExecuteCommand("ls /vmfs/devices/disks/")
+	naaDevices := []string{}
+	for _, line := range strings.Split(allDisks, "\n") {
+		device := strings.TrimSpace(line)
+		if strings.HasPrefix(device, "naa.") {
+			naaDevices = append(naaDevices, device)
+			// Check for exact match
+			if device == naaID {
+				klog.Infof("Device %s found in final check!", naaID)
+				return nil
+			}
+			// Also check if our naaID is contained (in case of prefix issues)
+			if strings.Contains(device, naaID) || strings.Contains(naaID, device) {
+				klog.Infof("Partial match found: looking for %q, found %q", naaID, device)
+			}
+		}
+	}
+
+	klog.Infof("Available NAA devices after timeout (%d found):", len(naaDevices))
+	for _, d := range naaDevices {
+		klog.Infof("  - %q (len=%d)", d, len(d))
+	}
 
 	return fmt.Errorf("device %s not visible after %s", naaID, timeout)
 }
-
-// CreateDatastore creates a new VMFS datastore on a NAA device
 func (c *Client) CreateDatastore(datastoreName, naaID string) error {
 	if c.sshClient == nil {
 		return fmt.Errorf("not connected to ESXi host")
