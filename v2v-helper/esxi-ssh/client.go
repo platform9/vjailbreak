@@ -26,11 +26,13 @@ const (
 
 // VmkfstoolsTask represents the result of a vmkfstools operation
 type VmkfstoolsTask struct {
-	TaskId   string `json:"taskId"`
-	Pid      int    `json:"pid"`
-	ExitCode string `json:"exitCode"`
-	LastLine string `json:"lastLine"`
-	Stderr   string `json:"stdErr"`
+	TaskId            string `json:"taskId"`
+	Pid               int    `json:"pid"`
+	ExitCode          string `json:"exitCode"`
+	LastLine          string `json:"lastLine"`
+	Stderr            string `json:"stdErr"`
+	LogFile           string `json:"logFile"`
+	RDMDescriptorPath string `json:"rdmDescriptorPath"`
 }
 
 // XMLResponse represents the XML response structure
@@ -360,9 +362,11 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 
 	// Return task info with PID so we can check status later
 	task := &VmkfstoolsTask{
-		TaskId:   fmt.Sprintf("vmkfstools-rdm-clone-%s", pid),
-		Pid:      0, // Will be parsed from output
-		LastLine: fmt.Sprintf("RDM clone started with PID %s, log: %s", pid, logFile),
+		TaskId:            fmt.Sprintf("vmkfstools-rdm-clone-%s", pid),
+		Pid:               0, // Will be parsed from output
+		LastLine:          fmt.Sprintf("RDM clone started with PID %s, log: %s", pid, logFile),
+		LogFile:           logFile,
+		RDMDescriptorPath: rdmDescriptor,
 	}
 
 	// Try to parse PID
