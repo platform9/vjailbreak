@@ -530,33 +530,18 @@ func (c *Client) RescanStorage() error {
 	// Method 1: Rescan all HBAs using esxcli
 	output, err := c.ExecuteCommand("esxcli storage core adapter rescan --all")
 	if err != nil {
-		klog.Warningf("esxcli rescan failed (output: %s): %v", output, err)
-		// Try alternative method
+		// "Scan already in progress" is not a real error, just means another scan is running
+		if strings.Contains(output, "already in progress") {
+			klog.Info("Storage rescan already in progress, waiting...")
+			time.Sleep(5 * time.Second)
+		} else {
+			klog.Warningf("esxcli rescan failed (output: %s): %v", output, err)
+		}
 	} else {
 		klog.Info("esxcli storage rescan completed")
 	}
 
-	// Method 2: Rescan iSCSI adapter specifically
-	// First get the iSCSI adapter name
-	adapters, adapterErr := c.RunEsxcliCommand("iscsi", []string{"adapter", "list"})
-	if adapterErr == nil {
-		for _, adapter := range adapters {
-			if adapterName, ok := adapter["Adapter"]; ok && adapterName != "" {
-				klog.Infof("Rescanning iSCSI adapter: %s", adapterName)
-				rescanCmd := fmt.Sprintf("esxcli iscsi adapter rescan --adapter=%s", adapterName)
-				rescanOutput, rescanErr := c.ExecuteCommand(rescanCmd)
-				if rescanErr != nil {
-					klog.Warningf("iSCSI adapter rescan failed for %s (output: %s): %v", adapterName, rescanOutput, rescanErr)
-				} else {
-					klog.Infof("iSCSI adapter %s rescanned successfully", adapterName)
-				}
-			}
-		}
-	} else {
-		klog.Warningf("Failed to list iSCSI adapters: %v", adapterErr)
-	}
-
-	// Method 3: Rescan using vim-cmd (alternative approach)
+	// Method 2: Rescan using vim-cmd (most reliable for detecting new LUNs)
 	vimOutput, vimErr := c.ExecuteCommand("vim-cmd hostsvc/storage/refresh")
 	if vimErr != nil {
 		klog.Warningf("vim-cmd storage refresh failed (output: %s): %v", vimOutput, vimErr)
