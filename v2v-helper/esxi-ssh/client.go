@@ -255,17 +255,55 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	return task, nil
 }
 
+// convertDatastorePathToFilesystemPath converts a vSphere datastore path to ESXi filesystem path
+// e.g., "[datastore-name] vm-folder/vm.vmdk" -> "/vmfs/volumes/datastore-name/vm-folder/vm.vmdk"
+// If the path is already a filesystem path (starts with /), it's returned unchanged
+func convertDatastorePathToFilesystemPath(datastorePath string) string {
+	datastorePath = strings.TrimSpace(datastorePath)
+
+	// If already a filesystem path, return as-is
+	if strings.HasPrefix(datastorePath, "/") {
+		return datastorePath
+	}
+
+	// Parse vSphere datastore path format: [datastore-name] path/to/file.vmdk
+	if !strings.HasPrefix(datastorePath, "[") {
+		// Not a datastore path format, return as-is
+		return datastorePath
+	}
+
+	// Find the closing bracket
+	closeBracket := strings.Index(datastorePath, "]")
+	if closeBracket == -1 {
+		return datastorePath
+	}
+
+	// Extract datastore name (without brackets)
+	datastoreName := datastorePath[1:closeBracket]
+
+	// Extract the path after the datastore name (skip the space after ])
+	remainingPath := strings.TrimSpace(datastorePath[closeBracket+1:])
+
+	// Construct the filesystem path
+	return fmt.Sprintf("/vmfs/volumes/%s/%s", datastoreName, remainingPath)
+}
+
 // StartVmkfstoolsRDMClone starts a vmkfstools clone operation from source VMDK to target raw device (RDM)
 // This uses VAAI XCOPY to clone directly to a raw device without creating a datastore
 // Command format: vmkfstools -i <source> -d rdm:<target_device> <dummy_vmdk_path>
 func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*VmkfstoolsTask, error) {
 	klog.Infof("Starting vmkfstools RDM clone: source=%s, target=%s", sourceVMDK, targetDevicePath)
 
+	// Convert vSphere datastore path to ESXi filesystem path if needed
+	// e.g., "[datastore-name] vm-folder/vm.vmdk" -> "/vmfs/volumes/datastore-name/vm-folder/vm.vmdk"
+	sourceVMDK = convertDatastorePathToFilesystemPath(sourceVMDK)
+	klog.Infof("Source VMDK path (converted): %s", sourceVMDK)
+
 	// First check if source exists
-	checkCmd := fmt.Sprintf("ls -l %s 2>&1", sourceVMDK)
+	checkCmd := fmt.Sprintf("ls -l '%s' 2>&1", sourceVMDK)
 	checkOutput, _ := c.ExecuteCommand(checkCmd)
-	if !strings.Contains(checkOutput, sourceVMDK) {
-		return nil, fmt.Errorf("source VMDK does not exist: %s", sourceVMDK)
+	if strings.Contains(checkOutput, "No such file") {
+		return nil, fmt.Errorf("source VMDK does not exist: %s (output: %s)", sourceVMDK, checkOutput)
 	}
 
 	// Verify target device exists
