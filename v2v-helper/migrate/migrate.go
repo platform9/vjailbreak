@@ -985,11 +985,6 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Converting disk")
 
-	// Disable fstrim in libguestfs appliance to reduce migration latency
-	if err := virtv2v.DisableFstrimInAppliance(); err != nil {
-		utils.PrintLog(fmt.Sprintf("Warning: failed to disable fstrim: %v", err))
-	}
-
 	// Step 1: Determine boot command based on OS type
 	getBootCommand := migobj.getBootCommand(vminfo.OSType)
 

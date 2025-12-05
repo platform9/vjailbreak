@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -88,75 +87,6 @@ func IsRHELFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "centos") ||
 		strings.Contains(lowerRelease, "rocky") ||
 		strings.Contains(lowerRelease, "alma")
-}
-
-// DisableFstrimInAppliance creates a supermin overlay to disable fstrim in libguestfs appliance
-func DisableFstrimInAppliance() error {
-	superminDir := "/usr/local/lib/guestfs/supermin.d"
-	overlayDir := "/tmp/fstrim-overlay"
-	fstrimPath := overlayDir + "/usr/sbin/fstrim"
-	tarPath := superminDir + "/zz-no-fstrim.tar"
-
-	// Always clear libguestfs cache to force appliance rebuild
-	cacheDir := os.Getenv("LIBGUESTFS_CACHEDIR")
-	if cacheDir == "" {
-		cacheDir = "/var/tmp"
-	}
-	
-	// Remove cached appliances to force rebuild with our overlay
-	cachePaths := []string{
-		cacheDir + "/.guestfs-*",
-		"/root/.cache/libguestfs",
-		"/var/tmp/.guestfs-*",
-	}
-	for _, pattern := range cachePaths {
-		matches, _ := filepath.Glob(pattern)
-		for _, match := range matches {
-			os.RemoveAll(match)
-			log.Printf("Cleared libguestfs cache: %s", match)
-		}
-	}
-
-	// Check if overlay tar already exists
-	tarExists := false
-	if _, err := os.Stat(tarPath); err == nil {
-		tarExists = true
-		log.Println("fstrim override tar already exists")
-	}
-
-	if !tarExists {
-		// Create directory structure
-		if err := os.MkdirAll(overlayDir+"/usr/sbin", 0755); err != nil {
-			return fmt.Errorf("failed to create overlay directory: %w", err)
-		}
-		defer os.RemoveAll(overlayDir)
-
-		// Create fake fstrim script that does nothing
-		fstrimScript := "#!/bin/sh\n# Disabled fstrim to reduce migration latency\nexit 0\n"
-		if err := os.WriteFile(fstrimPath, []byte(fstrimScript), 0755); err != nil {
-			return fmt.Errorf("failed to create fake fstrim: %w", err)
-		}
-
-		// Create supermin directory if it doesn't exist
-		if err := os.MkdirAll(superminDir, 0755); err != nil {
-			return fmt.Errorf("failed to create supermin directory: %w", err)
-		}
-
-		// Create tar archive
-		cmd := exec.Command("tar", "-cf", tarPath, "-C", overlayDir, ".")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to create tar overlay: %w, output: %s", err, output)
-		}
-
-		log.Printf("Successfully created fstrim override at %s", tarPath)
-	}
-
-	// Force environment variable to ensure appliance rebuild
-	os.Setenv("SUPERMIN_KERNEL", "/boot/vmlinuz-*")
-	os.Setenv("SUPERMIN_MODULES", "/lib/modules/*")
-	
-	log.Println("Libguestfs cache cleared and fstrim override configured")
-	return nil
 }
 
 func GetPartitions(disk string) ([]string, error) {
@@ -284,7 +214,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		os.Setenv("VIRTIO_WIN", filePath)
 	}
 
-	// Step 2: Set guestfs backend and disable fstrim
+	// Step 2: Set guestfs backend
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
