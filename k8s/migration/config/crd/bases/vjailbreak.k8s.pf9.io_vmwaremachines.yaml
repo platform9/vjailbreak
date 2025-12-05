@@ -140,6 +140,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  useGPU:
+                    description: UseGPU is a flag to indicate if the virtual machine
+                      uses GPU
+                    type: boolean
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string

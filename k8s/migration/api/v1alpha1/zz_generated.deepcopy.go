@@ -1015,7 +1015,9 @@ func (in *OpenstackCredsSpec) DeepCopyInto(out *OpenstackCredsSpec) {
 	if in.Flavors != nil {
 		in, out := &in.Flavors, &out.Flavors
 		*out = make([]flavors.Flavor, len(*in))
-		copy(*out, *in)
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.PCDHostConfig != nil {
 		in, out := &in.PCDHostConfig, &out.PCDHostConfig
