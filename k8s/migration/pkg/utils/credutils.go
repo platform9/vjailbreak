@@ -646,8 +646,8 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
-// GetAllVMs gets all the VMs in a datacenter.
-func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
+// GetAndCreateAllVMs gets all the VMs in a datacenter.
+func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
 	vmErrors := []vmError{}
 	errMu := sync.Mutex{}
@@ -710,6 +710,34 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 		}
 	}
 	return vminfo, rdmDiskMap, nil
+}
+
+// DetectGPUUsage checks if the VM has any GPU devices attached.
+// It detects PCI passthrough devices (including GPUs) and vGPU profiles.
+func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
+	if vmProps.Config == nil || vmProps.Config.Hardware.Device == nil {
+		return false
+	}
+
+	for _, device := range vmProps.Config.Hardware.Device {
+		// Check for PCI passthrough devices (including GPUs)
+		if _, ok := device.(*types.VirtualPCIPassthrough); ok {
+			return true
+		}
+
+		// Check for vGPU (shared GPU) devices
+		// vGPU devices are represented as VirtualPCIPassthrough with specific backing
+		if pciDevice, ok := device.(*types.VirtualPCIPassthrough); ok {
+			if pciDevice.Backing != nil {
+				// VirtualPCIPassthroughVmiopBackingInfo indicates vGPU
+				if _, isVGPU := pciDevice.Backing.(*types.VirtualPCIPassthroughVmiopBackingInfo); isVGPU {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
@@ -1699,6 +1727,9 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		return
 	}
 
+	// Detect GPU usage
+	useGPU := DetectGPUUsage(&vmProps)
+
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
 		Datastores:        datastores,
@@ -1714,6 +1745,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		RDMDisks:          rdmForVM,
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
+		UseGPU:            useGPU,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
