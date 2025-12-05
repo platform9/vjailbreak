@@ -75,6 +75,11 @@ spec:
                     description: CinderBackendPool is the pool name within the backend
                       (optional)
                     type: string
+                  cinderHost:
+                    description: |-
+                      CinderHost is the full Cinder host string for manage API
+                      Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+                    type: string
                   volumeType:
                     description: VolumeType is the Cinder volume type associated with
                       this mapping
