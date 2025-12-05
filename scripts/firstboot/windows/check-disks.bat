@@ -36,7 +36,7 @@ echo. >> "%~dp0check-disks.ps1"
 echo     # Get all partitions >> "%~dp0check-disks.ps1"
 echo     Write-Log "Scanning for partition drive letter assignments..." >> "%~dp0check-disks.ps1"
 echo     $allPartitions = Get-Partition >> "%~dp0check-disks.ps1"
-echo     $unassignedPartitions = $allPartitions ^| Where-Object { $_.DriveLetter -eq $null -and $_.Type -eq "Basic" -and $_.Size -gt 100MB } # Type has been added to avoid Dynamic Disk partitions getting scanned by this check >> "%~dp0check-disks.ps1"
+echo     $unassignedPartitions = $allPartitions ^| Where-Object { $_.DriveLetter -eq 0 -and $_.Type -notin @("Recovery", "Reserved", "System", "Dynamic") -and $_.Size -gt 100MB }
 echo. >> "%~dp0check-disks.ps1"
 echo     if ($unassignedPartitions.Count -gt 0) { >> "%~dp0check-disks.ps1"
 echo         Write-Log "ISSUE: Found $($unassignedPartitions.Count) partition(s) without drive letters" "WARNING" >> "%~dp0check-disks.ps1"
