@@ -290,57 +290,73 @@ func convertDatastorePathToFilesystemPath(datastorePath string) string {
 
 // StartVmkfstoolsRDMClone starts a vmkfstools clone operation from source VMDK to target raw device (RDM)
 // This uses VAAI XCOPY to clone directly to a raw device without creating a datastore
-// Command format: vmkfstools -i <source> -d rdm:<target_device> <dummy_vmdk_path>
+// Command format: vmkfstools -i <source> -d rdm:<target_device> <rdm_descriptor_vmdk>
 func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*VmkfstoolsTask, error) {
-	klog.Infof("Starting vmkfstools RDM clone: source=%s, target=%s", sourceVMDK, targetDevicePath)
+	klog.Infof("=== Starting vmkfstools RDM clone ===")
+	klog.Infof("Input source VMDK: %s", sourceVMDK)
+	klog.Infof("Input target device path: %s", targetDevicePath)
 
 	// Convert vSphere datastore path to ESXi filesystem path if needed
 	// e.g., "[datastore-name] vm-folder/vm.vmdk" -> "/vmfs/volumes/datastore-name/vm-folder/vm.vmdk"
-	sourceVMDK = convertDatastorePathToFilesystemPath(sourceVMDK)
-	klog.Infof("Source VMDK path (converted): %s", sourceVMDK)
+	sourceVMDKConverted := convertDatastorePathToFilesystemPath(sourceVMDK)
+	klog.Infof("Source VMDK path (after conversion): %s", sourceVMDKConverted)
 
 	// First check if source exists
-	checkCmd := fmt.Sprintf("ls -l '%s' 2>&1", sourceVMDK)
+	klog.Infof("Checking if source VMDK exists...")
+	checkCmd := fmt.Sprintf("ls -l '%s' 2>&1", sourceVMDKConverted)
+	klog.Infof("Executing: %s", checkCmd)
 	checkOutput, _ := c.ExecuteCommand(checkCmd)
+	klog.Infof("Source check output: %s", checkOutput)
 	if strings.Contains(checkOutput, "No such file") {
-		return nil, fmt.Errorf("source VMDK does not exist: %s (output: %s)", sourceVMDK, checkOutput)
+		return nil, fmt.Errorf("source VMDK does not exist: %s (output: %s)", sourceVMDKConverted, checkOutput)
 	}
+	klog.Infof("Source VMDK exists")
 
 	// Verify target device exists
+	klog.Infof("Checking if target device exists...")
 	checkDevCmd := fmt.Sprintf("ls -l %s 2>&1", targetDevicePath)
+	klog.Infof("Executing: %s", checkDevCmd)
 	checkDevOutput, _ := c.ExecuteCommand(checkDevCmd)
+	klog.Infof("Target device check output: %s", checkDevOutput)
 	if !strings.Contains(checkDevOutput, targetDevicePath) {
 		return nil, fmt.Errorf("target device does not exist: %s", targetDevicePath)
 	}
+	klog.Infof("Target device exists")
 
-	// Create a temporary directory for the RDM descriptor file
-	tmpDir := fmt.Sprintf("/tmp/vaai-rdm-%d", time.Now().Unix())
-	mkdirCmd := fmt.Sprintf("mkdir -p %s", tmpDir)
-	_, err := c.ExecuteCommand(mkdirCmd)
-	if err != nil {
-		klog.Warningf("Failed to create temp directory: %v", err)
-	} else {
-		klog.Infof("Created temp directory: %s", tmpDir)
-	}
+	// Derive RDM descriptor path on the same datastore as source VMDK
+	// e.g., /vmfs/volumes/pure-ds/pure-clone1/pure-clone1.vmdk -> /vmfs/volumes/pure-ds/pure-clone1/pure-clone1-rdm.vmdk
+	sourceDir := sourceVMDKConverted[:strings.LastIndex(sourceVMDKConverted, "/")]
+	sourceBaseName := sourceVMDKConverted[strings.LastIndex(sourceVMDKConverted, "/")+1:]
+	sourceNameWithoutExt := strings.TrimSuffix(sourceBaseName, ".vmdk")
+	rdmDescriptor := fmt.Sprintf("%s/%s-rdm.vmdk", sourceDir, sourceNameWithoutExt)
+	klog.Infof("Source directory: %s", sourceDir)
+	klog.Infof("Source base name: %s", sourceBaseName)
+	klog.Infof("RDM descriptor path (on datastore): %s", rdmDescriptor)
 
 	// Create a log file for vmkfstools output
 	logFile := fmt.Sprintf("/tmp/vmkfstools_rdm_clone_%d.log", time.Now().Unix())
+	klog.Infof("Log file: %s", logFile)
 
-	// RDM descriptor file path (vmkfstools will create this)
-	rdmDescriptor := fmt.Sprintf("%s/rdm-disk.vmdk", tmpDir)
-
-	// Run vmkfstools in background with RDM format
+	// Build the vmkfstools command
 	// vmkfstools -i <source> -d rdm:<device> <rdm_descriptor>
-	command := fmt.Sprintf("vmkfstools -i %s -d rdm:%s %s >%s 2>&1 & echo $!",
-		sourceVMDK, targetDevicePath, rdmDescriptor, logFile)
+	vmkfstoolsCmd := fmt.Sprintf("vmkfstools -i %s -d rdm:%s %s", sourceVMDKConverted, targetDevicePath, rdmDescriptor)
+	klog.Infof("=== vmkfstools command ===")
+	klog.Infof("%s", vmkfstoolsCmd)
+	klog.Infof("==========================")
+
+	// Run vmkfstools in background
+	command := fmt.Sprintf("%s >%s 2>&1 & echo $!", vmkfstoolsCmd, logFile)
+	klog.Infof("Executing background command: %s", command)
 
 	output, err := c.ExecuteCommand(command)
 	if err != nil {
+		klog.Errorf("Failed to start RDM clone: %v", err)
 		return nil, fmt.Errorf("failed to start RDM clone: %w", err)
 	}
 
 	pid := strings.TrimSpace(output)
-	klog.Infof("Started vmkfstools RDM clone with PID: %s, log: %s", pid, logFile)
+	klog.Infof("vmkfstools started with PID: %s", pid)
+	klog.Infof("Log file location: %s", logFile)
 
 	// Return task info with PID so we can check status later
 	task := &VmkfstoolsTask{
@@ -354,6 +370,7 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 		klog.Infof("Parsed PID: %d", task.Pid)
 	}
 
+	klog.Infof("=== vmkfstools RDM clone started successfully ===")
 	return task, nil
 }
 
