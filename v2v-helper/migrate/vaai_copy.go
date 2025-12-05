@@ -109,6 +109,11 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.VMName))
 
+	// Wait for ESXi to release file locks on VMDK files after VM power off
+	// This is necessary to avoid "Failed to lock the file" errors during vmkfstools clone
+	migobj.logMessage("Waiting 5 seconds for ESXi to release disk file locks...")
+	time.Sleep(5 * time.Second)
+
 	volumes := []storage.Volume{}
 
 	// Process each disk
@@ -235,6 +240,11 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 
 	targetDevicePath := fmt.Sprintf("/vmfs/devices/disks/%s", targetVolume.NAA)
 	migobj.logMessage(fmt.Sprintf("Target device is visible: %s", targetDevicePath))
+
+	// Wait for device to be fully ready after rescan
+	// ESXi needs time to fully initialize the device after it appears
+	migobj.logMessage("Waiting 3 seconds for device to be fully initialized...")
+	time.Sleep(3 * time.Second)
 
 	// Step 9: Perform VAAI XCOPY clone directly to raw device (RDM format)
 	// This clones directly to the raw device without needing a datastore
