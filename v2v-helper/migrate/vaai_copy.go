@@ -355,14 +355,14 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 	}
 
 	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
-	cinderBackendName := arrayCreds.Spec.OpenStackMapping.CinderBackendName
-	cinderBackendPool := arrayCreds.Spec.OpenStackMapping.CinderBackendPool
 
-	// Construct the Cinder host string
-	// Format: backend@pool or just backend if no pool
-	cinderHost := cinderBackendName
-	if cinderBackendPool != "" {
-		cinderHost = fmt.Sprintf("%s@%s", cinderBackendName, cinderBackendPool)
+	// Use the full Cinder host string from ArrayCreds for the manage API
+	// This includes the hostname@backend format required by Cinder
+	// Example: "pcd-ce@pure-iscsi-1" or "pcd-ce@pure-iscsi-1#pool"
+	cinderHost := arrayCreds.Spec.OpenStackMapping.CinderHost
+	if cinderHost == "" {
+		// Fallback to backend name if CinderHost is not set (backwards compatibility)
+		cinderHost = arrayCreds.Spec.OpenStackMapping.CinderBackendName
 	}
 
 	// Create the manage volume request

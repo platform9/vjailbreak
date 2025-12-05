@@ -1899,11 +1899,16 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		driver := pool.Capabilities.DriverVersion
 		volumeType, backendName := parsePoolName(pool.Name)
 
+		// Extract hostname@backend from pool.Name for Cinder manage API
+		// pool.Name format: "hostname@backend#pool" or "hostname@backend"
+		cinderHost := extractCinderHost(pool.Name)
+
 		backendMap[backendName] = map[string]string{
 			"vendor":     vendor,
 			"driver":     driver,
 			"pool":       pool.Name,
 			"volumeType": volumeType,
+			"cinderHost": cinderHost,
 		}
 	}
 
@@ -1929,6 +1934,15 @@ func parsePoolName(fullPoolName string) (volumeType string, backendName string) 
 	}
 
 	return volumeType, segments[0]
+}
+
+// extractCinderHost extracts the hostname@backend part from full Cinder pool name for the manage API.
+// Example: "pcd-ce@pure-iscsi-1#vt-pure-iscsi" → "pcd-ce@pure-iscsi-1"
+// Example: "pcd-ce@pure-iscsi-1" → "pcd-ce@pure-iscsi-1"
+func extractCinderHost(fullPoolName string) string {
+	// Remove the pool part (#pool) if it exists
+	parts := strings.Split(fullPoolName, "#")
+	return parts[0]
 }
 
 func GetArrayVendor(vendor string) string {
