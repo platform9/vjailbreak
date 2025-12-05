@@ -26,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -270,6 +271,27 @@ func (r *RollingMigrationPlanReconciler) reconcileDelete(ctx context.Context, sc
 		if delErr := r.Delete(ctx, validationConfigMap); delErr != nil {
 			log.Error(delErr, "Failed to delete validation configmap", "rollingmigrationplan", scope.RollingMigrationPlan.Name)
 			return ctrl.Result{}, errors.Wrap(delErr, "failed to delete validation configmap")
+		}
+	}
+
+	// Delete cloud-init secret (merged userdata secret)
+	if scope.RollingMigrationPlan.Spec.CloudInitConfigRef != nil {
+		cloudInitSecret := &corev1.Secret{}
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      scope.RollingMigrationPlan.Spec.CloudInitConfigRef.Name,
+			Namespace: scope.RollingMigrationPlan.Spec.CloudInitConfigRef.Namespace,
+		}, cloudInitSecret)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				log.Error(err, "Failed to get cloud-init secret", "secretName", scope.RollingMigrationPlan.Spec.CloudInitConfigRef.Name)
+				return ctrl.Result{}, errors.Wrap(err, "failed to get cloud-init secret")
+			}
+		} else {
+			if delErr := r.Delete(ctx, cloudInitSecret); delErr != nil {
+				log.Error(delErr, "Failed to delete cloud-init secret", "secretName", scope.RollingMigrationPlan.Spec.CloudInitConfigRef.Name)
+				return ctrl.Result{}, errors.Wrap(delErr, "failed to delete cloud-init secret")
+			}
+			log.Info("Deleted cloud-init secret", "secretName", scope.RollingMigrationPlan.Spec.CloudInitConfigRef.Name)
 		}
 	}
 
