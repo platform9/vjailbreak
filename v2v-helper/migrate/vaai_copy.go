@@ -191,28 +191,14 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		}
 	}()
 
-	// Step 6: Rescan ESXi storage to detect the target volume
-	migobj.logMessage("Rescanning ESXi storage to detect target volume")
-	if err := esxiClient.RescanStorage(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Storage rescan failed: %v", err))
+	// Step 6: Rescan ESXi storage and wait for target volume to appear
+	migobj.logMessage(fmt.Sprintf("Waiting for target volume %s to appear on ESXi", targetVolume.NAA))
+	deviceTimeout := 2 * time.Minute
+	if err := esxiClient.RescanStorageForDevice(targetVolume.NAA, deviceTimeout); err != nil {
+		return storage.Volume{}, errors.Wrapf(err, "target device %s not visible on ESXi", targetVolume.NAA)
 	}
 
-	// TODO: Add retry logic
-	time.Sleep(40 * time.Second)
-
-	// Step 7: Verify target device is visible on ESXi
-	targetDevicePath := fmt.Sprintf("/vmfs/devices/disks/naa.%s", targetVolume.NAA)
-	migobj.logMessage(fmt.Sprintf("Verifying target device is visible: %s", targetDevicePath))
-
-	checkCmd := fmt.Sprintf("ls %s 2>&1", targetDevicePath)
-	checkOutput, checkErr := esxiClient.ExecuteCommand(checkCmd)
-	if checkErr != nil || !strings.Contains(checkOutput, targetDevicePath) {
-		migobj.logMessage(fmt.Sprintf("Warning: Device not immediately visible: %v, output: %s", checkErr, checkOutput))
-		// List available devices for debugging
-		allDisks, _ := esxiClient.ExecuteCommand("ls /vmfs/devices/disks/ | grep naa | head -20")
-		migobj.logMessage(fmt.Sprintf("Available NAA devices (first 20): %s", allDisks))
-		return storage.Volume{}, fmt.Errorf("target device %s not visible on ESXi after rescan", targetDevicePath)
-	}
+	targetDevicePath := fmt.Sprintf("/vmfs/devices/disks/%s", targetVolume.NAA)
 	migobj.logMessage(fmt.Sprintf("Target device is visible: %s", targetDevicePath))
 
 	// Step 8: Perform VAAI XCOPY clone directly to raw device (RDM format)
