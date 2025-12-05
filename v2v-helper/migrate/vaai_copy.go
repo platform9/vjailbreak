@@ -170,13 +170,27 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", sanitizedName)
 	}
 
-	// Step 6: Map target volume to ESXi host BEFORE Cinder manage
-	// (Cinder manage will rename the volume, so we need to map it first while it still has the original name)
-	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", targetVolume.Name))
+	// Step 6: Cinder manage the volume FIRST
+	// This renames the volume on Pure to volume-<cinder-id>-cinder
+	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", targetVolume.Name))
+	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
+	if err != nil {
+		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", targetVolume.Name)
+	}
+
+	// After Cinder manage, the volume name on Pure changes to volume-<cinder-id>-cinder
+	cinderVolumeName := fmt.Sprintf("volume-%s-cinder", cinderVolumeId)
+	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to: %s", cinderVolumeName))
+
+	// Step 7: Map target volume to ESXi host using the NEW Cinder volume name
+	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
 	targetVol := storage.Volume{
-		Name: targetVolume.Name,
+		Name: cinderVolumeName, // Use the Cinder-renamed volume name
 		NAA:  targetVolume.NAA,
 		Size: targetVolume.Size,
+		OpenstackVol: storage.OpenstackVolume{
+			ID: cinderVolumeId,
+		},
 	}
 	_, err = migobj.StorageProvider.MapVolumeToGroup(initiatorGroup, targetVol, mappingContext)
 	if err != nil {
@@ -184,17 +198,15 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		migobj.logMessage(fmt.Sprintf("Warning: Failed to map target volume (may already be mapped): %v", err))
 	}
 
-	// Cleanup function to unmap after copy (will use the Cinder-renamed volume name)
+	// Cleanup function to unmap after copy
 	defer func() {
 		migobj.logMessage("Cleaning up volume mappings")
-		// Note: After Cinder manage, the volume name changes to volume-<cinder-id>-cinder
-		// But unmap should still work with the original volume object
 		if err := migobj.StorageProvider.UnmapVolumeFromGroup(initiatorGroup, targetVol, mappingContext); err != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
 		}
 	}()
 
-	// Step 7: Rescan ESXi storage and wait for target volume to appear
+	// Step 8: Rescan ESXi storage and wait for target volume to appear
 	migobj.logMessage(fmt.Sprintf("Waiting for target volume %s to appear on ESXi", targetVolume.NAA))
 	deviceTimeout := 2 * time.Minute
 	if err := esxiClient.RescanStorageForDevice(targetVolume.NAA, deviceTimeout); err != nil {
@@ -204,9 +216,8 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	targetDevicePath := fmt.Sprintf("/vmfs/devices/disks/%s", targetVolume.NAA)
 	migobj.logMessage(fmt.Sprintf("Target device is visible: %s", targetDevicePath))
 
-	// Step 8: Perform VAAI XCOPY clone directly to raw device (RDM format)
+	// Step 9: Perform VAAI XCOPY clone directly to raw device (RDM format)
 	// This clones directly to the raw device without needing a datastore
-	// Command format: vmkfstools -i <source> -d rdm:<target_device> <dummy_vmdk_path>
 	migobj.logMessage(fmt.Sprintf("Starting VAAI XCOPY clone: %s -> %s (RDM)", vmDisk.Path, targetDevicePath))
 
 	cloneStart := time.Now()
@@ -215,7 +226,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to start VAAI RDM clone for disk %s", vmDisk.Name)
 	}
 
-	// Step 9: Monitor clone progress
+	// Step 10: Monitor clone progress
 	tracker := esxissh.NewCloneTracker(esxiClient, task, vmDisk.Path, targetDevicePath)
 	tracker.SetPollInterval(2 * time.Second)
 
@@ -230,15 +241,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	migobj.logMessage(fmt.Sprintf("VAAI XCOPY completed in %s (total: %s) for disk %s",
 		cloneDuration.Round(time.Second), totalDuration.Round(time.Second), vmDisk.Name))
 
-	// Step 10: Cinder manage the volume AFTER XCOPY is complete
-	// This renames the volume on Pure to volume-<cinder-id>-cinder
-	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", targetVolume.Name))
-	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", targetVolume.Name)
-	}
-
-	// Update the volume with Cinder ID
+	// Update the target volume with Cinder info
 	targetVolume.OpenstackVol = storage.OpenstackVolume{
 		ID: cinderVolumeId,
 	}
