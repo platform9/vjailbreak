@@ -69,6 +69,9 @@ type OpenstackMapping struct {
 	CinderBackendName string `json:"cinderBackendName"`
 	// CinderBackendPool is the pool name within the backend (optional)
 	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+	// CinderHost is the full Cinder host string for manage API
+	// Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+	CinderHost string `json:"cinderHost,omitempty"`
 }
 
 // ArrayCredsStatus defines the observed state of ArrayCreds
