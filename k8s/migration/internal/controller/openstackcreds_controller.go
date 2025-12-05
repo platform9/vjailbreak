@@ -315,6 +315,7 @@ func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *
 			OpenStackMapping: vjailbreakv1alpha1.OpenstackMapping{
 				VolumeType:        backendInfo["volumeType"],
 				CinderBackendName: backendName,
+				CinderHost:        backendInfo["cinderHost"],
 			},
 			SecretRef: corev1.ObjectReference{
 				Name:      "", // Empty - awaiting user input
