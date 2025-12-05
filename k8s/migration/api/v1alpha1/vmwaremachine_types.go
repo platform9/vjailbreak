@@ -54,6 +54,8 @@ type VMInfo struct {
 	NetworkInterfaces []NIC `json:"networkInterfaces,omitempty"`
 	// GuestNetworks is the list of network interfaces for the virtual machine as reported by the guest
 	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
+	// UseGPU is a flag to indicate if the virtual machine uses GPU
+	UseGPU bool `json:"useGPU,omitempty"`
 }
 
 // NIC represents a Virtual ethernet card in the virtual machine.
