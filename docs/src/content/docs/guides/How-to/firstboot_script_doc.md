@@ -17,8 +17,8 @@ Following are some use cases for Firstboot Scripts:
 The script is deployed through the migration form interface:
 1. Navigate to the **Migration Options** section in your migration form
 2. Check the **Post Migration Script** option
-3. Paste the complete contents of firstboot scripts into the script field, if you have multiple scripts, append it in the end of the existing script.
-4. Start the migration once all the options are set.
+3. Paste the complete contents of firstboot scripts into the script field, if you have multiple scripts, append it in the end of the existing script
+4. Start the migration once all the options are set
 
 ![img1](../../../../../public/images/firstboot-form.png)
 > **Note:** The script contents should be added directly into the migration form
@@ -30,10 +30,7 @@ The script is deployed through the migration form interface:
 The script executes **automatically after the migration completes and VM boots for the first time in PCD/OpenStack.**
 
 
-### Overview
-
-#### What is Guestfs?
-[Guestfs](https://libguestfs.org/) (libguestfs) is a set of tools for accessing and modifying virtual machine disk images. During migration, guestfs runs as part of [virt-v2v in-place](https://libguestfs.org/virt-v2v-in-place.1.html) conversion process
+The firstboot Script feature uses [Guestfs](https://libguestfs.org/) (libguestfs) which is a set of tools for accessing and modifying virtual machine disk images. During migration, guestfs runs as part of [virt-v2v in-place](https://libguestfs.org/virt-v2v-in-place.1.html) conversion process which runs inside the v2v-helper pod.
 
 ### Order of Execution
 
@@ -42,7 +39,7 @@ The script executes **automatically after the migration completes and VM boots f
 - Script is added in the **Post-Migration Script** field
 
 #### 2. Controller Creates ConfigMap
-- The migration controller intercepts the script content.
+- The migration controller intercepts the script content
 - Creates a Kubernetes **ConfigMap** with the script data with the name as `firstboot-config-<vmwaremachine-resource-name>`
 - ConfigMap details:
   - **Key**: `user_firstboot.sh`
@@ -53,10 +50,10 @@ The script executes **automatically after the migration completes and VM boots f
 - Mount path allows virt-v2v to access the script
 
 #### 4. Guestfs Access and Execution
-- Virt-v2v reads the script from the mounted ConfigMap
+- "virt-v2v" reads the script from the mounted ConfigMap
 - Script content is retrieved from the `user_firstboot.sh` key
 - Guestfs adds the scripts by applying changes to the VM disk image
-- when VM boots for the first time in PCD/OpenStack, the script executes automatically
+- When VM boots for the first time in PCD/OpenStack, the script executes automatically
 
 ---
 
@@ -111,4 +108,4 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 ![img6](../../../../../public/images/firstboot-linux-firstboot-path.png)
 
 ## Link to Readily Available Firstboot Scripts
-[firstbootscripts](https://github.com/platform9/vjailbreak/tree/main/scripts/firstboot/)
+1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers   from Windows VMs
