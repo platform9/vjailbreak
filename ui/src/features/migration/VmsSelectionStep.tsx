@@ -163,6 +163,7 @@ interface VmsSelectionStepProps {
   openstackCredentials?: OpenstackCreds
   vmwareCluster?: string
   vmwareClusterDisplayName?: string
+  useGPU?: boolean
 }
 
 function VmsSelectionStep({
@@ -177,7 +178,8 @@ function VmsSelectionStep({
   openstackCredName,
   openstackCredentials,
   vmwareCluster,
-  vmwareClusterDisplayName
+  vmwareClusterDisplayName,
+  useGPU = false
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
@@ -1492,6 +1494,22 @@ function VmsSelectionStep({
             {rdmValidation.powerStateErrorMessage}
           </Alert>
         )}
+
+        {/* GPU Warning Message */}
+        {(() => {
+          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+          const hasGPUVMs = selectedVmsData.some((vm) => vm.useGPU)
+          const hasAssignedFlavors = selectedVmsData.some((vm) => vm.targetFlavorId)
+          
+          if (hasGPUVMs && !useGPU && !hasAssignedFlavors) {
+            return (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                You have selected VMs with GPU enabled. Please assign appropriate flavour or select "Use GPU enabled flavours" checkbox in Migration Options.
+              </Alert>
+            )
+          }
+          return null
+        })()}
       </FieldsContainer>
 
       {/* Flavor Assignment Dialog */}
