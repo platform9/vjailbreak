@@ -89,6 +89,26 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 	migobj.logMessage("Connected to ESXi host via SSH")
 
+	// Verify VM is powered off before attempting VAAI copy
+	// Get VM ID from vminfo
+	vmID := vminfo.VMID
+	if vmID == "" {
+		return []storage.Volume{}, fmt.Errorf("VM ID is empty, cannot check power state")
+	}
+
+	migobj.logMessage(fmt.Sprintf("Checking power state of VM %s (ID: %s)", vminfo.VMName, vmID))
+	powerStateCmd := fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmID)
+	powerState, err := esxiClient.ExecuteCommand(powerStateCmd)
+	if err != nil {
+		return []storage.Volume{}, errors.Wrap(err, "failed to check VM power state")
+	}
+
+	if strings.Contains(powerState, "Powered on") {
+		return []storage.Volume{}, fmt.Errorf("VM %s is still powered on. VM must be powered off before VAAI copy can proceed. Power state: %s", vminfo.VMName, powerState)
+	}
+
+	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.VMName))
+
 	volumes := []storage.Volume{}
 
 	// Process each disk
