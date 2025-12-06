@@ -1467,20 +1467,18 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
-	if vmwcreds.Spec.SecretRef.Name == "" {
-		return nil, nil, errors.New("secret name is empty")
-	}
-
-	vmwarecredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name, constants.NamespaceMigrationSystem)
+	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get VMware credentials from secret: %w", err)
+		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
 	}
-
-	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwarecredsinfo.Host, vmwarecredsinfo.Username, vmwarecredsinfo.Password, datacenter, vmwarecredsinfo.Insecure)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to validate VMware credentials: %w", err)
+	if c != nil {
+		defer c.CloseIdleConnections()
+		defer func() {
+			if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, c); err != nil {
+				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
+			}
+		}()
 	}
-
 	finder := find.NewFinder(c, false)
 	if datacenter != "" {
 		dc, err := finder.Datacenter(ctx, datacenter)

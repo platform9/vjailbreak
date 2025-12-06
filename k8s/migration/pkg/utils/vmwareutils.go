@@ -11,11 +11,13 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // GetVMwareClustersAndHosts retrieves a list of all available VMware clusters and their hosts
@@ -23,14 +25,14 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Getting VMware clusters and hosts", "vmwarecreds", scope.VMwareCreds.Name)
 
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, scope.VMwareCreds.Spec.Datacenter)
+	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get finder for VCenter credentials")
 		return nil, errors.Wrap(err, "failed to get VMware finder")
 	}
 
 	// If no datacenter is specified, search across all datacenters
-	if scope.VMwareCreds.Spec.Datacenter == "" {
+	if scope.VMwareCreds.Spec.DataCenter == "" {
 		return getClustersFromAllDatacenters(ctx, finder)
 	}
 
