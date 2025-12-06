@@ -4,7 +4,6 @@ import { getVMwareClusters } from 'src/api/vmware-clusters/vmwareClusters'
 import { getPCDClusters } from 'src/api/pcd-clusters'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
-import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { VMwareCluster } from 'src/api/vmware-clusters/model'
 import { PCDCluster } from 'src/api/pcd-clusters/model'
 
@@ -60,25 +59,32 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         return
       }
 
-      const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
-        const credName = cred.metadata.name
-        const datacenter = cred.spec.datacenter || credName
-
-        // Use hostName directly from credential spec instead of fetching from secret
-        const vcenterName = cred.spec.hostName || credName
-
-        const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, credName)
-
-        const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
-          id: `${credName}:${cluster.metadata.name}`,
-          name: cluster.metadata.name,
-          displayName: cluster.spec.name
-        }))
+      const transformedData: SourceDataItem[] = vmwareCreds.map((cred) => {
+        const credName = cred.metadata?.name || 'Unknown'
+        const vcenterName = cred.spec?.hostName || credName
+        const datacenter = cred.spec.datacenter || ''
 
         return {
           credName,
           datacenter,
           vcenterName,
+          clusters: []
+        }
+      })
+
+      const sourceDataPromises = transformedData.map(async (item) => {
+        const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, item.credName)
+
+        const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
+          id: `${item.credName}:${cluster.metadata.name}`,
+          name: cluster.metadata.name,
+          displayName: cluster.spec.name
+        }))
+
+        return {
+          credName: item.credName,
+          datacenter: item.datacenter,
+          vcenterName: item.vcenterName,
           clusters
         }
       })

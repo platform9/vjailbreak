@@ -92,9 +92,9 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   const [formValues, setFormValues] = useState({
     credentialName: '',
     vcenterHost: '',
-    datacenter: '',
     username: '',
     password: '',
+    datacenter: '',
     insecure: false
   })
 
@@ -234,7 +234,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     if (
       !formValues.credentialName ||
       !formValues.vcenterHost ||
-      !formValues.datacenter ||
       !formValues.username ||
       !formValues.password
     ) {

@@ -282,7 +282,7 @@ export default function MigrationFormDrawer({
           const patchBody = {
             spec: {
               source: {
-                datacenter: params.vmwareCreds?.datacenter,
+                ...(params.vmwareCreds?.datacenter && { datacenter: params.vmwareCreds.datacenter }),
                 vmwareRef: vmwareCredentials?.metadata.name
               },
               destination: {
@@ -302,7 +302,7 @@ export default function MigrationFormDrawer({
 
         // Otherwise create a new template once
         const body = createMigrationTemplateJson({
-          datacenter: params.vmwareCreds?.datacenter,
+          ...(params.vmwareCreds?.datacenter && { datacenter: params.vmwareCreds.datacenter }),
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,

@@ -134,7 +134,9 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
+	// Use the datacenter from spec, even if empty
+	datacenter := scope.VMwareCreds.Spec.DataCenter
+	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, datacenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}

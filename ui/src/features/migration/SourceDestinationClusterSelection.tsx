@@ -189,8 +189,9 @@ export default function SourceDestinationClusterSelection({
                 const sourceItem = sourceData.find((item) => item.credName === credName)
                 const vcenterName = sourceItem?.vcenterName || credName
                 const cluster = sourceItem?.clusters.find((c) => c.id === selected)
-                return `${vcenterName} - ${sourceItem?.datacenter || ''} - ${
-                  cluster?.displayName || ''
+                const datacenterDisplay = sourceItem?.datacenter || '(all datacenters)'
+                return `${vcenterName} - ${datacenterDisplay} - ${
+                  cluster?.displayName || cluster?.name || 'Unknown Cluster'
                 }`
               }}
               endAdornment={

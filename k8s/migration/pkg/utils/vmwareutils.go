@@ -20,21 +20,28 @@ import (
 
 // GetVMwareClustersAndHosts retrieves a list of all available VMware clusters and their hosts
 func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
-	// Pre-allocate clusters slice with initial capacity
-	clusters := make([]VMwareClusterInfo, 0, 4)
-	vmwarecreds, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, scope.VMwareCreds.Spec.SecretRef.Name)
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Getting VMware clusters and hosts", "vmwarecreds", scope.VMwareCreds.Name)
+
+	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, scope.VMwareCreds.Spec.Datacenter)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get vCenter credentials")
+		ctxlog.Error(err, "Failed to get finder for VCenter credentials")
+		return nil, errors.Wrap(err, "failed to get VMware finder")
 	}
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, vmwarecreds.Datacenter)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
+
+	// If no datacenter is specified, search across all datacenters
+	if scope.VMwareCreds.Spec.Datacenter == "" {
+		return getClustersFromAllDatacenters(ctx, finder)
 	}
+
 	clusterList, err := finder.ClusterComputeResourceList(ctx, "*")
 	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return nil, errors.Wrap(err, "failed to get cluster list")
 	}
 
+	// Pre-allocate clusters slice with initial capacity
+	clusters := make([]VMwareClusterInfo, 0, len(clusterList))
+	
 	for _, cluster := range clusterList {
 		var clusterProperties mo.ClusterComputeResource
 		err := cluster.Properties(ctx, cluster.Reference(), []string{"name"}, &clusterProperties)
@@ -60,6 +67,58 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 		})
 	}
 	return clusters, nil
+}
+
+// getClustersFromAllDatacenters fetches clusters from all datacenters when no specific datacenter is provided
+func getClustersFromAllDatacenters(ctx context.Context, finder *find.Finder) ([]VMwareClusterInfo, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Fetching clusters from all datacenters")
+
+	var allClusters []VMwareClusterInfo
+
+	// Get all datacenters
+	datacenters, err := finder.DatacenterList(ctx, "*")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list datacenters")
+	}
+
+	// Iterate through each datacenter and get clusters
+	for _, dc := range datacenters {
+		finder.SetDatacenter(dc)
+		
+		clusterList, err := finder.ClusterComputeResourceList(ctx, "*")
+		if err != nil && !strings.Contains(err.Error(), "not found") {
+			ctxlog.Error(err, "Failed to get clusters from datacenter", "datacenter", dc.Name())
+			continue
+		}
+
+		for _, cluster := range clusterList {
+			var clusterProperties mo.ClusterComputeResource
+			err := cluster.Properties(ctx, cluster.Reference(), []string{"name"}, &clusterProperties)
+			if err != nil {
+				ctxlog.Error(err, "Failed to get cluster properties", "cluster", cluster.Name())
+				continue
+			}
+
+			hosts, err := cluster.Hosts(ctx)
+			if err != nil {
+				ctxlog.Error(err, "Failed to get hosts for cluster", "cluster", cluster.Name())
+				continue
+			}
+
+			var vmHosts []VMwareHostInfo
+			for _, host := range hosts {
+				vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name()})
+			}
+
+			allClusters = append(allClusters, VMwareClusterInfo{
+				Name:  clusterProperties.Name,
+				Hosts: vmHosts,
+			})
+		}
+	}
+
+	return allClusters, nil
 }
 
 // createVMwareHost creates a VMware host resource in Kubernetes

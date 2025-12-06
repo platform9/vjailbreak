@@ -314,6 +314,11 @@ func createVCenterClientAndDC(
 	}
 	ctxlog.Info("vCenter client created successfully")
 
+	if datacenterName == "" {
+		ctxlog.Info("No datacenter specified, returning client without datacenter scope")
+		return vcClient, nil, nil
+	}
+
 	ctxlog.Info("Using datacenter", "datacenter", datacenterName)
 	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
 	if err != nil {

@@ -45,12 +45,14 @@ export const deleteVmwareCredentials = async (
 export const createVMwareCredsWithSecret = async (
   name: string,
   secretName: string,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE,
-  datacenter: string
+  host: string,
+  datacenter?: string,
+  insecure: boolean = false,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds`
 
-  const credBody = {
+  const credBody: any = {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
     kind: 'VMwareCreds',
     metadata: {
@@ -59,10 +61,16 @@ export const createVMwareCredsWithSecret = async (
     },
     spec: {
       secretRef: {
-        name: secretName
+        name: secretName,
+        namespace
       },
-      datacenter
+      vcenterHost: host
     }
+  }
+
+  // Only include datacenter if it's provided and not empty
+  if (datacenter && datacenter.trim() !== '') {
+    credBody.spec.datacenter = datacenter
   }
 
   const response = await axios.post<VMwareCreds>({

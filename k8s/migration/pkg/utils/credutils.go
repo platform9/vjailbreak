@@ -97,9 +97,6 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	if password == "" {
 		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
 	}
-	if datacenter == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
-	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
 
@@ -530,9 +527,11 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 	// Check if the datacenter exists
 	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	if datacenter != "" {
+		_, err = finder.Datacenter(context.Background(), datacenter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find datacenter: %w", err)
+		}
 	}
 	// All validations passed - cache the fully validated client
 	vmwareClientMap.Store(mapKey, c)
@@ -1468,24 +1467,28 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 }
 
 func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
-	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
+	if vmwcreds.Spec.SecretRef.Name == "" {
+		return nil, nil, errors.New("secret name is empty")
+	}
+
+	vmwarecredsinfo, err := GetVMwareCredentialsFromSecret(ctx, k3sclient, vmwcreds.Spec.SecretRef.Name, constants.NamespaceMigrationSystem)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
+		return nil, nil, fmt.Errorf("failed to get VMware credentials from secret: %w", err)
 	}
-	if c != nil {
-		defer c.CloseIdleConnections()
-		defer func() {
-			if err := LogoutVMwareClient(ctx, k3sclient, vmwcreds, c); err != nil {
-				log.FromContext(ctx).Error(err, "Failed to logout VMware client")
-			}
-		}()
+
+	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwarecredsinfo.Host, vmwarecredsinfo.Username, vmwarecredsinfo.Password, datacenter, vmwarecredsinfo.Insecure)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to validate VMware credentials: %w", err)
 	}
+
 	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find datacenter: %w", err)
+	if datacenter != "" {
+		dc, err := finder.Datacenter(ctx, datacenter)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to find datacenter: %w", err)
+		}
+		finder.SetDatacenter(dc)
 	}
-	finder.SetDatacenter(dc)
 	return c, finder, nil
 }
 
