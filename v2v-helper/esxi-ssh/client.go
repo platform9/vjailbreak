@@ -394,11 +394,12 @@ func (c *Client) GetCloneLog(pid int) (string, error) {
 
 // CheckCloneStatus checks if a clone operation is still running
 func (c *Client) CheckCloneStatus(pid int) (bool, error) {
-	// Check if process is still running using ps
-	checkCmd := fmt.Sprintf("ps -c -p %d 2>/dev/null | grep %d", pid, pid)
+	// ESXi uses BusyBox ps which doesn't support -p flag
+	// Use kill -0 to check if process exists (doesn't actually send a signal)
+	checkCmd := fmt.Sprintf("kill -0 %d 2>/dev/null && echo 'running'", pid)
 	output, _ := c.ExecuteCommand(checkCmd)
 
-	isRunning := strings.Contains(output, fmt.Sprintf("%d", pid))
+	isRunning := strings.Contains(output, "running")
 
 	return isRunning, nil
 }
