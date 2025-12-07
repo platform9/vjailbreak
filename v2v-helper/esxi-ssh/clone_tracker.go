@@ -90,21 +90,49 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 				var pct float64
 				if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil {
 					status.PercentDone = pct
-					klog.V(2).Infof("Parsed progress: %.1f%%", pct)
+					klog.V(2).Infof("Copying progress: %.1f%%", pct)
 				}
 			}
 		}
 	}
 
-	// If not running, check log for success/failure
+	// If not running according to ps, we need to determine the actual state
+	// vmkfstools may not be visible via ps even while running
 	if !isRunning {
-		klog.Infof("Process %d is no longer running, checking log for result", ct.task.Pid)
+		klog.Infof("Process %d is not visible via ps, checking log for actual state", ct.task.Pid)
 		klog.Infof("Log content: %s", logContent)
 
-		// vmkfstools can take 30+ seconds to actually start executing after the shell returns the PID.
-		// During this time, the process may not be visible via ps and the log file will be empty.
-		// We must wait for the startup timeout before declaring failure.
 		elapsedTime := time.Since(ct.startTime)
+
+		// Check for errors in log FIRST - this is definitive
+		if strings.Contains(logContent, "Failed") || strings.Contains(logContent, "Error") || strings.Contains(logContent, "error") {
+			status.Error = fmt.Sprintf("vmkfstools failed: %s", logContent)
+			return status, nil
+		}
+
+		// Check for successful completion (100% done in log) - this is definitive
+		if strings.Contains(logContent, "100% done") {
+			klog.Infof("Clone completed successfully (100%% done in log)")
+			status.PercentDone = 100.0
+			return status, nil
+		}
+
+		// If log shows progress but not 100%, the clone is STILL RUNNING
+		// (vmkfstools may not be visible via ps but it's definitely working)
+		if strings.Contains(logContent, "% done") && status.PercentDone < 100 {
+			klog.Infof("Log shows %0.1f%% progress - clone is still running (process may not be visible via ps)", status.PercentDone)
+			status.IsRunning = true
+			return status, nil
+		}
+
+		// If log has "Cloning disk" but no progress yet, clone just started - still running
+		if strings.Contains(logContent, "Cloning disk") {
+			klog.Infof("Log shows 'Cloning disk' - clone has started and is running")
+			status.IsRunning = true
+			return status, nil
+		}
+
+		// If log is empty and we're within startup timeout, process may still be starting
 		if logContent == "" && elapsedTime < ct.startupTimeout {
 			klog.Infof("Process %d not found but only %v elapsed (startup timeout: %v), treating as still starting",
 				ct.task.Pid, elapsedTime.Round(time.Second), ct.startupTimeout)
@@ -112,25 +140,15 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 			return status, nil
 		}
 
-		// Check for errors in log
-		if strings.Contains(logContent, "Failed") || strings.Contains(logContent, "Error") || strings.Contains(logContent, "error") {
-			status.Error = fmt.Sprintf("vmkfstools failed: %s", logContent)
-			return status, nil
-		}
-
-		// Check for successful completion (100% done in log)
-		if strings.Contains(logContent, "100% done") {
-			klog.Infof("Clone completed successfully (100%% done in log)")
-			status.PercentDone = 100.0
-			return status, nil
-		}
-
-		// Also check if RDM descriptor was created (indicates success)
-		if ct.task.RDMDescriptorPath != "" {
+		// At this point: no error, no 100% done, no progress, no "Cloning disk", and either:
+		// - log is empty and startup timeout exceeded, OR
+		// - log has unexpected content
+		// Check if RDM descriptor exists as final fallback (only valid if log is empty/missing)
+		if ct.task.RDMDescriptorPath != "" && logContent == "" {
 			checkCmd := fmt.Sprintf("test -f %s && echo 'exists'", ct.task.RDMDescriptorPath)
 			output, _ := ct.client.ExecuteCommand(checkCmd)
 			if strings.Contains(output, "exists") {
-				klog.Infof("RDM descriptor exists at %s, clone successful", ct.task.RDMDescriptorPath)
+				klog.Infof("RDM descriptor exists at %s and log is empty - assuming clone successful", ct.task.RDMDescriptorPath)
 				status.PercentDone = 100.0
 				return status, nil
 			}
