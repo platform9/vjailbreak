@@ -43,7 +43,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 
 	// Pre-allocate clusters slice with initial capacity
 	clusters := make([]VMwareClusterInfo, 0, len(clusterList))
-	
+
 	for _, cluster := range clusterList {
 		var clusterProperties mo.ClusterComputeResource
 		err := cluster.Properties(ctx, cluster.Reference(), []string{"name"}, &clusterProperties)
@@ -64,8 +64,9 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 			vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name(), HardwareUUID: hostSummary.Summary.Hardware.Uuid})
 		}
 		clusters = append(clusters, VMwareClusterInfo{
-			Name:  clusterProperties.Name,
-			Hosts: vmHosts,
+			Name:       clusterProperties.Name,
+			Hosts:      vmHosts,
+			Datacenter: scope.VMwareCreds.Spec.DataCenter,
 		})
 	}
 	return clusters, nil
@@ -114,8 +115,9 @@ func getClustersFromAllDatacenters(ctx context.Context, finder *find.Finder) ([]
 			}
 
 			allClusters = append(allClusters, VMwareClusterInfo{
-				Name:  clusterProperties.Name,
-				Hosts: vmHosts,
+				Name:       clusterProperties.Name,
+				Hosts:      vmHosts,
+				Datacenter: dc.Name(),
 			})
 		}
 	}
@@ -177,13 +179,18 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 
+	labels := map[string]string{
+		constants.VMwareCredsLabel: scope.Name(),
+	}
+	if cluster.Datacenter != "" {
+		labels[constants.VMwareDatacenterLabel] = cluster.Datacenter
+	}
+
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterk8sName,
 			Namespace: scope.Namespace(),
-			Labels: map[string]string{
-				constants.VMwareCredsLabel: scope.Name(),
-			},
+			Labels:    labels,
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name: cluster.Name,
@@ -400,13 +407,33 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
+	// Try to infer a single datacenter for the dummy cluster from existing real clusters.
+	// If all existing clusters share the same non-empty datacenter, use it; otherwise leave empty.
+	var inferredDatacenter string
+	for _, c := range existingClusters {
+		if c.Datacenter == "" {
+			continue
+		}
+		if inferredDatacenter == "" {
+			inferredDatacenter = c.Datacenter
+		} else if inferredDatacenter != c.Datacenter {
+			inferredDatacenter = ""
+			break
+		}
+	}
+
+	labels := map[string]string{
+		constants.VMwareCredsLabel: scope.Name(),
+	}
+	if inferredDatacenter != "" {
+		labels[constants.VMwareDatacenterLabel] = inferredDatacenter
+	}
+
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      k8sClusterName,
 			Namespace: constants.NamespaceMigrationSystem,
-			Labels: map[string]string{
-				constants.VMwareCredsLabel: scope.Name(),
-			},
+			Labels:    labels,
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name: constants.VMwareClusterNameStandAloneESX,

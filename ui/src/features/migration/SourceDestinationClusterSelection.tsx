@@ -186,13 +186,16 @@ export default function SourceDestinationClusterSelection({
                 const parts = selected.split(':')
                 const credName = parts[0]
 
-                const sourceItem = sourceData.find((item) => item.credName === credName)
-                const vcenterName = sourceItem?.vcenterName || credName
+                const sourceItem = sourceData.find(
+                  (item) => item.credName === credName && item.clusters.some((c) => c.id === selected)
+                )
                 const cluster = sourceItem?.clusters.find((c) => c.id === selected)
-                const datacenterDisplay = sourceItem?.datacenter || '(all datacenters)'
-                return `${vcenterName} - ${datacenterDisplay} - ${
-                  cluster?.displayName || cluster?.name || 'Unknown Cluster'
-                }`
+                const vcenterName = sourceItem?.vcenterName || credName
+                const datacenterDisplay = sourceItem?.datacenter
+                const clusterLabel = cluster?.displayName || cluster?.name || 'Unknown Cluster'
+                return datacenterDisplay
+                  ? `${vcenterName} - ${datacenterDisplay} - ${clusterLabel}`
+                  : `${vcenterName} - ${clusterLabel}`
               }}
               endAdornment={
                 loadingVMware ? (

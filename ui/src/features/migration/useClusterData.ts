@@ -59,38 +59,46 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         return
       }
 
-      const transformedData: SourceDataItem[] = vmwareCreds.map((cred) => {
+      const sourceDataPerCredPromises = vmwareCreds.map(async (cred) => {
         const credName = cred.metadata?.name || 'Unknown'
         const vcenterName = cred.spec?.hostName || credName
-        const datacenter = cred.spec.datacenter || ''
+        const baseDatacenter = cred.spec.datacenter || ''
 
-        return {
+        const clustersResponse = await getVMwareClusters(
+          VJAILBREAK_DEFAULT_NAMESPACE,
+          credName
+        )
+
+        const clustersByDatacenter: Record<string, { id: string; name: string; displayName: string }[]> = {}
+        const datacenterLabelKey = 'vjailbreak.k8s.pf9.io/datacenter'
+
+        clustersResponse.items.forEach((cluster: VMwareCluster) => {
+          const clusterId = `${credName}:${cluster.metadata.name}`
+          const clusterDisplayName = cluster.spec.name
+          const labels = cluster.metadata.labels || {}
+          const clusterDatacenter = labels[datacenterLabelKey] || baseDatacenter || ''
+
+          if (!clustersByDatacenter[clusterDatacenter]) {
+            clustersByDatacenter[clusterDatacenter] = []
+          }
+          clustersByDatacenter[clusterDatacenter].push({
+            id: clusterId,
+            name: cluster.metadata.name,
+            displayName: clusterDisplayName
+          })
+        })
+
+        return Object.entries(clustersByDatacenter).map(([datacenter, clusters]) => ({
           credName,
           datacenter,
           vcenterName,
-          clusters: []
-        }
-      })
-
-      const sourceDataPromises = transformedData.map(async (item) => {
-        const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, item.credName)
-
-        const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
-          id: `${item.credName}:${cluster.metadata.name}`,
-          name: cluster.metadata.name,
-          displayName: cluster.spec.name
-        }))
-
-        return {
-          credName: item.credName,
-          datacenter: item.datacenter,
-          vcenterName: item.vcenterName,
           clusters
-        }
+        }))
       })
 
-      const newSourceData = await Promise.all(sourceDataPromises)
-      setSourceData(newSourceData.filter((item) => item.clusters.length > 0))
+      const perCredResults = await Promise.all(sourceDataPerCredPromises)
+      const flattenedSourceData = perCredResults.flat()
+      setSourceData(flattenedSourceData.filter((item) => item.clusters.length > 0))
     } catch (error) {
       console.error('Failed to fetch VMware cluster data:', error)
       setError('Failed to fetch VMware cluster data')

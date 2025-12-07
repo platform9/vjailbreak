@@ -646,9 +646,27 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
 	}
 
-	vms, err := finder.VirtualMachineList(ctx, "*")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get vms: %w", err)
+	var vms []*object.VirtualMachine
+
+	// When no specific datacenter is provided, collect VMs from all datacenters
+	if datacenter == "" {
+		dcs, err := finder.DatacenterList(ctx, "*")
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to list datacenters for VM discovery: %w", err)
+		}
+		for _, dc := range dcs {
+			finder.SetDatacenter(dc)
+			dcVMs, err := finder.VirtualMachineList(ctx, "*")
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get vms: %w", err)
+			}
+			vms = append(vms, dcVMs...)
+		}
+	} else {
+		vms, err = finder.VirtualMachineList(ctx, "*")
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get vms: %w", err)
+		}
 	}
 	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
