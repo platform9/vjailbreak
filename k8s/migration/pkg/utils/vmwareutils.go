@@ -358,10 +358,30 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
-	hostList, err := finder.HostSystemList(ctx, "*")
-	if err != nil && !strings.Contains(err.Error(), "not found") {
-		return nil, errors.Wrap(err, "failed to get host list")
+
+	var hostList []*object.HostSystem
+
+	// If no specific datacenter is provided, collect standalone hosts from all datacenters
+	if vmwareCredsInfo.Datacenter == "" {
+		datacenters, err := finder.DatacenterList(ctx, "*")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to list datacenters for standalone ESX discovery")
+		}
+		for _, dc := range datacenters {
+			finder.SetDatacenter(dc)
+			dcHostList, err := finder.HostSystemList(ctx, "*")
+			if err != nil && !strings.Contains(err.Error(), "not found") {
+				return nil, errors.Wrap(err, "failed to get host list")
+			}
+			hostList = append(hostList, dcHostList...)
+		}
+	} else {
+		hostList, err = finder.HostSystemList(ctx, "*")
+		if err != nil && !strings.Contains(err.Error(), "not found") {
+			return nil, errors.Wrap(err, "failed to get host list")
+		}
 	}
+
 	vmHosts := make([]*object.HostSystem, 0, len(hostList))
 	for _, host := range hostList {
 		// if part of a cluster, skip

@@ -65,10 +65,8 @@ export const createVMwareCredsWithSecret = async (
     }
   }
 
-  // Only include datacenter if it's provided and not empty
-  if (datacenter && datacenter.trim() !== '') {
-    credBody.spec.datacenter = datacenter
-  }
+  // Use empty string when datacenter is not provided
+  credBody.spec.datacenter = datacenter?.trim() || ''
 
   const response = await axios.post<VMwareCreds>({
     endpoint,

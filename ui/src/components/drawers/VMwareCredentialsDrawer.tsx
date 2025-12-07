@@ -313,7 +313,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       validatingVmwareCreds ||
       !isValidCredentialName ||
       !formValues.vcenterHost ||
-      !formValues.datacenter ||
       !formValues.username ||
       !formValues.password,
     onSubmit: handleSubmit,
@@ -325,7 +324,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       <Header title="Add VMware Credentials" />
       <DrawerContent>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <FormControl fullWidth error={!!credNameError} required>
+          <FormControl fullWidth error={!!credNameError}>
             <TextField
               id="credentialName"
               label="Enter VMware Credential Name"
@@ -373,7 +372,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
               variant="outlined"
               value={formValues.datacenter}
               onChange={handleFormChange('datacenter')}
-              required
               fullWidth
               size="small"
               sx={{ mb: 2 }}
@@ -465,7 +463,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           validatingVmwareCreds ||
           !isValidCredentialName ||
           !formValues.vcenterHost?.trim() ||
-          !formValues.datacenter?.trim() ||
           !formValues.username?.trim() ||
           !formValues.password?.trim()
         }
