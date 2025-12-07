@@ -24,30 +24,38 @@ type CloneStatus struct {
 
 // CloneTracker monitors a vmkfstools clone operation in real-time
 type CloneTracker struct {
-	client       *Client
-	task         *VmkfstoolsTask
-	sourcePath   string
-	targetPath   string
-	startTime    time.Time
-	lastChecksum int64
-	pollInterval time.Duration
+	client         *Client
+	task           *VmkfstoolsTask
+	sourcePath     string
+	targetPath     string
+	startTime      time.Time
+	lastChecksum   int64
+	pollInterval   time.Duration
+	startupTimeout time.Duration // Time to wait for process to actually start executing
 }
 
 // NewCloneTracker creates a new clone operation tracker
 func NewCloneTracker(client *Client, task *VmkfstoolsTask, sourcePath, targetPath string) *CloneTracker {
 	return &CloneTracker{
-		client:       client,
-		task:         task,
-		sourcePath:   sourcePath,
-		targetPath:   targetPath,
-		startTime:    time.Now(),
-		pollInterval: 2 * time.Second,
+		client:         client,
+		task:           task,
+		sourcePath:     sourcePath,
+		targetPath:     targetPath,
+		startTime:      time.Now(),
+		pollInterval:   2 * time.Second,
+		startupTimeout: 5 * time.Minute, // vmkfstools can take 30+ seconds to start executing
 	}
 }
 
 // SetPollInterval sets how often to check clone status
 func (ct *CloneTracker) SetPollInterval(interval time.Duration) {
 	ct.pollInterval = interval
+}
+
+// SetStartupTimeout sets how long to wait for the process to actually start executing
+// vmkfstools can take 30+ seconds to start after the shell returns the PID
+func (ct *CloneTracker) SetStartupTimeout(timeout time.Duration) {
+	ct.startupTimeout = timeout
 }
 
 // GetStatus returns the current status of the clone operation
@@ -93,10 +101,13 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 		klog.Infof("Process %d is no longer running, checking log for result", ct.task.Pid)
 		klog.Infof("Log content: %s", logContent)
 
-		// If log is empty and we just started (< 2 seconds), the process might still be starting
-		// Don't fail immediately - treat as still running to give it time to actually start
-		if logContent == "" && time.Since(ct.startTime) < 2*time.Second {
-			klog.Infof("Process not found but just started %v ago, treating as still starting", time.Since(ct.startTime))
+		// vmkfstools can take 30+ seconds to actually start executing after the shell returns the PID.
+		// During this time, the process may not be visible via ps and the log file will be empty.
+		// We must wait for the startup timeout before declaring failure.
+		elapsedTime := time.Since(ct.startTime)
+		if logContent == "" && elapsedTime < ct.startupTimeout {
+			klog.Infof("Process %d not found but only %v elapsed (startup timeout: %v), treating as still starting",
+				ct.task.Pid, elapsedTime.Round(time.Second), ct.startupTimeout)
 			status.IsRunning = true
 			return status, nil
 		}
