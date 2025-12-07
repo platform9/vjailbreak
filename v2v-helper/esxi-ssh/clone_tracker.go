@@ -24,26 +24,28 @@ type CloneStatus struct {
 
 // CloneTracker monitors a vmkfstools clone operation in real-time
 type CloneTracker struct {
-	client         *Client
-	task           *VmkfstoolsTask
-	sourcePath     string
-	targetPath     string
-	startTime      time.Time
-	lastChecksum   int64
-	pollInterval   time.Duration
-	startupTimeout time.Duration // Time to wait for process to actually start executing
+	client            *Client
+	task              *VmkfstoolsTask
+	sourcePath        string
+	targetPath        string
+	startTime         time.Time
+	lastChecksum      int64
+	pollInterval      time.Duration
+	startupTimeout    time.Duration // Time to wait for process to actually start executing
+	lastLoggedPercent int           // Last percentage that was logged (for 5% increment logging)
 }
 
 // NewCloneTracker creates a new clone operation tracker
 func NewCloneTracker(client *Client, task *VmkfstoolsTask, sourcePath, targetPath string) *CloneTracker {
 	return &CloneTracker{
-		client:         client,
-		task:           task,
-		sourcePath:     sourcePath,
-		targetPath:     targetPath,
-		startTime:      time.Now(),
-		pollInterval:   2 * time.Second,
-		startupTimeout: 5 * time.Minute, // vmkfstools can take 30+ seconds to start executing
+		client:            client,
+		task:              task,
+		sourcePath:        sourcePath,
+		targetPath:        targetPath,
+		startTime:         time.Now(),
+		pollInterval:      2 * time.Second,
+		startupTimeout:    5 * time.Minute, // vmkfstools can take 30+ seconds to start executing
+		lastLoggedPercent: -1,              // Start at -1 so 0% gets logged
 	}
 }
 
@@ -90,7 +92,16 @@ func (ct *CloneTracker) GetStatus() (*CloneStatus, error) {
 				var pct float64
 				if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil {
 					status.PercentDone = pct
-					klog.V(2).Infof("Copying progress: %.1f%%", pct)
+
+					// Log progress every 5% increment
+					currentPercent := int(pct)
+					// Round down to nearest 5%
+					currentBucket := (currentPercent / 5) * 5
+					if currentBucket > ct.lastLoggedPercent {
+						elapsed := time.Since(ct.startTime).Round(time.Second)
+						klog.Infof("Clone progress: %d%% done [elapsed: %v]", currentBucket, elapsed)
+						ct.lastLoggedPercent = currentBucket
+					}
 				}
 			}
 		}
