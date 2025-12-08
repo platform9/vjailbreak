@@ -30,7 +30,7 @@ export const navigationItems: NavigationItem[] = [
     id: 'storage-management',
     label: 'Storage Management',
     path: '/dashboard/storage-management',
-    icon: <StorageIcon />
+    icon: <Storage />
   },
   {
     id: 'agents',
