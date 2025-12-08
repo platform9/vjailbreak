@@ -626,6 +626,33 @@ func local_request_VailbreakProxy_ValidateOpenstackIp_0(ctx context.Context, mar
 	return msg, metadata, err
 }
 
+func request_VailbreakProxy_RevalidateCredentials_0(ctx context.Context, marshaler runtime.Marshaler, client VailbreakProxyClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RevalidateCredentialsRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.RevalidateCredentials(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_VailbreakProxy_RevalidateCredentials_0(ctx context.Context, marshaler runtime.Marshaler, server VailbreakProxyServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RevalidateCredentialsRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.RevalidateCredentials(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 func request_StorageArray_ValidateCredentials_0(ctx context.Context, marshaler runtime.Marshaler, client StorageArrayClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq ValidateStorageCredsRequest
