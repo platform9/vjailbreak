@@ -258,10 +258,6 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 	userDataMap := make(map[string]interface{})
 	cloudInitMap := make(map[string]interface{})
 
-	// TODO: remove debug prints before production
-	fmt.Printf("userData: %s\n", userData)
-	fmt.Printf("cloudInit: %s\n", cloudInit)
-
 	// Unmarshal the YAML strings
 	if err := yaml.Unmarshal([]byte(userData), &userDataMap); err != nil {
 		return "", fmt.Errorf("failed to parse userData: %v", err)
