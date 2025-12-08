@@ -681,7 +681,7 @@ export default function MigrationFormDrawer({
       (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
     )
 
-    // Check for powered-ON VMs without OS assignment or with Unknown OS
+    // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
       .concat(
@@ -704,7 +704,9 @@ export default function MigrationFormDrawer({
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
-          `We could not detect the operating system for ${vmsWithoutOSAssigned.length} powered-on VM${vmsWithoutOSAssigned.length === 1 ? '' : 's'}`
+          `We could not detect the operating system for ${vmsWithoutOSAssigned.length} VM${
+            vmsWithoutOSAssigned.length === 1 ? '' : 's'
+          }`
         )
       }
 
