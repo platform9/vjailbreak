@@ -1,38 +1,47 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, Grid } from '@mui/material'
 import Step from '../../components/forms/Step'
 import Autocomplete from '@mui/material/Autocomplete'
 import TextField from '@mui/material/TextField'
 import Checkbox from '@mui/material/Checkbox'
-import { OpenstackCreds, SecurityGroupOption } from 'src/api/openstack-creds/model'
+import { OpenstackCreds, SecurityGroupOption, ServerGroupOption } from 'src/api/openstack-creds/model'
 
-interface SecurityGroupAndSSHKeyStepProps {
+interface SecurityGroupAndServerGroupProps {
   params: {
     vms?: any[]
     securityGroups?: string[]
+    serverGroup?: string
   }
   onChange: (key: string) => (value: any) => void
   openstackCredentials?: OpenstackCreds
   stepNumber?: string
 }
 
-export default function SecurityGroupAndSSHKeyStep({
+export default function SecurityGroupAndServerGroup({
   params,
   onChange,
   openstackCredentials,
   stepNumber = '4'
-}: SecurityGroupAndSSHKeyStepProps) {
+}: SecurityGroupAndServerGroupProps) {
   const securityGroupOptions: SecurityGroupOption[] =
     openstackCredentials?.status?.openstack?.securityGroups || []
+  
+  const serverGroupOptions: ServerGroupOption[] =
+    openstackCredentials?.status?.openstack?.serverGroups || []
 
   return (
     <Box>
-      <Step stepNumber={stepNumber} label="Security Groups (Optional)" />
+      <Step stepNumber={stepNumber} label="Security Groups & Server Group (Optional)" />
       <Box sx={{ ml: 6 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Assign security groups to the selected VMs.
-        </Typography>
-        <Box>
-          <Autocomplete
+        <Grid container spacing={3}>
+          {/* Left side: Security Groups */}
+          <Grid item xs={6}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Security Groups
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Assign security groups to the selected VMs.
+            </Typography>
+            <Autocomplete
             multiple
             options={securityGroupOptions}
             getOptionLabel={(option) =>
@@ -104,7 +113,44 @@ export default function SecurityGroupAndSSHKeyStep({
             size="small"
             sx={{ width: '100%' }}
           />
-        </Box>
+          </Grid>
+
+          {/* Right side: Server Group */}
+          <Grid item xs={6}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Server Group
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Control VM affinity/anti-affinity placement.
+            </Typography>
+            <Autocomplete
+              options={serverGroupOptions}
+              getOptionLabel={(option) => 
+                `${option.name} (${option.policy})`
+              }
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              value={serverGroupOptions.find(opt => opt.id === params.serverGroup) || null}
+              onChange={(_, value) => {
+                onChange('serverGroup')(value?.id || '')
+              }}
+              renderInput={(inputParams) => (
+                <TextField
+                  {...inputParams}
+                  label="Server Group"
+                  placeholder="Select Server Group"
+                  size="small"
+                />
+              )}
+              renderOption={(props, option) => (
+                <li {...props}>
+                  {option.name} ({option.policy})
+                </li>
+              )}
+              size="small"
+              sx={{ width: '100%' }}
+            />
+          </Grid>
+        </Grid>
       </Box>
     </Box>
   )
