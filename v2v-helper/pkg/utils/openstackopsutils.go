@@ -593,7 +593,11 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 			})
 			gatewayIP[mac] = dhcpSubnetId.GatewayIP
 		}
-		PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %v. Port ID: %s", ipPerMac[mac][0], dhcpPort.ID))
+		logMsg := "Port created with DHCP instead of static IP"
+		if len(ipPerMac[mac]) > 0 {
+			logMsg = fmt.Sprintf("Port created with DHCP instead of static IP %v", ipPerMac[mac][0])
+		}
+		PrintLog(fmt.Sprintf("%s. Port ID: %s", logMsg, dhcpPort.ID))
 		return dhcpPort, nil
 	}
 
