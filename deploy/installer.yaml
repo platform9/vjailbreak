@@ -820,6 +820,10 @@ spec:
                 description: UseFlavorless indicates if the migration should use flavorless
                   VM creation for PCD.
                 type: boolean
+              useGPUFlavor:
+                description: UseGPUFlavor indicates if the migration should filter
+                  and use GPU-enabled flavors.
+                type: boolean
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine
@@ -996,6 +1000,15 @@ spec:
                     disk:
                       description: Disk is the amount of root disk, measured in GB.
                       type: integer
+                    extra_specs:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        Properties is a dictionary of the flavor’s extra-specs key-and-value
+                        pairs. This will only be included if the user is allowed by policy to
+                        index flavor extra_specs
+                        New in version 2.61
+                      type: object
                     id:
                       description: ID is the flavor's unique ID.
                       type: string
@@ -1020,6 +1033,7 @@ spec:
                   - OS-FLV-EXT-DATA:ephemeral
                   - description
                   - disk
+                  - extra_specs
                   - id
                   - name
                   - os-flavor-access:is_public
@@ -2426,6 +2440,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  useGPU:
+                    description: UseGPU is a flag to indicate if the virtual machine
+                      uses GPU
+                    type: boolean
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
@@ -3719,7 +3737,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.3.6
+        image: quay.io/platform9/vjailbreak-controller:v0.3.7
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3802,7 +3820,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
+        image: quay.io/platform9/vjailbreak-vpwned:v0.3.7
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

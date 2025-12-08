@@ -88,6 +88,10 @@ spec:
                 description: UseFlavorless indicates if the migration should use flavorless
                   VM creation for PCD.
                 type: boolean
+              useGPUFlavor:
+                description: UseGPUFlavor indicates if the migration should filter
+                  and use GPU-enabled flavors.
+                type: boolean
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine
