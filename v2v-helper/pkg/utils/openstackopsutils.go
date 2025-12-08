@@ -462,8 +462,8 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, ipPerMac map[string][]string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -476,7 +476,7 @@ PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, t
 	if err != nil {
 		return nil, err
 	}
-
+	ip = ipPerMac[mac]
 	for _, port := range portList {
 		if port.MACAddress == mac {
 			if port.DeviceID != "" {
@@ -571,8 +571,16 @@ PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, t
 		if dhcpErr != nil {
 			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-
-		PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
+		ipPerMac[mac] = []string{}
+		for _, iAddr := range dhcpPort.FixedIPs {
+			ipPerMac[mac] = append(ipPerMac[mac], iAddr.IPAddress)
+		}
+		dhcpSubnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac[mac][0])
+		if err != nil && !fallbackToDHCP {
+			return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac[mac][0])
+		}
+		gatewayIP[mac] = dhcpSubnetId.GatewayIP
+		PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ipPerMac[mac][0], dhcpPort.ID))
 		return dhcpPort, nil
 	}
 

@@ -47,12 +47,11 @@ type VMOperations interface {
 }
 
 type VMInfo struct {
-	CPU      int32
-	Memory   int32
-	State    types.VirtualMachinePowerState
-	Mac      []string
-	IPperMac map[string][]string
-	// IPs               []string
+	CPU               int32
+	Memory            int32
+	State             types.VirtualMachinePowerState
+	Mac               []string
+	IPperMac          map[string][]string
 	UUID              string
 	Host              string
 	VMDisks           []VMDisk
@@ -173,23 +172,25 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
 			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
 				// Every mac should have a corresponding IP, Ignore link layer ip
-				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
-					ips = append(ips, guestNetwork.IP)
+				if strings.EqualFold(guestNetwork.MAC, macAddresss) {
 					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
 						ipPerMac[guestNetwork.MAC] = []string{}
 					}
-					ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], guestNetwork.IP)
+					if !strings.Contains(guestNetwork.IP, ":") {
+						ips = append(ips, guestNetwork.IP)
+						ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], guestNetwork.IP)
+					}
 				}
 			}
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
 					if networkInterface.MAC == macAddresss {
+						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+							ipPerMac[networkInterface.MAC] = []string{}
+						}
 						if !strings.Contains(networkInterface.IPAddress, ":") {
 							ips = append(ips, networkInterface.IPAddress)
-							if _, ok := ipPerMac[networkInterface.MAC]; !ok {
-								ipPerMac[networkInterface.MAC] = []string{}
-							}
 							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], networkInterface.IPAddress)
 						}
 					}

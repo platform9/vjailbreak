@@ -1539,37 +1539,10 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 
 			var ippm []string
 
-			// NetworkInterfaces from CRD spec (lowest priority, fallback)
-			if vminfo.NetworkInterfaces != nil {
-				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
-						ippm = []string{nic.IPAddress}
-						utils.PrintLog(fmt.Sprintf("IP from NetworkInterface for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
-						break
-					}
-				}
-			}
-
 			// VMware Tools detected IPs
 			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
 				ippm = detectedIPs
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
-			}
-
-			// Guest Network IPs
-			if vminfo.GuestNetworks != nil {
-				var guestIPs []string
-				for _, gn := range vminfo.GuestNetworks {
-					if strings.EqualFold(gn.MAC, vminfo.Mac[idx]) && gn.IP != "" {
-						if !strings.Contains(gn.IP, ":") {
-							guestIPs = append(guestIPs, gn.IP)
-						}
-					}
-				}
-				if len(guestIPs) > 0 {
-					ippm = guestIPs
-					utils.PrintLog(fmt.Sprintf("IPs from Guest Network for MAC %s: %v", vminfo.Mac[idx], guestIPs))
-				}
 			}
 
 			// User-assigned IP from ConfigMap
@@ -1579,6 +1552,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 					ip := strings.TrimSpace(assignedIPs[idx])
 					if ip != "" {
 						ippm = []string{ip}
+						vminfo.IPperMac[vminfo.Mac[idx]] = []string{ip}
 						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
 					} else {
 						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
@@ -1587,7 +1561,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
