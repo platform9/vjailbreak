@@ -14,6 +14,7 @@ export const createMigrationPlanJson = (params) => {
     postMigrationAction,
     disconnectSourceNetwork = false,
     securityGroups,
+    serverGroup,
     fallbackToDHCP = false,
     postMigrationScript,
     periodicSyncInterval,
@@ -63,6 +64,10 @@ export const createMigrationPlanJson = (params) => {
 
   if (securityGroups && securityGroups.length > 0) {
     spec.securityGroups = securityGroups
+  }
+
+  if (serverGroup) {
+    spec.serverGroup = serverGroup
   }
 
   // Add assignedIPsPerVM for cold migration if provided

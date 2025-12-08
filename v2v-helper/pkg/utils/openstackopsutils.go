@@ -18,6 +18,7 @@ import (
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -28,6 +29,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/schedulerhints"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
@@ -598,7 +601,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -633,6 +636,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		SecurityGroups: securityGroups,
 	}
 
+	schedulerHints := schedulerhints.SchedulerHints{}
+	if serverGroupID != "" {
+		schedulerHints.Group = serverGroupID
+		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
+	} else {
+		PrintLog(fmt.Sprintf("No server group specified for VM %s - using default scheduling", vminfo.Name))
+	}
+
 	if useFlavorless {
 		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
@@ -653,9 +664,13 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		}
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
+
 	createOpts := bootfromvolume.CreateOptsExt{
-		CreateOptsBuilder: serverCreateOpts,
-		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
+		CreateOptsBuilder: schedulerhints.CreateOptsExt{
+			CreateOptsBuilder: serverCreateOpts,
+			SchedulerHints:    schedulerHints,
+		},
+		BlockDevice: []bootfromvolume.BlockDevice{blockDevice},
 	}
 
 	for _, disk := range vminfo.RDMDisks {
@@ -793,4 +808,30 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, proje
 	}
 
 	return groupIDs, nil
+}
+
+func (osclient *OpenStackClients) GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching server groups for project %s", projectName))
+
+	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list server groups: %w", err)
+	}
+
+	allGroups, err := servergroups.ExtractServerGroups(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract server groups: %w", err)
+	}
+
+	var result []vjailbreakv1alpha1.ServerGroupInfo
+	for _, group := range allGroups {
+		result = append(result, vjailbreakv1alpha1.ServerGroupInfo{
+			Name:    group.Name,
+			ID:      group.ID,
+			Policy:  strings.Join(group.Policies, ","),
+			Members: len(group.Members),
+		})
+	}
+
+	return result, nil
 }

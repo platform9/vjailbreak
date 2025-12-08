@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -42,7 +43,8 @@ type OpenstackOperations interface {
 	GetPort(portID string) (*ports.Port, error)
 	GetSubnet(network []string, ip string) (*subnets.Subnet, error)
 	CreatePort(networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
-	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+  CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+	GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
 	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)

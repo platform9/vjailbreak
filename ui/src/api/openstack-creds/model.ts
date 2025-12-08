@@ -71,6 +71,13 @@ export interface SecurityGroupOption {
   requiresIdDisplay: boolean
 }
 
+export interface ServerGroupOption {
+  name: string
+  id: string
+  policy: string
+  members: number
+}
+
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
@@ -79,6 +86,7 @@ export interface OpenstackCredsStatus {
     volumeTypes?: string[]
     volumeBackends?: string[]
     securityGroups?: SecurityGroupOption[]
+    serverGroups?: ServerGroupOption[]
   }
 }
 
