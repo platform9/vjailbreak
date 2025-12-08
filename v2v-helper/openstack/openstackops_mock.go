@@ -15,6 +15,7 @@ import (
 	networks "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	ports "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	subnets "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
+	v1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	k8sutils "github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	vm "github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -72,18 +73,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(ctx, networkid, mac, i
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
+	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, vjailbreakSettings, useFlavorless)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless)
 }
 
 // CreateVolume mocks base method.
@@ -231,6 +232,21 @@ func (m *MockOpenstackOperations) GetSecurityGroupIDs(ctx context.Context, group
 func (mr *MockOpenstackOperationsMockRecorder) GetSecurityGroupIDs(ctx, groupNames, projectName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupIDs", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSecurityGroupIDs), ctx, groupNames, projectName)
+}
+
+// GetServerGroups mocks base method.
+func (m *MockOpenstackOperations) GetServerGroups(ctx context.Context, projectName string) ([]v1alpha1.ServerGroupInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServerGroups", ctx, projectName)
+	ret0, _ := ret[0].([]v1alpha1.ServerGroupInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetServerGroups indicates an expected call of GetServerGroups.
+func (mr *MockOpenstackOperationsMockRecorder) GetServerGroups(ctx, projectName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServerGroups", reflect.TypeOf((*MockOpenstackOperations)(nil).GetServerGroups), ctx, projectName)
 }
 
 // GetSubnet mocks base method.

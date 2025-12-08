@@ -632,9 +632,10 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	}
 	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
 	
-	// Add scheduler hints for server group if specified
+	// Prepare scheduler hints for server group if specified
+	var schedulerHints servers.SchedulerHintOptsBuilder
 	if serverGroupID != "" {
-		serverCreateOpts.SchedulerHints = &servers.SchedulerHints{
+		schedulerHints = servers.SchedulerHintOpts{
 			Group: serverGroupID,
 		}
 		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
@@ -676,7 +677,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		}
 	}
 
-	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, nil).Extract()
+	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}

@@ -4,7 +4,6 @@ go 1.24.10
 
 require (
 	github.com/golang/mock v1.6.0
-	github.com/gophercloud/gophercloud v1.14.1
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
