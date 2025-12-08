@@ -465,8 +465,9 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
+
+func (osclient *OpenStackClients) CheckIfPortExists(ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
+
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -479,7 +480,6 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 	if err != nil {
 		return nil, err
 	}
-	ipEntries := ipPerMac[mac]
 	for _, port := range portList {
 		if port.MACAddress == mac {
 			if port.DeviceID != "" {
@@ -502,7 +502,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 					gatewayIP[mac] = subnetId.GatewayIP
 				}
 				if !contain_all {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ipPerMac[mac])
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ipEntries)
 				}
 				// Check if port is already active - cannot reuse active ports
 				if port.Status == "ACTIVE" {
@@ -523,6 +523,20 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 		}
 	}
 
+	return nil, nil
+
+}
+
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
+	ipEntries := ipPerMac[mac]
+	Existingport, err := osclient.CheckIfPortExists(ipEntries, mac, network, gatewayIP)
+	if err != nil {
+		return nil, err
+	}
+	if Existingport != nil {
+		return Existingport, nil
+	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipEntries))
 
 	// Check if subnet is valid to avoid panic.
@@ -585,11 +599,12 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 		ipPerMac[mac] = []vm.IpEntry{}
 		for _, iAddr := range dhcpPort.FixedIPs {
 			dhcpSubnetId, err := osclient.GetSubnet(network.Subnets, iAddr.IPAddress)
-			if err != nil && !fallbackToDHCP {
+			if err != nil {
 				return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
 			}
 			ipPerMac[mac] = append(ipPerMac[mac], vm.IpEntry{
-				IP: iAddr.IPAddress,
+				IP:     iAddr.IPAddress,
+				Prefix: 0,
 			})
 			gatewayIP[mac] = dhcpSubnetId.GatewayIP
 		}
