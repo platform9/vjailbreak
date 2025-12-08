@@ -419,8 +419,9 @@ function VmsSelectionStep({
         const detectedOsFamily = params.row?.osFamily
         const assignedOsFamily = vmOSAssignments[vmId]
         const currentOsFamily = assignedOsFamily === undefined ? detectedOsFamily : assignedOsFamily
-        // Show dropdown for ALL powered-off VMs (allows changing selection)
-        if (isSelected && powerState === 'powered-off') {
+        // Show dropdown when:
+        // - VM is selected
+        if (isSelected) {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
               <Select
@@ -730,7 +731,7 @@ function VmsSelectionStep({
 
     setVmsWithFlavor((prev) =>
       prev.map((vm) => {
-        if (vmOSAssignments && vmOSAssignments[vm.name]) {
+        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.name)) {
           return {
             ...vm,
             osFamily: vmOSAssignments[vm.name]
