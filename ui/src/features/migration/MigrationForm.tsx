@@ -1,5 +1,12 @@
-import { Box, Drawer, styled, Alert } from '@mui/material'
+import { Alert, Box, Drawer, styled } from '@mui/material'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
+import Header from '../../components/forms/Header'
+import Footer from '../../components/forms/Footer'
+import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
+import VmsSelectionStep from './VmsSelectionStep'
+import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup' // Component exported as SecurityGroupAndServerGroup
+import MigrationOptions from './MigrationOptions'
 import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useEffect, useMemo, useState, useCallback } from 'react'
@@ -8,7 +15,6 @@ import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
 import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/api/migration-plans/model'
 import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -38,12 +44,6 @@ import { VMWARE_MACHINES_BASE_KEY } from "src/hooks/api/useVMwareMachinesQuery"
 import { useInterval } from "src/hooks/useInterval"
 import useParams from "src/hooks/useParams"
 import { isNilOrEmpty } from "src/utils"
-import Footer from "../../components/forms/Footer"
-import Header from "../../components/forms/Header"
-import MigrationOptions from "./MigrationOptionsAlt"
-import NetworkAndStorageMappingStep from "./NetworkAndStorageMappingStep"
-import SourceDestinationClusterSelection from "./SourceDestinationClusterSelection"
-import VmsSelectionStep from "./VmsSelectionStep"
 import { CUTOVER_TYPES } from "./constants"
 import { uniq } from "ramda"
 import { flatten } from "ramda"
@@ -487,8 +487,6 @@ export default function MigrationFormDrawer({
       spec: {
         networkMapping: networkMappings.metadata.name,
         storageCopyMethod,
-      },
-        storageMapping: storageMappings.metadata.name
       }
     }
     
@@ -996,12 +994,10 @@ export default function MigrationFormDrawer({
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
-            openstackCredentials={openstackCredentials}
             selectedMigrationOptions={selectedMigrationOptions}
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
-            stepNumber="5"
           />
         </Box>
       </DrawerContent>

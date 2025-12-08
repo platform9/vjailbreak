@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -145,7 +145,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = err.Error()
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
@@ -193,7 +193,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			// Don't fail reconciliation, just log error
 		}
 
-		err = handleValidatedCreds(ctx, r, scope)
+		err := handleValidatedCreds(ctx, r, scope)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -421,10 +421,10 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to get Openstack credentials from secret")
 	}
 
-if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
-	ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
-	scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
-}
+	if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
+		ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+		scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+	}
 
 	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
