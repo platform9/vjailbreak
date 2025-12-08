@@ -59,7 +59,7 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 func startgRPCServer(ctx context.Context, network, port string) error {
 	grpcServer = grpc.NewServer()
 
-	k8sClient, err := CreateInClusterClient()
+	_, err := CreateInClusterClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to create k8s client for grpc server")
 	}
