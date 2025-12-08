@@ -11,12 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -27,6 +29,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/schedulerhints"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
@@ -461,9 +465,8 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip, vmname string, securityGroups []string, fallbackToDHCP bool) (*ports.Port, error) {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP address %s", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -483,13 +486,40 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
 			}
 			if len(port.FixedIPs) > 0 {
-				foundPortIP := port.FixedIPs[0].IPAddress
-				if ip != "" && foundPortIP != ip {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, foundPortIP, ip)
+				fixedIps := []string{}
+				for _, fixedIp := range port.FixedIPs {
+					fixedIps = append(fixedIps, fixedIp.IPAddress)
 				}
+				contain_all := true
+				for _, ipIdx := range ip {
+					if !slices.Contains(fixedIps, ipIdx) {
+						contain_all = false
+					}
+					subnetId, err := osclient.GetSubnet(network.Subnets, ipIdx)
+					if err != nil {
+						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx)
+					}
+					gatewayIP[mac] = subnetId.GatewayIP
+				}
+				if !contain_all {
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ip)
+				}
+				// Check if port is already active - cannot reuse active ports
+				if port.Status == "ACTIVE" {
+					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
+				}
+				PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
+				return &port, nil
+			} else if len(port.FixedIPs) == 0 && len(ip) == 0 {
+				// Check if port is already active - cannot reuse active ports
+				if port.Status == "ACTIVE" {
+					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
+				}
+				PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
+				return &port, nil
+			} else {
+				return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, port.FixedIPs, ip)
 			}
-			PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
-			return &port, nil
 		}
 	}
 
@@ -506,23 +536,23 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
 	}
-
-	if ip != "" {
-		PrintLog(fmt.Sprintf("Subnets in network  : %v", network.Subnets))
-
-		subnet, err := osclient.GetSubnet(network.Subnets, ip)
-		fixedIP := []ports.IP{}
-		if err != nil && !fallbackToDHCP {
-			return nil, fmt.Errorf("failed to get subnet: %s", err)
-		}
-
-		if subnet != nil {
-			fixedIP = append(fixedIP, ports.IP{
-				SubnetID:  subnet.ID,
-				IPAddress: ip,
+	if len(ip) > 0 {
+		fixedIPs := make([]ports.IP, 0)
+		for _, ipPerMac := range ip {
+			subnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac)
+			if err != nil && !fallbackToDHCP {
+				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
+			}
+			gatewayIP[mac] = subnetId.GatewayIP
+			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
+			fixedIPs = append(fixedIPs, ports.IP{
+				SubnetID:  subnetId.ID,
+				IPAddress: ipPerMac,
 			})
 		}
-		createOpts.FixedIPs = fixedIP
+		createOpts.FixedIPs = fixedIPs
+	} else if len(ip) == 0 && !fallbackToDHCP {
+		PrintLog("Empty port on vcentre detected for mac " + mac)
 	}
 
 	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
@@ -553,7 +583,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac, ip,
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -588,6 +618,14 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		SecurityGroups: securityGroups,
 	}
 
+	schedulerHints := schedulerhints.SchedulerHints{}
+	if serverGroupID != "" {
+		schedulerHints.Group = serverGroupID
+		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
+	} else {
+		PrintLog(fmt.Sprintf("No server group specified for VM %s - using default scheduling", vminfo.Name))
+	}
+
 	if useFlavorless {
 		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
@@ -608,9 +646,13 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 		}
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
+
 	createOpts := bootfromvolume.CreateOptsExt{
-		CreateOptsBuilder: serverCreateOpts,
-		BlockDevice:       []bootfromvolume.BlockDevice{blockDevice},
+		CreateOptsBuilder: schedulerhints.CreateOptsExt{
+			CreateOptsBuilder: serverCreateOpts,
+			SchedulerHints:    schedulerHints,
+		},
+		BlockDevice: []bootfromvolume.BlockDevice{blockDevice},
 	}
 
 	for _, disk := range vminfo.RDMDisks {
@@ -626,6 +668,17 @@ func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, p
 			BootIndex:           -1,
 		}
 		createOpts.BlockDevice = append(createOpts.BlockDevice, blockDevice)
+	}
+
+	// Wait for RDM disks to become available before creating VM
+	for _, disk := range vminfo.RDMDisks {
+		if disk.Status.CinderVolumeID == "" {
+			return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID", disk.Name)
+		}
+		err := osclient.WaitForVolume(disk.Status.CinderVolumeID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to wait for RDM volume %s to become available: %s", disk.Name, err)
+		}
 	}
 
 	// Wait for disks to become available
@@ -798,4 +851,29 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
 
 	return &volume, nil
+}
+func (osclient *OpenStackClients) GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching server groups for project %s", projectName))
+
+	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list server groups: %w", err)
+	}
+
+	allGroups, err := servergroups.ExtractServerGroups(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract server groups: %w", err)
+	}
+
+	var result []vjailbreakv1alpha1.ServerGroupInfo
+	for _, group := range allGroups {
+		result = append(result, vjailbreakv1alpha1.ServerGroupInfo{
+			Name:    group.Name,
+			ID:      group.ID,
+			Policy:  strings.Join(group.Policies, ","),
+			Members: len(group.Members),
+		})
+	}
+
+	return result, nil
 }

@@ -37,12 +37,14 @@ type MigrationParams struct {
 	VMwareMachineName       string
 	DisconnectSourceNetwork bool
 	SecurityGroups          string
+	ServerGroup             string
 	RDMDisks                string
 	FallbackToDHCP          bool
 	PeriodicSyncInterval    string
 	StorageCopyMethod       string
 	VendorType              string
 	ArrayCredsMapping       string
+	PeriodicSyncEnabled     bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -81,11 +83,13 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		VMwareMachineName:       string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork: string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
 		SecurityGroups:          string(configMap.Data["SECURITY_GROUPS"]),
+		ServerGroup:             string(configMap.Data["SERVER_GROUP"]),
 		RDMDisks:                string(configMap.Data["RDM_DISK_NAMES"]),
 		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
 		PeriodicSyncInterval:    string(configMap.Data["PERIODIC_SYNC_INTERVAL"]),
 		StorageCopyMethod:       string(configMap.Data["STORAGE_COPY_METHOD"]),
 		VendorType:              string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:       string(configMap.Data["ARRAY_CREDS_MAPPING"]),
+		PeriodicSyncEnabled:     string(configMap.Data["PERIODIC_SYNC_ENABLED"]) == constants.TrueString,
 	}, nil
 }

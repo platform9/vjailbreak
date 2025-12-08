@@ -601,6 +601,38 @@
         ]
       }
     },
+    "/vpw/v1/revalidate_credentials": {
+      "post": {
+        "operationId": "VailbreakProxy_RevalidateCredentials",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiRevalidateCredentialsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiRevalidateCredentialsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/set_resource_bm2pxeboot": {
       "post": {
         "operationId": "BMProvider_SetResourceBM2PXEBoot",

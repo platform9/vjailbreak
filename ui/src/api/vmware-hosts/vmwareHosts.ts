@@ -1,9 +1,6 @@
-import { VMwareHostList, VMwareHost } from "./model"
-import axios from "../axios"
-import {
-  VJAILBREAK_API_BASE_PATH,
-  VJAILBREAK_DEFAULT_NAMESPACE,
-} from "../constants"
+import { VMwareHostList, VMwareHost } from './model'
+import axios from '../axios'
+import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 
 export const getVMwareHosts = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
@@ -12,28 +9,28 @@ export const getVMwareHosts = async (
 ): Promise<VMwareHostList> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarehosts`
 
-  let labelSelector = ""
+  let labelSelector = ''
 
   if (vmwareCredName) {
     labelSelector += `vjailbreak.k8s.pf9.io/vmwarecreds=${vmwareCredName}`
   }
 
   if (clusterName) {
-    if (labelSelector) labelSelector += ","
+    if (labelSelector) labelSelector += ','
     labelSelector += `vjailbreak.k8s.pf9.io/vmware-cluster=${clusterName}`
   }
 
   const config = labelSelector
     ? {
         params: {
-          labelSelector,
-        },
+          labelSelector
+        }
       }
     : undefined
 
   return axios.get<VMwareHostList>({
     endpoint,
-    config,
+    config
   })
 }
 
@@ -44,7 +41,7 @@ export const getVMwareHost = async (
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarehosts/${hostName}`
 
   return axios.get<VMwareHost>({
-    endpoint,
+    endpoint
   })
 }
 
@@ -62,8 +59,8 @@ export const patchVMwareHost = async (
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarehosts/${hostName}`
   const payload = {
     spec: {
-      hostConfigId: hostConfigId,
-    },
+      hostConfigId: hostConfigId
+    }
   }
 
   return axios.patch<VMwareHost>({
@@ -71,8 +68,8 @@ export const patchVMwareHost = async (
     data: payload,
     config: {
       headers: {
-        "Content-Type": "application/merge-patch+json",
-      },
-    },
+        'Content-Type': 'application/merge-patch+json'
+      }
+    }
   })
 }

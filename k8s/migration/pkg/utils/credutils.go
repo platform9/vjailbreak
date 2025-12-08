@@ -18,6 +18,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
@@ -380,11 +381,29 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
+	// Fetch server groups
+	openstackservergroups := make([]vjailbreakv1alpha1.ServerGroupInfo, 0)
+	allServerGroupPages, err := servergroups.List(openstackClients.ComputeClient, servergroups.ListOpts{}).AllPages()
+	if err == nil {
+		allServerGroups, err := servergroups.ExtractServerGroups(allServerGroupPages)
+		if err == nil {
+			for _, group := range allServerGroups {
+				openstackservergroups = append(openstackservergroups, vjailbreakv1alpha1.ServerGroupInfo{
+					Name:    group.Name,
+					ID:      group.ID,
+					Policy:  strings.Join(group.Policies, ","),
+					Members: len(group.Members),
+				})
+			}
+		}
+	}
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
 		SecurityGroups: openstacksecuritygroups,
+		ServerGroups:   openstackservergroups,
 	}, nil
 }
 
@@ -453,6 +472,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	}
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
+		Proxy:           http.ProxyFromEnvironment,
 	}
 	providerClient.HTTPClient = http.Client{
 		Transport: transport,
@@ -520,7 +540,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 	mapKey := string(vmwcreds.UID)
-	var c *vim25.Client
 	// Initialize map if needed
 	if vmwareClientMap == nil {
 		vmwareClientMap = &sync.Map{}
@@ -529,16 +548,14 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if val, ok := vmwareClientMap.Load(mapKey); ok {
 		cachedClient, valid := val.(*vim25.Client)
 		if valid && cachedClient != nil && cachedClient.Client != nil {
-			c = cachedClient
-			sessMgr := session.NewManager(c)
+			sessMgr := session.NewManager(cachedClient)
 			userSession, err := sessMgr.UserSession(ctx)
 			if err == nil && userSession != nil {
 				// Cached client is still valid, return it
-				return c, nil
+				return cachedClient, nil
 			}
 			// Cached client is no longer valid, remove it
 			vmwareClientMap.Delete(mapKey)
-			c = nil // Will create fresh client below
 		}
 	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
@@ -548,12 +565,11 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	// Exponential retry logic
 	maxRetries := settings.VCenterLoginRetryLimit
 	var lastErr error
+	var c *vim25.Client
 	ctxlog := log.FromContext(ctx)
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Ensure we have a client for this attempt
-		if c == nil {
-			c = new(vim25.Client)
-		}
+		// Create a new empty client struct for Login to populate
+		c = &vim25.Client{}
 		err = s.Login(ctx, c, nil)
 		if err == nil {
 			// Login successful
@@ -570,7 +586,6 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 			delayNum := math.Pow(2, float64(attempt)) * 500
 			ctxlog.Info("Retrying login after delay", "delayMs", delayNum)
 			time.Sleep(time.Duration(delayNum) * time.Millisecond)
-			c = nil // Force fresh client on next attempt
 		}
 	}
 	// Check if all login attempts failed
@@ -1742,7 +1757,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 					if !strings.Contains(guestNet.IP, ":") {
 						nicList[i].IPAddress = guestNet.IP
 					}
-					break
 				}
 			}
 		}
@@ -1763,6 +1777,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if strings.HasPrefix(vmProps.Config.Name, "vCLS-") {
 		return
 	}
+
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
 		Datastores:        datastores,

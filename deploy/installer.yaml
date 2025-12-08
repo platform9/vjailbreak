@@ -748,10 +748,21 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
                   periodicSyncInterval:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
                     type: string
+                type: object
+              assignedIPsPerVM:
+                additionalProperties:
+                  type: string
+                description: |-
+                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -812,6 +823,8 @@ spec:
                 items:
                   type: string
                 type: array
+              serverGroup:
+                type: string
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -837,10 +850,6 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
-              retryCount:
-                description: Migration RetryCount is the number of times the migration
-                  has been retried
-                type: integer
             required:
             - migrationMessage
             - migrationStatus
@@ -907,6 +916,11 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              assignedIP:
+                description: |-
+                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
+                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
+                type: string
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -1422,6 +1436,25 @@ spec:
                       - requiresIdDisplay
                       type: object
                     type: array
+                  serverGroups:
+                    items:
+                      description: ServerGroupInfo holds the server group name, ID,
+                        and policy information
+                      properties:
+                        id:
+                          type: string
+                        members:
+                          type: integer
+                        name:
+                          type: string
+                        policy:
+                          type: string
+                      required:
+                      - id
+                      - name
+                      - policy
+                      type: object
+                    type: array
                   volumeBackends:
                     items:
                       type: string
@@ -1852,6 +1885,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
                   periodicSyncInterval:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
@@ -4015,6 +4052,9 @@ spec:
         env:
         - name: MAX_CONCURRENT_RECONCILES
           value: "5"
+        envFrom:
+        - configMapRef:
+            name: pf9-env
         image: quay.io/platform9/vjailbreak-controller:v0.3.6
         imagePullPolicy: IfNotPresent
         lifecycle:
@@ -4096,6 +4136,10 @@ spec:
     spec:
       containers:
       - image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
+      - envFrom:
+        - configMapRef:
+            name: pf9-env
+        image: quay.io/platform9/vjailbreak-vpwned:v0.3.6
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

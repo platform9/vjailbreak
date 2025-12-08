@@ -117,13 +117,21 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			OpenstackCredsRequeueAfterMinutes:   constants.OpenstackCredsRequeueAfterMinutes,
 			VMwareCredsRequeueAfterMinutes:      constants.VMwareCredsRequeueAfterMinutes,
 			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
+			PeriodicSyncMaxRetries:              constants.PeriodicSyncMaxRetries,
+			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
+			AutoFstabUpdate:                     constants.AutoFstabUpdate,
 		}, nil
 	}
 
 	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
 		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
 	}
-
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] = strconv.Itoa(constants.PeriodicSyncMaxRetries)
+	}
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] = constants.PeriodicSyncRetryCap
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
@@ -174,6 +182,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] = strconv.FormatBool(constants.ValidateRDMOwnerVMs)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] == "" {
+		vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] = strconv.FormatBool(constants.AutoFstabUpdate)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -189,6 +201,9 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
 		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
+		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
+		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
+		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
 	}, nil
 }
 

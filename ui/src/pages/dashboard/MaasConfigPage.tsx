@@ -1,4 +1,4 @@
-import BMConfigForm from "./BMConfigForm"
+import BMConfigForm from './BMConfigForm'
 
 export default function MaasConfigPage() {
   return <BMConfigForm />

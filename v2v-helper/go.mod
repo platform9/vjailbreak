@@ -2,6 +2,8 @@ module github.com/platform9/vjailbreak/v2v-helper
 
 go 1.24.3
 
+toolchain go1.24.10
+
 require (
 	github.com/golang/mock v1.6.0
 	github.com/gophercloud/gophercloud v1.14.1

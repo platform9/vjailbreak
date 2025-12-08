@@ -63,6 +63,9 @@ spec:
         env:
           - name: MAX_CONCURRENT_RECONCILES
             value: "5"
+        envFrom:
+          - configMapRef:
+              name: pf9-env
         args:
           - --leader-elect=false
           - --health-probe-bind-address=:8081

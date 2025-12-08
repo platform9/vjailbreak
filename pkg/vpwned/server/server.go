@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/pkg/errors"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3"
 	"github.com/sirupsen/logrus"
@@ -57,6 +58,11 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 // setup grpc server
 func startgRPCServer(ctx context.Context, network, port string) error {
 	grpcServer = grpc.NewServer()
+
+	k8sClient, err := CreateInClusterClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to create k8s client for grpc server")
+	}
 
 	//Register all services here
 	//TODO: Register proto servers here.
@@ -109,6 +115,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
+	// ctx, muxer, "127.0.0.1:3000", option
 	if err := api.RegisterVersionHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for version")
 	}
@@ -132,7 +139,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	return mux, nil
 }
 
-func StartServer(host, port, apiPort string) error {
+func StartServer(host, port, apiPort, apiHost string) error {
 	ctx := context.Background()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
@@ -143,21 +150,21 @@ func StartServer(host, port, apiPort string) error {
 		}
 	}()
 	logrus.Info("gRPC server started at:", host, ":", port)
-	mux, err := getHTTPServer(ctx, host+":"+apiPort, host+":"+port)
+	mux, err := getHTTPServer(ctx, apiHost+":"+apiPort, host+":"+port)
 	if err != nil {
 		logrus.Errorf("cannot start rest server: %v", err)
 		return err
 	}
 	logrus.Info("starting http server.....")
 	httpServer = &http.Server{
-		Addr:    host + ":" + apiPort,
+		Addr:    apiHost + ":" + apiPort,
 		Handler: mux,
 	}
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		logrus.Error("cannot start http server", err)
 		return err
 	}
-	logrus.Info("Http server started at:", host, ":", apiPort)
+	logrus.Info("Http server started at:", apiHost, ":", apiPort)
 	return nil
 }
 

@@ -146,9 +146,18 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// VMwareCredsRequeueAfterMinutes is the time to requeue after.
 	VMwareCredsRequeueAfterMinutes = 60
 
+	// PeriodicSyncMaxRetries is the max number of retries for CBT sync
+	PeriodicSyncMaxRetries = 3
+
+	// PeriodicSyncRetryCap is the max retry interval for CBT sync
+	PeriodicSyncRetryCap = "3h"
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 
 	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
 	ESXiSSHSecretName = "esxi-ssh-key"
+	// AutoFstabUpdate is the default value for automatic fstab update
+	AutoFstabUpdate = false
+	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
+	AutoFstabUpdateKey = "AUTO_FSTAB_UPDATE"
 )

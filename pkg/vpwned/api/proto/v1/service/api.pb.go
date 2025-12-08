@@ -3730,6 +3730,110 @@ func (x *ValidateOpenstackIpResponse) GetReason() []string {
 	return nil
 }
 
+type RevalidateCredentialsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevalidateCredentialsRequest) Reset() {
+	*x = RevalidateCredentialsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevalidateCredentialsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevalidateCredentialsRequest) ProtoMessage() {}
+
+func (x *RevalidateCredentialsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevalidateCredentialsRequest.ProtoReflect.Descriptor instead.
+func (*RevalidateCredentialsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *RevalidateCredentialsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RevalidateCredentialsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *RevalidateCredentialsRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type RevalidateCredentialsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevalidateCredentialsResponse) Reset() {
+	*x = RevalidateCredentialsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevalidateCredentialsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevalidateCredentialsResponse) ProtoMessage() {}
+
+func (x *RevalidateCredentialsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevalidateCredentialsResponse.ProtoReflect.Descriptor instead.
+func (*RevalidateCredentialsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *RevalidateCredentialsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 type CleanupStepRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Step          string                 `protobuf:"bytes,1,opt,name=step,proto3" json:"step,omitempty"`
@@ -3739,7 +3843,7 @@ type CleanupStepRequest struct {
 
 func (x *CleanupStepRequest) Reset() {
 	*x = CleanupStepRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3751,7 +3855,7 @@ func (x *CleanupStepRequest) String() string {
 func (*CleanupStepRequest) ProtoMessage() {}
 
 func (x *CleanupStepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[56]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3764,7 +3868,7 @@ func (x *CleanupStepRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupStepRequest.ProtoReflect.Descriptor instead.
 func (*CleanupStepRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{56}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *CleanupStepRequest) GetStep() string {
@@ -3785,7 +3889,7 @@ type CleanupStepResponse struct {
 
 func (x *CleanupStepResponse) Reset() {
 	*x = CleanupStepResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3797,7 +3901,7 @@ func (x *CleanupStepResponse) String() string {
 func (*CleanupStepResponse) ProtoMessage() {}
 
 func (x *CleanupStepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[57]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3810,7 +3914,7 @@ func (x *CleanupStepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupStepResponse.ProtoReflect.Descriptor instead.
 func (*CleanupStepResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{57}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *CleanupStepResponse) GetStep() string {
@@ -5004,7 +5108,13 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"accessInfo\"P\n" +
 	"\x1bValidateOpenstackIpResponse\x12\x19\n" +
 	"\bis_valid\x18\x01 \x03(\bR\aisValid\x12\x16\n" +
-	"\x06reason\x18\x02 \x03(\tR\x06reason\"(\n" +
+	"\x06reason\x18\x02 \x03(\tR\x06reason\"d\n" +
+	"\x1cRevalidateCredentialsRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\"9\n" +
+	"\x1dRevalidateCredentialsResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"(\n" +
 	"\x12CleanupStepRequest\x12\x12\n" +
 	"\x04step\x18\x01 \x01(\tR\x04step\"]\n" +
 	"\x13CleanupStepResponse\x12\x12\n" +
@@ -5116,7 +5226,7 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x06WhoAmI\x12\x12.api.WhoAmIRequest\x1a\x13.api.WhoAmIResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/vpw/v1/who_am_i\x12k\n" +
 	"\x0eListBootSource\x12\x1a.api.ListBootSourceRequest\x1a\x1b.api.ListBootSourceResponse\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/vpw/v1/list_boot_source\x12b\n" +
 	"\rReclaimBMHost\x12\x15.api.ReclaimBMRequest\x1a\x16.api.ReclaimBMResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/vpw/v1/reclaim_bm_host\x12i\n" +
-	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\x95\x01\n" +
+	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\xa1\x02\n" +
 	"\x0eVailbreakProxy\x12\x82\x01\n" +
 	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ip2\xfd\x05\n" +
 	"\fStorageArray\x12\x7f\n" +

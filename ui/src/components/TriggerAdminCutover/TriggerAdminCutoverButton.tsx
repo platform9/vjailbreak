@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState } from 'react'
 import {
   IconButton,
   Tooltip,
@@ -9,10 +9,10 @@ import {
   DialogTitle,
   Button,
   Alert,
-  CircularProgress,
-} from "@mui/material"
+  CircularProgress
+} from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import { triggerAdminCutover } from "../../api/migrations/migrations"
+import { triggerAdminCutover } from '../../api/migrations/migrations'
 
 interface TriggerAdminCutoverButtonProps {
   migrationName: string
@@ -25,7 +25,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
   migrationName,
   namespace,
   onSuccess,
-  onError,
+  onError
 }) => {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,19 +34,19 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
   const handleTriggerCutover = async () => {
     setError(null)
     setIsLoading(true)
-    
+
     try {
-      const result = await triggerAdminCutover(namespace || "migration-system", migrationName)
+      const result = await triggerAdminCutover(namespace || 'migration-system', migrationName)
 
       if (result.success) {
         setOpen(false)
         onSuccess?.()
       } else {
-        setError(result.message || "Failed to trigger cutover")
-        onError?.(result.message || "Failed to trigger cutover")
+        setError(result.message || 'Failed to trigger cutover')
+        onError?.(result.message || 'Failed to trigger cutover')
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred"
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
       setError(errorMessage)
       onError?.(errorMessage)
     } finally {
@@ -59,9 +59,9 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
       <Tooltip title="Trigger Admin Cutover">
         <IconButton
           onClick={(e) => {
-            e.stopPropagation();
-            setError(null); // Clear any previous errors
-            setOpen(true);
+            e.stopPropagation()
+            setError(null) // Clear any previous errors
+            setOpen(true)
           }}
           size="small"
           disabled={isLoading}
@@ -70,11 +70,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
             color: 'primary.main'
           }}
         >
-          {isLoading ? (
-            <CircularProgress size={16} />
-          ) : (
-            <PlayArrowIcon />
-          )}
+          {isLoading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
         </IconButton>
       </Tooltip>
 
@@ -82,10 +78,10 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
         <DialogTitle>Trigger Admin Cutover</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to trigger the admin cutover for migration "{migrationName}"?
-            This will start the cutover process and cannot be undone.
+            Are you sure you want to trigger the admin cutover for migration "{migrationName}"? This
+            will start the cutover process and cannot be undone.
           </DialogContentText>
-          
+
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {error}

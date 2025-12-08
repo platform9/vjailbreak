@@ -1,16 +1,14 @@
-import { Box, CircularProgress, styled } from "@mui/material"
-import { GridLoadingOverlayProps } from "@mui/x-data-grid"
+import { Box, CircularProgress, styled } from '@mui/material'
 
-const StyledGridOverlay = styled("div")(({ theme }) => ({
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  height: "100%",
-  backgroundColor: theme.palette.mode === 'dark'
-    ? 'rgba(18, 18, 18, 0.9)'
-    : 'rgba(255, 255, 255, 0.9)',
-  color: theme.palette.text.primary,
+const StyledGridOverlay = styled('div')(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100%',
+  backgroundColor:
+    theme.palette.mode === 'dark' ? 'rgba(18, 18, 18, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+  color: theme.palette.text.primary
 }))
 
 interface CustomLoadingOverlayProps extends GridLoadingOverlayProps {

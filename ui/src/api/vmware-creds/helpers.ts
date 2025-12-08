@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4 } from 'uuid'
 
 interface VmwareCredsParams {
   name?: string
@@ -9,16 +9,14 @@ interface VmwareCredsParams {
   existingCredName?: string
 }
 
-export const createVmwareCredsJson = (
-  params: VmwareCredsParams | null | undefined
-) => {
+export const createVmwareCredsJson = (params: VmwareCredsParams | null | undefined) => {
   const {
     name,
     vcenterHost,
     username,
     password,
-    namespace = "migration-system",
-    existingCredName,
+    namespace = 'migration-system',
+    existingCredName
   } = params || {}
 
   // If existingCredName is provided, we're using an existing credential
@@ -28,17 +26,17 @@ export const createVmwareCredsJson = (
   }
 
   return {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "VMwareCreds",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'VMwareCreds',
     metadata: {
       name: name || uuidv4(),
-      namespace,
+      namespace
     },
     spec: {
       VCENTER_HOST: vcenterHost,
       VCENTER_INSECURE: true,
       VCENTER_PASSWORD: password,
-      VCENTER_USERNAME: username,
-    },
+      VCENTER_USERNAME: username
+    }
   }
 }
