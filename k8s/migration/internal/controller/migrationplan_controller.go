@@ -1020,8 +1020,12 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			// UseGPUFlavor is only applicable for PCD credentials
 			useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
 
+			// Get GPU requirements from VM
+			passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
+			vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
+
 			var flavor *flavors.Flavor
-			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors, useGPUFlavor)
+			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}

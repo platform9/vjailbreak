@@ -712,32 +712,41 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	return vminfo, rdmDiskMap, nil
 }
 
-// DetectGPUUsage checks if the VM has any GPU devices attached.
-// It detects PCI passthrough devices (including GPUs) and vGPU profiles.
-func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
+// CountGPUs counts the number of GPU devices attached to a VM.
+// It separately counts PCI passthrough GPUs and vGPU devices.
+func CountGPUs(vmProps *mo.VirtualMachine) vjailbreakv1alpha1.GPUInfo {
+	info := vjailbreakv1alpha1.GPUInfo{}
+
 	if vmProps.Config == nil || vmProps.Config.Hardware.Device == nil {
-		return false
+		return info
 	}
 
 	for _, device := range vmProps.Config.Hardware.Device {
-		// Check for PCI passthrough devices (including GPUs)
-		if _, ok := device.(*types.VirtualPCIPassthrough); ok {
-			return true
-		}
-
-		// Check for vGPU (shared GPU) devices
-		// vGPU devices are represented as VirtualPCIPassthrough with specific backing
 		if pciDevice, ok := device.(*types.VirtualPCIPassthrough); ok {
 			if pciDevice.Backing != nil {
 				// VirtualPCIPassthroughVmiopBackingInfo indicates vGPU
 				if _, isVGPU := pciDevice.Backing.(*types.VirtualPCIPassthroughVmiopBackingInfo); isVGPU {
-					return true
+					info.VGPUCount++
+				} else {
+					// Regular PCI passthrough (likely GPU)
+					info.PassthroughCount++
 				}
+			} else {
+				// PCI passthrough without specific backing
+				info.PassthroughCount++
 			}
 		}
 	}
 
-	return false
+	return info
+}
+
+// DetectGPUUsage checks if the VM has any GPU devices attached.
+// It detects PCI passthrough devices (including GPUs) and vGPU profiles.
+// Deprecated: Use CountGPUs() and GPUInfo.HasGPU() instead.
+func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
+	gpuInfo := CountGPUs(vmProps)
+	return gpuInfo.HasGPU()
 }
 
 // ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
@@ -1727,8 +1736,8 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		return
 	}
 
-	// Detect GPU usage
-	useGPU := DetectGPUUsage(&vmProps)
+	// Detect GPU usage and count GPUs
+	gpuInfo := CountGPUs(&vmProps)
 
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
@@ -1745,7 +1754,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		RDMDisks:          rdmForVM,
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
-		UseGPU:            useGPU,
+		GPU:               gpuInfo,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
