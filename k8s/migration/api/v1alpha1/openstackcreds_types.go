@@ -127,6 +127,25 @@ type OpenstackCredsList struct {
 	Items           []OpenstackCreds `json:"items"`
 }
 
+// DeepCopyInto is a custom deepcopy function to handle the Flavors field
+// which uses an external type that doesn't implement DeepCopyInto
+func (in *OpenstackCredsSpec) DeepCopyInto(out *OpenstackCredsSpec) {
+	*out = *in
+	out.SecretRef = in.SecretRef
+	if in.Flavors != nil {
+		in, out := &in.Flavors, &out.Flavors
+		*out = make([]flavors.Flavor, len(*in))
+		copy(*out, *in)
+	}
+	if in.PCDHostConfig != nil {
+		in, out := &in.PCDHostConfig, &out.PCDHostConfig
+		*out = make([]HostConfig, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+}
+
 func init() {
 	SchemeBuilder.Register(&OpenstackCreds{}, &OpenstackCredsList{})
 }
