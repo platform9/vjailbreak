@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -39,6 +40,34 @@ type VirtV2VOperations interface {
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
+}
+
+// AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
+func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
+	// Create the netplan file locally
+	localPath := "/home/fedora/50-vj.yaml"
+	if err := os.WriteFile(localPath, []byte(netplanYAML), 0644); err != nil {
+		return fmt.Errorf("failed to create netplan yaml: %s", err)
+	}
+	log.Println("Created local netplan YAML")
+	log.Println("Uploading netplan YAML to disk")
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var (
+		ans string
+		err error
+	)
+	if useSingleDisk {
+		command := `upload /home/fedora/50-vj.yaml /etc/netplan/50-vj.yaml`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/50-vj.yaml", "/etc/netplan/50-vj.yaml")
+	}
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
+		return err
+	}
+	return nil
 }
 
 func RetainAlphanumeric(input string) string {
@@ -201,9 +230,10 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
+
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
-	
+
 	// Use the debug logging with proper file cleanup
 	err := utils.RunCommandWithLogFile(cmd)
 	duration := time.Since(start)
@@ -256,34 +286,123 @@ func GetOsRelease(path string) (string, error) {
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC, gatewayIP map[string]string) error {
 	// Add wildcard to netplan
-	var ans string
-	netplan := `[Match]
-Name=en*
+	type ipEntry struct {
+		ip     string
+		prefix int32
+	}
+	macToIPs := make(map[string][]ipEntry)
+	macToDNS := make(map[string][]string)
+	if len(guestNetworks) > 0 {
+		for _, gn := range guestNetworks {
+			if strings.Contains(gn.IP, ":") { // skip IPv6 here
+				continue
+			}
+			macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
+			if len(gn.DNS) > 0 {
+				macToDNS[gn.MAC] = gn.DNS
+			}
+		}
+	} else if len(networkInterfaces) > 0 {
+		for _, ni := range networkInterfaces {
+			if strings.Contains(ni.IPAddress, ":") { // skip IPv6 here
+				continue
+			}
+			macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
+		}
+	}
 
-[Network]
-DHCP=yes`
-
+	// Construct YAML
+	var b strings.Builder
+	b.WriteString("network:\n")
+	b.WriteString("  version: 2\n")
+	b.WriteString("  renderer: networkd\n")
+	b.WriteString("  ethernets:\n")
+	idx := 0
+	routesAdded := false
+	log.Printf("MAC GATEWAY : %v", gatewayIP)
+	for mac, entries := range macToIPs {
+		if len(entries) == 0 {
+			continue
+		}
+		id := fmt.Sprintf("vj%d", idx)
+		b.WriteString(fmt.Sprintf("    %s:\n", id))
+		b.WriteString("      match:\n")
+		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
+		b.WriteString("      dhcp4: false\n")
+		b.WriteString("      addresses:\n")
+		for _, e := range entries {
+			// default prefix to 24 if zero
+			prefix := e.prefix
+			if prefix == 0 {
+				prefix = 24
+			}
+			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
+		}
+		if gateway, ok := gatewayIP[mac]; ok {
+			if !routesAdded {
+				log.Printf("Writing default routes")
+				b.WriteString("      routes:\n")
+				b.WriteString("        - to: default\n")
+				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+				routesAdded = true
+			}
+		}
+		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
+			b.WriteString("      nameservers:\n")
+			b.WriteString("        addresses:\n")
+			for _, d := range dns {
+				b.WriteString(fmt.Sprintf("          - %s\n", d))
+			}
+		}
+		idx++
+	}
+	if !routesAdded {
+		log.Println("WARNING: No gateway found")
+	}
+	netplanYAML := b.String()
+	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	// Create the netplan file
-	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplan), 0644)
+	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to create netplan file: %s", err)
+		return fmt.Errorf("failed to create netplan file: %w", err)
 	}
 	log.Println("Created local netplan file")
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
 	if useSingleDisk {
-		command := `upload /home/fedora/99-wildcard.network /etc/systemd/network/99-wildcard.network`
+		command := "mv /etc/netplan /etc/netplan-bkp"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "mkdir /etc/netplan"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml"
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
-		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/systemd/network/99-wildcard.network")
+		command := "mv"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "mkdir"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	}
 	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
-		return err
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
 	}
 	return nil
 }
@@ -359,7 +478,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
-	cmd.Args = append(cmd.Args, "-i", command)
+	cmd.Args = append(cmd.Args, "-i", "--", command)
 	cmd.Args = append(cmd.Args, args...)
 	return cmd
 }
@@ -375,6 +494,42 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(string(out)), nil
 }
 
+// GetDeviceNumberFromPartition returns the device index for a given partition name
+func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
+	command := "part-to-dev"
+	device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
+		return -1, err
+	}
+
+	command = "part-to-partnum"
+	num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
+		return -1, err
+	}
+
+	command = "part-get-bootable"
+	bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
+		return -1, err
+	}
+
+	if strings.TrimSpace(bootable) == "true" {
+		command = "device-index"
+		index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
+		if err != nil {
+			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
+			return -1, err
+		}
+		return strconv.Atoi(strings.TrimSpace(index))
+	}
+
+	return -1, errors.New("partition is not bootable")
+}
+
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
@@ -384,36 +539,11 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 
 	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
 	for _, partition := range partitions {
-		command := "part-to-dev"
-		device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
-			return -1, err
+		deviceNum, err := GetDeviceNumberFromPartition(disks, partition)
+		if err == nil {
+			return deviceNum, nil
 		}
-
-		command = "part-to-partnum"
-		num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
-			return -1, err
-		}
-
-		command = "part-get-bootable"
-		bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
-			return -1, err
-		}
-
-		if strings.TrimSpace(bootable) == "true" {
-			command = "device-index"
-			index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
-			if err != nil {
-				fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-				return -1, err
-			}
-			return strconv.Atoi(strings.TrimSpace(index))
-		}
+		// Continue to next partition if this one is not bootable or has an error
 	}
 	return -1, errors.New("bootable volume not found")
 }
@@ -536,4 +666,133 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 
 	// Return original error if not a missing file issue
 	return "", err
+}
+
+// RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
+// during guest inspection phase for Linux migrations
+func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Script should be available in the container at /home/fedora/
+	scriptPath := "/home/fedora/generate-mount-persistence.sh"
+
+	// Check if script exists in the container
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
+	}
+
+	log.Printf("Running generate-mount-persistence.sh with --force-uuid option")
+
+	// Upload the script to the guest VM
+	var uploadErr error
+	var uploadOutput string
+
+	if useSingleDisk {
+		command := fmt.Sprintf("upload %s /tmp/generate-mount-persistence.sh", scriptPath)
+		uploadOutput, uploadErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
+	}
+
+	if uploadErr != nil {
+		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
+	}
+
+	log.Printf("Successfully uploaded generate-mount-persistence.sh to guest")
+
+	// Make the script executable
+	var chmodErr error
+	var chmodOutput string
+
+	if useSingleDisk {
+		command := "chmod 0755 /tmp/generate-mount-persistence.sh"
+		chmodOutput, chmodErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "chmod"
+		chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
+	}
+
+	if chmodErr != nil {
+		return fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
+	}
+
+	log.Printf("Made generate-mount-persistence.sh executable")
+
+	// Run the script with --force-uuid
+	var runErr error
+	var runOutput string
+
+	if useSingleDisk {
+		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
+		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "sh"
+		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
+	}
+
+	if runErr != nil {
+		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
+		// Don't return error, just log warning as this is not critical
+		return nil
+	}
+
+	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
+	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+
+	return nil
+}
+
+func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Script should be available in the container at /home/fedora/
+	scriptPath := "/home/fedora/get-bootable-partition.sh"
+
+	// Check if script exists in the container
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
+	}
+
+	// Upload the script to the guest VM
+	var uploadErr error
+	var uploadOutput string
+
+	command := "upload"
+	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/get-bootable-partition.sh")
+
+	if uploadErr != nil {
+		return "", fmt.Errorf("failed to upload get-bootable-partition.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
+	}
+
+	log.Printf("Successfully uploaded get-bootable-partition.sh to guest")
+
+	// Make the script executable
+	var chmodErr error
+	var chmodOutput string
+
+	command = "chmod"
+	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/get-bootable-partition.sh")
+
+	if chmodErr != nil {
+		return "", fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
+	}
+
+	log.Printf("Made get-bootable-partition.sh executable")
+
+	// Run the script
+	var runErr error
+	var runOutput string
+
+	command = "sh"
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/get-bootable-partition.sh")
+
+	if runErr != nil {
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(runOutput))
+	}
+
+	log.Printf("Successfully executed get-bootable-partition.sh")
+	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+
+	return strings.TrimSpace(runOutput), nil
 }

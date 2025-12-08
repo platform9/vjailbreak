@@ -1,26 +1,24 @@
-import { Box, Drawer, styled, Alert } from "@mui/material"
-import MigrationIcon from "@mui/icons-material/SwapHoriz"
-import { useQueryClient } from "@tanstack/react-query"
-import axios from "axios"
-import { useEffect, useMemo, useState, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
-import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
-import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
-import { MigrationPlan } from "src/api/migration-plans/model"
-import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
-import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
+import { Box, Drawer, styled, Alert } from '@mui/material'
+import MigrationIcon from '@mui/icons-material/SwapHoriz'
+import { useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
+import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
+import { MigrationPlan } from 'src/api/migration-plans/model'
+import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
   postMigrationTemplate,
-  deleteMigrationTemplate,
-} from "src/api/migration-templates/migrationTemplates"
-import { MigrationTemplate, VmData } from "src/api/migration-templates/model"
-import { getMigrations } from "src/api/migrations/migrations"
-import { Migration } from "src/api/migrations/model"
-import { createNetworkMappingJson } from "src/api/network-mapping/helpers"
-import { postNetworkMapping } from "src/api/network-mapping/networkMappings"
-import { OpenstackCreds } from "src/api/openstack-creds/model"
+  deleteMigrationTemplate
+} from 'src/api/migration-templates/migrationTemplates'
+import { MigrationTemplate, VmData } from 'src/api/migration-templates/model'
+import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
+import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import {
   getOpenstackCredentials,
   deleteOpenstackCredentials,
@@ -61,18 +59,18 @@ const stringsCompareFn = (a: string, b: string) =>
   a.toLowerCase().localeCompare(b.toLowerCase())
 
 const StyledDrawer = styled(Drawer)(({ theme }) => ({
-  "& .MuiDrawer-paper": {
-    display: "grid",
-    gridTemplateRows: "max-content 1fr max-content",
-    width: "1400px",
-    maxWidth: "90vw", // For responsiveness on smaller screens
-    zIndex: theme.zIndex.modal,
-  },
+  '& .MuiDrawer-paper': {
+    display: 'grid',
+    gridTemplateRows: 'max-content 1fr max-content',
+    width: '1400px',
+    maxWidth: '90vw', // For responsiveness on smaller screens
+    zIndex: theme.zIndex.modal
+  }
 }))
 
-const DrawerContent = styled("div")(({ theme }) => ({
-  overflow: "auto",
-  padding: theme.spacing(4, 6, 4, 4),
+const DrawerContent = styled('div')(({ theme }) => ({
+  overflow: 'auto',
+  padding: theme.spacing(4, 6, 4, 4)
 }))
 
 export interface FormValues extends Record<string, unknown> {
@@ -97,20 +95,20 @@ export interface FormValues extends Record<string, unknown> {
   }
   vms?: VmData[]
   rdmConfigurations?: Array<{
-    uuid: string;
-    diskName: string;
-    cinderBackendPool: string;
-    volumeType: string;
-    source: Record<string, string>;
+    uuid: string
+    diskName: string
+    cinderBackendPool: string
+    volumeType: string
+    source: Record<string, string>
   }>
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
   storageCopyMethod?: string  // 'normal' or 'vendor-based'
   arrayCredsMappings?: { source: string; target: string }[]
   // Cluster selection fields
-  vmwareCluster?: string  // Format: "credName:datacenter:clusterName"
+  vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   vmwareClusterDisplayName?: string
-  pcdCluster?: string     // PCD cluster ID
+  pcdCluster?: string // PCD cluster ID
   // Optional Params
   dataCopyMethod?: string
   dataCopyStartTime?: string
@@ -128,9 +126,9 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
+  serverGroup?: string
   fallbackToDHCP?: boolean
 }
-
 
 export interface SelectedMigrationOptionsType {
   dataCopyMethod: boolean
@@ -139,6 +137,7 @@ export interface SelectedMigrationOptionsType {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
+  periodicSyncEnabled?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -147,7 +146,6 @@ export interface SelectedMigrationOptionsType {
   }
   [key: string]: unknown
 }
-
 
 // Default state for checkboxes
 const defaultMigrationOptions = {
@@ -163,9 +161,7 @@ const defaultMigrationOptions = {
     renameVm: false,
     moveToFolder: false
   }
-};
-
-
+}
 
 const defaultValues: Partial<FormValues> = {}
 
@@ -175,109 +171,99 @@ interface MigrationFormDrawerProps {
   open: boolean
   onClose: () => void
   reloadMigrations?: () => void
+  onSuccess?: (message: string) => void
 }
 
 export default function MigrationFormDrawer({
   open,
   onClose,
+  onSuccess
 }: MigrationFormDrawerProps) {
   const navigate = useNavigate()
   const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
   const { pcdData } = useClusterData()
-  const { reportError } = useErrorHandler({ component: "MigrationForm" })
-  const { track } = useAmplitude({ component: "MigrationForm" })
-  const [error, setError] = useState<{ title: string; message: string } | null>(
-    null
-  )
+  const { reportError } = useErrorHandler({ component: 'MigrationForm' })
+  const { track } = useAmplitude({ component: 'MigrationForm' })
+  const [, setError] = useState<{ title: string; message: string } | null>(null)
   // Theses are the errors that will be displayed on the form
-  const { params: fieldErrors, getParamsUpdater: getFieldErrorsUpdater } =
-    useParams<FieldErrors>({})
+  const { params: fieldErrors, getParamsUpdater: getFieldErrorsUpdater } = useParams<FieldErrors>(
+    {}
+  )
   const queryClient = useQueryClient()
 
   // Migration Options - Checked or Unchecked state
-  const {
-    params: selectedMigrationOptions,
-    getParamsUpdater: updateSelectedMigrationOptions,
-  } = useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
+  const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
+    useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
   // Form Statuses
   const [submitting, setSubmitting] = useState(false)
 
   // Migration Resources
-  const [vmwareCredentials, setVmwareCredentials] = useState<
-    VMwareCreds | undefined
-  >(undefined)
-  const [openstackCredentials, setOpenstackCredentials] = useState<
-    OpenstackCreds | undefined
-  >(undefined)
-  const [migrationTemplate, setMigrationTemplate] = useState<
-    MigrationTemplate | undefined
-  >(undefined)
-  const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | undefined>(
+  const [vmwareCredentials, setVmwareCredentials] = useState<VMwareCreds | undefined>(undefined)
+  const [openstackCredentials, setOpenstackCredentials] = useState<OpenstackCreds | undefined>(
     undefined
   )
-  const [migrations, setMigrations] = useState<Migration[] | undefined>(
+  const [migrationTemplate, setMigrationTemplate] = useState<MigrationTemplate | undefined>(
     undefined
   )
 
   // Generate a unique session ID for this form instance
-  const [sessionId] = useState(() => `form-session-${Date.now()}`);
+  const [sessionId] = useState(() => `form-session-${Date.now()}`)
 
-  const vmwareCredsValidated =
-    vmwareCredentials?.status?.vmwareValidationStatus === "Succeeded"
+  const vmwareCredsValidated = vmwareCredentials?.status?.vmwareValidationStatus === 'Succeeded'
 
   const openstackCredsValidated =
-    openstackCredentials?.status?.openstackValidationStatus === "Succeeded"
+    openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
 
   // Query RDM disks
   const { data: rdmDisks = [] } = useRdmDisksQuery({
     enabled: vmwareCredsValidated && openstackCredsValidated
-  });
+  })
 
   // Polling Conditions - Poll when we have a migration template but it's not fully populated with networks/volumes
-  const shouldPollMigrationTemplate = migrationTemplate?.metadata?.name &&
+  const shouldPollMigrationTemplate =
+    migrationTemplate?.metadata?.name &&
     (!migrationTemplate?.status?.openstack?.networks ||
       !migrationTemplate?.status?.openstack?.volumeTypes)
-
-  const shouldPollMigrationPlan =
-    !!migrationPlan?.metadata?.name && migrationPlan?.status === undefined
 
   // Update this effect to only handle existing credential selection
   useEffect(() => {
     const fetchCredentials = async () => {
-      if (!params.vmwareCreds || !params.vmwareCreds.existingCredName) return;
+      if (!params.vmwareCreds || !params.vmwareCreds.existingCredName) return
 
       try {
-        const existingCredName = params.vmwareCreds.existingCredName;
-        const response = await getVmwareCredentials(existingCredName);
-        setVmwareCredentials(response);
+        const existingCredName = params.vmwareCreds.existingCredName
+        const response = await getVmwareCredentials(existingCredName)
+        setVmwareCredentials(response)
       } catch (error) {
-        console.error("Error fetching existing VMware credentials:", error);
-        getFieldErrorsUpdater("vmwareCreds")(
-          "Error fetching VMware credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+        console.error('Error fetching existing VMware credentials:', error)
+        getFieldErrorsUpdater('vmwareCreds')(
+          'Error fetching VMware credentials: ' +
+            (axios.isAxiosError(error) ? error?.response?.data?.message : error)
         )
       }
     }
 
     if (isNilOrEmpty(params.vmwareCreds)) return
     setVmwareCredentials(undefined)
-    getFieldErrorsUpdater("vmwareCreds")("")
+    getFieldErrorsUpdater('vmwareCreds')('')
     fetchCredentials()
   }, [params.vmwareCreds, getFieldErrorsUpdater])
 
   // Update this effect to only handle existing credential selection
   useEffect(() => {
     const fetchCredentials = async () => {
-      if (!params.openstackCreds || !params.openstackCreds.existingCredName) return;
+      if (!params.openstackCreds || !params.openstackCreds.existingCredName) return
 
       try {
-        const existingCredName = params.openstackCreds.existingCredName;
-        const response = await getOpenstackCredentials(existingCredName);
-        setOpenstackCredentials(response);
+        const existingCredName = params.openstackCreds.existingCredName
+        const response = await getOpenstackCredentials(existingCredName)
+        setOpenstackCredentials(response)
       } catch (error) {
-        console.error("Error fetching existing OpenStack credentials:", error);
-        getFieldErrorsUpdater("openstackCreds")(
-          "Error fetching OpenStack credentials: " + (axios.isAxiosError(error) ? error?.response?.data?.message : error),
+        console.error('Error fetching existing OpenStack credentials:', error)
+        getFieldErrorsUpdater('openstackCreds')(
+          'Error fetching OpenStack credentials: ' +
+            (axios.isAxiosError(error) ? error?.response?.data?.message : error)
         )
       }
     }
@@ -285,55 +271,88 @@ export default function MigrationFormDrawer({
     if (isNilOrEmpty(params.openstackCreds)) return
     // Reset the OpenstackCreds object if the user changes the credentials
     setOpenstackCredentials(undefined)
-    getFieldErrorsUpdater("opeanstackCreds")("")
+    getFieldErrorsUpdater('openstackCreds')('')
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
+  const targetPCDClusterName = useMemo(() => {
+    if (!params.pcdCluster) return undefined
+    const selectedPCD = pcdData.find((p) => p.id === params.pcdCluster)
+    return selectedPCD?.name
+  }, [params.pcdCluster, pcdData])
+
   useEffect(() => {
-    const createMigrationTemplate = async () => {
-      let targetPCDClusterName: string | undefined = undefined;
-      if (params.pcdCluster) {
+    if (!vmwareCredsValidated || !openstackCredsValidated) return
 
-        const selectedPCD = pcdData.find(p => p.id === params.pcdCluster);
-        targetPCDClusterName = selectedPCD?.name;
+    const syncMigrationTemplate = async () => {
+      try {
+        // If a template already exists, update it instead of creating a new one
+        if (migrationTemplate?.metadata?.name) {
+          const patchBody = {
+            spec: {
+              source: {
+                datacenter: params.vmwareCreds?.datacenter,
+                vmwareRef: vmwareCredentials?.metadata.name
+              },
+              destination: {
+                openstackRef: openstackCredentials?.metadata.name
+              },
+              ...(targetPCDClusterName && {
+                targetPCDClusterName
+              }),
+              useFlavorless: params.useFlavorless || false
+            }
+          }
+
+          const updated = await patchMigrationTemplate(migrationTemplate.metadata.name, patchBody)
+          setMigrationTemplate(updated)
+          return
+        }
+
+        // Otherwise create a new template once
+        const body = createMigrationTemplateJson({
+          datacenter: params.vmwareCreds?.datacenter,
+          vmwareRef: vmwareCredentials?.metadata.name,
+          openstackRef: openstackCredentials?.metadata.name,
+          targetPCDClusterName,
+          useFlavorless: params.useFlavorless || false
+        })
+        const created = await postMigrationTemplate(body)
+        setMigrationTemplate(created)
+      } catch (err) {
+        console.error('Error syncing migration template', err)
+        getFieldErrorsUpdater('migrationTemplate')(
+          'Error syncing migration template: ' +
+            (axios.isAxiosError(err)
+              ? err?.response?.data?.message
+              : err instanceof Error
+                ? err.message
+                : String(err))
+        )
       }
-
-      const body = createMigrationTemplateJson({
-        datacenter: params.vmwareCreds?.datacenter,
-        vmwareRef: vmwareCredentials?.metadata.name,
-        openstackRef: openstackCredentials?.metadata.name,
-        targetPCDClusterName: targetPCDClusterName,
-        useFlavorless: params.useFlavorless || false,
-      })
-      const response = await postMigrationTemplate(body)
-      setMigrationTemplate(response)
     }
 
-    if (!vmwareCredsValidated || !openstackCredsValidated) return
-    createMigrationTemplate()
+    syncMigrationTemplate()
   }, [
     vmwareCredsValidated,
     openstackCredsValidated,
     params.vmwareCreds?.datacenter,
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
-    params.pcdCluster,
+    targetPCDClusterName,
     params.useFlavorless,
-    pcdData
+    migrationTemplate?.metadata?.name,
+    getFieldErrorsUpdater
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
   const fetchMigrationTemplate = async () => {
     try {
-      const updatedMigrationTemplate = await getMigrationTemplate(
-        migrationTemplate!.metadata!.name
-      )
+      const updatedMigrationTemplate = await getMigrationTemplate(migrationTemplate!.metadata!.name)
       setMigrationTemplate(updatedMigrationTemplate)
     } catch (err) {
-      console.error("Error retrieving migration templates", err)
-      getFieldErrorsUpdater("migrationTemplate")(
-        "Error retrieving migration templates"
-      )
+      console.error('Error retrieving migration templates', err)
+      getFieldErrorsUpdater('migrationTemplate')('Error retrieving migration templates')
     }
   }
 
@@ -343,10 +362,8 @@ export default function MigrationFormDrawer({
         try {
           fetchMigrationTemplate()
         } catch (err) {
-          console.error("Error retrieving migration templates", err)
-          getFieldErrorsUpdater("migrationTemplate")(
-            "Error retrieving migration templates"
-          )
+          console.error('Error retrieving migration templates', err)
+          getFieldErrorsUpdater('migrationTemplate')('Error retrieving migration templates')
         }
       }
     },
@@ -362,21 +379,17 @@ export default function MigrationFormDrawer({
 
   const availableVmwareNetworks = useMemo(() => {
     if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.networks || []))).sort(
-      stringsCompareFn
-    ) // Back to unique networks only
+    return uniq(flatten(params.vms.map((vm) => vm.networks || []))).sort(stringsCompareFn) // Back to unique networks only
   }, [params.vms])
 
   const availableVmwareDatastores = useMemo(() => {
     if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(
-      stringsCompareFn
-    )
+    return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(stringsCompareFn)
   }, [params.vms])
 
   const createNetworkMapping = async (networkMappingParams) => {
     const body = createNetworkMappingJson({
-      networkMappings: networkMappingParams,
+      networkMappings: networkMappingParams
     })
 
     try {
@@ -386,11 +399,12 @@ export default function MigrationFormDrawer({
     } catch (err) {
       console.error('Error creating network mapping:', err)
       setError({
-        title: "Error creating network mapping",
-        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+        title: 'Error creating network mapping',
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
       })
-      getFieldErrorsUpdater("networksMapping")(
-        "Error creating network mapping : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      getFieldErrorsUpdater('networksMapping')(
+        'Error creating network mapping : ' +
+          (axios.isAxiosError(err) ? err?.response?.data?.message : err)
       )
       return null
     }
@@ -398,14 +412,14 @@ export default function MigrationFormDrawer({
 
   const createStorageMapping = async (storageMappingsParams) => {
     const body = createStorageMappingJson({
-      storageMappings: storageMappingsParams,
+      storageMappings: storageMappingsParams
     })
     try {
       const data = await postStorageMapping(body)
       console.log('Storage mapping created:', data)
       return data
     } catch (err) {
-      console.error("Error creating storage mapping", err)
+      console.error('Error creating storage mapping', err)
       reportError(err as Error, {
         context: 'storage-mapping-creation',
         metadata: {
@@ -414,11 +428,12 @@ export default function MigrationFormDrawer({
         }
       })
       setError({
-        title: "Error creating storage mapping",
-        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+        title: 'Error creating storage mapping',
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
       })
-      getFieldErrorsUpdater("storageMapping")(
-        "Error creating storage mapping : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      getFieldErrorsUpdater('storageMapping')(
+        'Error creating storage mapping : ' +
+          (axios.isAxiosError(err) ? err?.response?.data?.message : err)
       )
       return null
     }
@@ -473,6 +488,8 @@ export default function MigrationFormDrawer({
         networkMapping: networkMappings.metadata.name,
         storageCopyMethod,
       },
+        storageMapping: storageMappings.metadata.name
+      }
     }
     
     // Add either arrayCredsMapping or storageMapping based on method
@@ -498,8 +515,8 @@ export default function MigrationFormDrawer({
     } catch (err) {
       console.error('Error updating migration template:', err)
       setError({
-        title: "Error updating migration template",
-        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+        title: 'Error updating migration template',
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
       })
     }
   }
@@ -508,57 +525,73 @@ export default function MigrationFormDrawer({
     updatedMigrationTemplate?: MigrationTemplate | null
   ): Promise<MigrationPlan> => {
     if (!updatedMigrationTemplate?.metadata?.name) {
-      throw new Error("Migration template is not available")
+      throw new Error('Migration template is not available')
     }
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
       ? params.postMigrationAction
       : undefined
 
-    const vmsToMigrate = (params.vms || []).map((vm) => vm.name);
+    const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
+
+    // Build AssignedIPsPerVM map for cold migration
+    const assignedIPsPerVM: Record<string, string> = {}
+    if (params.vms) {
+      params.vms.forEach((vm) => {
+        if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
+          assignedIPsPerVM[vm.name] = vm.assignedIPs
+        }
+      })
+    }
 
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
-      type: selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-        ? params.dataCopyMethod
-        : "cold",
+      type:
+        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
+          ? params.dataCopyMethod
+          : 'cold',
+      ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
-        dataCopyStart: params.dataCopyStartTime,
-      }),
+          dataCopyStart: params.dataCopyStartTime
+        }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED && {
-        adminInitiatedCutOver: true
-      }),
+          adminInitiatedCutOver: true
+        }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverStartTime && {
-        vmCutoverStart: params.cutoverStartTime
-      }),
+          vmCutoverStart: params.cutoverStartTime
+        }),
       ...(selectedMigrationOptions.cutoverOption &&
         params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
         params.cutoverEndTime && {
-        vmCutoverEnd: params.cutoverEndTime
-      }),
+          vmCutoverEnd: params.cutoverEndTime
+        }),
       ...(postMigrationAction && { postMigrationAction }),
-      ...(params.securityGroups && params.securityGroups.length > 0 && {
-        securityGroups: params.securityGroups,
+      ...(params.securityGroups &&
+        params.securityGroups.length > 0 && {
+          securityGroups: params.securityGroups
+        }),
+      ...(params.serverGroup && {
+        serverGroup: params.serverGroup
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
       ...(selectedMigrationOptions.postMigrationScript &&
         params.postMigrationScript && {
-        postMigrationScript: params.postMigrationScript,
-      }),
-    };
+          postMigrationScript: params.postMigrationScript
+        }),
+      periodicSyncInterval: params.periodicSyncInterval,
+      periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled
+    }
 
-
-
-    const body = createMigrationPlanJson(migrationFields);
+    const body = createMigrationPlanJson(migrationFields)
 
     try {
-      const data = await postMigrationPlan(body);
+      const data = await postMigrationPlan(body)
 
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
@@ -570,12 +603,12 @@ export default function MigrationFormDrawer({
         hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
         hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
         postMigrationAction,
-        namespace: data.metadata?.namespace,
-      });
+        namespace: data.metadata?.namespace
+      })
 
-      return data;
+      return data
     } catch (error: unknown) {
-      console.error("Error creating migration plan", error);
+      console.error('Error creating migration plan', error)
 
       // Track migration creation failure
       track(AMPLITUDE_EVENTS.MIGRATION_CREATION_FAILED, {
@@ -583,8 +616,8 @@ export default function MigrationFormDrawer({
         virtualMachineCount: vmsToMigrate?.length || 0,
         migrationType: migrationFields.type,
         errorMessage: error instanceof Error ? error.message : String(error),
-        stage: "creation",
-      });
+        stage: 'creation'
+      })
 
       reportError(error as Error, {
         context: 'migration-plan-creation',
@@ -592,22 +625,22 @@ export default function MigrationFormDrawer({
           migrationFields: migrationFields,
           action: 'create-migration-plan'
         }
-      });
+      })
 
-      let errorMessage = "An unknown error occurred";
+      let errorMessage = 'An unknown error occurred'
       let errorResponse: {
-        status?: number;
-        statusText?: string;
-        data?: unknown;
+        status?: number
+        statusText?: string
+        data?: unknown
         config?: {
-          url?: string;
-          method?: string;
-          data?: unknown;
-        };
-      } = {};
+          url?: string
+          method?: string
+          data?: unknown
+        }
+      } = {}
 
       if (axios.isAxiosError(error)) {
-        errorMessage = error.response?.data?.message || error.message || String(error);
+        errorMessage = error.response?.data?.message || error.message || String(error)
         errorResponse = {
           status: error.response?.status,
           statusText: error.response?.statusText,
@@ -617,26 +650,24 @@ export default function MigrationFormDrawer({
             method: error.config?.method,
             data: error.config?.data
           }
-        };
+        }
       } else if (error instanceof Error) {
-        errorMessage = error.message;
+        errorMessage = error.message
       } else {
-        errorMessage = String(error);
+        errorMessage = String(error)
       }
 
-      console.error('Error details:', errorResponse);
+      console.error('Error details:', errorResponse)
 
       setError({
-        title: "Error creating migration plan",
-        message: errorMessage,
-      });
+        title: 'Error creating migration plan',
+        message: errorMessage
+      })
 
-      getFieldErrorsUpdater("migrationPlan")(
-        `Error creating migration plan: ${errorMessage}`
-      );
-      throw error;
+      getFieldErrorsUpdater('migrationPlan')(`Error creating migration plan: ${errorMessage}`)
+      throw error
     }
-  };
+  }
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
@@ -687,10 +718,18 @@ export default function MigrationFormDrawer({
     )
 
     // Create MigrationPlan
-    const migrationPlanResource = await createMigrationPlan(
-      updatedMigrationTemplate
-    )
-    setMigrationPlan(migrationPlanResource)
+    await createMigrationPlan(updatedMigrationTemplate)
+
+    // Stop submitting state
+    setSubmitting(false)
+    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+
+    // Show success notification via callback
+    onSuccess?.('Migration submitted successfully')
+
+    // Close form and navigate
+    onClose()
+    navigate('/dashboard/migrations')
   }, [
     params.networkMappings,
     params.storageMappings,
@@ -701,101 +740,96 @@ export default function MigrationFormDrawer({
     createStorageMapping,
     createArrayCredsMapping,
     updateMigrationTemplate,
-    createMigrationPlan
-  ]);
-
-  useInterval(
-    async () => {
-      if (shouldPollMigrationPlan) {
-        try {
-          const response = await getMigrations(migrationPlan?.metadata?.name)
-          setMigrations(response)
-        } catch (error) {
-          console.error("Error getting MigrationPlan", { error })
-          setSubmitting(false)
-        }
-      }
-    },
-    THREE_SECONDS,
-    shouldPollMigrationPlan
-  )
-
-  useEffect(() => {
-    if (migrations && migrations.length > 0 && !error) {
-      setSubmitting(false)
-      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
-      onClose()
-      navigate("/dashboard/migrations")
-    }
-  }, [migrations, error, onClose, navigate, queryClient])
+    createMigrationPlan,
+    queryClient,
+    onClose,
+    onSuccess,
+    navigate
+  ])
 
   const migrationOptionValidated = useMemo(() => {
     return Object.keys(selectedMigrationOptions).every((key) => {
-      if (key === "postMigrationAction") {
+      if (key === 'postMigrationAction') {
         // Post-migration actions are optional, so we don't validate them here
-        return true;
+        return true
+      }
+      // TODO - Need to figure out a better way to add validation for periodic sync interval
+      if (key === 'periodicSyncEnabled' && selectedMigrationOptions.periodicSyncEnabled) {
+        return params?.periodicSyncInterval !== '' && fieldErrors['periodicSyncInterval'] === ''
       }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
-        return params?.[key as keyof typeof params] !== undefined &&
-          !fieldErrors[key];
+        return params?.[key as keyof typeof params] !== undefined && !fieldErrors[key]
       }
-      return true;
-    });
-  }, [selectedMigrationOptions, params, fieldErrors]);
+      return true
+    })
+  }, [selectedMigrationOptions, params, fieldErrors])
 
   // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
-      return { hasError: false, errorMessage: "" };
+      return { hasError: false, errorMessage: '' }
     }
 
-    const poweredOffVMs = params.vms.filter(vm => {
+    const poweredOffVMs = params.vms.filter((vm) => {
       // Determine power state - check different possible property names
-      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
-      return powerState === "powered-off";
-    });
+      const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
+      return powerState === 'powered-off'
+    })
 
-    const poweredOnVMs = params.vms.filter(vm => {
+    const poweredOnVMs = params.vms.filter((vm) => {
       // Determine power state - check different possible property names
-      const powerState = vm.vmState === "running" ? "powered-on" : "powered-off";
-      return powerState === "powered-on";
-    });
+      const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
+      return powerState === 'powered-on'
+    })
 
     // Check for powered-off VMs without IP addresses
-    const vmsWithoutIPs = poweredOffVMs.filter(vm =>
-      !vm.ipAddress || vm.ipAddress === "—" || vm.ipAddress.trim() === ""
-    );
+    const vmsWithoutIPs = poweredOffVMs.filter(
+      (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
+    )
 
-    // Check for powered-ON VMs without OS assignment or with Unknown OS
-    const vmsWithoutOS = poweredOnVMs.filter(vm =>
-      !vm.osFamily || vm.osFamily === "Unknown" || vm.osFamily.trim() === ""
-    );
+    // Check for VMs without OS assignment or with Unknown OS (any power state)
+    const vmsWithoutOSAssigned = poweredOffVMs
+      .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
+      .concat(
+        poweredOnVMs.filter(
+          (vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === ''
+        )
+      )
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOS.length > 0) {
-      let errorMessage = "Cannot proceed with migration: ";
-      const issues: string[] = [];
+    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
+      let errorMessage = 'Cannot proceed with migration: '
+      const issues: string[] = []
 
       if (vmsWithoutIPs.length > 0) {
-        issues.push(`${vmsWithoutIPs.length} powered-off VM${vmsWithoutIPs.length === 1 ? '' : 's'} missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`);
+        issues.push(
+          `${vmsWithoutIPs.length} powered-off VM${
+            vmsWithoutIPs.length === 1 ? '' : 's'
+          } missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`
+        )
       }
 
-      if (vmsWithoutOS.length > 0) {
-        issues.push(`We could not detect the operating system for ${vmsWithoutOS.length} powered-on VM${vmsWithoutOS.length === 1 ? '' : 's'}`);
+      if (vmsWithoutOSAssigned.length > 0) {
+        issues.push(
+          `We could not detect the operating system for ${vmsWithoutOSAssigned.length} VM${
+            vmsWithoutOSAssigned.length === 1 ? '' : 's'
+          }`
+        )
       }
 
-      errorMessage += issues.join(" and ") + ". Please assign the required information before continuing.";
+      errorMessage +=
+        issues.join(' and ') + '. Please assign the required information before continuing.'
 
-      return { hasError: true, errorMessage };
+      return { hasError: true, errorMessage }
     }
 
-    return { hasError: false, errorMessage: "" };
-  }, [params.vms]);
+    return { hasError: false, errorMessage: '' }
+  }, [params.vms])
 
   // RDM validation - check if RDM disks have missing required configuration
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: params.vms || [],
-    rdmDisks: rdmDisks,
-  });
+    rdmDisks: rdmDisks
+  })
 
   const storageCopyMethod = params.storageCopyMethod || 'normal'
   const storageValidation = storageCopyMethod === 'vendor-based' 
@@ -818,6 +852,10 @@ export default function MigrationFormDrawer({
       !params.networkMappings?.some(mapping => mapping.source === network)) ||
     // Check if all datastores are mapped (based on storage copy method)
     !storageValidation ||
+    availableVmwareNetworks.some(
+      (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
+    ) ||
+
     !migrationOptionValidated ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
@@ -825,17 +863,11 @@ export default function MigrationFormDrawer({
     rdmValidation.hasValidationError
 
   const sortedOpenstackNetworks = useMemo(
-    () =>
-      (openstackCredentials?.status?.openstack?.networks || []).sort(
-        stringsCompareFn
-      ),
+    () => (openstackCredentials?.status?.openstack?.networks || []).sort(stringsCompareFn),
     [openstackCredentials?.status?.openstack?.networks]
   )
   const sortedOpenstackVolumeTypes = useMemo(
-    () =>
-      (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(
-        stringsCompareFn
-      ),
+    () => (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(stringsCompareFn),
     [openstackCredentials?.status?.openstack?.volumeTypes]
   )
 
@@ -863,9 +895,8 @@ export default function MigrationFormDrawer({
       if (openstackCredentials?.metadata?.name && !params.openstackCreds?.existingCredName) {
         await deleteOpenstackCredentials(openstackCredentials.metadata.name)
       }
-
     } catch (err) {
-      console.error("Error cleaning up resources", err)
+      console.error('Error cleaning up resources', err)
       reportError(err as Error, {
         context: 'resource-cleanup',
         metadata: {
@@ -877,7 +908,16 @@ export default function MigrationFormDrawer({
       })
       onClose()
     }
-  }, [migrationTemplate, vmwareCredentials, openstackCredentials, queryClient, sessionId, onClose, params.vmwareCreds, params.openstackCreds])
+  }, [
+    migrationTemplate,
+    vmwareCredentials,
+    openstackCredentials,
+    queryClient,
+    sessionId,
+    onClose,
+    params.vmwareCreds,
+    params.openstackCreds
+  ])
 
   // Handle keyboard events
   useKeyboardSubmit({
@@ -885,7 +925,7 @@ export default function MigrationFormDrawer({
     isSubmitDisabled: disableSubmit || submitting,
     onSubmit: handleSubmit,
     onClose: handleClose
-  });
+  })
 
   return (
     <StyledDrawer
@@ -899,7 +939,7 @@ export default function MigrationFormDrawer({
     >
       <Header title="Migration Form" icon={<MigrationIcon />} />
       <DrawerContent>
-        <Box sx={{ display: "grid", gap: 4 }}>
+        <Box sx={{ display: 'grid', gap: 4 }}>
           {/* Step 1 */}
           <SourceDestinationClusterSelection
             onChange={getParamsUpdater}
@@ -911,7 +951,7 @@ export default function MigrationFormDrawer({
           {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
           <VmsSelectionStep
             onChange={getParamsUpdater}
-            error={fieldErrors["vms"]}
+            error={fieldErrors['vms']}
             open={open}
             vmwareCredsValidated={vmwareCredsValidated}
             openstackCredsValidated={openstackCredsValidated}
@@ -942,11 +982,11 @@ export default function MigrationFormDrawer({
             openstackStorage={sortedOpenstackVolumeTypes}
             params={params}
             onChange={getParamsUpdater}
-            networkMappingError={fieldErrors["networksMapping"]}
-            storageMappingError={fieldErrors["storageMapping"]}
+            networkMappingError={fieldErrors['networksMapping']}
+            storageMappingError={fieldErrors['storageMapping']}
           />
           {/* Step 4 */}
-          <SecurityGroupAndSSHKeyStep
+          <SecurityGroupAndServerGroupStep
             params={params}
             onChange={getParamsUpdater}
             openstackCredentials={openstackCredentials}
@@ -963,12 +1003,10 @@ export default function MigrationFormDrawer({
             getErrorsUpdater={getFieldErrorsUpdater}
             stepNumber="5"
           />
-
-
         </Box>
       </DrawerContent>
       <Footer
-        submitButtonLabel={"Start Migration"}
+        submitButtonLabel={'Start Migration'}
         onClose={handleClose}
         onSubmit={handleSubmit}
         disableSubmit={disableSubmit || submitting}

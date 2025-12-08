@@ -1,11 +1,11 @@
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4 } from 'uuid'
 
 export const createMigrationPlanJson = (params) => {
   const {
     name,
     migrationTemplateName,
     retry = false,
-    type = "hot",
+    type = 'hot',
     dataCopyStart,
     vmCutoverStart,
     vmCutoverEnd,
@@ -14,8 +14,12 @@ export const createMigrationPlanJson = (params) => {
     postMigrationAction,
     disconnectSourceNetwork = false,
     securityGroups,
+    serverGroup,
     fallbackToDHCP = false,
     postMigrationScript,
+    periodicSyncInterval,
+    periodicSyncEnabled,
+    assignedIPsPerVM
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -27,26 +31,34 @@ export const createMigrationPlanJson = (params) => {
       adminInitiatedCutOver,
       vmCutoverStart,
       vmCutoverEnd,
-      disconnectSourceNetwork,
+      disconnectSourceNetwork
     },
     virtualMachines: [virtualMachines],
-    fallbackToDHCP,
+    fallbackToDHCP
   }
 
-  // Add firstBootScript if postMigrationScript is provided
+  const advancedOptions: Record<string, unknown> = {}
+  if (periodicSyncInterval) {
+    advancedOptions.periodicSyncInterval = periodicSyncInterval
+  }
+  if (typeof periodicSyncEnabled === 'boolean') {
+    advancedOptions.periodicSyncEnabled = periodicSyncEnabled
+  }
+  if (Object.keys(advancedOptions).length > 0) {
+    spec.advancedOptions = advancedOptions
+  }
+
+  // Add firstBootScript  if postMigrationScript is provided
   if (postMigrationScript && postMigrationScript.trim()) {
     spec.firstBootScript = postMigrationScript
   }
 
-  if (
-    postMigrationAction &&
-    (postMigrationAction.renameVm || postMigrationAction.moveToFolder)
-  ) {
+  if (postMigrationAction && (postMigrationAction.renameVm || postMigrationAction.moveToFolder)) {
     spec.postMigrationAction = {
       renameVm: postMigrationAction.renameVm || false,
-      suffix: postMigrationAction.suffix || "",
+      suffix: postMigrationAction.suffix || '',
       moveToFolder: postMigrationAction.moveToFolder || false,
-      folderName: postMigrationAction.folderName || "vjailbreakedVMs",
+      folderName: postMigrationAction.folderName || 'vjailbreakedVMs'
     }
   }
 
@@ -54,12 +66,21 @@ export const createMigrationPlanJson = (params) => {
     spec.securityGroups = securityGroups
   }
 
+  if (serverGroup) {
+    spec.serverGroup = serverGroup
+  }
+
+  // Add assignedIPsPerVM for cold migration if provided
+  if (assignedIPsPerVM && Object.keys(assignedIPsPerVM).length > 0) {
+    spec.assignedIPsPerVM = assignedIPsPerVM
+  }
+
   return {
-    apiVersion: "vjailbreak.k8s.pf9.io/v1alpha1",
-    kind: "MigrationPlan",
+    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+    kind: 'MigrationPlan',
     metadata: {
-      name: name || uuidv4(),
+      name: name || uuidv4()
     },
-    spec,
+    spec
   }
 }

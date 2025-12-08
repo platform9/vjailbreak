@@ -231,12 +231,17 @@ const (
 	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
 	ValidateRDMOwnerVMs = true
 
+	// MigrationPlan status message prefix
+	MigrationPlanValidationFailedPrefix = "Migration plan validation failed"
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
 	VCenterLoginRetryLimit = 5
 
+	MaxRetries = 3
+	RetryCap   = "3h"
 	// ConfigMap settings keys
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"

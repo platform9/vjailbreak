@@ -1,5 +1,5 @@
-import { useCallback } from "react"
-import { errorReportingService, ErrorContext } from "../services/errorReporting"
+import { useCallback } from 'react'
+import { errorReportingService, ErrorContext } from '../services/errorReporting'
 
 export interface UseErrorHandlerOptions {
   component?: string
@@ -14,8 +14,8 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
         context: additionalContext?.context || options.context,
         metadata: {
           ...additionalContext?.metadata,
-          component: options.component,
-        },
+          component: options.component
+        }
       }
 
       errorReportingService.notify(error, context)
@@ -30,8 +30,8 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
         context: additionalContext?.context || options.context,
         metadata: {
           ...additionalContext?.metadata,
-          component: options.component,
-        },
+          component: options.component
+        }
       }
 
       errorReportingService.notifyError(message, context)
@@ -40,10 +40,7 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
   )
 
   const handleAsyncError = useCallback(
-    async <T>(
-      asyncFn: () => Promise<T>,
-      errorContext?: ErrorContext
-    ): Promise<T | null> => {
+    async <T>(asyncFn: () => Promise<T>, errorContext?: ErrorContext): Promise<T | null> => {
       try {
         return await asyncFn()
       } catch (error) {
@@ -62,7 +59,7 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
     (message: string, metadata?: Record<string, unknown>) => {
       const enrichedMetadata = {
         ...metadata,
-        component: options.component,
+        component: options.component
       }
 
       errorReportingService.leaveBreadcrumb(message, enrichedMetadata)
@@ -70,19 +67,13 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
     [options.component]
   )
 
-  const setUserContext = useCallback(
-    (userId: string, email?: string, name?: string) => {
-      errorReportingService.setUser(userId, email, name)
-    },
-    []
-  )
+  const setUserContext = useCallback((userId: string, email?: string, name?: string) => {
+    errorReportingService.setUser(userId, email, name)
+  }, [])
 
-  const addMetadata = useCallback(
-    (section: string, key: string, value: unknown) => {
-      errorReportingService.addMetadata(section, key, value)
-    },
-    []
-  )
+  const addMetadata = useCallback((section: string, key: string, value: unknown) => {
+    errorReportingService.addMetadata(section, key, value)
+  }, [])
 
   const clearMetadata = useCallback((section: string, key?: string) => {
     errorReportingService.clearMetadata(section, key)
@@ -95,7 +86,7 @@ export const useErrorHandler = (options: UseErrorHandlerOptions = {}) => {
     leaveBreadcrumb,
     setUserContext,
     addMetadata,
-    clearMetadata,
+    clearMetadata
   }
 }
 export default useErrorHandler

@@ -1,39 +1,35 @@
-import {
-  Box,
-  FormControl,
-  FormHelperText,
-} from "@mui/material";
-import CredentialSelector from "./CredentialSelector";
+import { Box, FormControl, FormHelperText } from '@mui/material'
+import CredentialSelector from './CredentialSelector'
 
 export interface VmwareCredential {
   metadata: {
-    name: string;
-    namespace?: string;
-  };
+    name: string
+    namespace?: string
+  }
   spec: {
-    VCENTER_HOST?: string;
-    VCENTER_USERNAME?: string;
-    VCENTER_PASSWORD?: string;
+    VCENTER_HOST?: string
+    VCENTER_USERNAME?: string
+    VCENTER_PASSWORD?: string
     secretRef?: {
-      name: string;
-    };
-  };
+      name: string
+    }
+  }
   status?: {
-    vmwareValidationStatus?: string;
-    vmwareValidationMessage?: string;
-  };
+    vmwareValidationStatus?: string
+    vmwareValidationMessage?: string
+  }
 }
 
 export interface VmwareCredentialsFormProps {
-  credentialsList?: VmwareCredential[];
-  loadingCredentials?: boolean;
-  error?: string;
-  onCredentialSelect?: (credId: string | null) => void;
-  selectedCredential?: string | null;
-  showCredentialSelector?: boolean;
-  showCredentialNameField?: boolean;
-  fullWidth?: boolean;
-  size?: "small" | "medium";
+  credentialsList?: VmwareCredential[]
+  loadingCredentials?: boolean
+  error?: string
+  onCredentialSelect?: (credId: string | null) => void
+  selectedCredential?: string | null
+  showCredentialSelector?: boolean
+  showCredentialNameField?: boolean
+  fullWidth?: boolean
+  size?: 'small' | 'medium'
 }
 
 export default function VmwareCredentialsForm({
@@ -43,7 +39,7 @@ export default function VmwareCredentialsForm({
   onCredentialSelect,
   selectedCredential = null,
   showCredentialSelector = true,
-  size = "small",
+  size = 'small'
 }: VmwareCredentialsFormProps) {
   const credentialOptions = credentialsList.map((cred) => ({
     label: cred.metadata.name,
@@ -51,9 +47,9 @@ export default function VmwareCredentialsForm({
     metadata: cred.metadata,
     status: {
       validationStatus: cred.status?.vmwareValidationStatus,
-      validationMessage: cred.status?.vmwareValidationMessage,
-    },
-  }));
+      validationMessage: cred.status?.vmwareValidationMessage
+    }
+  }))
 
   return (
     <div>
@@ -63,7 +59,7 @@ export default function VmwareCredentialsForm({
             placeholder="Select VMware credentials"
             options={credentialOptions}
             value={selectedCredential}
-            onChange={onCredentialSelect || (() => { })}
+            onChange={onCredentialSelect || (() => {})}
             loading={loadingCredentials}
             size={size}
             emptyMessage="No VMware credentials found. Please use the credential drawer to create new ones."
@@ -77,5 +73,5 @@ export default function VmwareCredentialsForm({
         </FormControl>
       )}
     </div>
-  );
+  )
 }

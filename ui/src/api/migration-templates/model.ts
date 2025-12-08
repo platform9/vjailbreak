@@ -25,7 +25,7 @@ export interface MigrationTemplateMetadata {
 }
 
 export interface Annotations {
-  "kubectl.kubernetes.io/last-applied-configuration": string
+  'kubectl.kubernetes.io/last-applied-configuration': string
 }
 
 export interface Labels {
@@ -76,6 +76,8 @@ export interface VmData {
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]
   osFamily?: string
+  // User-assigned IPs for cold migration
+  assignedIPs?: string
   // RDM-related properties
   rdmDisks?: string[]
   hasSharedRdm?: boolean

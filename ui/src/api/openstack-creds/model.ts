@@ -25,7 +25,7 @@ export interface OpenstackCredsMetadata {
 }
 
 export interface Annotations {
-  "kubectl.kubernetes.io/last-applied-configuration": string
+  'kubectl.kubernetes.io/last-applied-configuration': string
 }
 
 export interface OpenstackFlavor {
@@ -71,6 +71,13 @@ export interface SecurityGroupOption {
   requiresIdDisplay: boolean
 }
 
+export interface ServerGroupOption {
+  name: string
+  id: string
+  policy: string
+  members: number
+}
+
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
@@ -79,6 +86,7 @@ export interface OpenstackCredsStatus {
     volumeTypes?: string[]
     volumeBackends?: string[]
     securityGroups?: SecurityGroupOption[]
+    serverGroups?: ServerGroupOption[]
   }
 }
 
@@ -94,12 +102,12 @@ export interface OpenstackImagesResponse {
 }
 
 export interface OpenStackFlavor {
-  "OS-FLV-EXT-DATA:ephemeral"?: number
+  'OS-FLV-EXT-DATA:ephemeral'?: number
   description?: string
   disk: number
   id: string
   name: string
-  "os-flavor-access:is_public"?: boolean
+  'os-flavor-access:is_public'?: boolean
   ram: number
   rxtx_factor?: number
   vcpus: number

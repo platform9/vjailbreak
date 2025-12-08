@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -127,9 +127,23 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
-	if _, err := utils.ValidateAndGetProviderClient(ctx, r.Client, scope.OpenstackCreds); err != nil {
+	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
 
-		ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+	if !result.Valid {
+		// Update the status of the OpenstackCreds object
+		errMsg := result.Message
+		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
+			if r.Local {
+				// At this point creds are valid but controller is not able to fetch metadata
+				// that is why we are getting this above error
+				err := handleValidatedCreds(ctx, r, scope)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
+		}
+		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = err.Error()
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {

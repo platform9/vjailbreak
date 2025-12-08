@@ -7,6 +7,7 @@ package nbd
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	object "github.com/vmware/govmomi/object"
@@ -62,6 +63,22 @@ func (m *MockNBDOperations) CopyDisk(ctx context.Context, dest string, diskindex
 func (mr *MockNBDOperationsMockRecorder) CopyDisk(ctx, dest, diskindex interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), ctx, dest, diskindex)
+}
+
+// GetProgress mocks base method.
+func (m *MockNBDOperations) GetProgress() (int64, int64, time.Duration) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProgress")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(time.Duration)
+	return ret0, ret1, ret2
+}
+
+// GetProgress indicates an expected call of GetProgress.
+func (mr *MockNBDOperationsMockRecorder) GetProgress() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProgress", reflect.TypeOf((*MockNBDOperations)(nil).GetProgress))
 }
 
 // StartNBDServer mocks base method.

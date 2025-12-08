@@ -5,8 +5,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Analytics'
-import StorageIcon from '@mui/icons-material/Storage'
-import { ManageAccounts } from '@mui/icons-material'
+import { Storage } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -43,13 +42,13 @@ export const navigationItems: NavigationItem[] = [
     id: 'baremetal-config',
     label: 'Bare Metal Config',
     path: '/dashboard/baremetal-config',
-    icon: <ConfigIcon />
+    icon: <Storage />
   },
   {
     id: 'global-settings',
     label: 'Global Settings',
     path: '/dashboard/global-settings',
-    icon: <ManageAccounts />
+    icon: <ConfigIcon />
   },
   {
     id: 'monitoring',
