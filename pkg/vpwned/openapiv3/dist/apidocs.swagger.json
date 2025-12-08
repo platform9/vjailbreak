@@ -1716,6 +1716,28 @@
         }
       }
     },
+    "apiRevalidateCredentialsRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "apiRevalidateCredentialsResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiSetResourceBM2PXEBootRequest": {
       "type": "object",
       "properties": {
