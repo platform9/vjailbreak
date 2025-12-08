@@ -396,10 +396,12 @@ func (c *Client) GetCloneLog(pid int) (string, error) {
 func (c *Client) CheckCloneStatus(pid int) (bool, error) {
 	// ESXi uses BusyBox ps which doesn't support -p flag
 	// Use kill -0 to check if process exists (doesn't actually send a signal)
-	checkCmd := fmt.Sprintf("kill -0 %d 2>/dev/null && echo 'running'", pid)
+	// Also try ps as fallback since kill -0 may not work reliably over SSH
+	checkCmd := fmt.Sprintf("kill -0 %d 2>/dev/null && echo 'running' || ps -c | grep -w %d | grep -v grep && echo 'running'", pid, pid)
 	output, _ := c.ExecuteCommand(checkCmd)
 
 	isRunning := strings.Contains(output, "running")
+	klog.V(2).Infof("CheckCloneStatus PID %d: output=%q, isRunning=%v", pid, strings.TrimSpace(output), isRunning)
 
 	return isRunning, nil
 }

@@ -245,10 +245,10 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	}
 
 	// Step 10: Monitor clone progress
-	tracker := esxissh.NewCloneTracker(esxiClient, task, vmDisk.Path, targetDevicePath)
+	tracker := esxissh.NewCloneTracker(esxiClient, task)
 	tracker.SetPollInterval(2 * time.Second)
 
-	err = tracker.WaitForCompletion()
+	err = tracker.WaitForCompletion(ctx)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "VAAI RDM clone failed for disk %s", vmDisk.Name)
 	}
