@@ -286,30 +286,18 @@ func GetOsRelease(path string) (string, error) {
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC, gatewayIP map[string]string) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
-	type ipEntry struct {
-		ip     string
-		prefix int32
-	}
-	macToIPs := make(map[string][]ipEntry)
+	macToIPs := ipPerMac
 	macToDNS := make(map[string][]string)
 	if len(guestNetworks) > 0 {
 		for _, gn := range guestNetworks {
 			if strings.Contains(gn.IP, ":") { // skip IPv6 here
 				continue
 			}
-			macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
 			if len(gn.DNS) > 0 {
 				macToDNS[gn.MAC] = gn.DNS
 			}
-		}
-	} else if len(networkInterfaces) > 0 {
-		for _, ni := range networkInterfaces {
-			if strings.Contains(ni.IPAddress, ":") { // skip IPv6 here
-				continue
-			}
-			macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
 		}
 	}
 
@@ -334,11 +322,11 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		b.WriteString("      addresses:\n")
 		for _, e := range entries {
 			// default prefix to 24 if zero
-			prefix := e.prefix
+			prefix := e.Prefix
 			if prefix == 0 {
 				prefix = 24
 			}
-			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
+			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 		}
 		if gateway, ok := gatewayIP[mac]; ok {
 			if !routesAdded {
