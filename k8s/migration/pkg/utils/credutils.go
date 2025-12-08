@@ -48,8 +48,9 @@ import (
 )
 
 const (
-	trueString = "true" // Define at package level
-	sdkPath    = "/sdk" // SDK path constant
+	trueString  = "true" // Define at package level
+	falseString = "false"
+	sdkPath     = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
