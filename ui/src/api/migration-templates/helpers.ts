@@ -11,7 +11,8 @@ export const createMigrationTemplateJson = (params) => {
     vmwareRef,
     openstackRef,
     targetPCDClusterName,
-    useFlavorless = false
+    useFlavorless = false,
+    useGPUFlavor = false
   } = params || {}
   return {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
@@ -34,7 +35,8 @@ export const createMigrationTemplateJson = (params) => {
       ...(targetPCDClusterName && {
         targetPCDClusterName: targetPCDClusterName
       }),
-      useFlavorless: useFlavorless
+      useFlavorless: useFlavorless,
+      useGPUFlavor: useGPUFlavor
     }
   }
 }
