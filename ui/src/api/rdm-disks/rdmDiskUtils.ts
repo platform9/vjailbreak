@@ -93,7 +93,8 @@ export const mapToVmDataWithRdm = (
       // RDM-related properties
       rdmDisks,
       hasSharedRdm,
-      rdmDependencies
+      rdmDependencies,
+      useGPU: machine.spec.vms.useGPU
     }
   })
 }
