@@ -189,20 +189,30 @@ func (r *Reporter) UpdateProgress(progress string) error {
 
 func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackChan chan<- struct{}) {
 	go func() {
+		utils.PrintLog("[DEBUG] UpdatePodEvents goroutine started, waiting for messages")
 		for {
 			select {
 			case msg, ok := <-ch:
 				if !ok {
 					// Channel closed, exit the goroutine
+					utils.PrintLog("[DEBUG] EventReporter channel closed, exiting goroutine")
 					return
 				}
+				utils.PrintLog(fmt.Sprintf("[DEBUG] Received message from EventReporter: %s", msg))
 				if err := r.UpdateProgress(msg); err != nil {
 					utils.PrintLog(err.Error())
+				} else {
+					utils.PrintLog(fmt.Sprintf("[DEBUG] UpdateProgress succeeded for: %s", msg))
 				}
 				if !strings.Contains(msg, "Progress:") && !strings.Contains(msg, "Periodic") {
+					utils.PrintLog(fmt.Sprintf("[DEBUG] Creating Kubernetes Event for: %s", msg))
 					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						utils.PrintLog(err.Error())
+					} else {
+						utils.PrintLog(fmt.Sprintf("[DEBUG] Kubernetes Event created for: %s", msg))
 					}
+				} else {
+					utils.PrintLog(fmt.Sprintf("[DEBUG] Skipping Kubernetes Event (contains Progress: or Periodic): %s", msg))
 				}
 				// Sending acknowledgment that the message has been processed
 				// If no one is expecting the ack, it will be dropped

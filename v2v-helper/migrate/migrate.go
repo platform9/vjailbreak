@@ -118,10 +118,14 @@ func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
 }
 
 func (migobj *Migrate) logMessage(message string) {
-	if migobj.InPod {
-		migobj.EventReporter <- message
-	}
 	utils.PrintLog(message)
+	if migobj.InPod {
+		utils.PrintLog(fmt.Sprintf("[DEBUG] Sending message to EventReporter channel: %s", message))
+		migobj.EventReporter <- message
+		utils.PrintLog("[DEBUG] Message sent to EventReporter channel")
+	} else {
+		utils.PrintLog("[DEBUG] Not in pod, skipping EventReporter")
+	}
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
