@@ -328,7 +328,7 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 			}
 			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 		}
-		if gateway, ok := gatewayIP[mac]; ok {
+		if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
 			if !routesAdded {
 				log.Printf("Writing default routes")
 				b.WriteString("      routes:\n")
