@@ -1035,7 +1035,7 @@ func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScop
 			"machineId", machines[matchedMachineIdx].Id,
 			"status", machines[matchedMachineIdx].Status,
 			"requiredStatus", "Deployed or Allocated")
-		if machines[matchedMachineIdx].Status == "Deployed" || machines[matchedMachineIdx].Status == "Allocated" {
+		if machines[matchedMachineIdx].Status == "Deployed" || machines[matchedMachineIdx].Status == "Allocated" || machines[matchedMachineIdx].Status == "New" {
 			ctxlog.Info("ESXi host successfully validated in MAAS",
 				"esxiName", vmwarehost.Spec.Name,
 				"machineName", machines[matchedMachineIdx].Hostname,
