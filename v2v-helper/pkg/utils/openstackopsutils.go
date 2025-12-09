@@ -527,22 +527,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ipEntries []vm.IpEntry, mac 
 
 }
 
-func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
-	ipEntries := ipPerMac[mac]
-	Existingport, err := osclient.CheckIfPortExists(ipEntries, mac, network, gatewayIP)
-	if err != nil {
-		return nil, err
-	}
-	if Existingport != nil {
-		return Existingport, nil
-	}
-	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipEntries))
-
-	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
-		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
-	}
+func (osclient *OpenStackClients) GetCreateOpts(network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
 
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
@@ -555,14 +540,7 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 		for _, ipEntry := range ipEntries {
 			subnetId, err := osclient.GetSubnet(network.Subnets, ipEntry.IP)
 			if err != nil {
-				if !fallbackToDHCP {
-					return nil, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
-				} else {
-					fixedIPs = append(fixedIPs, ports.IP{
-						SubnetID:  "",
-						IPAddress: ipEntry.IP,
-					})
-				}
+				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
 			} else {
 				gatewayIP[mac] = subnetId.GatewayIP
 				PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipEntry.IP, subnetId.ID))
@@ -573,51 +551,74 @@ func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac stri
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if len(ipEntries) == 0 && !fallbackToDHCP {
+	} else if len(ipEntries) == 0 {
 		PrintLog("Empty port on vcentre detected for mac " + mac)
+		subnetID, err := subnets.Get(osclient.NetworkingClient, network.Subnets[0]).Extract()
+		if err != nil {
+			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
+		}
+		gatewayIP[mac] = subnetID.GatewayIP
 	}
+	return createOpts, nil
+}
 
-	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
+func (osclient *OpenStackClients) ValidateAndCreatePort(network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
+	Existingport, err := osclient.CheckIfPortExists(ipPerMac[mac], mac, network, gatewayIP)
 	if err != nil {
-		// If static IP assignment fails, check the fallback flag
-		if !fallbackToDHCP {
-			// If fallback is disabled, return the error immediately
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipEntries)
-		}
-		// If fallback is enabled, proceed with the DHCP attempt
-		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipEntries))
-		dhcpPort, dhcpErr := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
-			Name:           "port-" + vmname,
-			NetworkID:      network.ID,
-			MACAddress:     mac,
-			SecurityGroups: &securityGroups,
-		}).Extract()
+		return nil, err
+	}
+	if Existingport != nil {
+		return Existingport, nil
+	}
+	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
-		if dhcpErr != nil {
-			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
-		}
-		ipPerMac[mac] = []vm.IpEntry{}
-		for _, iAddr := range dhcpPort.FixedIPs {
-			dhcpSubnetId, err := osclient.GetSubnet(network.Subnets, iAddr.IPAddress)
-			if err != nil {
-				return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
-			}
-			ipPerMac[mac] = append(ipPerMac[mac], vm.IpEntry{
-				IP:     iAddr.IPAddress,
-				Prefix: 0,
-			})
-			gatewayIP[mac] = dhcpSubnetId.GatewayIP
-		}
-		logMsg := "Port created with DHCP instead of static IP"
-		if len(ipPerMac[mac]) > 0 {
-			logMsg = fmt.Sprintf("Port created with DHCP instead of static IP %v", ipPerMac[mac][0])
-		}
-		PrintLog(fmt.Sprintf("%s. Port ID: %s", logMsg, dhcpPort.ID))
-		return dhcpPort, nil
+	// Check if subnet is valid to avoid panic.
+	if len(network.Subnets) == 0 {
+		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
-	PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
-	return port, nil
+	createOpts, err := osclient.GetCreateOpts(network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
+	if err != nil {
+		if !fallbackToDHCP {
+			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
+		} else {
+			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
+			return osclient.CreatePortWithDHCP(network, ipPerMac, mac, gatewayIP, createOpts)
+		}
+	}
+	return osclient.CreatePort(createOpts)
+}
+
+func (osclient *OpenStackClients) CreatePortWithDHCP(network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
+
+	dhcpPort, dhcpErr := osclient.CreatePort(createOpts)
+
+	if dhcpErr != nil {
+		return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
+	}
+	ipPerMac[mac] = []vm.IpEntry{}
+	for _, iAddr := range dhcpPort.FixedIPs {
+		dhcpSubnetId, err := osclient.GetSubnet(network.Subnets, iAddr.IPAddress)
+		if err != nil {
+			return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
+		}
+		ipPerMac[mac] = append(ipPerMac[mac], vm.IpEntry{
+			IP:     iAddr.IPAddress,
+			Prefix: 0,
+		})
+		gatewayIP[mac] = dhcpSubnetId.GatewayIP
+	}
+	logMsg := "Port created with DHCP instead of static IP"
+	if len(ipPerMac[mac]) > 0 {
+		logMsg = fmt.Sprintf("Port created with DHCP instead of static IP %v", ipPerMac[mac][0])
+	}
+	PrintLog(fmt.Sprintf("%s. Port ID: %s", logMsg, dhcpPort.ID))
+	return dhcpPort, nil
+}
+
+func (osclient *OpenStackClients) CreatePort(createOpts ports.CreateOpts) (*ports.Port, error) {
+	return ports.Create(osclient.NetworkingClient, createOpts).Extract()
 }
 
 func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
