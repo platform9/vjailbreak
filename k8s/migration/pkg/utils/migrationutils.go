@@ -152,7 +152,7 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 func CreateSucceededCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if eventList.Items[i].Reason != constants.MigrationReason || eventList.Items[i].Message != "VM created successfully" {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "VM created successfully") {
 			continue
 		}
 
