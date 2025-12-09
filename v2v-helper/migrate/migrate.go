@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
@@ -112,7 +112,7 @@ func (migobj *Migrate) logMessage(message string) {
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
-func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
+func (migobj *Migrate) CreateVolumes(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage("Creating volumes in OpenStack")
 
@@ -121,13 +121,13 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 		if len(vminfo.RDMDisks) > 0 {
 			setRDMLabel = true
 		}
-		volume, err := openstackops.CreateVolume(vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
+		volume, err := openstackops.CreateVolume(ctx, vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to create volume")
 		}
 		vminfo.VMDisks[idx].OpenstackVol = volume
 		if vminfo.VMDisks[idx].Boot {
-			err = openstackops.SetVolumeBootable(volume)
+			err = openstackops.SetVolumeBootable(ctx, volume)
 			if err != nil {
 				return vminfo, errors.Wrap(err, "failed to set volume as bootable")
 			}
@@ -137,14 +137,14 @@ func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	return vminfo, nil
 }
 
-func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
+func (migobj *Migrate) AttachVolume(ctx context.Context, disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage(fmt.Sprintf("Attaching volumes to VM: %s", disk.Name))
 	if disk.OpenstackVol == nil {
 		return "", errors.Wrap(fmt.Errorf("OpenStack volume is nil"), "failed to attach volume to VM")
 	}
 	volumeID := disk.OpenstackVol.ID
-	if err := openstackops.AttachVolumeToVM(volumeID); err != nil {
+	if err := openstackops.AttachVolumeToVM(ctx, volumeID); err != nil {
 		return "", errors.Wrap(err, "failed to attach volume to VM")
 	}
 
@@ -156,29 +156,29 @@ func (migobj *Migrate) AttachVolume(disk vm.VMDisk) (string, error) {
 	return devicePath, nil
 }
 
-func (migobj *Migrate) DetachVolume(disk vm.VMDisk) error {
+func (migobj *Migrate) DetachVolume(ctx context.Context, disk vm.VMDisk) error {
 	openstackops := migobj.Openstackclients
 
-	if err := openstackops.DetachVolumeFromVM(disk.OpenstackVol.ID); err != nil {
+	if err := openstackops.DetachVolumeFromVM(ctx, disk.OpenstackVol.ID); err != nil {
 		return errors.Wrap(err, "failed to detach volume from VM")
 	}
 
-	err := openstackops.WaitForVolume(disk.OpenstackVol.ID)
+	err := openstackops.WaitForVolume(ctx, disk.OpenstackVol.ID)
 	if err != nil {
 		return errors.Wrap(err, "failed to wait for volume to become available")
 	}
 	return nil
 }
 
-func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
+func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Detaching volume %s from VM", vmdisk.Name))
-		if err := openstackops.DetachVolumeFromVM(vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
+		if err := openstackops.DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
 		}
 
-		err := openstackops.WaitForVolume(vmdisk.OpenstackVol.ID)
+		err := openstackops.WaitForVolume(ctx, vmdisk.OpenstackVol.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for volume to become available")
 		}
@@ -188,10 +188,10 @@ func (migobj *Migrate) DetachAllVolumes(vminfo vm.VMInfo) error {
 	return nil
 }
 
-func (migobj *Migrate) DeleteAllVolumes(vminfo vm.VMInfo) error {
+func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
-		err := openstackops.DeleteVolume(vmdisk.OpenstackVol.ID)
+		err := openstackops.DeleteVolume(ctx, vmdisk.OpenstackVol.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete volume")
 		}
@@ -512,7 +512,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	final := false
 
 	for idx, vmdisk := range vminfo.VMDisks {
-		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(vmdisk)
+		vminfo.VMDisks[idx].Path, err = migobj.AttachVolume(ctx, vmdisk)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to attach volume")
 		}
@@ -656,7 +656,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	}
 
-	err = migobj.DetachAllVolumes(vminfo)
+	err = migobj.DetachAllVolumes(ctx, vminfo)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
@@ -691,9 +691,9 @@ func (migobj *Migrate) getBootCommand(osType string) string {
 }
 
 // attachAllVolumes attaches all volumes and updates their paths in vminfo
-func (migobj *Migrate) attachAllVolumes(vminfo *vm.VMInfo) error {
+func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) error {
 	for idx, vmdisk := range vminfo.VMDisks {
-		path, err := migobj.AttachVolume(vmdisk)
+		path, err := migobj.AttachVolume(ctx, vmdisk)
 		if err != nil {
 			return errors.Wrap(err, "failed to attach volume")
 		}
@@ -891,7 +891,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Set volume as bootable
-	if err := migobj.Openstackclients.SetVolumeBootable(vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
+	if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
 		return errors.Wrap(err, "failed to set volume as bootable")
 	}
 
@@ -990,7 +990,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	getBootCommand := migobj.getBootCommand(vminfo.OSType)
 
 	// Step 2: Attach all volumes
-	if err := migobj.attachAllVolumes(&vminfo); err != nil {
+	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
 		return err
 	}
 
@@ -1054,7 +1054,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// Step 10: Detach all volumes
-	if err := migobj.DetachAllVolumes(vminfo); err != nil {
+	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
 		return errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 
@@ -1106,7 +1106,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string) error {
+func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	var flavor *flavors.Flavor
@@ -1118,24 +1118,24 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 			return errors.Wrap(err, "failed to create target instance")
 		}
 		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
-		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
 		if err != nil {
 			return errors.Wrap(err, "failed to get the specified base flavor for flavorless creation")
 		}
 	} else if migobj.TargetFlavorId != "" {
-		flavor, err = openstackops.GetFlavor(migobj.TargetFlavorId)
+		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
 		if err != nil {
 			return errors.Wrap(err, "failed to get OpenStack flavor")
 		}
 	} else {
-		flavor, err = openstackops.GetClosestFlavour(vminfo.CPU, vminfo.Memory)
+		flavor, err = openstackops.GetClosestFlavour(ctx, vminfo.CPU, vminfo.Memory)
 		if err != nil {
 			return errors.Wrap(err, "failed to get closest OpenStack flavor")
 		}
 		utils.PrintLog(fmt.Sprintf("Closest OpenStack flavor: %s: CPU: %dvCPUs\tMemory: %dMB\n", flavor.Name, flavor.VCPUs, flavor.RAM))
 	}
 	// Get security group IDs
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
@@ -1155,7 +1155,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless)
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
@@ -1163,7 +1163,7 @@ func (migobj *Migrate) CreateTargetInstance(vminfo vm.VMInfo, networkids, portid
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
 		migobj.logMessage(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, vjailbreakSettings.VMActiveWaitRetryLimit))
-		active, err := openstackops.WaitUntilVMActive(newVM.ID)
+		active, err := openstackops.WaitUntilVMActive(ctx, newVM.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for VM to become active")
 		}
@@ -1367,14 +1367,14 @@ func (migobj *Migrate) HealthCheck(vminfo vm.VMInfo, ips []string) error {
 	return nil
 }
 
-func (migobj *Migrate) gracefulTerminate(vminfo vm.VMInfo, cancel context.CancelFunc) {
+func (migobj *Migrate) gracefulTerminate(ctx context.Context, vminfo vm.VMInfo, cancel context.CancelFunc) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
 	cancel()
-	migobj.cleanup(vminfo, "Migration terminated")
+	migobj.cleanup(ctx, vminfo, "Migration terminated")
 	os.Exit(0)
 }
 
@@ -1404,23 +1404,23 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Errorf("number of mac addresses does not match number of network names mac(%d) network(%d)", len(vminfo.Mac), len(migobj.Networknames))
 	}
 	// Graceful Termination clean-up volumes and snapshots
-	go migobj.gracefulTerminate(vminfo, cancel)
+	go migobj.gracefulTerminate(ctx, vminfo, cancel)
 
 	// Reserve ports for VM
-	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(&vminfo)
+	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(ctx, &vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
 	// Create and Add Volumes to Host
-	vminfo, err = migobj.CreateVolumes(vminfo)
+	vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to add volumes to host")
 	}
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
-		migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
+		migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err))
 		return errors.Wrap(err, "CBT Failure")
 	}
 
@@ -1432,7 +1432,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
@@ -1447,7 +1447,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
 			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
-			detachErr := migobj.DetachAllVolumes(vminfo)
+			detachErr := migobj.DetachAllVolumes(ctx, vminfo)
 			if detachErr != nil {
 				utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
 			}
@@ -1459,16 +1459,16 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			return errors.Wrap(err, "failed to convert disks")
 		}
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(vminfo, networkids, portids, ipaddresses)
+	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
@@ -1482,13 +1482,13 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	return nil
 }
 
-func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
+func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
-	err := migobj.DetachAllVolumes(vminfo)
+	err := migobj.DetachAllVolumes(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))
 	}
-	err = migobj.DeleteAllVolumes(vminfo)
+	err = migobj.DeleteAllVolumes(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to delete all volumes from host: %s\n", err))
 	}
@@ -1500,7 +1500,7 @@ func (migobj *Migrate) cleanup(vminfo vm.VMInfo, message string) error {
 	return nil
 }
 
-func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string, []string, error) {
+func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
 	networkids := []string{}
 	ipaddresses := []string{}
 	portids := []string{}
@@ -1508,7 +1508,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 	networknames := migobj.Networknames
 
 	// Get security group IDs
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(migobj.SecurityGroups, migobj.TenantName)
+	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
@@ -1525,7 +1525,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
 		}
 		for _, port := range migobj.Networkports {
-			retrPort, err := openstackops.GetPort(port)
+			retrPort, err := openstackops.GetPort(ctx, port)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to get port")
 			}
@@ -1540,7 +1540,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 		for idx, networkname := range networknames {
 			// Create Port Group with the same mac address as the source VM
 			// Find the network with the given ID
-			network, err := openstackops.GetNetwork(networkname)
+			network, err := openstackops.GetNetwork(ctx, networkname)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to get network")
 			}
@@ -1599,7 +1599,7 @@ func (migobj *Migrate) ReservePortsForVM(vminfo *vm.VMInfo) ([]string, []string,
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.CreatePort(network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.CreatePort(ctx, network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
