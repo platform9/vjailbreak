@@ -45,7 +45,7 @@ type OpenstackOperations interface {
 	CreatePort(networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
 	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
 	GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
-	CheckIfPortExists(ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string)
+	CheckIfPortExists(ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error)
 	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
