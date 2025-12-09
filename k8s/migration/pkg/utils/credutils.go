@@ -18,6 +18,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
@@ -47,8 +48,9 @@ import (
 )
 
 const (
-	trueString = "true" // Define at package level
-	sdkPath    = "/sdk" // SDK path constant
+	trueString  = "true" // Define at package level
+	falseString = "false"
+	sdkPath     = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -335,11 +337,29 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
+	// Fetch server groups
+	openstackservergroups := make([]vjailbreakv1alpha1.ServerGroupInfo, 0)
+	allServerGroupPages, err := servergroups.List(openstackClients.ComputeClient, servergroups.ListOpts{}).AllPages()
+	if err == nil {
+		allServerGroups, err := servergroups.ExtractServerGroups(allServerGroupPages)
+		if err == nil {
+			for _, group := range allServerGroups {
+				openstackservergroups = append(openstackservergroups, vjailbreakv1alpha1.ServerGroupInfo{
+					Name:    group.Name,
+					ID:      group.ID,
+					Policy:  strings.Join(group.Policies, ","),
+					Members: len(group.Members),
+				})
+			}
+		}
+	}
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
 		SecurityGroups: openstacksecuritygroups,
+		ServerGroups:   openstackservergroups,
 	}, nil
 }
 
