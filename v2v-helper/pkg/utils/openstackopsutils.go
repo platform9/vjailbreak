@@ -386,7 +386,7 @@ func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int
 	// Note: v2v-helper doesn't track GPU counts, so we pass 0 for both
 	bestFlavor, err := openstackpkg.GetClosestFlavour(int(cpu), int(memory), 0, 0, allFlavors, false)
 	if err != nil {
-		PrintLog("No suitable flavor found.")
+		PrintLog("No suitable flavor found without GPU.")
 		return nil, errors.Wrap(err, "failed to get closest flavor")
 	}
 

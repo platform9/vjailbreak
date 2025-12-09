@@ -743,6 +743,7 @@ func CountGPUs(vmProps *mo.VirtualMachine) vjailbreakv1alpha1.GPUInfo {
 
 // DetectGPUUsage checks if the VM has any GPU devices attached.
 // It detects PCI passthrough devices (including GPUs) and vGPU profiles.
+//
 // Deprecated: Use CountGPUs() and GPUInfo.HasGPU() instead.
 func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
 	gpuInfo := CountGPUs(vmProps)

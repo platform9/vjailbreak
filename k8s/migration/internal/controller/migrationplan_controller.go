@@ -1030,7 +1030,13 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}
 			if flavor == nil {
-				return nil, errors.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
+				gpuInfo := ""
+				if passthroughGPUCount > 0 || vgpuCount > 0 {
+					gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
+				} else {
+					gpuInfo = " without GPU"
+				}
+				return nil, errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
