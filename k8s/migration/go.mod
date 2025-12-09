@@ -15,11 +15,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-<<<<<<< HEAD
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
-=======
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
->>>>>>> d36e4cee (feat: add a net pacakge with unit test cases)
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
