@@ -160,7 +160,7 @@ func CreateSucceededCondition(migration *vjailbreakv1alpha1.Migration, eventList
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated,
 			corev1.ConditionTrue,
 			constants.MigrationReason,
-			"Migrating VM from VMware to OpenStack",
+			"VM successfully migrated from VMware to OpenStack",
 			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
