@@ -425,7 +425,19 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 		return nil, errors.Wrap(err, "Failed to list flavors")
 	}
 
-	return flavors.ExtractFlavors(allPages)
+	flavorList, err := flavors.ExtractFlavors(allPages)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure ExtraSpecs is never nil to satisfy CRD validation requirements
+	for i := range flavorList {
+		if flavorList[i].ExtraSpecs == nil {
+			flavorList[i].ExtraSpecs = make(map[string]string)
+		}
+	}
+
+	return flavorList, nil
 }
 
 // DeleteOpenstackVM deletes an OpenStack virtual machine by its UUID
