@@ -13,12 +13,16 @@ It is entirely possible to fully saturate a 10Gb network with many parallel migr
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
-To retrieve the `ubuntu` user's password for SSH'ing into an agent, follow these steps:
-- SSH into the primary vJailbreak VM and run:
-```shell
-cat /var/lib/rancher/k3s/server/token | cut -c 1-12
-```
-The first 12 characters of this token is the password for the agent VMs. 
+## Logging into Agent VMs
+
+Agent VMs use the same login process as the primary vJailbreak VM:
+- **Username**: `ubuntu`
+- **Default Password**: `password`
+- On first login, you will be prompted to change the password immediately. 
+
+:::note
+VDDK libraries are automatically synced from the primary vJailbreak VM to all agent nodes. You only need to upload VDDK to the primary vJailbreak VM.
+:::
 
 :::note 
 The following instructions apply to versions of vJailbreak older than v0.1.7
