@@ -64,18 +64,16 @@ export const calculateTimeElapsed = (creationTimestamp: string, status?: any): s
     let endTime = new Date() // Default to current time for running migrations
 
     // For completed migrations, use the completion time
-    console.log(status)
     if (status?.phase === 'Succeeded' || status?.phase === 'Failed') {
-      // Find the most recent condition (completion time)
-      const latestCondition = status.conditions
-        ?.filter((condition) => condition.reason === 'Migration')
-        ?.sort(
-          (a, b) =>
-            new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime()
-        )[0]
+      // For succeeded migrations, look for the Migrated condition type
+      // For failed migrations, look for the Failed condition type
+      const targetConditionType = status.phase === 'Succeeded' ? 'Migrated' : 'Failed'
+      const completionCondition = status.conditions?.find(
+        (condition) => condition.type === targetConditionType && condition.reason === 'Migration'
+      )
 
-      if (latestCondition?.lastTransitionTime) {
-        endTime = new Date(latestCondition.lastTransitionTime)
+      if (completionCondition?.lastTransitionTime) {
+        endTime = new Date(completionCondition.lastTransitionTime)
       }
     }
 

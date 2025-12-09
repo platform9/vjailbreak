@@ -82,6 +82,7 @@ export interface VmData {
   rdmDisks?: string[]
   hasSharedRdm?: boolean
   rdmDependencies?: string[] // List of other VM names that share RDM disks with this VM
+  useGPU?: boolean
 }
 
 export interface VmNetworkInterface {

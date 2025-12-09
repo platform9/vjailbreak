@@ -108,7 +108,9 @@ export enum StatusEnum {
 export enum Type {
   DataCopy = 'DataCopy',
   Migrated = 'Migrated',
-  Validated = 'Validated'
+  Validated = 'Validated',
+  Failed = 'Failed',
+  Migrating = 'Migrating'
 }
 
 export enum Phase {

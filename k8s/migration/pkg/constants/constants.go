@@ -253,6 +253,9 @@ runcmd:
 	// MigrationConditionTypeValidated represents the condition type for validated phase
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
+	
+	// MigrationConditionTypeMigrated represents the condition type for successful completion
+	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
