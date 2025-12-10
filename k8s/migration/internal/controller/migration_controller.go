@@ -169,10 +169,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateVAAICondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
-	migration.Status.Conditions = utils.CreateVAAICondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
 	err = r.SetupMigrationPhase(ctx, migrationScope)
