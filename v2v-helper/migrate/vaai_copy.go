@@ -146,25 +146,22 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client, vmDisk vm.VMDisk, hostIP string) (storage.Volume, error) {
 	startTime := time.Now()
 
-	// Step 1: Get source VMDK NAA (the backing storage device)
-	migobj.logMessage(fmt.Sprintf("Resolving source VMDK backing device: %s", vmDisk.Path))
-	sourceNAA, err := esxiClient.GetVMDKBackingNAA(vmDisk.Path)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to get source VMDK backing NAA for %s", vmDisk.Path)
-	}
-	migobj.logMessage(fmt.Sprintf("Source VMDK backed by NAA: %s", sourceNAA))
-
-	// Step 2: Initialize storage provider
+	defer func() {
+		migobj.logMessage(fmt.Sprintf("VAAI XCOPY completed in %s (total: %s) for disk %s",
+			time.Since(startTime).Round(time.Second), time.Since(startTime).Round(time.Second), vmDisk.Name))
+		migobj.StorageProvider.Disconnect()
+	}()
+	// Step 1: Initialize storage provider
 	migobj.InitializeStorageProvider(ctx)
 
-	// Step 3: Get ESXi host IQN for volume mapping
+	// Step 2: Get ESXi host IQN for volume mapping
 	hostIQN, err := esxiClient.GetHostIQN()
 	if err != nil {
 		return storage.Volume{}, errors.Wrap(err, "failed to get ESXi host IQN")
 	}
 	migobj.logMessage(fmt.Sprintf("ESXi host IQN: %s", hostIQN))
 
-	// Step 4: Map host IQN to initiator group
+	// Step 3: Map host IQN to initiator group
 	initiatorGroup := fmt.Sprintf("vjailbreak-xcopy")
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
 
@@ -173,7 +170,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to create initiator group %s", initiatorGroup)
 	}
 
-	// Step 5: Create target volume with sanitized name
+	// Step 4: Create target volume with sanitized name
 	// Use vmDisk.Size (VMware disk size in bytes) - Pure API expects size in bytes
 	diskSizeBytes := vmDisk.Size
 	// Ensure size is a multiple of 512 (sector alignment)
@@ -188,7 +185,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", sanitizedName)
 	}
 
-	// Step 6: Cinder manage the volume FIRST
+	// Step 5: Cinder manage the volume FIRST
 	// This renames the volume on Pure to volume-<cinder-id>-cinder
 	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", targetVolume.Name))
 	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
@@ -200,7 +197,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	cinderVolumeName := fmt.Sprintf("volume-%s-cinder", cinderVolumeId)
 	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to: %s", cinderVolumeName))
 
-	// Step 7: Map target volume to ESXi host using the NEW Cinder volume name
+	// Step 6: Map target volume to ESXi host using the NEW Cinder volume name
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
 	targetVol := storage.Volume{
 		Name: cinderVolumeName, // Use the Cinder-renamed volume name
@@ -224,7 +221,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		}
 	}()
 
-	// Step 8: Rescan ESXi storage and wait for target volume to appear
+	// Step 6: Rescan ESXi storage and wait for target volume to appear
 	migobj.logMessage(fmt.Sprintf("Waiting for target volume %s to appear on ESXi", targetVolume.NAA))
 	deviceTimeout := 2 * time.Minute
 	if err := esxiClient.RescanStorageForDevice(targetVolume.NAA, deviceTimeout); err != nil {
@@ -239,7 +236,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	migobj.logMessage("Waiting 10 seconds for device to be fully initialized...")
 	time.Sleep(10 * time.Second)
 
-	// Step 9: Perform VAAI XCOPY clone directly to raw device (RDM format)
+	// Step 7: Perform VAAI XCOPY clone directly to raw device (RDM format)
 	// This clones directly to the raw device without needing a datastore
 	migobj.logMessage(fmt.Sprintf("Starting VAAI XCOPY clone: %s -> %s (RDM)", vmDisk.Path, targetDevicePath))
 
@@ -249,7 +246,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		return storage.Volume{}, errors.Wrapf(err, "failed to start VAAI RDM clone for disk %s", vmDisk.Name)
 	}
 
-	// Step 10: Monitor clone progress
+	// Step 8: Monitor clone progress
 	tracker := esxissh.NewCloneTracker(esxiClient, task)
 	tracker.SetPollInterval(2 * time.Second)
 
