@@ -209,7 +209,7 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 	currentBucket := (int(percentDone) / 5) * 5
 	if currentBucket > ct.lastLoggedPercent {
-		msg := fmt.Sprintf("Copying disk %d: %d%% done", ct.diskIndex, currentBucket)
+		msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", ct.diskIndex, currentBucket)
 		utils.PrintLog(msg)
 		if ct.logger != nil {
 			ct.logger.LogMessage(msg)
