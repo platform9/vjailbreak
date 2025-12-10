@@ -78,11 +78,14 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 	esxiClient := esxissh.NewClient()
 	defer esxiClient.Disconnect()
 
+	// TODO: For now hardcode "root", give option to pass user via configmap
+	migobj.logMessage("Connecting to ESXi host via SSH")
 	if err := esxiClient.Connect(ctx, hostIP, "root", migobj.ESXiSSHPrivateKey); err != nil {
 		return []storage.Volume{}, errors.Wrap(err, "failed to connect to ESXi via SSH")
 	}
 
 	// Test the connection
+	migobj.logMessage("Testing ESXi connection")
 	if err := esxiClient.TestConnection(); err != nil {
 		return []storage.Volume{}, errors.Wrap(err, "failed to test ESXi connection")
 	}
@@ -167,7 +170,6 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	// Step 3: Map host IQN to initiator group
 	initiatorGroup := fmt.Sprintf("vjailbreak-xcopy")
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
-
 	mappingContext, err := migobj.StorageProvider.CreateOrUpdateInitiatorGroup(initiatorGroup, []string{hostIQN})
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to create initiator group %s", initiatorGroup)
