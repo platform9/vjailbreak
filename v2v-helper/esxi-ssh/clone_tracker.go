@@ -11,6 +11,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// ProgressLogger is an interface for logging clone progress messages.
+// This allows the migrate package to receive progress updates without circular imports.
+type ProgressLogger interface {
+	LogMessage(msg string)
+}
+
 // CloneStatus represents the current state of a clone operation
 type CloneStatus struct {
 	PID         int
@@ -31,10 +37,13 @@ type CloneTracker struct {
 	lastLoggedPercent int
 	lastProgress      float64
 	lastProgressTime  time.Time
+	logger            ProgressLogger
+	diskIndex         int
 }
 
-// NewCloneTracker creates a new clone operation tracker
-func NewCloneTracker(client *Client, task *VmkfstoolsTask) *CloneTracker {
+// NewCloneTracker creates a new clone operation tracker.
+// logger can be nil if no progress events are needed.
+func NewCloneTracker(client *Client, task *VmkfstoolsTask, diskIndex int, logger ProgressLogger) *CloneTracker {
 	now := time.Now()
 	return &CloneTracker{
 		client:            client,
@@ -46,6 +55,8 @@ func NewCloneTracker(client *Client, task *VmkfstoolsTask) *CloneTracker {
 		lastLoggedPercent: -1,
 		lastProgress:      -1,
 		lastProgressTime:  now,
+		logger:            logger,
+		diskIndex:         diskIndex,
 	}
 }
 
@@ -198,15 +209,22 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 	currentBucket := (int(percentDone) / 5) * 5
 	if currentBucket > ct.lastLoggedPercent {
-		elapsed := time.Since(ct.startTime).Round(time.Second)
-		klog.Infof("Clone progress: %d%% done [elapsed: %v]", currentBucket, elapsed)
+		msg := fmt.Sprintf("Copying disk %d: %d%% done", ct.diskIndex, currentBucket)
+		klog.Info(msg)
+		if ct.logger != nil {
+			ct.logger.LogMessage(msg)
+		}
 		ct.lastLoggedPercent = currentBucket
 	}
 }
 
 // WaitForCompletion blocks until the clone completes, fails, or context is cancelled
 func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
-	klog.Infof("Starting clone monitor for PID %d", ct.task.Pid)
+	msg := fmt.Sprintf("Starting clone monitor for disk %d (PID %d)", ct.diskIndex, ct.task.Pid)
+	klog.Info(msg)
+	if ct.logger != nil {
+		ct.logger.LogMessage(msg)
+	}
 
 	ticker := time.NewTicker(ct.pollInterval)
 	defer ticker.Stop()
@@ -215,6 +233,9 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			klog.Info("Clone monitoring cancelled")
+			if ct.logger != nil {
+				ct.logger.LogMessage("Clone monitoring cancelled")
+			}
 			return ctx.Err()
 
 		case <-ticker.C:
@@ -227,7 +248,11 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 				if status.Error != "" {
 					return fmt.Errorf("clone failed: %s", status.Error)
 				}
-				klog.Infof("Clone completed successfully in %v", status.ElapsedTime.Round(time.Second))
+				msg := fmt.Sprintf("Disk %d clone completed successfully in %v", ct.diskIndex, status.ElapsedTime.Round(time.Second))
+				klog.Info(msg)
+				if ct.logger != nil {
+					ct.logger.LogMessage(msg)
+				}
 				return nil
 			}
 		}

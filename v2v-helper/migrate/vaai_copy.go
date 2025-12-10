@@ -92,7 +92,7 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 	// Verify VM is powered off before attempting VAAI copy
 	// The VM should already be powered off by the migration flow before calling this function
 	if vminfo.State != "poweredOff" {
-		migobj.logMessage(fmt.Sprintf("VM %s is not powered off (state: %s). VM must be powered off before VAAI copy can proceed", vminfo.Name, vminfo.State))
+		migobj.logMessage(fmt.Sprintf("VM %s is not powered off (state: %s). VM must be powered off before storage copy can proceed", vminfo.Name, vminfo.State))
 		migobj.logMessage("Powering off VM")
 		if err := migobj.VMops.VMPowerOff(); err != nil {
 			return []storage.Volume{}, errors.Wrap(err, "failed to power off VM")
@@ -255,18 +255,18 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	}
 
 	// Step 8: Monitor clone progress
-	tracker := esxissh.NewCloneTracker(esxiClient, task)
+	tracker := esxissh.NewCloneTracker(esxiClient, task, idx, migobj)
 	tracker.SetPollInterval(2 * time.Second)
 
 	err = tracker.WaitForCompletion(ctx)
 	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "VAAI RDM clone failed for disk %s", vmDisk.Name)
+		return storage.Volume{}, errors.Wrapf(err, "Copy failed for disk %s", vmDisk.Name)
 	}
 
 	cloneDuration := time.Since(cloneStart)
 	totalDuration := time.Since(startTime)
 
-	migobj.logMessage(fmt.Sprintf("VAAI XCOPY completed in %s (total: %s) for disk %s",
+	migobj.logMessage(fmt.Sprintf("Copy completed in %s (total: %s) for disk %s",
 		cloneDuration.Round(time.Second), totalDuration.Round(time.Second), vmDisk.Name))
 
 	// Update the target volume with Cinder info
