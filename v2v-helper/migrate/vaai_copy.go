@@ -1,4 +1,4 @@
-// Copyright © 2024 The vjailbreak authors
+// Copyright © 2025 The vjailbreak authors
 
 package migrate
 
@@ -114,7 +114,7 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), vmdisk.Name))
 
 		// Perform VAAI copy for this disk
-		clonedVolume, err := migobj.copyDiskViaVAAI(ctx, esxiClient, vminfo.VMDisks[idx], hostIP)
+		clonedVolume, err := migobj.copyDiskViaVAAI(ctx, esxiClient, idx, &vminfo, hostIP)
 		if err != nil {
 			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via VAAI", vmdisk.Name)
 		}
@@ -143,8 +143,11 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 }
 
 // copyDiskViaVAAI copies a single disk using VAAI XCOPY
-func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client, vmDisk vm.VMDisk, hostIP string) (storage.Volume, error) {
+func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client,
+	idx int, vminfo *vm.VMInfo, hostIP string) (storage.Volume, error) {
 	startTime := time.Now()
+
+	vmDisk := vminfo.VMDisks[idx]
 
 	defer func() {
 		migobj.logMessage(fmt.Sprintf("VAAI XCOPY completed in %s (total: %s) for disk %s",
@@ -177,7 +180,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	if diskSizeBytes%512 != 0 {
 		diskSizeBytes = ((diskSizeBytes / 512) + 1) * 512
 	}
-	sanitizedName := sanitizeVolumeName(vmDisk.Name)
+	sanitizedName := sanitizeVolumeName(vmDisk.Name + "-" + vmDisk.Name)
 	migobj.logMessage(fmt.Sprintf("Creating target volume %s (sanitized from: %s) with size %d bytes (%d GB)",
 		sanitizedName, vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
 	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, diskSizeBytes)
@@ -191,6 +194,11 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", targetVolume.Name)
+	}
+	vminfo.VMDisks[idx].OpenstackVol = &cindervolumes.Volume{
+		ID:   cinderVolumeId,
+		Name: targetVolume.Name,
+		Size: int(targetVolume.Size / (1024 * 1024 * 1024)), // Convert bytes to GB
 	}
 
 	// After Cinder manage, the volume name on Pure changes to volume-<cinder-id>-cinder

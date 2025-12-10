@@ -27,18 +27,25 @@ type CloneTracker struct {
 	startTime         time.Time
 	pollInterval      time.Duration
 	startupTimeout    time.Duration
+	stallTimeout      time.Duration
 	lastLoggedPercent int
+	lastProgress      float64
+	lastProgressTime  time.Time
 }
 
 // NewCloneTracker creates a new clone operation tracker
 func NewCloneTracker(client *Client, task *VmkfstoolsTask) *CloneTracker {
+	now := time.Now()
 	return &CloneTracker{
 		client:            client,
 		task:              task,
-		startTime:         time.Now(),
-		pollInterval:      2 * time.Second,
+		startTime:         now,
+		pollInterval:      10 * time.Second,
 		startupTimeout:    5 * time.Minute,
+		stallTimeout:      5 * time.Minute,
 		lastLoggedPercent: -1,
+		lastProgress:      -1,
+		lastProgressTime:  now,
 	}
 }
 
@@ -150,16 +157,30 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 		return false
 	}
 
+	// Track progress changes to detect stalled clones
+	now := time.Now()
+	if percentDone > ct.lastProgress {
+		ct.lastProgress = percentDone
+		ct.lastProgressTime = now
+	}
+
 	// Check if process is visible
 	processVisible, _ := ct.client.CheckCloneStatus(ct.task.Pid)
 	if processVisible {
 		return true
 	}
 
-	// Process not visible - check if it's still working based on log
+	// Process not visible - check if clone is stalled
 	elapsed := time.Since(ct.startTime)
+	timeSinceProgress := now.Sub(ct.lastProgressTime)
 
-	// If log shows progress (but not 100%), clone is running even if process not visible
+	// If we have progress but it's stalled (no change for stallTimeout), clone likely failed
+	if percentDone > 0 && percentDone < 100 && timeSinceProgress > ct.stallTimeout {
+		klog.Warningf("Clone appears stalled: no progress change for %v (stuck at %.0f%%)", timeSinceProgress.Round(time.Second), percentDone)
+		return false
+	}
+
+	// If log shows progress (but not 100%) and not stalled, clone is running even if process not visible
 	if percentDone > 0 {
 		return true
 	}
