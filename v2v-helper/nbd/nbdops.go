@@ -177,9 +177,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 		scanner := bufio.NewScanner(progressRead)
 		
 		lastLoggedProgress := -1
-		logInterval := 5
-		
-		lastChannelProgress := 0 
+		const logInterval = 5
+		lastChannelProgress := 0
 
 		for scanner.Scan() {
 			progressInt, _, err := utils.ParseFraction(scanner.Text())
@@ -189,7 +188,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
 
-			if progressInt > lastLoggedProgress && progressInt % logInterval == 0 {
+			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
 				utils.PrintLog(msg)
 				lastLoggedProgress = progressInt
 			}
@@ -424,7 +423,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	go func() {
 		copiedsize := int64(0)
 		lastLoggedPct := -1
-		logInterval := 5
+		const logInterval = 5
 		startTime := time.Now()
 		nbdserver.StartTime = startTime
 		nbdserver.TotalSize = totalsize
@@ -432,16 +431,16 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			copiedsize += progress
 			nbdserver.CopiedSize = copiedsize
 			nbdserver.Duration = time.Since(startTime)
-			
+
 			currentPct := int(float64(copiedsize) / float64(totalsize) * 100.0)
 
-			prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
-			
-			if currentPct > lastLoggedPct && currentPct % logInterval == 0 {
+			prog := fmt.Sprintf("Progress: %d%%", currentPct)
+
+			if currentPct == 0 || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
 				utils.PrintLog(prog)
 				lastLoggedPct = currentPct
 			}
-			
+
 			nbdserver.progresschan <- prog
 		}
 	}()
