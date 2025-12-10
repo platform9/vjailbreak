@@ -71,9 +71,6 @@ func (ct *CloneTracker) GetStatus(ctx context.Context) (*CloneStatus, error) {
 	status.Error = ct.parseError(logContent)
 	status.IsRunning = ct.determineIfRunning(logContent, status.PercentDone, status.Error)
 
-	klog.Infof("GetStatus: PID=%d, progress=%.0f%%, isRunning=%v, error=%q, elapsed=%v",
-		status.PID, status.PercentDone, status.IsRunning, status.Error, status.ElapsedTime.Round(time.Second))
-
 	// Log progress at 5% increments
 	ct.logProgressIfNeeded(status.PercentDone)
 
@@ -83,28 +80,11 @@ func (ct *CloneTracker) GetStatus(ctx context.Context) (*CloneStatus, error) {
 // readLogFile reads the vmkfstools log file content
 func (ct *CloneTracker) readLogFile() string {
 	if ct.task.LogFile == "" {
-		klog.Warning("readLogFile: LogFile path is empty")
 		return ""
 	}
 	logCmd := fmt.Sprintf("cat %s 2>/dev/null", ct.task.LogFile)
-	content, err := ct.client.ExecuteCommand(logCmd)
-	if err != nil {
-		klog.Warningf("readLogFile: Error reading log file %s: %v", ct.task.LogFile, err)
-	}
-	content = strings.TrimSpace(content)
-
-	// Log raw content for debugging (first 300 chars)
-	if len(content) > 0 {
-		preview := content
-		if len(preview) > 300 {
-			preview = preview[:300] + "..."
-		}
-		// Show raw bytes to detect \r characters
-		klog.Infof("readLogFile: content length=%d, raw preview: %q", len(content), preview)
-	} else {
-		klog.Infof("readLogFile: log file is empty")
-	}
-	return content
+	content, _ := ct.client.ExecuteCommand(logCmd)
+	return strings.TrimSpace(content)
 }
 
 // parseProgress extracts the highest percentage from log content
@@ -119,22 +99,18 @@ func (ct *CloneTracker) parseProgress(logContent string) float64 {
 	// Replace \r with \n to handle vmkfstools progress output
 	// vmkfstools writes: "Clone: 0% done.\rClone: 1% done.\r..."
 	normalized := strings.ReplaceAll(logContent, "\r", "\n")
-	lines := strings.Split(normalized, "\n")
 
-	klog.Infof("parseProgress: splitting into %d lines", len(lines))
-
-	for i, line := range lines {
+	for _, line := range strings.Split(normalized, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 
 		var pct float64
-		// Try with period at end
+		// Try with period at end (most common format)
 		if _, err := fmt.Sscanf(line, "Clone: %f%% done.", &pct); err == nil {
 			if pct > maxPct {
 				maxPct = pct
-				klog.Infof("parseProgress: line %d matched 'Clone: %.0f%% done.'", i, pct)
 			}
 			continue
 		}
@@ -142,12 +118,10 @@ func (ct *CloneTracker) parseProgress(logContent string) float64 {
 		if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil {
 			if pct > maxPct {
 				maxPct = pct
-				klog.Infof("parseProgress: line %d matched 'Clone: %.0f%% done'", i, pct)
 			}
 		}
 	}
 
-	klog.Infof("parseProgress: final maxPct=%.0f%%", maxPct)
 	return maxPct
 }
 
@@ -166,46 +140,36 @@ func (ct *CloneTracker) parseError(logContent string) string {
 
 // determineIfRunning determines if the clone is still running based on all available signals
 func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float64, errorMsg string) bool {
-	elapsed := time.Since(ct.startTime)
-
-	// Check if process is visible
-	processVisible, _ := ct.client.CheckCloneStatus(ct.task.Pid)
-	klog.Infof("determineIfRunning: processVisible=%v, percentDone=%.0f%%, hasError=%v, logLen=%d, elapsed=%v",
-		processVisible, percentDone, errorMsg != "", len(logContent), elapsed.Round(time.Second))
-
 	// If there's an error, not running
 	if errorMsg != "" {
-		klog.Infof("determineIfRunning: returning false (error detected)")
 		return false
 	}
 
 	// If 100% done, not running (completed)
 	if percentDone >= 100 {
-		klog.Infof("determineIfRunning: returning false (100%% complete)")
 		return false
 	}
 
-	// If process is visible, it's running
+	// Check if process is visible
+	processVisible, _ := ct.client.CheckCloneStatus(ct.task.Pid)
 	if processVisible {
-		klog.Infof("determineIfRunning: returning true (process visible)")
 		return true
 	}
 
 	// Process not visible - check if it's still working based on log
+	elapsed := time.Since(ct.startTime)
+
 	// If log shows progress (but not 100%), clone is running even if process not visible
 	if percentDone > 0 {
-		klog.Infof("determineIfRunning: returning true (progress %.0f%% detected, process may be offloaded to storage)", percentDone)
 		return true
 	}
 
 	// If log is empty and within startup timeout, assume still starting
 	if logContent == "" && elapsed < ct.startupTimeout {
-		klog.Infof("determineIfRunning: returning true (log empty, within startup timeout %v)", ct.startupTimeout)
 		return true
 	}
 
 	// Process not visible, no progress, startup timeout exceeded
-	klog.Infof("determineIfRunning: returning false (process not visible, no progress after %v)", elapsed.Round(time.Second))
 	return false
 }
 
