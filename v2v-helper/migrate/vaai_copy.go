@@ -180,7 +180,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	if diskSizeBytes%512 != 0 {
 		diskSizeBytes = ((diskSizeBytes / 512) + 1) * 512
 	}
-	sanitizedName := sanitizeVolumeName(vmDisk.Name + "-" + vmDisk.Name)
+	sanitizedName := sanitizeVolumeName(vminfo.Name + "-" + vmDisk.Name)
 	migobj.logMessage(fmt.Sprintf("Creating target volume %s (sanitized from: %s) with size %d bytes (%d GB)",
 		sanitizedName, vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
 	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, diskSizeBytes)
