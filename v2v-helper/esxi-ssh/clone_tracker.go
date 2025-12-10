@@ -69,6 +69,7 @@ func (ct *CloneTracker) GetStatus(ctx context.Context) (*CloneStatus, error) {
 	// Parse state from log content
 	status.PercentDone = ct.parseProgress(logContent)
 	status.Error = ct.parseError(logContent)
+	klog.V(2).Infof("Clone progress: %.2f%% done, before determineIfRunning", status.PercentDone)
 	status.IsRunning = ct.determineIfRunning(logContent, status.PercentDone, status.Error)
 
 	// Log progress at 5% increments
@@ -91,11 +92,14 @@ func (ct *CloneTracker) readLogFile() string {
 func (ct *CloneTracker) parseProgress(logContent string) float64 {
 	var maxPct float64 = 0
 	for _, line := range strings.Split(logContent, "\n") {
+		klog.V(3).Infof("Processing line: %q", line)
 		var pct float64
 		if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil && pct > maxPct {
 			maxPct = pct
+			klog.V(3).Infof("Found new max percentage: %.2f%%", maxPct)
 		}
 	}
+	klog.V(3).Infof("Final max percentage: %.2f%%", maxPct)
 	return maxPct
 }
 
@@ -159,6 +163,7 @@ func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 		klog.Infof("Clone progress: %d%% done [elapsed: %v]", currentBucket, elapsed)
 		ct.lastLoggedPercent = currentBucket
 	}
+	klog.V(2).Infof("Clone progress: %.2f%% done just logging to check.", percentDone)
 }
 
 // WaitForCompletion blocks until the clone completes, fails, or context is cancelled

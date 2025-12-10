@@ -92,7 +92,12 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 	// Verify VM is powered off before attempting VAAI copy
 	// The VM should already be powered off by the migration flow before calling this function
 	if vminfo.State != "poweredOff" {
-		return []storage.Volume{}, fmt.Errorf("VM %s is not powered off (state: %s). VM must be powered off before VAAI copy can proceed", vminfo.Name, vminfo.State)
+		migobj.logMessage(fmt.Sprintf("VM %s is not powered off (state: %s). VM must be powered off before VAAI copy can proceed", vminfo.Name, vminfo.State))
+		migobj.logMessage("Powering off VM")
+		if err := migobj.VMops.VMPowerOff(); err != nil {
+			return []storage.Volume{}, errors.Wrap(err, "failed to power off VM")
+		}
+		migobj.logMessage("VM powered off successfully")
 	}
 
 	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.Name))
@@ -231,8 +236,8 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 
 	// Wait for device to be fully ready after rescan
 	// ESXi needs time to fully initialize the device after it appears
-	migobj.logMessage("Waiting 3 seconds for device to be fully initialized...")
-	time.Sleep(3 * time.Second)
+	migobj.logMessage("Waiting 10 seconds for device to be fully initialized...")
+	time.Sleep(10 * time.Second)
 
 	// Step 9: Perform VAAI XCOPY clone directly to raw device (RDM format)
 	// This clones directly to the raw device without needing a datastore
