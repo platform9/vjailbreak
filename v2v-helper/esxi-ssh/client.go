@@ -401,7 +401,6 @@ func (c *Client) CheckCloneStatus(pid int) (bool, error) {
 	output, _ := c.ExecuteCommand(checkCmd)
 
 	isRunning := strings.Contains(output, "running")
-	utils.PrintLog(fmt.Sprintf("CheckCloneStatus PID %d: output=%q, isRunning=%v", pid, strings.TrimSpace(output), isRunning))
 
 	return isRunning, nil
 }
