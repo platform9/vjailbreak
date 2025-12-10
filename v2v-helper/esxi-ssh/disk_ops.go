@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog/v2"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
 
 // ListDatastores returns all datastores on the ESXi host
@@ -525,20 +525,20 @@ func (c *Client) RescanStorage() error {
 		return fmt.Errorf("not connected to ESXi host")
 	}
 
-	klog.Info("Rescanning ESXi storage adapters...")
+	utils.PrintLog("Rescanning ESXi storage adapters...")
 
 	// Method 1: Rescan all HBAs using esxcli
 	output, err := c.ExecuteCommand("esxcli storage core adapter rescan --all")
 	if err != nil {
 		// "Scan already in progress" is not a real error, just means another scan is running
 		if strings.Contains(output, "already in progress") {
-			klog.Info("Storage rescan already in progress, waiting...")
+			utils.PrintLog("Storage rescan already in progress, waiting...")
 			time.Sleep(5 * time.Second)
 		} else {
-			klog.Warningf("esxcli rescan failed (output: %s): %v", output, err)
+			utils.PrintLog(fmt.Sprintf("WARNING: esxcli rescan failed (output: %s): %v", output, err))
 		}
 	}
-	klog.Info("Storage rescan completed")
+	utils.PrintLog("Storage rescan completed")
 	return nil
 }
 
@@ -552,8 +552,8 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 	naaID = strings.TrimSpace(naaID)
 
 	devicePath := fmt.Sprintf("/vmfs/devices/disks/%s", naaID)
-	klog.Infof("Waiting for device %s to appear (timeout: %s)", devicePath, timeout)
-	klog.Infof("Looking for NAA ID: %q (len=%d)", naaID, len(naaID))
+	utils.PrintLog(fmt.Sprintf("Waiting for device %s to appear (timeout: %s)", devicePath, timeout))
+	utils.PrintLog(fmt.Sprintf("Looking for NAA ID: %q (len=%d)", naaID, len(naaID)))
 
 	startTime := time.Now()
 	pollInterval := 5 * time.Second
@@ -571,7 +571,7 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 			for _, line := range strings.Split(output, "\n") {
 				device := strings.TrimSpace(line)
 				if device == naaID {
-					klog.Infof("Device %s is now visible (took %s)", naaID, time.Since(startTime).Round(time.Second))
+					utils.PrintLog(fmt.Sprintf("Device %s is now visible (took %s)", naaID, time.Since(startTime).Round(time.Second)))
 					return nil
 				}
 			}
@@ -579,7 +579,7 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 
 		// Trigger rescan periodically
 		if time.Since(lastRescan) >= rescanInterval {
-			klog.Infof("Device %s not yet visible, triggering rescan...", naaID)
+			utils.PrintLog(fmt.Sprintf("Device %s not yet visible, triggering rescan...", naaID))
 			_ = c.RescanStorage()
 			lastRescan = time.Now()
 		}
@@ -596,19 +596,19 @@ func (c *Client) RescanStorageForDevice(naaID string, timeout time.Duration) err
 			naaDevices = append(naaDevices, device)
 			// Check for exact match
 			if device == naaID {
-				klog.Infof("Device %s found in final check!", naaID)
+				utils.PrintLog(fmt.Sprintf("Device %s found in final check!", naaID))
 				return nil
 			}
 			// Also check if our naaID is contained (in case of prefix issues)
 			if strings.Contains(device, naaID) || strings.Contains(naaID, device) {
-				klog.Infof("Partial match found: looking for %q, found %q", naaID, device)
+				utils.PrintLog(fmt.Sprintf("Partial match found: looking for %q, found %q", naaID, device))
 			}
 		}
 	}
 
-	klog.Infof("Available NAA devices after timeout (%d found):", len(naaDevices))
+	utils.PrintLog(fmt.Sprintf("Available NAA devices after timeout (%d found):", len(naaDevices)))
 	for _, d := range naaDevices {
-		klog.Infof("  - %q (len=%d)", d, len(d))
+		utils.PrintLog(fmt.Sprintf("  - %q (len=%d)", d, len(d)))
 	}
 
 	return fmt.Errorf("device %s not visible after %s", naaID, timeout)
@@ -620,7 +620,7 @@ func (c *Client) CreateDatastore(datastoreName, naaID string) error {
 
 	devicePath := fmt.Sprintf("/vmfs/devices/disks/%s", naaID)
 
-	klog.Infof("Creating VMFS datastore %s on device %s", datastoreName, devicePath)
+	utils.PrintLog(fmt.Sprintf("Creating VMFS datastore %s on device %s", datastoreName, devicePath))
 
 	// Create partition table and VMFS filesystem
 	// Using vmkfstools with -C to create VMFS datastore
@@ -630,7 +630,7 @@ func (c *Client) CreateDatastore(datastoreName, naaID string) error {
 		return fmt.Errorf("failed to create datastore: %w", err)
 	}
 
-	klog.Infof("Created datastore %s", datastoreName)
+	utils.PrintLog(fmt.Sprintf("Created datastore %s", datastoreName))
 	return nil
 }
 
@@ -672,7 +672,7 @@ func (c *Client) GetHostIQN() (string, error) {
 		return "", fmt.Errorf("failed to get storage adapter list: %w", err)
 	}
 
-	klog.Infof("Found %d storage adapters", len(results))
+	utils.PrintLog(fmt.Sprintf("Found %d storage adapters", len(results)))
 
 	for _, adapter := range results {
 		uid, hasUID := adapter["UID"]
@@ -684,13 +684,13 @@ func (c *Client) GetHostIQN() (string, error) {
 		}
 
 		uid = strings.ToLower(strings.TrimSpace(uid))
-		klog.Infof("Adapter: Driver=%s, LinkState=%s, UID=%s", driver, linkState, uid)
+		utils.PrintLog(fmt.Sprintf("Adapter: Driver=%s, LinkState=%s, UID=%s", driver, linkState, uid))
 
 		// Check if the UID is iSCSI IQN (could also check for FC or NVMe-oF)
 		isIQN := strings.HasPrefix(uid, "iqn.")
 
 		if (linkState == "link-up" || linkState == "online") && isIQN {
-			klog.Infof("Found ESXi IQN: %s", uid)
+			utils.PrintLog(fmt.Sprintf("Found ESXi IQN: %s", uid))
 			return uid, nil
 		}
 	}
