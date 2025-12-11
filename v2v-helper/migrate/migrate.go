@@ -1472,6 +1472,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
+		// Delete ports if cleanup is enabled
+		if vcenterSettings.CleanupPortsAfterMigrationFailure {
+			migobj.logMessage("Cleanup ports after migration failure is enabled, deleting ports")
+			if portCleanupErr := migobj.DeleteAllPorts(ctx, portids); portCleanupErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to delete ports: %s\n", portCleanupErr))
+			}
+		} else {
+			migobj.logMessage("Cleanup ports after migration failure is disabled, ports will not be deleted")
+		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
 
@@ -1496,6 +1505,20 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
+	}
+	return nil
+}
+
+func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) error {
+	migobj.logMessage("Deleting all ports")
+	openstackops := migobj.Openstackclients
+	for _, portID := range portids {
+		err := openstackops.DeletePort(ctx, portID)
+		if err != nil {
+			utils.PrintLog(fmt.Sprintf("Failed to delete port %s: %s\n", portID, err))
+			return errors.Wrapf(err, "failed to delete port %s", portID)
+		}
+		utils.PrintLog(fmt.Sprintf("Successfully deleted port %s\n", portID))
 	}
 	return nil
 }
