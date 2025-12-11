@@ -1374,7 +1374,7 @@ func (migobj *Migrate) gracefulTerminate(ctx context.Context, vminfo vm.VMInfo, 
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
 	cancel()
-	migobj.cleanup(ctx, vminfo, "Migration terminated")
+	migobj.cleanup(ctx, vminfo, "Migration terminated", nil, nil)
 	os.Exit(0)
 }
 
@@ -1420,7 +1420,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Enable CBT
 	err = migobj.EnableCBTWrapper()
 	if err != nil {
-		migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err))
+		migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
 		return errors.Wrap(err, "CBT Failure")
 	}
 
@@ -1432,7 +1432,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	// Live Replicate Disks
 	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
@@ -1459,7 +1459,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			return errors.Wrap(err, "failed to convert disks")
 		}
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert volumes: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
@@ -1468,18 +1468,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err)); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		// Delete ports if cleanup is enabled
-		if vcenterSettings.CleanupPortsAfterMigrationFailure {
-			migobj.logMessage("Cleanup ports after migration failure is enabled, deleting ports")
-			if portCleanupErr := migobj.DeleteAllPorts(ctx, portids); portCleanupErr != nil {
-				utils.PrintLog(fmt.Sprintf("Failed to delete ports: %s\n", portCleanupErr))
-			}
-		} else {
-			migobj.logMessage("Cleanup ports after migration failure is disabled, ports will not be deleted")
 		}
 		return errors.Wrap(err, "failed to create target instance")
 	}
@@ -1491,7 +1482,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	return nil
 }
 
-func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string) error {
+func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
 	err := migobj.DetachAllVolumes(ctx, vminfo)
 	if err != nil {
@@ -1506,6 +1497,17 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
+	
+	// Delete ports if cleanup is enabled
+	if vcenterSettings != nil && vcenterSettings.CleanupPortsAfterMigrationFailure && len(portids) > 0 {
+		migobj.logMessage("Cleanup ports after migration failure is enabled, deleting ports")
+		if portCleanupErr := migobj.DeleteAllPorts(ctx, portids); portCleanupErr != nil {
+			utils.PrintLog(fmt.Sprintf("Failed to delete ports: %s\n", portCleanupErr))
+		}
+	} else if vcenterSettings != nil && !vcenterSettings.CleanupPortsAfterMigrationFailure {
+		migobj.logMessage("Cleanup ports after migration failure is disabled, ports will not be deleted")
+	}
+	
 	return nil
 }
 
