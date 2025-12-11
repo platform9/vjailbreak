@@ -100,6 +100,7 @@ type SettingsForm = {
   DEFAULT_MIGRATION_METHOD: 'hot' | 'cold'
   VCENTER_SCAN_CONCURRENCY_LIMIT: number
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: boolean
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: boolean
   POPULATE_VMWARE_MACHINE_FLAVORS: boolean
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: number
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: number
@@ -118,6 +119,7 @@ const DEFAULTS: SettingsForm = {
   DEFAULT_MIGRATION_METHOD: 'hot',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 10,
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: false,
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: false,
   POPULATE_VMWARE_MACHINE_FLAVORS: true,
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: 10,
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: 15,
@@ -146,6 +148,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
     'DEFAULT_MIGRATION_METHOD',
     'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+    'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS'
   ]
@@ -238,6 +241,8 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Default method for VM migration (placeholder for future releases, not currently used).',
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE:
     'Automatically delete intermediate volumes when a conversion fails.',
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE:
+    'Automatically delete network ports when a migration fails.',
   POPULATE_VMWARE_MACHINE_FLAVORS:
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.'
@@ -246,6 +251,7 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
 type ToggleKey = Extract<
   keyof SettingsForm,
   | 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE'
+  | 'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE'
   | 'POPULATE_VMWARE_MACHINE_FLAVORS'
   | 'VALIDATE_RDM_OWNER_VMS'
 >
@@ -255,6 +261,11 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
     key: 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
     label: 'Cleanup Volumes After Conversion Failure',
     description: 'Remove orphaned storage artifacts after a failed conversion run.'
+  },
+  {
+    key: 'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
+    label: 'Cleanup Ports After Migration Failure',
+    description: 'Remove orphaned network ports after a failed migration run.'
   },
   {
     key: 'POPULATE_VMWARE_MACHINE_FLAVORS',
@@ -288,6 +299,7 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   DEFAULT_MIGRATION_METHOD: f.DEFAULT_MIGRATION_METHOD,
   VCENTER_SCAN_CONCURRENCY_LIMIT: String(f.VCENTER_SCAN_CONCURRENCY_LIMIT),
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: String(f.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE),
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: String(f.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE),
   POPULATE_VMWARE_MACHINE_FLAVORS: String(f.POPULATE_VMWARE_MACHINE_FLAVORS),
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: String(f.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS),
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: String(f.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT),
@@ -322,6 +334,10 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: parseBool(
     data?.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE,
     DEFAULTS.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE
+  ),
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: parseBool(
+    data?.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE,
+    DEFAULTS.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE
   ),
   POPULATE_VMWARE_MACHINE_FLAVORS: parseBool(
     data?.POPULATE_VMWARE_MACHINE_FLAVORS,
@@ -561,6 +577,7 @@ export default function GlobalSettingsPage() {
 
     const bools: Array<keyof SettingsForm> = [
       'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+      'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
       'VALIDATE_RDM_OWNER_VMS'
     ]

@@ -128,6 +128,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
+	// CleanupPortsAfterMigrationFailure is the default value for cleanup ports after migration failure
+	CleanupPortsAfterMigrationFailure = false
+
 	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
 	PopulateVMwareMachineFlavors = true
 
