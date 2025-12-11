@@ -62,6 +62,10 @@ Cloud-init can be used during VM creation to automate initial configuration incl
   ```
 - You can provide this cloud-init configuration when creating the VM through the OpenStack dashboard or CLI.
 
+**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+
+
+
 ### Copy VDDK Libraries
 VMware VDDK library is required for vJailbreak to interact with the VMware environment and it must be configured in the vJailbreak VM.
 - Copy the latest version of the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vJailbreak VM. Untar it to a folder named `vmware-vix-disklib-distrib` in the `/home/ubuntu` directory.
