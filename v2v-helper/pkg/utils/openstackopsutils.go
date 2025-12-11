@@ -587,12 +587,12 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
 		}
 	}
-	return osclient.CreatePort(ctx, createOpts)
+	return osclient.createPortLowLevel(ctx, createOpts)
 }
 
 func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
 
-	dhcpPort, dhcpErr := osclient.CreatePort(ctx, createOpts)
+	dhcpPort, dhcpErr := osclient.createPortLowLevel(ctx, createOpts)
 
 	if dhcpErr != nil {
 		return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
@@ -617,7 +617,26 @@ func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, networ
 	return dhcpPort, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+	// Convert ip []string to []vm.IpEntry
+	ipEntries := make([]vm.IpEntry, len(ip))
+	for i, ipAddr := range ip {
+		ipEntries[i] = vm.IpEntry{IP: ipAddr}
+	}
+
+	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
+	if err != nil {
+		if !fallbackToDHCP {
+			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
+		}
+		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
+		// Create with DHCP by removing fixed IPs
+		createOpts.FixedIPs = nil
+	}
+	return osclient.createPortLowLevel(ctx, createOpts)
+}
+
+func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 

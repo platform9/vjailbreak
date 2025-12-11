@@ -6,14 +6,15 @@ import (
 	"strings"
 	"time"
 
-	gophercloud "github.com/gophercloud/gophercloud"
-	openstack "github.com/gophercloud/gophercloud/openstack"
-	ports "github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	gophercloud "github.com/gophercloud/gophercloud/v2"
+	openstack "github.com/gophercloud/gophercloud/v2/openstack"
+	ports "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
 	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
+	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -124,7 +125,7 @@ func isIPInUse(client *gophercloud.ServiceClient, ip string) (bool, string, erro
 	// Check fixed IPs on ports
 	portList, err := ports.List(client, ports.ListOpts{
 		FixedIPs: []ports.FixedIPOpts{{IPAddress: ip}},
-	}).AllPages()
+	}).AllPages(context.TODO())
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"func": fn, "ip": ip}).WithError(err).Error("Failed to list ports for IP")
 		return false, "", err
@@ -283,7 +284,7 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
 
-	err = openstack.Authenticate(providerClient, gophercloud.AuthOptions{
+	err = openstack.Authenticate(context.TODO(), providerClient, gophercloud.AuthOptions{
 		IdentityEndpoint: openstackAccessInfo.AuthURL,
 		Username:         openstackAccessInfo.Username,
 		Password:         openstackAccessInfo.Password,

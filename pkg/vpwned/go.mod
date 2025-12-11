@@ -8,7 +8,7 @@ require (
 	github.com/bougou/go-ipmi v0.7.6
 	github.com/canonical/gomaasclient v0.12.0
 	github.com/google/go-github/v63 v63.0.0
-	github.com/gophercloud/gophercloud v1.14.1
+	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/juju/errors v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -56,7 +56,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gophercloud/gophercloud/v2 v2.9.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
