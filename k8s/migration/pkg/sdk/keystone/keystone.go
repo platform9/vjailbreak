@@ -272,18 +272,7 @@ type Role struct {
 // HTTPClient implements the Client interface for interacting with Keystone API
 type HTTPClient struct {
 
-	// endpoint should contain the base path of keystone.
-	//
-	// Example: https://some-du.platform9.horse/keystone
-	endpoint string
-
-	httpClient *http.Client
-
-	log *zap.Logger
-}
-
-// NewClient creates a new HTTPClient instance for interacting with the Keystone API
-func NewClient(endpoint string, insecure bool) *HTTPClient {
+func NewClient(endpoint string, insecure bool) (*HTTPClient, error) {
 	client := netutils.NewVjbNet()
 	returnClient := &HTTPClient{}
 	// Turn off cert verification if running in airgapped mode
@@ -292,16 +281,14 @@ func NewClient(endpoint string, insecure bool) *HTTPClient {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
 		client.Insecure = true
 	}
-	if client.CreateSecureHTTPClient() == nil {
-		returnClient.httpClient = client.GetClient()
-	} else {
-		zap.L().Error("failed to create secure HTTP client")
-		return nil
+	if err := client.CreateSecureHTTPClient(); err != nil {
+		zap.L().Error("failed to create secure HTTP client", zap.Error(err))
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
-
+	returnClient.httpClient = client.GetClient()
 	returnClient.endpoint = strings.TrimRight(endpoint, "/")
 	returnClient.log = zap.L()
-	return returnClient
+	return returnClient, nil
 }
 
 // Auth authenticates the user with the provided credentials.
