@@ -1,3 +1,9 @@
+---
+title: Firstboot Script
+description: Guide on using firstboot scripts during VM migration
+---
+
+
 ## Overview
 The Firstboot Script feature allows users to run custom scripts automatically on virtual machines (VMs) immediately after they are migrated to Platform9 Cloud Director (PCD) or OpenStack environments. This capability is essential for automating post-migration configurations, installations, and other setup tasks that need to be performed on the VM upon its first boot.
 
@@ -5,7 +11,6 @@ Following are some use cases for Firstboot Scripts:
 1. Users can automate tasks such as installing necessary software, driver removal, or system updates right after migration.
 2. Configuring network settings or any other custom setup required for their specific use cases.
 
----
 
 **Allowed Script Formats:**
 1. **WindowsGuests**: `Batch` (.bat)
@@ -23,7 +28,6 @@ The script is deployed through the migration form interface:
 ![img1](../../../../../public/images/firstboot-form.png)
 > **Note:** The script contents should be added directly into the migration form
 
----
 
 ## Execution Flow of Firstboot Script
 ### When and Where Does It Run?
@@ -55,7 +59,6 @@ The firstboot Script feature uses [Guestfs](https://libguestfs.org/) (libguestfs
 - Guestfs adds the scripts by applying changes to the VM disk image
 - When VM boots for the first time in PCD/OpenStack, the script executes automatically
 
----
 
 ## Troubleshooting
 
@@ -63,19 +66,17 @@ The firstboot Script feature uses [Guestfs](https://libguestfs.org/) (libguestfs
 
 > #### For Windows Guests:
 
-After migration, check execution logs at: `C:\Program Files\Guestfs\log.txt`
+After migration, check execution logs at: `C:\Program Files\Guestfs\Firstboot\log.txt`
 
 ![img3](../../../../../public/images/firstboot-guestfs-log-file.png)
 ![img3-1](../../../../../public/images/firstboot-log-file-content.png)
 
----
 
 | Issue | Location to Check |
 |-------|-------------------|
-| Script Not Executing | `C:\Program Files\Guestfs\log` for errors |
+| Script Not Executing | `C:\Program Files\Guestfs\Firstboot\log.txt` for errors |
 | ConfigMap Not Mounted | Check v2v-helper pod volume mounts (`mountPath: /home/fedora/scripts`, `name: firstboot`) |
 
----
 
 ***The script's success or failure can be determined by checking its location after migration:***
 1. If the script executed successfully, it will be moved to: `C:\Program Files\guestfs\Firstboot\scripts-done\`
@@ -83,7 +84,6 @@ After migration, check execution logs at: `C:\Program Files\Guestfs\log.txt`
 
 ![img4](../../../../../public/images/firstboot-scripts-done-folder.png)
 
----
 
 > #### For Linux Guests:
 
@@ -92,14 +92,12 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 ![img5](../../../../../public/images/firstboot-linux-log-path.png)
 ![img5-1](../../../../../public/images/firstboot-linux-log-content.png)
 
----
 
 | Issue | Location to Check |
 |-------|-------------------|
 | Script Not Executing | `/root/virt-sysprep-firstboot.log` for errors |
 | ConfigMap Not Mounted | Check v2v-helper pod volume mounts (`mountPath: /home/fedora/scripts`, `name: firstboot`) |
 
----
 
 ***The script's success or failure can be determined by checking its location after migration:***
 1. If the script executed successfully, it will not appear in both: `/usr/lib/virt-sysprep/scripts/` and `/usr/lib/virt-sysprep/scripts-done/`
@@ -108,4 +106,4 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 ![img6](../../../../../public/images/firstboot-linux-firstboot-path.png)
 
 ## Link to Readily Available Firstboot Scripts
-1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers   from Windows VMs
+1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers from Windows VMs
