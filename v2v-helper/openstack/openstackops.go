@@ -42,7 +42,8 @@ type OpenstackOperations interface {
 	GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error)
 	GetNetwork(ctx context.Context, networkname string) (*networks.Network, error)
 	GetPort(ctx context.Context, portID string) (*ports.Port, error)
-	ValidateAndCreatePort(ctx context.Context,networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
+	ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
+	DeletePort(ctx context.Context, portID string) error
 	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
 	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
 	GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
