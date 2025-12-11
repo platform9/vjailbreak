@@ -100,7 +100,7 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 
 
 ***The script's success or failure can be determined by checking its location after migration:***
-1. If the script executed successfully, it will not appear in both: `/usr/lib/virt-sysprep/scripts/` and `/usr/lib/virt-sysprep/scripts-done/`
+1. If the script executed successfully, they get deleted and will not appear in: `/usr/lib/virt-sysprep/scripts/` and `/usr/lib/virt-sysprep/scripts-done/`
 2. If the script failed during execution, it will remain in: `/usr/lib/virt-sysprep/scripts/`
 
 ![img6](../../../../../public/images/firstboot-linux-firstboot-path.png)
