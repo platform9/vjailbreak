@@ -3,6 +3,7 @@ title: "Migrating RDM Disk"
 description: "A guide on how to migrate a Virtual Machine with RDM disks using the vjailbreak CLI."
 ---
 
+
 RDM disks are primarily used for clustered Windows machines.
 
 This guide walks you through the steps required to migrate a VM with **RDM (Raw Device Mapping) disks** using the CLI.
