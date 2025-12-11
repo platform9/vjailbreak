@@ -79,7 +79,7 @@ After migration, check execution logs at: `C:\Program Files\Guestfs\Firstboot\lo
 
 
 ***The script's success or failure can be determined by checking its location after migration:***
-1. If the script executed successfully, it will be moved to: `C:\Program Files\guestfs\Firstboot\scripts-done\`
+1. If the script executed successfully, it will be moved to: `C:\Program Files\Guestfs\Firstboot\scripts-done\`
 2. If the script failed during execution, it will remain in: `C:\Program Files\Guestfs\Firstboot\scripts\`
 
 ![img4](../../../../../public/images/firstboot-scripts-done-folder.png)
