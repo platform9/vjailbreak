@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 )
 
@@ -113,7 +114,7 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {

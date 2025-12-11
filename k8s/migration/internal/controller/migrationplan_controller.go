@@ -27,8 +27,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -993,6 +994,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"SERVER_GROUP":               migrationplan.Spec.ServerGroup,
 				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
@@ -1020,13 +1022,26 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, errors.Wrap(err, "failed to list all flavors")
 			}
 
+			// UseGPUFlavor is only applicable for PCD credentials
+			useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
+
+			// Get GPU requirements from VM
+			passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
+			vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
+
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors)
+			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}
 			if flavor == nil {
-				return nil, errors.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
+				gpuInfo := ""
+				if passthroughGPUCount > 0 || vgpuCount > 0 {
+					gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
+				} else {
+					gpuInfo = " without GPU"
+				}
+				return nil, errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}

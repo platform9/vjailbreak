@@ -32,11 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
-	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )
 
@@ -134,9 +134,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
-	// Use the datacenter from spec, even if empty
-	datacenter := scope.VMwareCreds.Spec.DataCenter
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, datacenter)
+	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}

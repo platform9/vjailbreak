@@ -67,6 +67,15 @@ spec:
                     disk:
                       description: Disk is the amount of root disk, measured in GB.
                       type: integer
+                    extra_specs:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        Properties is a dictionary of the flavor’s extra-specs key-and-value
+                        pairs. This will only be included if the user is allowed by policy to
+                        index flavor extra_specs
+                        New in version 2.61
+                      type: object
                     id:
                       description: ID is the flavor's unique ID.
                       type: string
@@ -91,6 +100,7 @@ spec:
                   - OS-FLV-EXT-DATA:ephemeral
                   - description
                   - disk
+                  - extra_specs
                   - id
                   - name
                   - os-flavor-access:is_public
@@ -200,6 +210,25 @@ spec:
                       - id
                       - name
                       - requiresIdDisplay
+                      type: object
+                    type: array
+                  serverGroups:
+                    items:
+                      description: ServerGroupInfo holds the server group name, ID,
+                        and policy information
+                      properties:
+                        id:
+                          type: string
+                        members:
+                          type: integer
+                        name:
+                          type: string
+                        policy:
+                          type: string
+                      required:
+                      - id
+                      - name
+                      - policy
                       type: object
                     type: array
                   volumeBackends:

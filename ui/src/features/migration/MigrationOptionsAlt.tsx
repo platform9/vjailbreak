@@ -48,7 +48,7 @@ const CustomTextField = styled(TextField)(() => ({
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
-  params: FormValues & { useFlavorless?: boolean }
+  params: FormValues & { useFlavorless?: boolean; useGPU?: boolean }
   onChange: (key: string) => (value: unknown) => void
   openstackCredentials?: OpenstackCreds
   selectedMigrationOptions: SelectedMigrationOptionsType
@@ -86,10 +86,11 @@ export default function MigrationOptionsAlt({
 
   // Iniitialize fields
   useEffect(() => {
-    onChange('dataCopyMethod')('cold')
+    const defaultMethod = globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD || 'cold'
+    onChange('dataCopyMethod')(defaultMethod)
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
     refetchConfigMap()
-  }, [refetchConfigMap])
+  }, [refetchConfigMap, globalConfigMap])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
@@ -405,24 +406,46 @@ export default function MigrationOptionsAlt({
             </Fields>
 
             {isPCD && (
-              <Fields sx={{ gridGap: '0' }}>
-                <FormControlLabel
-                  label="Use Dynamic Hotplug-Enabled Flavors"
-                  control={
-                    <Checkbox
-                      checked={params?.useFlavorless || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked
-                        updateSelectedMigrationOptions('useFlavorless')(isChecked)
-                        onChange('useFlavorless')(isChecked)
-                      }}
-                    />
-                  }
-                />
-                <Typography variant="caption" sx={{ marginLeft: '32px' }}>
-                  This will use the base flavor ID specified in PCD.
-                </Typography>
-              </Fields>
+              <>
+                <Fields sx={{ gridGap: '0' }}>
+                  <FormControlLabel
+                    label="Use GPU enabled flavours"
+                    control={
+                      <Checkbox
+                        checked={params?.useGPU || false}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('useGPU')(isChecked)
+                          onChange('useGPU')(isChecked)
+                        }}
+                      />
+                    }
+                  />
+                  <Typography variant="caption" sx={{ marginLeft: '32px' }}>
+                    Migration will fail if suitable GPU flavour is not found. This option will be
+                    ignored if you have already assigned flavour in the VM table.
+                  </Typography>
+                </Fields>
+
+                <Fields sx={{ gridGap: '0' }}>
+                  <FormControlLabel
+                    label="Use Dynamic Hotplug-Enabled Flavors"
+                    control={
+                      <Checkbox
+                        checked={params?.useFlavorless || false}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('useFlavorless')(isChecked)
+                          onChange('useFlavorless')(isChecked)
+                        }}
+                      />
+                    }
+                  />
+                  <Typography variant="caption" sx={{ marginLeft: '32px' }}>
+                    This will use the base flavor ID specified in PCD.
+                  </Typography>
+                </Fields>
+              </>
             )}
 
             {/* Post Migration Script - moved to the end */}

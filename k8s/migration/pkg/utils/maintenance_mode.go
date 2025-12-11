@@ -372,7 +372,7 @@ func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context
 		"CheckDRSEnabled":                         trueString,
 		"CheckDRSIsFullyAutomated":                trueString,
 		"CheckIfThereAreMoreThanOneHostInCluster": trueString,
-		"CheckClusterRemainingHostCapacity":       trueString,
+		"CheckClusterRemainingHostCapacity":       falseString,
 		"CheckVMsAreNotBlockedForMigration":       trueString,
 		"CheckESXiInMAAS":                         trueString,
 		"CheckPCDHasClusterConfigured":            trueString,

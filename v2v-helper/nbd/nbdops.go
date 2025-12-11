@@ -175,7 +175,11 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
-		lastProgress := 0
+		
+		lastLoggedProgress := -1
+		const logInterval = 5
+		lastChannelProgress := 0
+
 		for scanner.Scan() {
 			progressInt, _, err := utils.ParseFraction(scanner.Text())
 			if err != nil {
@@ -183,11 +187,15 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 				continue
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
-			utils.PrintLog(msg)
 
-			if lastProgress <= progressInt-10 {
+			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
+				utils.PrintLog(msg)
+				lastLoggedProgress = progressInt
+			}
+
+			if lastChannelProgress <= progressInt-10 {
 				nbdserver.progresschan <- msg
-				lastProgress = progressInt
+				lastChannelProgress = progressInt
 			}
 		}
 	}()
@@ -414,6 +422,8 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	// Goroutine for updating progress
 	go func() {
 		copiedsize := int64(0)
+		lastLoggedPct := -1
+		const logInterval = 5
 		startTime := time.Now()
 		nbdserver.StartTime = startTime
 		nbdserver.TotalSize = totalsize
@@ -421,8 +431,16 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			copiedsize += progress
 			nbdserver.CopiedSize = copiedsize
 			nbdserver.Duration = time.Since(startTime)
-			prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
-			utils.PrintLog(prog)
+
+			currentPct := int(float64(copiedsize) / float64(totalsize) * 100.0)
+
+			prog := fmt.Sprintf("Progress: %d%%", currentPct)
+
+			if currentPct == 0 || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
+				utils.PrintLog(prog)
+				lastLoggedPct = currentPct
+			}
+
 			nbdserver.progresschan <- prog
 		}
 	}()

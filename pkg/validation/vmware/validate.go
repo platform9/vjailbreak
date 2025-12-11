@@ -49,18 +49,18 @@ func getRetryLimitFromSettings(ctx context.Context, k8sClient client.Client) int
 		Name:      vjailbreakSettingsName,
 		Namespace: namespaceMigrationSystem,
 	}, configMap)
-	
+
 	if err != nil {
 		return defaultMaxRetries
 	}
-	
+
 	if retryLimitStr, ok := configMap.Data[retryLimitKey]; ok {
 		var retryLimit int
 		if _, err := fmt.Sscanf(retryLimitStr, "%d", &retryLimit); err == nil && retryLimit > 0 {
 			return retryLimit
 		}
 	}
-	
+
 	return defaultMaxRetries
 }
 
@@ -270,7 +270,7 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	}
 
 	log.Printf("Fetching all VMs")
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
+	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch VMs")
 	}

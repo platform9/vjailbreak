@@ -8,7 +8,7 @@ import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
 import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/api/migration-plans/model'
 import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import SecurityGroupAndSSHKeyStep from './SecurityGroupAndSSHKeyStep'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -118,7 +118,9 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
+  serverGroup?: string
   fallbackToDHCP?: boolean
+  useGPU?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -291,7 +293,8 @@ export default function MigrationFormDrawer({
               ...(targetPCDClusterName && {
                 targetPCDClusterName
               }),
-              useFlavorless: params.useFlavorless || false
+              useFlavorless: params.useFlavorless || false,
+              useGPUFlavor: params.useGPU || false
             }
           }
 
@@ -306,7 +309,8 @@ export default function MigrationFormDrawer({
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,
-          useFlavorless: params.useFlavorless || false
+          useFlavorless: params.useFlavorless || false,
+          useGPUFlavor: params.useGPU || false
         })
         const created = await postMigrationTemplate(body)
         setMigrationTemplate(created)
@@ -332,6 +336,7 @@ export default function MigrationFormDrawer({
     openstackCredentials?.metadata.name,
     targetPCDClusterName,
     params.useFlavorless,
+    params.useGPU,
     migrationTemplate?.metadata?.name,
     getFieldErrorsUpdater
   ])
@@ -501,6 +506,9 @@ export default function MigrationFormDrawer({
         params.securityGroups.length > 0 && {
           securityGroups: params.securityGroups
         }),
+      ...(params.serverGroup && {
+        serverGroup: params.serverGroup
+      }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
       ...(selectedMigrationOptions.postMigrationScript &&
@@ -847,6 +855,7 @@ export default function MigrationFormDrawer({
             openstackCredentials={openstackCredentials}
             vmwareCluster={params.vmwareCluster}
             vmwareClusterDisplayName={params.vmwareClusterDisplayName}
+            useGPU={params.useGPU}
           />
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
@@ -871,7 +880,7 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors['storageMapping']}
           />
           {/* Step 4 */}
-          <SecurityGroupAndSSHKeyStep
+          <SecurityGroupAndServerGroupStep
             params={params}
             onChange={getParamsUpdater}
             openstackCredentials={openstackCredentials}

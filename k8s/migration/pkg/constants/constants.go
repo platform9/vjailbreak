@@ -210,6 +210,9 @@ const (
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
+	// CleanupPortsAfterMigrationFailure is the default value for cleanup ports after migration failure
+	CleanupPortsAfterMigrationFailure = false
+
 	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
 	PopulateVMwareMachineFlavors = true
 
@@ -256,6 +259,9 @@ runcmd:
 	// MigrationConditionTypeValidated represents the condition type for validated phase
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
+
+	// MigrationConditionTypeMigrated represents the condition type for successful completion
+	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
