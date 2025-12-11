@@ -659,30 +659,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, blockDevice)
 	}
 
-	// Wait for RDM disks to become available before creating VM
-	for _, disk := range vminfo.RDMDisks {
-		if disk.Status.CinderVolumeID == "" {
-			return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID", disk.Name)
-		}
-
-		// Get volume details to check if it is Multiattach
-		vol, err := volumes.Get(ctx, osclient.BlockStorageClient, disk.Status.CinderVolumeID).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get volume details for RDM disk %s: %s", disk.Name, err)
-		}
-
-		// Skip the WaitForVolume check if the volume supports multi-attach
-		if vol.Multiattach {
-			PrintLog(fmt.Sprintf("Volume %s (ID: %s) is Multiattach enabled. Skipping availability check.", disk.Name, vol.ID))
-			continue
-		}
-
-		err = osclient.WaitForVolume(ctx, disk.Status.CinderVolumeID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to wait for RDM volume %s to become available: %s", disk.Name, err)
-		}
-	}
-
 	// Wait for disks to become available
 	for _, disk := range vminfo.VMDisks {
 		err := osclient.WaitForVolume(ctx, disk.OpenstackVol.ID)
