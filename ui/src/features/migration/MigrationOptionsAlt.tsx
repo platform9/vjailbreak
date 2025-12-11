@@ -86,10 +86,11 @@ export default function MigrationOptionsAlt({
 
   // Iniitialize fields
   useEffect(() => {
-    onChange('dataCopyMethod')('cold')
+    const defaultMethod = globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD || 'cold'
+    onChange('dataCopyMethod')(defaultMethod)
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
     refetchConfigMap()
-  }, [refetchConfigMap])
+  }, [refetchConfigMap, globalConfigMap])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
