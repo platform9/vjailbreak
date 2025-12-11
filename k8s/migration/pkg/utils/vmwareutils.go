@@ -182,15 +182,17 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 	labels := map[string]string{
 		constants.VMwareCredsLabel: scope.Name(),
 	}
+	annotations := map[string]string{}
 	if cluster.Datacenter != "" {
-		labels[constants.VMwareDatacenterLabel] = cluster.Datacenter
+		annotations[constants.VMwareDatacenterLabel] = cluster.Datacenter
 	}
 
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterk8sName,
-			Namespace: scope.Namespace(),
-			Labels:    labels,
+			Name:        clusterk8sName,
+			Namespace:   scope.Namespace(),
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name: cluster.Name,
@@ -420,20 +422,19 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 			inferredDatacenter = ""
 			break
 		}
-	}
 
 	labels := map[string]string{
 		constants.VMwareCredsLabel: scope.Name(),
 	}
-	if inferredDatacenter != "" {
-		labels[constants.VMwareDatacenterLabel] = inferredDatacenter
-	}
+	annotations := map[string]string{}
+	annotations[constants.VMwareDatacenterLabel] = "All Datacenters"
 
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      k8sClusterName,
-			Namespace: constants.NamespaceMigrationSystem,
-			Labels:    labels,
+			Name:        k8sClusterName,
+			Namespace:   constants.NamespaceMigrationSystem,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name: constants.VMwareClusterNameStandAloneESX,

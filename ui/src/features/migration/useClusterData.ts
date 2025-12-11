@@ -75,8 +75,8 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         clustersResponse.items.forEach((cluster: VMwareCluster) => {
           const clusterId = `${credName}:${cluster.metadata.name}`
           const clusterDisplayName = cluster.spec.name
-          const labels = cluster.metadata.labels || {}
-          const clusterDatacenter = labels[datacenterLabelKey] || baseDatacenter || ''
+          const annotations = (cluster.metadata as any).annotations || {}
+          const clusterDatacenter = annotations[datacenterLabelKey] || baseDatacenter || ''
 
           if (!clustersByDatacenter[clusterDatacenter]) {
             clustersByDatacenter[clusterDatacenter] = []
