@@ -78,7 +78,7 @@ echo $driversPath = "C:\Windows\Sysnative\drivers" >> "%~dp0vmware-tools-removal
 echo $vmwareDrivers = @( >> "%~dp0vmware-tools-removal.ps1"
 echo     "vmci.sys", "vm3dmp.sys", "vmaudio.sys", "vmhgfs.sys", "vmmemctl.sys",  >> "%~dp0vmware-tools-removal.ps1"
 echo     "vmmouse.sys", "vmrawdsk.sys", "vmtools.sys", "vmusbmouse.sys",  >> "%~dp0vmware-tools-removal.ps1"
-echo     "vmvss.sys", "vsock.sys", "vmx_svga.sys" >> "%~dp0vmware-tools-removal.ps1"
+echo     "vmvss.sys", "vsock.sys", "vmx_svga.sys", "vmxnet3.sys" >> "%~dp0vmware-tools-removal.ps1"
 echo ) >> "%~dp0vmware-tools-removal.ps1"
 echo. >> "%~dp0vmware-tools-removal.ps1"
 echo foreach ($driver in $vmwareDrivers) { >> "%~dp0vmware-tools-removal.ps1"
