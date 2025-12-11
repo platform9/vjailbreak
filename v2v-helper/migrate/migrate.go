@@ -922,7 +922,7 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 
 	if isNetplanSupported(versionID) {
 		utils.PrintLog("Adding wildcard netplan")
-		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.NetworkInterfaces, vminfo.GatewayIP); err != nil {
+		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
 			return errors.Wrap(err, "failed to add wildcard netplan")
 		}
 		utils.PrintLog("Wildcard netplan added successfully")
@@ -1551,37 +1551,12 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 
 			var ippm []string
 
-			// NetworkInterfaces from CRD spec (lowest priority, fallback)
-			if vminfo.NetworkInterfaces != nil {
-				for _, nic := range vminfo.NetworkInterfaces {
-					if nic.MAC == vminfo.Mac[idx] && nic.IPAddress != "" {
-						ippm = []string{nic.IPAddress}
-						utils.PrintLog(fmt.Sprintf("IP from NetworkInterface for MAC %s: %s", vminfo.Mac[idx], nic.IPAddress))
-						break
-					}
-				}
-			}
-
 			// VMware Tools detected IPs
 			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
-				ippm = detectedIPs
+				for _, detectedIP := range detectedIPs {
+					ippm = append(ippm, detectedIP.IP)
+				}
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
-			}
-
-			// Guest Network IPs
-			if vminfo.GuestNetworks != nil {
-				var guestIPs []string
-				for _, gn := range vminfo.GuestNetworks {
-					if strings.EqualFold(gn.MAC, vminfo.Mac[idx]) && gn.IP != "" {
-						if !strings.Contains(gn.IP, ":") {
-							guestIPs = append(guestIPs, gn.IP)
-						}
-					}
-				}
-				if len(guestIPs) > 0 {
-					ippm = guestIPs
-					utils.PrintLog(fmt.Sprintf("IPs from Guest Network for MAC %s: %v", vminfo.Mac[idx], guestIPs))
-				}
 			}
 
 			// User-assigned IP from ConfigMap
@@ -1591,6 +1566,12 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					ip := strings.TrimSpace(assignedIPs[idx])
 					if ip != "" {
 						ippm = []string{ip}
+						vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
+							vm.IpEntry{
+								IP:     ip,
+								Prefix: 0,
+							},
+						}
 						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
 					} else {
 						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
@@ -1599,7 +1580,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.CreatePort(ctx, network, vminfo.Mac[idx], ippm, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx,network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
@@ -1610,7 +1591,9 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
-			ipaddresses = append(ipaddresses, port.FixedIPs[0].IPAddress)
+			for _, fixedIP := range port.FixedIPs {
+				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+			}
 		}
 		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
