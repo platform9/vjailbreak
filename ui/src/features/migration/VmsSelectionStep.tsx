@@ -305,6 +305,16 @@ function VmsSelectionStep({
     Record<string, Record<number, string>>
   >({})
   const [assigningIPs, setAssigningIPs] = useState(false)
+  const hasBulkIpValidationErrors = React.useMemo(() => {
+    return Object.values(bulkValidationStatus).some((interfaces) =>
+      Object.values(interfaces || {}).some((status) => status === 'invalid')
+    )
+  }, [bulkValidationStatus])
+  const hasBulkIpsToApply = React.useMemo(() => {
+    return Object.values(bulkEditIPs).some((interfaces) =>
+      Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
+    )
+  }, [bulkEditIPs])
 
   const clusterName = React.useMemo(() => {
     if (!vmwareCluster) return undefined
@@ -969,6 +979,10 @@ function VmsSelectionStep({
     })
 
     if (ipsToApply.length === 0) return
+    if (hasBulkIpValidationErrors) {
+      showToast('Resolve invalid IP addresses before applying changes.', 'error')
+      return
+    }
 
     const markBulkValidationFailure = (message: string) => {
       setBulkValidationStatus((prev) => {
@@ -1743,11 +1757,7 @@ function VmsSelectionStep({
             onClick={handleApplyBulkIPs}
             variant="contained"
             color="primary"
-            disabled={
-              Object.values(bulkEditIPs).every((interfaces) =>
-                Object.values(interfaces).every((ip) => !ip.trim())
-              ) || assigningIPs
-            }
+            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
           >
             {assigningIPs ? 'Applying...' : 'Apply Changes'}
           </Button>
