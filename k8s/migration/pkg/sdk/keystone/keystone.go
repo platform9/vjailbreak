@@ -276,6 +276,7 @@ type HTTPClient struct {
 	log        *zap.Logger
 }
 
+// NewClient creates a new HTTPClient for Keystone API communication with the specified endpoint and TLS settings.
 func NewClient(endpoint string, insecure bool) (*HTTPClient, error) {
 	client := netutils.NewVjbNet()
 	returnClient := &HTTPClient{}
