@@ -271,6 +271,10 @@ type Role struct {
 
 // HTTPClient implements the Client interface for interacting with Keystone API
 type HTTPClient struct {
+	endpoint   string
+	httpClient *http.Client
+	log        *zap.Logger
+}
 
 func NewClient(endpoint string, insecure bool) (*HTTPClient, error) {
 	client := netutils.NewVjbNet()

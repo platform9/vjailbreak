@@ -64,15 +64,14 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
 	vjbNet.SetTimeout(60 * time.Second)
-	if vjbNet.CreateSecureHTTPClient() == nil {
-		providerClient.HTTPClient = *vjbNet.GetClient()
-	} else {
+	if err := vjbNet.CreateSecureHTTPClient(); err != nil {
 		return ValidationResult{
 			Valid:   false,
 			Message: fmt.Sprintf("failed to create secure HTTP client"),
-			Error:   fmt.Errorf("failed to create secure HTTP client"),
+			Error:   fmt.Errorf("failed to create secure HTTP client %v", err),
 		}
 	}
+	providerClient.HTTPClient = *vjbNet.GetClient()
 
 	// Authenticate
 	authOpts := gophercloud.AuthOptions{

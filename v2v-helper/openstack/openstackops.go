@@ -76,11 +76,11 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	if insecure {
 		vjbNet.Insecure = true
 	}
-	if vjbNet.CreateSecureHTTPClient() == nil {
-		providerClient.HTTPClient = *vjbNet.GetClient()
-	} else {
-		return nil, fmt.Errorf("failed to create secure HTTP client")
+	err = vjbNet.CreateSecureHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secure HTTP client %v", err)
 	}
+	providerClient.HTTPClient = *vjbNet.GetClient()
 	// Connection Retry Block
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = openstack.Authenticate(ctx, providerClient, opts)
