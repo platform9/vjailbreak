@@ -14,14 +14,14 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
+	gophercloud "github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	netutils "github.com/platform9/vjailbreak/common/utils"
 )
 
