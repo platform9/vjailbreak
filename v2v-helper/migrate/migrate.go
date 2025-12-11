@@ -1512,14 +1512,31 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) error {
 	migobj.logMessage("Deleting all ports")
 	openstackops := migobj.Openstackclients
+	var deletionErrors []error
+	successCount := 0
+	
 	for _, portID := range portids {
 		err := openstackops.DeletePort(ctx, portID)
 		if err != nil {
 			utils.PrintLog(fmt.Sprintf("Failed to delete port %s: %s\n", portID, err))
-			return errors.Wrapf(err, "failed to delete port %s", portID)
+			deletionErrors = append(deletionErrors, errors.Wrapf(err, "failed to delete port %s", portID))
+		} else {
+			utils.PrintLog(fmt.Sprintf("Successfully deleted port %s\n", portID))
+			successCount++
 		}
-		utils.PrintLog(fmt.Sprintf("Successfully deleted port %s\n", portID))
 	}
+	
+	if len(deletionErrors) > 0 {
+		migobj.logMessage(fmt.Sprintf("Port deletion completed with errors: %d succeeded, %d failed out of %d total", successCount, len(deletionErrors), len(portids)))
+		// Combine all errors into a single error message
+		errMsg := fmt.Sprintf("failed to delete %d port(s):", len(deletionErrors))
+		for _, err := range deletionErrors {
+			errMsg += fmt.Sprintf("\n  - %s", err.Error())
+		}
+		return errors.New(errMsg)
+	}
+	
+	migobj.logMessage(fmt.Sprintf("Successfully deleted all %d ports", successCount))
 	return nil
 }
 
