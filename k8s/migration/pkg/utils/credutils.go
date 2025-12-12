@@ -1539,6 +1539,8 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
+var rdmSemaphore = &sync.Mutex{}
+
 // extractDatacenterFromInventoryPath extracts the datacenter name from VM inventory path
 // Path format: /Datacenter/vm/folder/vmname
 func extractDatacenterFromInventoryPath(path string) string {
@@ -1670,11 +1672,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	clusterName = getClusterNameFromHost(ctx, c, host)
 	if clusterName == "" {
 		// Standalone VM - assign to NO CLUSTER of its datacenter
-		vmInventoryPath, err := vm.InventoryPath(ctx)
-		if err != nil {
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VM inventory path: %w", err))
-			return
-		}
+		vmInventoryPath := vm.InventoryPath()
 		datacenter := extractDatacenterFromInventoryPath(vmInventoryPath)
 		clusterName = fmt.Sprintf("%s-%s", constants.VMwareClusterNameStandAloneESX, datacenter)
 	}
