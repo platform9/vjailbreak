@@ -92,9 +92,9 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   const [formValues, setFormValues] = useState({
     credentialName: '',
     vcenterHost: '',
+    datacenter: '',
     username: '',
     password: '',
-    datacenter: '',
     insecure: false
   })
 
@@ -255,7 +255,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     try {
       const credentialData = {
         VCENTER_HOST: formValues.vcenterHost,
-        VCENTER_DATACENTER: formValues.datacenter,
+        VCENTER_DATACENTER: formValues.datacenter || '',
         VCENTER_USERNAME: formValues.username,
         VCENTER_PASSWORD: formValues.password,
         ...(formValues.insecure && { VCENTER_INSECURE: true })
@@ -324,7 +324,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       <Header title="Add VMware Credentials" />
       <DrawerContent>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <FormControl fullWidth error={!!credNameError}>
+          <FormControl fullWidth error={!!credNameError} required>
             <TextField
               id="credentialName"
               label="Enter VMware Credential Name"
@@ -368,12 +368,13 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
             <TextField
               id="datacenter"
-              label="Datacenter Name"
+              label="Datacenter Name (Optional)"
               variant="outlined"
               value={formValues.datacenter}
               onChange={handleFormChange('datacenter')}
               fullWidth
               size="small"
+              placeholder="Leave empty to scan all datacenters"
               sx={{ mb: 2 }}
             />
 

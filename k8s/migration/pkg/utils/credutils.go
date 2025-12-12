@@ -545,9 +545,8 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if lastErr != nil {
 		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, lastErr)
 	}
-	// Check if the datacenter exists
-	finder := find.NewFinder(c, false)
 	if datacenter != "" {
+		finder := find.NewFinder(c, false)
 		_, err = finder.Datacenter(context.Background(), datacenter)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find datacenter: %w", err)
@@ -661,40 +660,60 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	}
 	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
 
-	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
-	}
-
-	var vms []*object.VirtualMachine
-
-	// When no specific datacenter is provided, collect VMs from all datacenters
-	if datacenter == "" {
+	// Determine which datacenters to scan
+	targetDatacenters := []string{}
+	if datacenter != "" {
+		targetDatacenters = append(targetDatacenters, datacenter)
+	} else {
+		// If no datacenter specified, we need to fetch all datacenters from vCenter
+		c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to validate vmware creds: %w", err)
+		}
+		finder := find.NewFinder(c, false)
 		dcs, err := finder.DatacenterList(ctx, "*")
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to list datacenters for VM discovery: %w", err)
+			return nil, nil, fmt.Errorf("failed to list datacenters: %w", err)
 		}
 		for _, dc := range dcs {
-			finder.SetDatacenter(dc)
-			dcVMs, err := finder.VirtualMachineList(ctx, "*")
-			if err != nil && !strings.Contains(err.Error(), "not found") {
-				return nil, nil, fmt.Errorf("failed to get vms: %w", err)
-			}
-			vms = append(vms, dcVMs...)
+			targetDatacenters = append(targetDatacenters, dc.Name())
 		}
-	} else {
-		vms, err = finder.VirtualMachineList(ctx, "*")
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get vms: %w", err)
-		}
+		log.Info("No datacenter specified, scanning all found datacenters", "count", len(targetDatacenters), "datacenters", targetDatacenters)
 	}
-	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
 	// Create a semaphore to limit concurrent goroutines
 	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
-	for i := range vms {
+	
+	// Collect all VMs from all target datacenters 
+	allVMs := make([]*object.VirtualMachine, 0)
+	
+	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get client: %w", err)
+	}
+
+	for _, dcName := range targetDatacenters {
+		finder := find.NewFinder(c, false)
+		dc, err := finder.Datacenter(ctx, dcName)
+		if err != nil {
+			log.Error(err, "failed to find datacenter, skipping", "datacenter", dcName)
+			continue
+		}
+		finder.SetDatacenter(dc)
+		
+		vms, err := finder.VirtualMachineList(ctx, "*")
+		if err != nil {
+			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
+			continue
+		}
+		allVMs = append(allVMs, vms...)
+	}
+
+	// Pre-allocate vminfo slice
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(allVMs))
+
+	for i := range allVMs {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
 		semaphore <- struct{}{}
 		wg.Add(1)
@@ -710,7 +729,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 					panicMu.Unlock()
 				}
 			}()
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
+			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -1529,6 +1548,7 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 		}()
 	}
 	finder := find.NewFinder(c, false)
+
 	if datacenter != "" {
 		dc, err := finder.Datacenter(ctx, datacenter)
 		if err != nil {
@@ -1540,18 +1560,6 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 }
 
 var rdmSemaphore = &sync.Mutex{}
-
-// extractDatacenterFromVmPathName extracts the datacenter name from VM path name
-// Path format: [datacenter] vm/folder/vmname
-func extractDatacenterFromVmPathName(path string) string {
-	if strings.HasPrefix(path, "[") {
-		end := strings.Index(path, "]")
-		if end > 1 {
-			return path[1:end]
-		}
-	}
-	return ""
-}
 
 // processSingleVM processes a single VM, extracting its properties and updating the VMInfo and VMwareMachine resources
 // It handles RDM disks, networks, and other VM properties.
@@ -1672,12 +1680,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
-	if clusterName == "" {
-		// Standalone VM - assign to NO CLUSTER of its datacenter
-		vmPathName := vmProps.Config.Files.VmPathName
-		datacenter := extractDatacenterFromVmPathName(vmPathName)
-		clusterName = fmt.Sprintf("%s-%s", constants.VMwareClusterNameStandAloneESX, datacenter)
-	}
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
 		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return

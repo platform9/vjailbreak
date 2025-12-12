@@ -4,6 +4,7 @@ import { getVMwareClusters } from 'src/api/vmware-clusters/vmwareClusters'
 import { getPCDClusters } from 'src/api/pcd-clusters'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { VMwareCluster } from 'src/api/vmware-clusters/model'
 import { PCDCluster } from 'src/api/pcd-clusters/model'
 
@@ -59,46 +60,45 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         return
       }
 
-      const sourceDataPerCredPromises = vmwareCreds.map(async (cred) => {
-        const credName = cred.metadata?.name || 'Unknown'
-        const vcenterName = cred.spec?.hostName || credName
-        const baseDatacenter = cred.spec.datacenter || ''
+      const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
+        const credName = cred.metadata.name
+        const fixedDatacenter = cred.spec.datacenter
 
-        const clustersResponse = await getVMwareClusters(
-          VJAILBREAK_DEFAULT_NAMESPACE,
-          credName
-        )
+        // Use hostName directly from credential spec instead of fetching from secret
+        const vcenterName = cred.spec.hostName || credName
 
-        const clustersByDatacenter: Record<string, { id: string; name: string; displayName: string }[]> = {}
-        const datacenterLabelKey = 'vjailbreak.k8s.pf9.io/datacenter'
+        const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, credName)
+        
+        const clustersByDC: Record<string, typeof clustersResponse.items> = {}
 
         clustersResponse.items.forEach((cluster: VMwareCluster) => {
-          const clusterId = `${credName}:${cluster.metadata.name}`
-          const clusterDisplayName = cluster.spec.name
-          const annotations = (cluster.metadata as any).annotations || {}
-          const clusterDatacenter = annotations[datacenterLabelKey] || baseDatacenter || ''
-
-          if (!clustersByDatacenter[clusterDatacenter]) {
-            clustersByDatacenter[clusterDatacenter] = []
+          const dcLabel = cluster.metadata.labels?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
+          if (!clustersByDC[dcLabel]) {
+            clustersByDC[dcLabel] = []
           }
-          clustersByDatacenter[clusterDatacenter].push({
-            id: clusterId,
-            name: cluster.metadata.name,
-            displayName: clusterDisplayName
-          })
+          clustersByDC[dcLabel].push(cluster)
         })
 
-        return Object.entries(clustersByDatacenter).map(([datacenter, clusters]) => ({
-          credName,
-          datacenter,
-          vcenterName,
-          clusters
-        }))
+        return Object.keys(clustersByDC).map(dcName => {
+           const clusters = clustersByDC[dcName].map((cluster: VMwareCluster) => ({
+            id: `${credName}:${cluster.metadata.name}`,
+            name: cluster.metadata.name,
+            displayName: cluster.spec.name
+          }))
+
+          return {
+            credName,
+            datacenter: dcName,
+            vcenterName,
+            clusters
+          }
+        })
       })
 
-      const perCredResults = await Promise.all(sourceDataPerCredPromises)
-      const flattenedSourceData = perCredResults.flat()
-      setSourceData(flattenedSourceData.filter((item) => item.clusters.length > 0))
+      const nestedResults = await Promise.all(sourceDataPromises)
+      const newSourceData = nestedResults.flat().filter((item) => item.clusters.length > 0)
+      
+      setSourceData(newSourceData)
     } catch (error) {
       console.error('Failed to fetch VMware cluster data:', error)
       setError('Failed to fetch VMware cluster data')
