@@ -915,7 +915,7 @@ func AppendUnique(slice []string, values ...string) []string {
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
 	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
@@ -962,6 +962,9 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 					constants.VMwareCredsLabel:   vmwcreds.Name,
 					constants.ESXiNameLabel:      esxiK8sName,
 					constants.VMwareClusterLabel: clusterK8sName,
+				},
+				Annotations: map[string]string{
+					constants.VMwareDatacenterLabel: datacenter,
 				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
@@ -1012,6 +1015,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			}
 			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
 			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
+
+			if vmwvm.Annotations == nil {
+				vmwvm.Annotations = make(map[string]string)
+			}
+			vmwvm.Annotations[constants.VMwareDatacenterLabel] = datacenter
 
 			if vmwvm.Spec.VMInfo.OSFamily == "" {
 				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
@@ -1805,7 +1813,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		GPU:               gpuInfo,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
-	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
+	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM, vmDatacenter)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
 	}
