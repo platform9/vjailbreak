@@ -677,7 +677,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 		for _, dc := range dcs {
 			finder.SetDatacenter(dc)
 			dcVMs, err := finder.VirtualMachineList(ctx, "*")
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "not found") {
 				return nil, nil, fmt.Errorf("failed to get vms: %w", err)
 			}
 			vms = append(vms, dcVMs...)
@@ -1539,7 +1539,15 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 	return c, finder, nil
 }
 
-var rdmSemaphore = &sync.Mutex{}
+// extractDatacenterFromInventoryPath extracts the datacenter name from VM inventory path
+// Path format: /Datacenter/vm/folder/vmname
+func extractDatacenterFromInventoryPath(path string) string {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
+}
 
 // processSingleVM processes a single VM, extracting its properties and updating the VMInfo and VMwareMachine resources
 // It handles RDM disks, networks, and other VM properties.
@@ -1660,6 +1668,16 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
+	if clusterName == "" {
+		// Standalone VM - assign to NO CLUSTER of its datacenter
+		vmInventoryPath, err := vm.InventoryPath(ctx)
+		if err != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VM inventory path: %w", err))
+			return
+		}
+		datacenter := extractDatacenterFromInventoryPath(vmInventoryPath)
+		clusterName = fmt.Sprintf("%s-%s", constants.VMwareClusterNameStandAloneESX, datacenter)
+	}
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
 		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return
