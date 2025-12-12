@@ -210,17 +210,18 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
-	networkIDs, err := GetCurrentInstanceNetworkInfo()
+	networkIDs, securityGroups, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get network info")
 	}
 
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
-		Name:      vjNode.Name,
-		FlavorRef: vjNode.Spec.OpenstackFlavorID,
-		ImageRef:  imageID,
-		Networks:  networkIDs,
+		Name:           vjNode.Name,
+		FlavorRef:      vjNode.Spec.OpenstackFlavorID,
+		ImageRef:       imageID,
+		Networks:       networkIDs,
+		SecurityGroups: securityGroups,
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
 			token[:12], constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
@@ -273,21 +274,56 @@ func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*
 	return oscreds, nil
 }
 
-// GetCurrentInstanceNetworkInfo retrieves network information for the current instance
-func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
-	client := retryablehttp.NewClient()
-	client.RetryMax = 5
-	client.Logger = nil
-	networks := []servers.Network{}
+// getSecurityGroupsFromMetadata fetches security groups from EC2-compatible metadata API
+func getSecurityGroupsFromMetadata(client *retryablehttp.Client) ([]string, error) {
 	req, err := retryablehttp.NewRequestWithContext(context.Background(), "GET",
-		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
+		"http://169.254.169.254/2009-04-04/meta-data/security-groups", http.NoBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		return nil, errors.Wrap(err, "failed to create security groups request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get response")
+		return nil, errors.Wrap(err, "failed to get security groups response")
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing security groups response body: %v", err)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read security groups response body")
+	}
+
+	// Security groups are returned as newline-separated values
+	securityGroupsStr := strings.TrimSpace(string(body))
+	if securityGroupsStr == "" {
+		return []string{}, nil
+	}
+
+	securityGroups := strings.Split(securityGroupsStr, "\n")
+	return securityGroups, nil
+}
+
+// GetCurrentInstanceNetworkInfo retrieves network and security group information for the current instance
+func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 5
+	client.Logger = nil
+	networks := []servers.Network{}
+	
+	// Fetch network data
+	req, err := retryablehttp.NewRequestWithContext(context.Background(), "GET",
+		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create request")
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get response")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -297,12 +333,12 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response body")
+		return nil, nil, errors.Wrap(err, "failed to read response body")
 	}
 
 	var metadata OpenStackMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal response body")
+		return nil, nil, errors.Wrap(err, "failed to unmarshal response body")
 	}
 
 	for _, Network := range metadata.Networks {
@@ -310,7 +346,16 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 			UUID: Network.NetworkID,
 		})
 	}
-	return networks, nil
+	
+	// Fetch security groups from EC2-compatible metadata API
+	securityGroups, err := getSecurityGroupsFromMetadata(client)
+	if err != nil {
+		// Log the error but don't fail the entire operation
+		fmt.Printf("Warning: failed to get security groups: %v\n", err)
+		return networks, []string{}, nil
+	}
+	
+	return networks, securityGroups, nil
 }
 
 // GetOpenstackVMIP retrieves the IP address of an OpenStack VM
