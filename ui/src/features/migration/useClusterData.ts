@@ -74,7 +74,6 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         clustersResponse.items.forEach((cluster: VMwareCluster) => {
           const annotations = (cluster.metadata as any).annotations
           const dcAnnotation = annotations?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
-          console.log('Cluster:', cluster.spec.name, 'Annotations:', annotations, 'Datacenter:', dcAnnotation)
           if (!clustersByDC[dcAnnotation]) {
             clustersByDC[dcAnnotation] = []
           }

@@ -256,12 +256,39 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	}
 
 	// add entry for dummy cluster so save it from cleanup
+	vmwarecreds, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, scope.VMwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vCenter credentials")
+	}
+
+	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
+	if err != nil {
+		return errors.Wrap(err, "failed to get finder for vCenter credentials")
+	}
+
+	// Get list of all target datacenters
+	var targetDatacenters []*object.Datacenter
+	if vmwarecreds.Datacenter != "" {
+		dc, err := finder.Datacenter(ctx, vmwarecreds.Datacenter)
+		if err != nil {
+			return errors.Wrapf(err, "failed to find specified datacenter %s", vmwarecreds.Datacenter)
+		}
+		targetDatacenters = []*object.Datacenter{dc}
+	} else {
+		targetDatacenters, err = finder.DatacenterList(ctx, "*")
+		if err != nil {
+			return errors.Wrap(err, "failed to list all datacenters")
+		}
+	}
+
 	standAloneHosts, err := FetchStandAloneESXHostsFromVcenter(ctx, scope, clusters)
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch standalone ESX hosts")
 	}
 
-	for dcName, hosts := range standAloneHosts {
+	for _, dc := range targetDatacenters {
+		dcName := dc.Name()
+		hosts := standAloneHosts[dcName]
 		vmHosts := make([]VMwareHostInfo, 0, len(hosts))
 		for _, host := range hosts {
 			vmHosts = append(vmHosts, VMwareHostInfo{
