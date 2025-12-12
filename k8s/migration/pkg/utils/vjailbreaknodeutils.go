@@ -95,17 +95,19 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 // UpdateMasterNodeImageID updates the image ID of the master node
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
 	var imageID string
-	openstackcreds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
-	if err != nil {
-		return errors.Wrap(err, "failed to get openstack credentials for master")
-	}
+
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
-	err = k3sclient.Get(ctx, types.NamespacedName{
+	err := k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
 		Name:      constants.VjailbreakMasterNodeName,
 	}, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak node")
+	}
+
+	openstackcreds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to get openstack credentials for master")
 	}
 
 	if local {
@@ -200,7 +202,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master node")
 	}
 
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -210,17 +212,18 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
-	networkIDs, err := GetCurrentInstanceNetworkInfo()
+	networkIDs, securityGroups, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get network info")
 	}
 
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
-		Name:      vjNode.Name,
-		FlavorRef: vjNode.Spec.OpenstackFlavorID,
-		ImageRef:  imageID,
-		Networks:  networkIDs,
+		Name:           vjNode.Name,
+		FlavorRef:      vjNode.Spec.OpenstackFlavorID,
+		ImageRef:       imageID,
+		Networks:       networkIDs,
+		SecurityGroups: securityGroups,
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
 			token[:12], constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
@@ -237,19 +240,10 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	return server.ID, nil
 }
 
-// GetOpenstackCredsForMaster retrieves OpenStack credentials for the master node
-func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*vjailbreakv1alpha1.OpenstackCreds, error) {
-	// Get master vjailbreakNode
-	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
-	err := k3sclient.Get(ctx, client.ObjectKey{
-		Name:      constants.VjailbreakMasterNodeName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, &vjNode)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, "failed to get vjailbreak node")
-	}
+// GetOpenstackCredsVjailbreakNode retrieves OpenStack credentials for the master node
+func GetOpenstackCredsVjailbreakNode(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	err = k3sclient.Get(ctx, client.ObjectKey{
+	err := k3sclient.Get(ctx, client.ObjectKey{
 		Name:      vjNode.Spec.OpenstackCreds.Name,
 		Namespace: constants.NamespaceMigrationSystem,
 	}, oscreds)
@@ -273,21 +267,56 @@ func GetOpenstackCredsForMaster(ctx context.Context, k3sclient client.Client) (*
 	return oscreds, nil
 }
 
-// GetCurrentInstanceNetworkInfo retrieves network information for the current instance
-func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
-	client := retryablehttp.NewClient()
-	client.RetryMax = 5
-	client.Logger = nil
-	networks := []servers.Network{}
+// getSecurityGroupsFromMetadata fetches security groups from EC2-compatible metadata API
+func getSecurityGroupsFromMetadata(client *retryablehttp.Client) ([]string, error) {
 	req, err := retryablehttp.NewRequestWithContext(context.Background(), "GET",
-		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
+		"http://169.254.169.254/2009-04-04/meta-data/security-groups", http.NoBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		return nil, errors.Wrap(err, "failed to create security groups request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get response")
+		return nil, errors.Wrap(err, "failed to get security groups response")
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing security groups response body: %v", err)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read security groups response body")
+	}
+
+	// Security groups are returned as newline-separated values
+	securityGroupsStr := strings.TrimSpace(string(body))
+	if securityGroupsStr == "" {
+		return []string{}, nil
+	}
+
+	securityGroups := strings.Split(securityGroupsStr, "\n")
+	return securityGroups, nil
+}
+
+// GetCurrentInstanceNetworkInfo retrieves network and security group information for the current instance
+func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 5
+	client.Logger = nil
+	networks := []servers.Network{}
+
+	// Fetch network data
+	req, err := retryablehttp.NewRequestWithContext(context.Background(), "GET",
+		"http://169.254.169.254/openstack/latest/network_data.json", http.NoBody)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create request")
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get response")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -297,12 +326,12 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response body")
+		return nil, nil, errors.Wrap(err, "failed to read response body")
 	}
 
 	var metadata OpenStackMetadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal response body")
+		return nil, nil, errors.Wrap(err, "failed to unmarshal response body")
 	}
 
 	for _, Network := range metadata.Networks {
@@ -310,12 +339,21 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, error) {
 			UUID: Network.NetworkID,
 		})
 	}
-	return networks, nil
+
+	// Fetch security groups from EC2-compatible metadata API
+	securityGroups, err := getSecurityGroupsFromMetadata(client)
+	if err != nil {
+		// Log the error but don't fail the entire operation
+		fmt.Printf("Warning: failed to get security groups: %v\n", err)
+		return networks, []string{}, nil
+	}
+
+	return networks, securityGroups, nil
 }
 
 // GetOpenstackVMIP retrieves the IP address of an OpenStack VM
-func GetOpenstackVMIP(ctx context.Context, uuid string, k3sclient client.Client) (string, error) {
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (string, error) {
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -325,7 +363,7 @@ func GetOpenstackVMIP(ctx context.Context, uuid string, k3sclient client.Client)
 	}
 
 	// Fetch the VM details
-	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, vjNode.Status.OpenstackUUID).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to get server details")
 	}
@@ -441,8 +479,8 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 }
 
 // DeleteOpenstackVM deletes an OpenStack virtual machine by its UUID
-func DeleteOpenstackVM(ctx context.Context, uuid string, k3sclient client.Client) error {
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+func DeleteOpenstackVM(ctx context.Context, uuid string, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) error {
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack creds")
 	}
@@ -474,8 +512,8 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 }
 
 // GetOpenstackVMByName retrieves an OpenStack VM's UUID by its name
-func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Client) (string, error) {
-	creds, err := GetOpenstackCredsForMaster(ctx, k3sclient)
+func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (string, error) {
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
 	}
