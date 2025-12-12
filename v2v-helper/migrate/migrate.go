@@ -124,6 +124,11 @@ func (migobj *Migrate) logMessage(message string) {
 	utils.PrintLog(message)
 }
 
+// LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.
+func (migobj *Migrate) LogMessage(message string) {
+	migobj.logMessage(message)
+}
+
 // This function creates volumes in OpenStack and attaches them to the helper vm
 func (migobj *Migrate) CreateVolumes(vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients

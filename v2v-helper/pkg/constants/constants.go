@@ -96,6 +96,17 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
 
+	// VAAI XCOPY specific event messages
+	EventMessageEsxiSSHConnect     = "Connecting to ESXi"
+	EventMessageEsxiSSHTest        = "Testing ESXi connection"
+	EventMessageEsxiConnected      = "Connected to ESXi"
+	EventMessageInitiatorGroup     = "Creating/updating initiator group"
+	EventMessageVAAICreatingVolume = "Creating target volume"
+	EventMessageVAAICinderManage   = "Cinder managing the volume"
+	EventMessageVAAIMappingVolume  = "Mapping target volume"
+	EventMessageVAAIRescanStorage  = "Waiting for target volume"
+	EventMessageVAAITargetDevice   = "Target device is visible:"
+
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
 

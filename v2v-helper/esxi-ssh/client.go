@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"golang.org/x/crypto/ssh"
-	"k8s.io/klog/v2"
 )
 
 // SSHOperation represents the type of SSH operation
@@ -206,7 +206,7 @@ func (c *Client) TestConnection() error {
 // This will automatically use XCOPY/VAAI hardware offload if available on the storage array
 // The clone runs in the background and returns immediately
 func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*VmkfstoolsTask, error) {
-	klog.Infof("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN)
+	utils.PrintLog(fmt.Sprintf("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN))
 
 	// First check if source exists
 	checkCmd := fmt.Sprintf("ls -l %s 2>&1", sourceVMDK)
@@ -220,9 +220,9 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	mkdirCmd := fmt.Sprintf("mkdir -p %s", targetDir)
 	_, err := c.ExecuteCommand(mkdirCmd)
 	if err != nil {
-		klog.Warningf("Failed to create target directory: %v", err)
+		utils.PrintLog(fmt.Sprintf("WARNING: Failed to create target directory: %v", err))
 	} else {
-		klog.Infof("Created target directory: %s", targetDir)
+		utils.PrintLog(fmt.Sprintf("Created target directory: %s", targetDir))
 	}
 
 	// Create a log file for vmkfstools output so we can debug failures
@@ -240,7 +240,7 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	}
 
 	pid := strings.TrimSpace(output)
-	klog.Infof("Started vmkfstools clone with PID: %s, log: %s", pid, logFile)
+	utils.PrintLog(fmt.Sprintf("Started vmkfstools clone with PID: %s, log: %s", pid, logFile))
 
 	// Return task info with PID so we can check status later
 	task := &VmkfstoolsTask{
@@ -251,7 +251,7 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 
 	// Try to parse PID
 	if pidInt, err := fmt.Sscanf(pid, "%d", &task.Pid); err == nil && pidInt == 1 {
-		klog.Infof("Parsed PID: %d", task.Pid)
+		utils.PrintLog(fmt.Sprintf("Parsed PID: %d", task.Pid))
 	}
 
 	return task, nil
@@ -294,36 +294,36 @@ func convertDatastorePathToFilesystemPath(datastorePath string) string {
 // This uses VAAI XCOPY to clone directly to a raw device without creating a datastore
 // Command format: vmkfstools -i <source> -d rdm:<target_device> <rdm_descriptor_vmdk>
 func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*VmkfstoolsTask, error) {
-	klog.Infof("=== Starting vmkfstools RDM clone ===")
-	klog.Infof("Input source VMDK: %s", sourceVMDK)
-	klog.Infof("Input target device path: %s", targetDevicePath)
+	utils.PrintLog("=== Starting vmkfstools RDM clone ===")
+	utils.PrintLog(fmt.Sprintf("Input source VMDK: %s", sourceVMDK))
+	utils.PrintLog(fmt.Sprintf("Input target device path: %s", targetDevicePath))
 
 	// Convert vSphere datastore path to ESXi filesystem path if needed
 	// e.g., "[datastore-name] vm-folder/vm.vmdk" -> "/vmfs/volumes/datastore-name/vm-folder/vm.vmdk"
 	sourceVMDKConverted := convertDatastorePathToFilesystemPath(sourceVMDK)
-	klog.Infof("Source VMDK path (after conversion): %s", sourceVMDKConverted)
+	utils.PrintLog(fmt.Sprintf("Source VMDK path (after conversion): %s", sourceVMDKConverted))
 
 	// First check if source exists
-	klog.Infof("Checking if source VMDK exists...")
+	utils.PrintLog("Checking if source VMDK exists...")
 	checkCmd := fmt.Sprintf("ls -l '%s' 2>&1", sourceVMDKConverted)
-	klog.Infof("Executing: %s", checkCmd)
+	utils.PrintLog(fmt.Sprintf("Executing: %s", checkCmd))
 	checkOutput, _ := c.ExecuteCommand(checkCmd)
-	klog.Infof("Source check output: %s", checkOutput)
+	utils.PrintLog(fmt.Sprintf("Source check output: %s", checkOutput))
 	if strings.Contains(checkOutput, "No such file") {
 		return nil, fmt.Errorf("source VMDK does not exist: %s (output: %s)", sourceVMDKConverted, checkOutput)
 	}
-	klog.Infof("Source VMDK exists")
+	utils.PrintLog("Source VMDK exists")
 
 	// Verify target device exists
-	klog.Infof("Checking if target device exists...")
+	utils.PrintLog("Checking if target device exists...")
 	checkDevCmd := fmt.Sprintf("ls -l %s 2>&1", targetDevicePath)
-	klog.Infof("Executing: %s", checkDevCmd)
+	utils.PrintLog(fmt.Sprintf("Executing: %s", checkDevCmd))
 	checkDevOutput, _ := c.ExecuteCommand(checkDevCmd)
-	klog.Infof("Target device check output: %s", checkDevOutput)
+	utils.PrintLog(fmt.Sprintf("Target device check output: %s", checkDevOutput))
 	if !strings.Contains(checkDevOutput, targetDevicePath) {
 		return nil, fmt.Errorf("target device does not exist: %s", targetDevicePath)
 	}
-	klog.Infof("Target device exists")
+	utils.PrintLog("Target device exists")
 
 	// Derive RDM descriptor path on the same datastore as source VMDK
 	// e.g., /vmfs/volumes/pure-ds/pure-clone1/pure-clone1.vmdk -> /vmfs/volumes/pure-ds/pure-clone1/pure-clone1-rdm.vmdk
@@ -331,34 +331,34 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 	sourceBaseName := sourceVMDKConverted[strings.LastIndex(sourceVMDKConverted, "/")+1:]
 	sourceNameWithoutExt := strings.TrimSuffix(sourceBaseName, ".vmdk")
 	rdmDescriptor := fmt.Sprintf("%s/%s-rdm.vmdk", sourceDir, sourceNameWithoutExt)
-	klog.Infof("Source directory: %s", sourceDir)
-	klog.Infof("Source base name: %s", sourceBaseName)
-	klog.Infof("RDM descriptor path (on datastore): %s", rdmDescriptor)
+	utils.PrintLog(fmt.Sprintf("Source directory: %s", sourceDir))
+	utils.PrintLog(fmt.Sprintf("Source base name: %s", sourceBaseName))
+	utils.PrintLog(fmt.Sprintf("RDM descriptor path (on datastore): %s", rdmDescriptor))
 
 	// Create a log file for vmkfstools output
 	logFile := fmt.Sprintf("/tmp/vmkfstools_rdm_clone_%d.log", time.Now().Unix())
-	klog.Infof("Log file: %s", logFile)
+	utils.PrintLog(fmt.Sprintf("Log file: %s", logFile))
 
 	// Build the vmkfstools command
 	// vmkfstools -i <source> -d rdm:<device> <rdm_descriptor>
 	vmkfstoolsCmd := fmt.Sprintf("vmkfstools -i %s -d rdm:%s %s", sourceVMDKConverted, targetDevicePath, rdmDescriptor)
-	klog.Infof("=== vmkfstools command ===")
-	klog.Infof("%s", vmkfstoolsCmd)
-	klog.Infof("==========================")
+	utils.PrintLog("=== vmkfstools command ===")
+	utils.PrintLog(vmkfstoolsCmd)
+	utils.PrintLog("==========================")
 
 	// Run vmkfstools in background
 	command := fmt.Sprintf("%s >%s 2>&1 & echo $!", vmkfstoolsCmd, logFile)
-	klog.Infof("Executing background command: %s", command)
+	utils.PrintLog(fmt.Sprintf("Executing background command: %s", command))
 
 	output, err := c.ExecuteCommand(command)
 	if err != nil {
-		klog.Errorf("Failed to start RDM clone: %v", err)
+		utils.PrintLog(fmt.Sprintf("ERROR: Failed to start RDM clone: %v", err))
 		return nil, fmt.Errorf("failed to start RDM clone: %w", err)
 	}
 
 	pid := strings.TrimSpace(output)
-	klog.Infof("vmkfstools started with PID: %s", pid)
-	klog.Infof("Log file location: %s", logFile)
+	utils.PrintLog(fmt.Sprintf("vmkfstools started with PID: %s", pid))
+	utils.PrintLog(fmt.Sprintf("Log file location: %s", logFile))
 
 	// Return task info with PID so we can check status later
 	task := &VmkfstoolsTask{
@@ -371,10 +371,10 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 
 	// Try to parse PID
 	if pidInt, err := fmt.Sscanf(pid, "%d", &task.Pid); err == nil && pidInt == 1 {
-		klog.Infof("Parsed PID: %d", task.Pid)
+		utils.PrintLog(fmt.Sprintf("Parsed PID: %d", task.Pid))
 	}
 
-	klog.Infof("=== vmkfstools RDM clone started successfully ===")
+	utils.PrintLog("=== vmkfstools RDM clone started successfully ===")
 	return task, nil
 }
 
@@ -401,7 +401,6 @@ func (c *Client) CheckCloneStatus(pid int) (bool, error) {
 	output, _ := c.ExecuteCommand(checkCmd)
 
 	isRunning := strings.Contains(output, "running")
-	klog.V(2).Infof("CheckCloneStatus PID %d: output=%q, isRunning=%v", pid, strings.TrimSpace(output), isRunning)
 
 	return isRunning, nil
 }
@@ -431,7 +430,7 @@ func (c *Client) VerifyVMDKClone(vmdkPath string) error {
 		return fmt.Errorf("flat file not found at %s (output: %s)", flatFile, lsOutput)
 	}
 
-	klog.Infof("VMDK clone verified: descriptor and flat files exist at %s", vmdkPath)
+	utils.PrintLog(fmt.Sprintf("VMDK clone verified: descriptor and flat files exist at %s", vmdkPath))
 	return nil
 }
 
@@ -455,7 +454,7 @@ func (c *Client) GetVMDKSize(vmdkPath string) (int64, error) {
 			fields := strings.Fields(line)
 			if len(fields) >= 2 {
 				if sectors, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
-					klog.Infof("Found VMDK size in descriptor: %d sectors (%d bytes)", sectors, sectors*512)
+					utils.PrintLog(fmt.Sprintf("Found VMDK size in descriptor: %d sectors (%d bytes)", sectors, sectors*512))
 					return sectors * 512, nil // Convert sectors to bytes
 				}
 			}
@@ -491,7 +490,7 @@ func (c *Client) DeleteVMDKFiles(vmdkPath string) error {
 		return fmt.Errorf("failed to delete VMDK files: %w", err)
 	}
 
-	klog.Infof("Deleted existing VMDK files at %s", vmdkPath)
+	utils.PrintLog(fmt.Sprintf("Deleted existing VMDK files at %s", vmdkPath))
 	return nil
 }
 
@@ -540,7 +539,7 @@ func (c *Client) RunEsxcliCommand(namespace string, args []string) ([]map[string
 
 	// Build command with XML formatter for structured output
 	cmd := fmt.Sprintf("esxcli --formatter=xml %s %s", namespace, strings.Join(args, " "))
-	klog.Infof("Running esxcli command: %s", cmd)
+	utils.PrintLog(fmt.Sprintf("Running esxcli command: %s", cmd))
 
 	output, err := c.ExecuteCommand(cmd)
 	if err != nil {

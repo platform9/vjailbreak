@@ -537,18 +537,7 @@ func (c *Client) RescanStorage() error {
 		} else {
 			klog.Warningf("esxcli rescan failed (output: %s): %v", output, err)
 		}
-	} else {
-		klog.Info("esxcli storage rescan completed")
 	}
-
-	// Method 2: Rescan using vim-cmd (most reliable for detecting new LUNs)
-	vimOutput, vimErr := c.ExecuteCommand("vim-cmd hostsvc/storage/refresh")
-	if vimErr != nil {
-		klog.Warningf("vim-cmd storage refresh failed (output: %s): %v", vimOutput, vimErr)
-	} else {
-		klog.Info("vim-cmd storage refresh completed")
-	}
-
 	klog.Info("Storage rescan completed")
 	return nil
 }
