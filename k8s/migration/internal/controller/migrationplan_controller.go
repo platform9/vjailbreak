@@ -1135,7 +1135,7 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string) ([]string, error) {
 	// Get datacenter from VM's cluster annotation
-	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds)
+	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get datacenter for VM")
 	}
@@ -1201,7 +1201,7 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vm string) ([]string, error) {
 	// Get datacenter from VM's cluster annotation
-	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds)
+	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get datacenter for VM")
 	}
@@ -1693,4 +1693,23 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	}
 
 	return validVMs, skippedVMs, nil
+}
+
+// getDatacenterForVM retrieves the datacenter for a given VM from its VMwareMachine annotation
+func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm string, vmwcreds *vjailbreakv1alpha1.VMwareCreds, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) (string, error) {
+	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
+	}
+
+	if vmMachine.Annotations == nil {
+		return "", fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
+	}
+
+	datacenter, exists := vmMachine.Annotations[constants.VMwareDatacenterLabel]
+	if !exists || datacenter == "" {
+		return "", fmt.Errorf("VMwareMachine %s has no datacenter annotation", vmMachine.Name)
+	}
+
+	return datacenter, nil
 }
