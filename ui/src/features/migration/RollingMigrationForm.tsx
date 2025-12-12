@@ -362,6 +362,18 @@ export default function RollingMigrationFormDrawer({
     Record<string, Record<number, string>>
   >({}) // Updated for multiple interfaces
 
+  const hasBulkIpValidationErrors = useMemo(() => {
+    return Object.values(bulkValidationStatus).some((interfaces) =>
+      Object.values(interfaces || {}).some((status) => status === 'invalid')
+    )
+  }, [bulkValidationStatus])
+
+  const hasBulkIpsToApply = useMemo(() => {
+    return Object.values(bulkEditIPs).some((interfaces) =>
+      Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
+    )
+  }, [bulkEditIPs])
+
   // Flavor assignment state
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
   const [selectedFlavor, setSelectedFlavor] = useState('')
@@ -2634,7 +2646,7 @@ export default function RollingMigrationFormDrawer({
               onClick={handleApplyBulkIPs}
               variant="contained"
               color="primary"
-              disabled={Object.values(bulkEditIPs).every((ip) => !ip) || assigningIPs}
+              disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
             >
               {assigningIPs ? 'Applying...' : 'Apply Changes'}
             </Button>

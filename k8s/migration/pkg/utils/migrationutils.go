@@ -148,6 +148,31 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 	return existingConditions
 }
 
+// CreateSucceededCondition creates or updates a succeeded condition for a migration based on events.
+func CreateSucceededCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "VM created successfully") {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrated, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			"VM successfully migrated from VMware to OpenStack",
+			eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+		break
+	}
+	return existingConditions
+}
+
 // SetCutoverLabel sets the cutover label for a migration
 func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	// If initiateCutover is true, return the current label

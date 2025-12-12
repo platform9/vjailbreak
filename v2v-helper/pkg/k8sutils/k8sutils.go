@@ -110,6 +110,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
 			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
 			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
+			CleanupPortsAfterMigrationFailure:   constants.CleanupPortsAfterMigrationFailure,
 			PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
 			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
 			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
@@ -154,6 +155,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
 	}
 
+	if vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] == "" {
+		vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] = strconv.FormatBool(constants.CleanupPortsAfterMigrationFailure)
+	}
+
 	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
 		vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] = strconv.FormatBool(constants.PopulateVMwareMachineFlavors)
 	}
@@ -194,6 +199,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
 		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
+		CleanupPortsAfterMigrationFailure:   vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] == "true",
 		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
 		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
 		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),

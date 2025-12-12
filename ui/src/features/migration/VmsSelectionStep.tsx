@@ -163,6 +163,7 @@ interface VmsSelectionStepProps {
   openstackCredentials?: OpenstackCreds
   vmwareCluster?: string
   vmwareClusterDisplayName?: string
+  useGPU?: boolean
 }
 
 function VmsSelectionStep({
@@ -177,7 +178,8 @@ function VmsSelectionStep({
   openstackCredName,
   openstackCredentials,
   vmwareCluster,
-  vmwareClusterDisplayName
+  vmwareClusterDisplayName,
+  useGPU = false
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
@@ -303,6 +305,16 @@ function VmsSelectionStep({
     Record<string, Record<number, string>>
   >({})
   const [assigningIPs, setAssigningIPs] = useState(false)
+  const hasBulkIpValidationErrors = React.useMemo(() => {
+    return Object.values(bulkValidationStatus).some((interfaces) =>
+      Object.values(interfaces || {}).some((status) => status === 'invalid')
+    )
+  }, [bulkValidationStatus])
+  const hasBulkIpsToApply = React.useMemo(() => {
+    return Object.values(bulkEditIPs).some((interfaces) =>
+      Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
+    )
+  }, [bulkEditIPs])
 
   const clusterName = React.useMemo(() => {
     if (!vmwareCluster) return undefined
@@ -967,6 +979,10 @@ function VmsSelectionStep({
     })
 
     if (ipsToApply.length === 0) return
+    if (hasBulkIpValidationErrors) {
+      showToast('Resolve invalid IP addresses before applying changes.', 'error')
+      return
+    }
 
     const markBulkValidationFailure = (message: string) => {
       setBulkValidationStatus((prev) => {
@@ -1492,6 +1508,22 @@ function VmsSelectionStep({
             {rdmValidation.powerStateErrorMessage}
           </Alert>
         )}
+
+        {/* GPU Warning Message */}
+        {(() => {
+          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+          const hasGPUVMs = selectedVmsData.some((vm) => vm.useGPU)
+          const hasAssignedFlavors = selectedVmsData.some((vm) => vm.targetFlavorId)
+          
+          if (hasGPUVMs && !useGPU && !hasAssignedFlavors) {
+            return (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                You have selected VMs with GPU enabled. Please assign appropriate flavour or select "Use GPU enabled flavours" checkbox in Migration Options.
+              </Alert>
+            )
+          }
+          return null
+        })()}
       </FieldsContainer>
 
       {/* Flavor Assignment Dialog */}
@@ -1725,11 +1757,7 @@ function VmsSelectionStep({
             onClick={handleApplyBulkIPs}
             variant="contained"
             color="primary"
-            disabled={
-              Object.values(bulkEditIPs).every((interfaces) =>
-                Object.values(interfaces).every((ip) => !ip.trim())
-              ) || assigningIPs
-            }
+            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
           >
             {assigningIPs ? 'Applying...' : 'Apply Changes'}
           </Button>

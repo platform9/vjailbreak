@@ -128,6 +128,7 @@ export interface FormValues extends Record<string, unknown> {
   securityGroups?: string[]
   serverGroup?: string
   fallbackToDHCP?: boolean
+  useGPU?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -300,7 +301,8 @@ export default function MigrationFormDrawer({
               ...(targetPCDClusterName && {
                 targetPCDClusterName
               }),
-              useFlavorless: params.useFlavorless || false
+              useFlavorless: params.useFlavorless || false,
+              useGPUFlavor: params.useGPU || false
             }
           }
 
@@ -315,7 +317,8 @@ export default function MigrationFormDrawer({
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,
-          useFlavorless: params.useFlavorless || false
+          useFlavorless: params.useFlavorless || false,
+          useGPUFlavor: params.useGPU || false
         })
         const created = await postMigrationTemplate(body)
         setMigrationTemplate(created)
@@ -341,6 +344,7 @@ export default function MigrationFormDrawer({
     openstackCredentials?.metadata.name,
     targetPCDClusterName,
     params.useFlavorless,
+    params.useGPU,
     migrationTemplate?.metadata?.name,
     getFieldErrorsUpdater
   ])
@@ -960,6 +964,7 @@ export default function MigrationFormDrawer({
             openstackCredentials={openstackCredentials}
             vmwareCluster={params.vmwareCluster}
             vmwareClusterDisplayName={params.vmwareClusterDisplayName}
+            useGPU={params.useGPU}
           />
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>

@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -882,6 +883,8 @@ func isBMConfigValid(ctx context.Context, client client.Client, name string) boo
 // EnsureESXiInMass verifies that an ESXi host is correctly registered in the Metal-as-a-Service system
 // and is in the appropriate state (Deployed or Allocated) for migration operations
 func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwarehost vjailbreakv1alpha1.VMwareHost) (bool, string, error) {
+	ctxlog := log.FromContext(ctx)
+
 	// Get maas provider
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
@@ -898,15 +901,158 @@ func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScop
 		return false, "", errors.Wrap(err, "failed to list maas machines")
 	}
 
-	for i := range machines {
-		if machines[i].HardwareUuid == vmwarehost.Spec.HardwareUUID {
-			if machines[i].Status == "Deployed" || machines[i].Status == "Allocated" {
-				return true, "", nil
+	ctxlog.Info("Retrieved MAAS machines", "count", len(machines), "esxiName", vmwarehost.Spec.Name, "esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
+
+	// First, try to match by hardware UUID
+	var matchedMachineIdx = -1
+
+	if vmwarehost.Spec.HardwareUUID != "" {
+		ctxlog.Info("Attempting hardware UUID matching", "esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
+		for i := range machines {
+			ctxlog.V(1).Info("Checking MAAS machine",
+				"index", i,
+				"machineHardwareUuid", machines[i].HardwareUuid,
+				"machineName", machines[i].Hostname,
+				"machineId", machines[i].Id,
+				"machineStatus", machines[i].Status)
+			if machines[i].HardwareUuid != "" && machines[i].HardwareUuid == vmwarehost.Spec.HardwareUUID {
+				ctxlog.Info("Found a matching machine by hardware UUID",
+					"hardwareUuid", machines[i].HardwareUuid,
+					"name", machines[i].Hostname,
+					"id", machines[i].Id)
+				matchedMachineIdx = i
+				break
 			}
-			return false, fmt.Sprintf("ESXi %s is not in Deployed or Allocated state", vmwarehost.Spec.Name), nil
+		}
+		if matchedMachineIdx == -1 {
+			ctxlog.Info("No hardware UUID match found")
+		}
+	} else {
+		ctxlog.Info("ESXi has empty hardware UUID, skipping UUID matching")
+	}
+
+	// If no UUID match found, fall back to MAC address matching
+	if matchedMachineIdx == -1 {
+		ctxlog.Info("Falling back to MAC address matching")
+
+		// Get VMware credentials to fetch ESXi summary
+		vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+		if err != nil {
+			return false, "", errors.Wrap(err, "failed to get vmware credentials")
+		}
+
+		// Get ESXi summary to extract MAC addresses
+		hs, err := GetESXiSummary(ctx, scope.Client, vmwarehost.Spec.Name, vmwarecreds)
+		if err != nil {
+			return false, "", errors.Wrap(err, "failed to get ESXi summary")
+		}
+
+		// Extract MAC addresses from ESXi host's physical network adapters
+		var hostMacAddresses []string
+		if hs.Config != nil && hs.Config.Network != nil && hs.Config.Network.Pnic != nil && len(hs.Config.Network.Pnic) > 0 {
+			ctxlog.Info("Extracting MAC addresses from ESXi physical NICs", "pnicCount", len(hs.Config.Network.Pnic))
+			for idx, pnic := range hs.Config.Network.Pnic {
+				if pnic.Mac != "" {
+					// Normalize MAC address to lowercase for comparison
+					normalizedMac := strings.ToLower(pnic.Mac)
+					hostMacAddresses = append(hostMacAddresses, normalizedMac)
+					ctxlog.V(1).Info("Found ESXi NIC MAC address",
+						"nicIndex", idx,
+						"device", pnic.Device,
+						"originalMac", pnic.Mac,
+						"normalizedMac", normalizedMac)
+				} else {
+					ctxlog.V(1).Info("Skipping ESXi NIC with empty MAC", "nicIndex", idx, "device", pnic.Device)
+				}
+			}
+		} else {
+			ctxlog.Info("ESXi host has no physical NIC configuration available")
+		}
+
+		if len(hostMacAddresses) == 0 {
+			return false, "", errors.New("no hardware UUID or MAC addresses found for matching")
+		}
+
+		ctxlog.Info("ESXi host MAC addresses extracted", "count", len(hostMacAddresses), "macs", hostMacAddresses)
+
+		// Match machines based on MAC addresses (many-to-many)
+		ctxlog.Info("Starting MAC address matching against MAAS machines", "machineCount", len(machines))
+		for i := range machines {
+			if machines[i].MacAddress == "" {
+				ctxlog.V(1).Info("Skipping MAAS machine with empty MAC address",
+					"index", i,
+					"machineName", machines[i].Hostname,
+					"machineId", machines[i].Id)
+				continue
+			}
+
+			machineMac := strings.ToLower(machines[i].MacAddress)
+			ctxlog.V(1).Info("Checking MAAS machine MAC",
+				"index", i,
+				"machineName", machines[i].Hostname,
+				"machineId", machines[i].Id,
+				"originalMac", machines[i].MacAddress,
+				"normalizedMac", machineMac)
+
+			// Check if any host MAC address matches the machine MAC address
+			matched := false
+			for hostMacIdx, hostMac := range hostMacAddresses {
+				if hostMac != "" && hostMac == machineMac {
+					ctxlog.Info("MAC address match found!",
+						"esxiMac", hostMac,
+						"esxiMacIndex", hostMacIdx,
+						"machineMac", machineMac,
+						"machineName", machines[i].Hostname,
+						"machineId", machines[i].Id)
+					matched = true
+					break
+				}
+			}
+
+			if matched {
+				ctxlog.Info("Found a matching machine by MAC address",
+					"machineMAC", machineMac,
+					"name", machines[i].Hostname,
+					"id", machines[i].Id,
+					"hardwareUuid", machines[i].HardwareUuid,
+					"status", machines[i].Status)
+				matchedMachineIdx = i
+				break
+			}
+		}
+
+		if matchedMachineIdx == -1 {
+			ctxlog.Info("No MAC address match found after checking all machines",
+				"esxiMacs", hostMacAddresses,
+				"machinesChecked", len(machines))
 		}
 	}
 
+	// If a match was found (either by UUID or MAC), check the status
+	if matchedMachineIdx != -1 {
+		ctxlog.Info("Checking matched machine status",
+			"machineName", machines[matchedMachineIdx].Hostname,
+			"machineId", machines[matchedMachineIdx].Id,
+			"status", machines[matchedMachineIdx].Status,
+			"requiredStatus", "Deployed or Allocated")
+		if machines[matchedMachineIdx].Status == "Deployed" || machines[matchedMachineIdx].Status == "Allocated" {
+			ctxlog.Info("ESXi host successfully validated in MAAS",
+				"esxiName", vmwarehost.Spec.Name,
+				"machineName", machines[matchedMachineIdx].Hostname,
+				"status", machines[matchedMachineIdx].Status)
+			return true, "", nil
+		}
+		ctxlog.Info("ESXi host found in MAAS but status is invalid",
+			"esxiName", vmwarehost.Spec.Name,
+			"machineName", machines[matchedMachineIdx].Hostname,
+			"currentStatus", machines[matchedMachineIdx].Status,
+			"requiredStatus", "Deployed or Allocated")
+		return false, fmt.Sprintf("ESXi %s is not in Deployed or Allocated state", vmwarehost.Spec.Name), nil
+	}
+
+	ctxlog.Info("ESXi host not found in MAAS after all matching attempts",
+		"esxiName", vmwarehost.Spec.Name,
+		"esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
 	return false, fmt.Sprintf("ESXi %s is not in MAAS", vmwarehost.Spec.Name), nil
 }
 

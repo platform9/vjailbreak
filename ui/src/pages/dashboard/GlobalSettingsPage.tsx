@@ -100,6 +100,7 @@ type SettingsForm = {
   DEFAULT_MIGRATION_METHOD: 'hot' | 'cold'
   VCENTER_SCAN_CONCURRENCY_LIMIT: number
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: boolean
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: boolean
   POPULATE_VMWARE_MACHINE_FLAVORS: boolean
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: number
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: number
@@ -107,6 +108,7 @@ type SettingsForm = {
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: number
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: number
   VALIDATE_RDM_OWNER_VMS: boolean
+  AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
 }
 
@@ -118,6 +120,7 @@ const DEFAULTS: SettingsForm = {
   DEFAULT_MIGRATION_METHOD: 'hot',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 10,
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: false,
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: false,
   POPULATE_VMWARE_MACHINE_FLAVORS: true,
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: 10,
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: 15,
@@ -125,6 +128,7 @@ const DEFAULTS: SettingsForm = {
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
+  AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak'
 }
 
@@ -146,8 +150,10 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
     'DEFAULT_MIGRATION_METHOD',
     'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+    'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
-    'VALIDATE_RDM_OWNER_VMS'
+    'VALIDATE_RDM_OWNER_VMS',
+    'AUTO_FSTAB_UPDATE'
   ]
 }
 
@@ -238,16 +244,21 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Default method for VM migration (placeholder for future releases, not currently used).',
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE:
     'Automatically delete intermediate volumes when a conversion fails.',
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE:
+    'Automatically delete network ports when a migration fails.',
   POPULATE_VMWARE_MACHINE_FLAVORS:
     'Fetch VMware hardware flavors to enrich instance sizing details.',
-  VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.'
+  VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
+  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.'
 }
 
 type ToggleKey = Extract<
   keyof SettingsForm,
   | 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE'
+  | 'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE'
   | 'POPULATE_VMWARE_MACHINE_FLAVORS'
   | 'VALIDATE_RDM_OWNER_VMS'
+  | 'AUTO_FSTAB_UPDATE'
 >
 
 const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string }> = [
@@ -255,6 +266,11 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
     key: 'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
     label: 'Cleanup Volumes After Conversion Failure',
     description: 'Remove orphaned storage artifacts after a failed conversion run.'
+  },
+  {
+    key: 'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
+    label: 'Cleanup Ports After Migration Failure',
+    description: 'Remove orphaned network ports after a failed migration run.'
   },
   {
     key: 'POPULATE_VMWARE_MACHINE_FLAVORS',
@@ -265,6 +281,11 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
     key: 'VALIDATE_RDM_OWNER_VMS',
     label: 'Validate MigrationPlan for RDM VMs',
     description: 'Adds guard rails to ensure RDM devices still belong to the reported VM owner.'
+  },
+  {
+    key: 'AUTO_FSTAB_UPDATE',
+    label: 'Auto Fstab Update',
+    description: 'Automatically update fstab entries to ensure proper disk mounting after migration.'
   }
 ]
 
@@ -288,6 +309,7 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   DEFAULT_MIGRATION_METHOD: f.DEFAULT_MIGRATION_METHOD,
   VCENTER_SCAN_CONCURRENCY_LIMIT: String(f.VCENTER_SCAN_CONCURRENCY_LIMIT),
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: String(f.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE),
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: String(f.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE),
   POPULATE_VMWARE_MACHINE_FLAVORS: String(f.POPULATE_VMWARE_MACHINE_FLAVORS),
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: String(f.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS),
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: String(f.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT),
@@ -295,6 +317,7 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: String(f.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES),
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
   VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
+  AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
   DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
 })
 
@@ -323,6 +346,10 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
     data?.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE,
     DEFAULTS.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE
   ),
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: parseBool(
+    data?.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE,
+    DEFAULTS.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE
+  ),
   POPULATE_VMWARE_MACHINE_FLAVORS: parseBool(
     data?.POPULATE_VMWARE_MACHINE_FLAVORS,
     DEFAULTS.POPULATE_VMWARE_MACHINE_FLAVORS
@@ -348,6 +375,7 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
     DEFAULTS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES
   ),
   VALIDATE_RDM_OWNER_VMS: parseBool(data?.VALIDATE_RDM_OWNER_VMS, DEFAULTS.VALIDATE_RDM_OWNER_VMS),
+  AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, DEFAULTS.AUTO_FSTAB_UPDATE),
   DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME
 })
 
@@ -561,8 +589,10 @@ export default function GlobalSettingsPage() {
 
     const bools: Array<keyof SettingsForm> = [
       'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+      'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
-      'VALIDATE_RDM_OWNER_VMS'
+      'VALIDATE_RDM_OWNER_VMS',
+      'AUTO_FSTAB_UPDATE'
     ]
     bools.forEach((k) => {
       const val = state[k]

@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -125,6 +125,25 @@ type OpenstackCredsList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OpenstackCreds `json:"items"`
+}
+
+// DeepCopyInto is a custom deepcopy function to handle the Flavors field
+// which uses an external type that doesn't implement DeepCopyInto
+func (in *OpenstackCredsSpec) DeepCopyInto(out *OpenstackCredsSpec) {
+	*out = *in
+	out.SecretRef = in.SecretRef
+	if in.Flavors != nil {
+		in, out := &in.Flavors, &out.Flavors
+		*out = make([]flavors.Flavor, len(*in))
+		copy(*out, *in)
+	}
+	if in.PCDHostConfig != nil {
+		in, out := &in.PCDHostConfig, &out.PCDHostConfig
+		*out = make([]HostConfig, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 }
 
 func init() {

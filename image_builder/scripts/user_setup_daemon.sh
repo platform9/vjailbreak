@@ -12,8 +12,13 @@ ExecStart=/bin/bash -c '\
     echo "Creating user ubuntu..."; \
     useradd -m -s /bin/bash ubuntu; \
   fi; \
-  echo "ubuntu:password" | chpasswd; \
-  passwd --expire ubuntu && echo "Password expired for ubuntu — must change on first login"; \
+  if grep -iq '^password:' /var/lib/cloud/instance/user-data.txt* 2>/dev/null; then \
+      echo "Yes – password was set via cloud-init!"; \
+  else \
+    echo "Setting default password for ubuntu..."; \
+    echo "ubuntu:password" | chpasswd; \
+    passwd --expire ubuntu && echo "Password expired for ubuntu — must change on first login"; \
+  fi; \
 '
 ExecStartPost=/bin/touch /var/lib/setup-ubuntu-user.done
 RemainAfterExit=yes

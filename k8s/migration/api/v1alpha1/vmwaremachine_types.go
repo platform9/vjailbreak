@@ -20,6 +20,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// GPUInfo contains information about GPU devices attached to a VM.
+type GPUInfo struct {
+	// PassthroughCount is the number of PCI passthrough GPU devices
+	PassthroughCount int `json:"passthroughCount,omitempty"`
+	// VGPUCount is the number of vGPU (shared GPU) devices
+	VGPUCount int `json:"vgpuCount,omitempty"`
+}
+
+// HasGPU returns true if the VM has any GPU devices (passthrough or vGPU)
+func (g GPUInfo) HasGPU() bool {
+	return g.PassthroughCount > 0 || g.VGPUCount > 0
+}
+
+// TotalCount returns the total number of GPU devices
+func (g GPUInfo) TotalCount() int {
+	return g.PassthroughCount + g.VGPUCount
+}
+
 // VMInfo contains detailed information about a VMware virtual machine to be migrated,
 // including resource allocation, network configuration, storage details, and host placement.
 // This comprehensive data is necessary for accurately recreating the VM in the target environment.
@@ -54,6 +72,8 @@ type VMInfo struct {
 	NetworkInterfaces []NIC `json:"networkInterfaces,omitempty"`
 	// GuestNetworks is the list of network interfaces for the virtual machine as reported by the guest
 	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
+	// GPU contains information about GPU devices attached to the VM
+	GPU GPUInfo `json:"gpu,omitempty"`
 }
 
 type Disk struct {
