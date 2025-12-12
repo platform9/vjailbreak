@@ -108,6 +108,7 @@ type SettingsForm = {
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: number
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: number
   VALIDATE_RDM_OWNER_VMS: boolean
+  AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
 }
 
@@ -127,6 +128,7 @@ const DEFAULTS: SettingsForm = {
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
+  AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak'
 }
 
@@ -150,7 +152,8 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
-    'VALIDATE_RDM_OWNER_VMS'
+    'VALIDATE_RDM_OWNER_VMS',
+    'AUTO_FSTAB_UPDATE'
   ]
 }
 
@@ -245,7 +248,8 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Automatically delete network ports when a migration fails.',
   POPULATE_VMWARE_MACHINE_FLAVORS:
     'Fetch VMware hardware flavors to enrich instance sizing details.',
-  VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.'
+  VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
+  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.'
 }
 
 type ToggleKey = Extract<
@@ -254,6 +258,7 @@ type ToggleKey = Extract<
   | 'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE'
   | 'POPULATE_VMWARE_MACHINE_FLAVORS'
   | 'VALIDATE_RDM_OWNER_VMS'
+  | 'AUTO_FSTAB_UPDATE'
 >
 
 const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string }> = [
@@ -276,6 +281,11 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
     key: 'VALIDATE_RDM_OWNER_VMS',
     label: 'Validate MigrationPlan for RDM VMs',
     description: 'Adds guard rails to ensure RDM devices still belong to the reported VM owner.'
+  },
+  {
+    key: 'AUTO_FSTAB_UPDATE',
+    label: 'Auto Fstab Update',
+    description: 'Automatically update fstab entries to ensure proper disk mounting after migration.'
   }
 ]
 
@@ -307,6 +317,7 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: String(f.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES),
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
   VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
+  AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
   DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
 })
 
@@ -364,6 +375,7 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
     DEFAULTS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES
   ),
   VALIDATE_RDM_OWNER_VMS: parseBool(data?.VALIDATE_RDM_OWNER_VMS, DEFAULTS.VALIDATE_RDM_OWNER_VMS),
+  AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, DEFAULTS.AUTO_FSTAB_UPDATE),
   DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME
 })
 
@@ -579,7 +591,8 @@ export default function GlobalSettingsPage() {
       'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
       'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
-      'VALIDATE_RDM_OWNER_VMS'
+      'VALIDATE_RDM_OWNER_VMS',
+      'AUTO_FSTAB_UPDATE'
     ]
     bools.forEach((k) => {
       const val = state[k]
