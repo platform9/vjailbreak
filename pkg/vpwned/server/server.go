@@ -59,7 +59,7 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 func startgRPCServer(ctx context.Context, network, port string) error {
 	grpcServer = grpc.NewServer()
 
-	k8sClient, err := CreateInClusterClient()
+	_, err := CreateInClusterClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to create k8s client for grpc server")
 	}
@@ -69,7 +69,8 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
 	api.RegisterVCenterServer(grpcServer, &targetVcenterGRPC{})
 	api.RegisterBMProviderServer(grpcServer, &providersGRPC{})
-	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{K8sClient: k8sClient})
+	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{})
+	api.RegisterStorageArrayServer(grpcServer, &storageArrayGRPC{})
 	reflection.Register(grpcServer)
 	connection, err := net.Listen(network, port)
 	if err != nil {
@@ -129,6 +130,10 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// Register VJailbreakProxy service
 	if err := api.RegisterVailbreakProxyHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for VailbreakProxy")
+	}
+	// Register StorageArray service
+	if err := api.RegisterStorageArrayHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
+		logrus.Errorf("cannot start handler for StorageArray")
 	}
 	mux.Handle("/", APILogger(gatewayMuxer))
 	return mux, nil

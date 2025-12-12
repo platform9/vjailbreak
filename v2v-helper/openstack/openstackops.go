@@ -50,6 +50,7 @@ type OpenstackOperations interface {
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(ctx context.Context, volumeID string) error
 	FindDevice(volumeID string) (string, error)
+	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
 }
 

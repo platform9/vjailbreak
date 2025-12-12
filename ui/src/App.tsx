@@ -14,6 +14,7 @@ import ClusterConversionsPage from './pages/dashboard/ClusterConversionsPage'
 import MaasConfigPage from './pages/dashboard/MaasConfigPage'
 import Onboarding from './pages/onboarding/Onboarding'
 import GlobalSettingsPage from './pages/dashboard/GlobalSettingsPage'
+import StorageManagementPage from './pages/dashboard/StorageManagementPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -80,6 +81,7 @@ function App() {
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />
             <Route path="credentials" element={<CredentialsPage />} />
+            <Route path="storage-management" element={<StorageManagementPage />} />
             <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
             <Route path="baremetal-config" element={<MaasConfigPage />} />
             <Route path="global-settings" element={<GlobalSettingsPage />} />

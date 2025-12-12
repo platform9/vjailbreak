@@ -472,6 +472,32 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
+	var arraycreds *vjailbreakv1alpha1.ArrayCreds
+	// Check if StorageCopyMethod is vendor-based
+	if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
+		// Fetch ArrayCredsMapping CR first
+		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCredsMapping '%s'", migrationtemplate.Spec.ArrayCredsMapping)
+		}
+
+		// Validate ArrayCredsMapping has mappings
+		if len(arrayCredsMapping.Spec.Mappings) == 0 {
+			return ctrl.Result{}, errors.Errorf("ArrayCredsMapping '%s' has no mappings defined", migrationtemplate.Spec.ArrayCredsMapping)
+		}
+		for _, mapping := range arrayCredsMapping.Spec.Mappings {
+			arraycreds = &vjailbreakv1alpha1.ArrayCreds{}
+			if err := r.Get(ctx, types.NamespacedName{Name: mapping.Target, Namespace: migrationtemplate.Namespace}, arraycreds); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCreds '%s' from mapping", mapping.Target)
+			}
+			if arraycreds.Status.ArrayValidationStatus != string(corev1.PodSucceeded) {
+				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
+			}
+		}
+	} else {
+		arraycreds = nil
+	}
+
 	// Starting the Migrations
 	if migrationplan.Status.MigrationStatus == "" {
 		err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodRunning, "Migration(s) in progress")
@@ -504,7 +530,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -677,7 +703,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
-	vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	arrayCredsSecretRef string) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
@@ -778,6 +805,13 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										SecretRef: &corev1.SecretEnvSource{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: openstackSecretRef,
+											},
+										},
+									},
+									{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: arrayCredsSecretRef,
 											},
 										},
 									},
@@ -925,7 +959,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*corev1.ConfigMap, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	arraycreds *vjailbreakv1alpha1.ArrayCreds) (*corev1.ConfigMap, error) {
 	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
@@ -1055,6 +1090,12 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
 		}
 
+		if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
+			configMap.Data["STORAGE_COPY_METHOD"] = "vendor-based"
+			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
+			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+		}
+
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
@@ -1112,13 +1153,21 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string) (openstacknws, openstackvolumetypes []string, err error) {
+	ctxlog := r.ctxlog.WithValues("reconcileMapping", vm)
+	ctxlog.Info("Reconciling mapping for VM")
 	openstacknws, err = r.reconcileNetwork(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
-	openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to reconcile storage")
+	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
+	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
+	// Skip storage mapping reconciliation for vendor-based storage copy method
+	// as it uses ArrayCredsMapping instead of StorageMapping
+	if migrationtemplate.Spec.StorageCopyMethod != "vendor-based" {
+		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
+		}
 	}
 	return openstacknws, openstackvolumetypes, nil
 }
@@ -1232,6 +1281,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	arrayCreds *vjailbreakv1alpha1.ArrayCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []*vjailbreakv1alpha1.VMwareMachine) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
@@ -1288,7 +1338,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arrayCreds)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
@@ -1309,7 +1359,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
-			vmMachineObj)
+			vmMachineObj,
+			arrayCreds.Spec.SecretRef.Name)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}

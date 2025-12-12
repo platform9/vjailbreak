@@ -27,6 +27,12 @@ export const navigationItems: NavigationItem[] = [
     icon: <CredentialsIcon />
   },
   {
+    id: 'storage-management',
+    label: 'Storage Management',
+    path: '/dashboard/storage-management',
+    icon: <Storage />
+  },
+  {
     id: 'agents',
     label: 'Agents',
     path: '/dashboard/agents',
